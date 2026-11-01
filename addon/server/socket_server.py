@@ -21,6 +21,7 @@ log = get_logger("socket")
 
 _RESTART_DELAY = 2.0  # seconds before rebinding after socket error
 _MAX_RESTARTS = 10  # consecutive restart cap before giving up
+_MAX_BUFFER_BYTES = 16 * 1024 * 1024  # close clients that never frame a message
 
 
 class Fusion360MCPServer:
@@ -175,6 +176,11 @@ class Fusion360MCPServer:
                 if not chunk:
                     break
                 buf += chunk
+                if len(buf) > _MAX_BUFFER_BYTES:
+                    log.warning(
+                        "Client buffer over %d bytes — closing", _MAX_BUFFER_BYTES
+                    )
+                    break
 
                 # Newline-delimited JSON messages
                 while b"\n" in buf:
@@ -185,10 +191,16 @@ class Fusion360MCPServer:
                     try:
                         command = json.loads(line)
                     except json.JSONDecodeError:
+                        # A malformed *complete* line is not tolerated. Browsers
+                        # can reach this loopback port, and an HTTP request line
+                        # is never valid JSON, so skipping bad lines let the body
+                        # of a cross-protocol POST be dispatched as a command.
+                        # Closing here kills that path; an *unterminated* buffer
+                        # is still treated as incomplete below, not as an error.
                         self._send(
                             client, {"status": "error", "message": "Invalid JSON"}
                         )
-                        continue
+                        return
                     self._dispatch(client, command)
 
                 # Fallback: try raw JSON blob (no newline framing)
