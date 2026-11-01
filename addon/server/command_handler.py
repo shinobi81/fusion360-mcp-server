@@ -568,11 +568,23 @@ class CommandHandler:
             "bodies_count": root.bRepBodies.count,
             "sketches_count": root.sketches.count,
             "features_count": root.features.count,
-            "timeline_count": (
-                design.timeline.count if hasattr(design, "timeline") else 0
-            ),
+            "timeline_count": self._timeline_count(design),
             "camera": self._camera_info(),
         }
+
+    @staticmethod
+    def _timeline_count(design) -> int:
+        """Timeline length, or 0 — ``design.timeline`` raises in direct mode.
+
+        ``hasattr`` only swallows AttributeError, and Fusion raises RuntimeError
+        ("3 : this is not a parametric design"), so the property has to be
+        guarded rather than probed.
+        """
+        try:
+            timeline = design.timeline
+        except RuntimeError:
+            return 0
+        return timeline.count if timeline is not None else 0
 
     def get_object_info(self, name: str):
         root = self._root()
@@ -2297,9 +2309,114 @@ class CommandHandler:
         return {"deleted": deleted, "remaining": remaining, "errors": errors}
 
     def undo(self):
+        """Step the design back one operation.
+
+        Fusion's ``UndoCommand`` is asynchronous: it applies only after this
+        handler returns, so the tool can neither rely on it nor verify it.
+        Measured on 2706 — four of five consecutive calls changed nothing while
+        reporting success, and 57 event pumps inside one handler did not make a
+        queued undo land. Parametric designs therefore step the timeline marker
+        back, which the API performs synchronously; direct designs have no
+        timeline and keep the UI command, reported as issued-but-unverified.
+        """
         design = self._design()
+        parametric = design.designType == adsk.fusion.DesignTypes.ParametricDesignType
+
+        # ``design.timeline`` raises "this is not a parametric design" in direct
+        # mode, so it must only be touched once the type is known.
+        if parametric:
+            timeline = design.timeline
+            if timeline is None or not timeline.count:
+                return self._undo_nothing(timeline)
+            return self._undo_by_marker(design, timeline)
+
+        return self._undo_by_command(design)
+
+    @staticmethod
+    def _undo_nothing(timeline) -> dict:
+        """Nothing to step back — say so instead of issuing an unverifiable undo."""
+        return {
+            "undone": False,
+            "verified": True,
+            "timeline_count": timeline.count if timeline is not None else 0,
+            "marker_position": (timeline.markerPosition if timeline is not None else 0),
+            "reason": "No timeline feature to step back — the marker is at the "
+            "start of history, or the timeline is empty.",
+            "hints": [
+                "Undo only reverts timeline features. Edits that create no "
+                "timeline item (parameter values, appearances, body renames, "
+                "joint values) are not undone by this tool.",
+            ],
+        }
+
+    def _undo_by_marker(self, design, timeline):
+        """Step the timeline marker back one feature — verifiable in this call."""
+        marker_before = timeline.markerPosition
         type_before = design.designType
 
+        if marker_before <= 0:
+            return self._undo_nothing(timeline)
+
+        timeline.markerPosition = marker_before - 1
+        adsk.doEvents()
+        marker_after = timeline.markerPosition
+
+        if design.designType != type_before:
+            # Rollback must never change the design type; if it ever does, put
+            # both the marker and the type back rather than leave direct mode.
+            try:
+                timeline.markerPosition = marker_before
+            except Exception as exc:
+                log.error("Could not restore the timeline marker: %s", exc)
+            try:
+                design.designType = type_before
+            except Exception as exc:
+                log.error("Could not restore design type after aborted undo: %s", exc)
+            adsk.doEvents()
+            parametric = adsk.fusion.DesignTypes.ParametricDesignType
+            raise RuntimeError(
+                f"Undo aborted: stepping the timeline back to "
+                f"{marker_before - 1} changed the design type from "
+                f"{'Parametric' if type_before == parametric else 'Direct'} to "
+                f"{'Parametric' if design.designType == parametric else 'Direct'}. "
+                f"The marker was restored. If the design is stuck in direct "
+                f"mode, call set_design_type('parametric') to capture history "
+                f"again, then delete the failed feature explicitly."
+            )
+
+        if marker_after == marker_before:
+            # The write did not take — do not report a success nobody can see.
+            return {
+                "undone": False,
+                "verified": True,
+                "marker_before": marker_before,
+                "marker_position": marker_after,
+                "timeline_count": timeline.count,
+                "reason": "Fusion did not move the timeline marker, so nothing "
+                "was undone.",
+                "hints": [
+                    "Retry once; if the marker still does not move, undo in the "
+                    "Fusion UI.",
+                ],
+            }
+
+        return {
+            "undone": True,
+            "verified": True,
+            "marker_before": marker_before,
+            "marker_position": marker_after,
+            "timeline_count": timeline.count,
+            "note": (
+                "Timeline stepped back one feature; it stays in the timeline "
+                "suppressed rather than being deleted. Rolling the marker "
+                "forward restores it (execute_code: "
+                "design.timeline.markerPosition = N) — but creating a new "
+                "feature while rolled back discards the suppressed ones."
+            ),
+        }
+
+    def _undo_by_command(self, design):
+        """Direct designs have no timeline; issue Fusion's undo, admit it's unverified."""
         cmd_def = self.ui.commandDefinitions.itemById("UndoCommand")
         if cmd_def is None:
             raise RuntimeError(
@@ -2308,26 +2425,21 @@ class CommandHandler:
                 "explicitly instead."
             )
         cmd_def.execute()
-
-        # Check if undo silently switched design type (Parametric → Direct)
-        adsk.doEvents()  # let Fusion process the undo
-        type_after = design.designType
-        if type_before != type_after:
-            # Undo the undo — redo to restore original state
-            redo_def = self.ui.commandDefinitions.itemById("RedoCommand")
-            if redo_def:
-                redo_def.execute()
-                adsk.doEvents()
-            parametric = adsk.fusion.DesignTypes.ParametricDesignType
-            raise RuntimeError(
-                f"Undo aborted: would have changed design type from "
-                f"{'Parametric' if type_before == parametric else 'Direct'} to "
-                f"{'Parametric' if type_after == parametric else 'Direct'}. "
-                f"The undo was automatically reversed (redo). "
-                f"Delete the failed feature explicitly instead."
-            )
-
-        return {"undone": True, "design_type": type_after}
+        adsk.doEvents()
+        return {
+            "undone": "issued",
+            "verified": False,
+            "design_type": design.designType,
+            "note": (
+                "This design has no timeline to step back, so Fusion's undo "
+                "command was issued. Fusion applies it on a later event-loop "
+                "turn, so this call cannot confirm it."
+            ),
+            "hints": [
+                "Fusion's undo is asynchronous; call get_scene_info to confirm "
+                "before issuing another undo.",
+            ],
+        }
 
     # ------------------------------------------------------------------
     # Direct Primitives (via TemporaryBRepManager)
