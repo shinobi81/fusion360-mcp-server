@@ -7,7 +7,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
-## [Unreleased]
+## [0.4.1] - 2026-11-01
+
+### Added
+
+- `scripts/check_review_threads.py` and a `threads` CI job: a pull request with unresolved
+  review threads now fails, listing each one. The branch ruleset already required
+  `required_review_thread_resolution`, but the code owner's `gh pr merge --admin` bypasses
+  the whole ruleset — which is how the revolve change below merged with seven open CodeQL
+  findings. `AGENTS.md` (a new **Merging** section) and `CONTRIBUTING.md` state the rule.
 
 ### Fixed
 
@@ -31,6 +39,9 @@ and published; they are the fork history.
 - A revolve axis that cannot lie in the profile's sketch plane is refused with the new
   `AXIS_OUT_OF_PLANE` error kind and hints, instead of being projected onto a different
   axis.
+- The seven CodeQL findings raised against that change are fixed rather than dismissed:
+  the `AXIS_OUT_OF_PLANE` hints no longer rely on implicit string concatenation, and a
+  module-scoped test fixture no longer mixes `return` with `yield`.
 
 ### Changed
 
@@ -154,6 +165,7 @@ and published; they are the fork history.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.4.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.2.2...v0.3.0
