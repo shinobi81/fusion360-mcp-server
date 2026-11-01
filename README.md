@@ -16,8 +16,19 @@ Install from a tag rather than PyPI: the published 0.1.0 pins `mcp>=1.0` with no
 bound and crashes under mcp 2.x (upstream issue #30).
 
 ```bash
-uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.2.1' fusion360-mcp-server --mode socket
+uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.2.2' fusion360-mcp-server --mode socket
 ```
+
+Changes in 0.2.2:
+
+- The add-in socket closes the connection on malformed input. Browsers can reach the
+  loopback port, and an HTTP request line is never valid JSON, so a web page could
+  previously POST a JSON body and have it executed as a command. Confirmed before the
+  fix and refused after it.
+- `execute_code` is annotated `destructiveHint: true`, so a client that honours
+  annotations will ask before running arbitrary Python inside Fusion.
+- CI moved to `actions/checkout@v7` and `astral-sh/setup-uv@v10.3.3`, which clears the
+  Node 20 deprecation warning.
 
 Changes in 0.2.1:
 

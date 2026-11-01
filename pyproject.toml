@@ -1,6 +1,6 @@
 [project]
 name = "fusion360-mcp-server"
-version = "0.2.1"
+version = "0.2.2"
 description = "MCP server for Autodesk Fusion 360 — bridges Claude to the Fusion360MCP add-in"
 readme = "README.md"
 requires-python = ">=3.10"
