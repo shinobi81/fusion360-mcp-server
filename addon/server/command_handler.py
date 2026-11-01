@@ -117,6 +117,7 @@ class CommandHandler:
         if self._COMMANDS is None:
             self.__class__._COMMANDS = {
                 # scene / query
+                "new_document": self.new_document,
                 "get_scene_info": self.get_scene_info,
                 "get_object_info": self.get_object_info,
                 "get_bounding_box": self.get_bounding_box,
@@ -297,7 +298,10 @@ class CommandHandler:
                 pass
         d = self.app.activeProduct
         if d is None or not hasattr(d, "rootComponent"):
-            raise RuntimeError("No active design")
+            raise RuntimeError(
+                "No active design — call new_document to create one "
+                "(Fusion has no document open)"
+            )
         return d
 
     # joint_type -> (JointInput setter, number of direction arguments it takes).
@@ -341,6 +345,38 @@ class CommandHandler:
 
     def _root(self):
         return self._design().rootComponent
+
+    def new_document(self, name: str = None):
+        """Create a design document and make it active.
+
+        Fusion starts at the data tab with no active product, and every command
+        needs a design, so this is the way in from a cold start. Created through
+        the API on purpose: a document created in the Fusion UI is a Part Design
+        document, which rejects ``addNewComponent``, so components and joints are
+        impossible in it.
+        """
+        doc = self.app.documents.add(adsk.core.DocumentTypes.FusionDesignDocumentType)
+        if name:
+            doc.name = name
+
+        design = doc.products.itemByProductType("DesignProductType")
+        if design is None:
+            raise RuntimeError("New document has no design product")
+
+        design_types = adsk.fusion.DesignTypes
+        if design.designType == design_types.ParametricDesignType:
+            kind = "parametric"
+        elif design.designType == design_types.DirectDesignType:
+            kind = "direct"
+        else:
+            kind = str(design.designType)
+
+        return {
+            "created": True,
+            "document": doc.name,
+            "design_type": kind,
+            "component": design.rootComponent.name,
+        }
 
     def _last_sketch(self):
         root = self._root()

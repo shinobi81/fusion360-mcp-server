@@ -523,6 +523,27 @@ TOOLS: list[dict] = [
     },
     # ── assembly ───────────────────────────────────────────────────────
     {
+        "name": "new_document",
+        "title": "New Document",
+        "description": (
+            "Create a new design document and make it active. Every other tool "
+            "needs an active design, and Fusion sits at the data tab with none "
+            "after a fresh launch, so this is the way in from a cold start. The "
+            "document is created through the API on purpose: documents created "
+            "in the Fusion UI are Part Design documents, which reject "
+            "addNewComponent, so components and joints are impossible in them."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Optional document name.",
+                },
+            },
+        },
+    },
+    {
         "name": "create_component",
         "title": "Create Component",
         "description": "Create a new component (sub-assembly) in the design",

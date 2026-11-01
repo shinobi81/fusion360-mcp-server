@@ -60,6 +60,8 @@ def test_expected_tools_present():
     """Verify the full set of commands we expect."""
     names = {t["name"] for t in TOOLS}
     expected = {
+        # documents
+        "new_document",
         # scene / query
         "get_scene_info",
         "get_object_info",

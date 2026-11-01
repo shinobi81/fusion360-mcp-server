@@ -1026,8 +1026,18 @@ def _default_mock(p: dict) -> dict:
 
 # ── dispatch table ────────────────────────────────────────────────────
 
+def _new_document(p: dict) -> dict:
+    return {
+        "created": True,
+        "document": p.get("name", "Untitled"),
+        "design_type": "parametric",
+        "component": "Component1",
+    }
+
+
 _DISPATCH: dict[str, Any] = {
     "ping": _ping,
+    "new_document": _new_document,
     "get_scene_info": _get_scene_info,
     "get_object_info": _get_object_info,
     "get_bounding_box": _get_bounding_box,
