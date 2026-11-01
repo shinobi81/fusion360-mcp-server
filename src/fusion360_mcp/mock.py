@@ -294,6 +294,18 @@ def _create_polygon(p: dict) -> dict:
     }
 
 
+def _draw_circles(p: dict) -> dict:
+    count = p.get("count", 1)
+    return {
+        "sketch": "Sketch_mock_xy",
+        "added": count,
+        "total_curves": count,
+        "radius": p.get("radius", 1),
+        "spacing": p.get("spacing", 1),
+        "axis": p.get("axis", "x"),
+    }
+
+
 def _draw_arc(p: dict) -> dict:
     return {
         "sketch_name": "Sketch_mock_xy",
@@ -1062,6 +1074,7 @@ _DISPATCH: dict[str, Any] = {
     "sweep": _sweep,
     "loft": _loft,
     "create_polygon": _create_polygon,
+    "draw_circles": _draw_circles,
     "draw_arc": _draw_arc,
     "create_hole": _create_hole,
     "rectangular_pattern": _rectangular_pattern,

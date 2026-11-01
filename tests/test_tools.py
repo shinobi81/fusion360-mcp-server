@@ -93,6 +93,7 @@ def test_expected_tools_present():
         "sweep",
         "loft",
         "create_polygon",
+        "draw_circles",
         "draw_arc",
         "create_hole",
         "rectangular_pattern",
