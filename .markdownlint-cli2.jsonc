@@ -1,0 +1,11 @@
+{
+  // The docs are tool catalogues with wide tables, so markdownlint's defaults
+  // fight them: MD013 would demand 80-column tables, and MD060 only asks for
+  // pipe alignment. Prose is wrapped at 88 to match ruff's line-length.
+  "config": {
+    "default": true,
+    "MD013": { "line_length": 88, "tables": false, "code_blocks": false },
+    "MD060": false,
+    "MD033": false
+  }
+}
