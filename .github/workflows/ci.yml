@@ -65,6 +65,23 @@ jobs:
       - name: Test
         run: uv run pytest -q
 
+  # The add-in install path and devcontainer wrapper are macOS-specific.
+  macos:
+    runs-on: macos-latest
+
+    steps:
+      # actions/checkout v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      # astral-sh/setup-uv v10.3.3
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+
+      - name: Install dependencies
+        run: uv sync --dev --frozen
+
+      - name: Test
+        run: uv run pytest -q
+
   docs:
     runs-on: ubuntu-latest
 

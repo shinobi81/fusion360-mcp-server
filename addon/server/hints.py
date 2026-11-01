@@ -33,20 +33,28 @@ _RULES: list[tuple[str, str, list[str]]] = [
             "is never extrudable.",
         ],
     ),
+    # BODY is matched before SKETCH, and both anchor on the quoted name. The
+    # obvious "keyword .* not found" pattern spans the whole message, so a body
+    # named "Sketch1" was reported as SKETCH_NOT_FOUND. The distance-capped
+    # fallback still catches Fusion's own unquoted wording.
     (
-        r"sketch\b.*\bnot found|no sketch|sketch.*does not exist",
-        "SKETCH_NOT_FOUND",
-        [
-            "The named sketch does not exist in the active design.",
-            "List sketches via get_scene_info before referencing one by name.",
-        ],
-    ),
-    (
-        r"body\b.*\bnot found|no body|body.*does not exist",
+        r"no body\b"
+        r"|body\s+['\"][^'\"]*['\"]\s+(?:not found|does not exist)"
+        r"|body\b[^.\n]{0,25}?\bnot found",
         "BODY_NOT_FOUND",
         [
             "The named body does not exist in the active design.",
             "Use list_components or get_scene_info to see available bodies.",
+        ],
+    ),
+    (
+        r"no sketch\b"
+        r"|sketch\s+['\"][^'\"]*['\"]\s+(?:not found|does not exist)"
+        r"|sketch\b[^.\n]{0,25}?\bnot found",
+        "SKETCH_NOT_FOUND",
+        [
+            "The named sketch does not exist in the active design.",
+            "List sketches via get_scene_info before referencing one by name.",
         ],
     ),
     (

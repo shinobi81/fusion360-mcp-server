@@ -4,6 +4,20 @@ version = "0.3.1"
 description = "MCP server for Autodesk Fusion 360 — bridges AI coding agents to the add-in"
 readme = "README.md"
 requires-python = ">=3.10"
+keywords = ["fusion360", "autodesk", "cad", "mcp", "model-context-protocol", "ai-agents"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+]
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE", "THIRD-PARTY-NOTICES.md"]
 authors = [{ name = "Andrea Camillacci" }]
@@ -43,6 +57,9 @@ select = ["E", "F", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Coverage is measured on every run so a regression is visible in the diff,
+# and floored just under the current number rather than at a round figure.
+addopts = "--cov --cov-report=term-missing --cov-fail-under=80"
 
 # The add-in imports Fusion's `adsk` runtime, which exists only inside Fusion.
 # No static type checker can resolve it, and each unresolved import cascades into
@@ -50,6 +67,10 @@ testpaths = ["tests"]
 # checking (ruff and the test suite still cover it — see the CI workflow).
 [tool.pyright]
 exclude = ["addon", "build"]
+# Resolve imports from the project venv, otherwise third-party packages read
+# as unresolved no matter what is installed.
+venvPath = "."
+venv = ".venv"
 
 [tool.mypy]
 exclude = ["^addon/", "^build/"]
@@ -58,5 +79,14 @@ ignore_missing_imports = true
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
+    "pytest-cov>=6.0",
+    "hypothesis>=6.100",
     "ruff>=0.6",
 ]
+
+[tool.coverage.run]
+source = ["src/fusion360_mcp"]
+
+[tool.coverage.report]
+omit = ["*/tests/*"]
+show_missing = true
