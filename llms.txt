@@ -7,8 +7,10 @@
 ## Start here
 
 - [README](https://github.com/shinobi81/fusion360-mcp-server/blob/main/README.md):
-  install from a tag, the full tool catalogue, units (centimetres), and the error
-  envelope.
+  install from a tag, behaviour worth knowing (centimetres, 30 s bridge timeout, undo
+  semantics), and troubleshooting.
+- [docs/TOOLS.md](https://github.com/shinobi81/fusion360-mcp-server/blob/main/docs/TOOLS.md):
+  all 96 tools with descriptions, grouped by category.
 - [AGENTS.md](https://github.com/shinobi81/fusion360-mcp-server/blob/main/AGENTS.md):
   instructions for AI coding agents — commands, architecture, conventions, and the
   boundaries that matter.
