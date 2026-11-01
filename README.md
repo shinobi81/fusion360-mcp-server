@@ -14,8 +14,22 @@ Install from a tag rather than PyPI: the published 0.1.0 pins `mcp>=1.0` with no
 upper bound and crashes under mcp 2.x (upstream issue #30).
 
 ```bash
-uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.2.0' fusion360-mcp-server --mode socket
+uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.2.1' fusion360-mcp-server --mode socket
 ```
+
+Changes in 0.2.1:
+
+- `measure_distance` reads `MeasureResults.positionOne` / `positionTwo`; the
+  previous attribute names do not exist, so every call failed.
+- `new_document` creates a design, so the tools work from a cold start instead
+  of failing with "No active design". Documents it creates support components,
+  unlike UI-created Part Design documents.
+- `draw_circles` adds many circles in one sketch solve: 100 circles in 98 ms
+  against 912 ms one at a time.
+- The server dials `127.0.0.1` rather than `localhost`, which on Windows can
+  spend two seconds per connect failing over from `::1` first.
+- Tool annotations are documented as untrusted hints rather than grounds for
+  auto-approval.
 
 Changes in 0.2.0:
 
