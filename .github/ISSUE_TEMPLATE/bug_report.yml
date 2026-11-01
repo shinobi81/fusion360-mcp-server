@@ -1,3 +1,4 @@
+---
 name: Bug report
 description: Something in the MCP server or the add-in misbehaves
 labels: ["bug"]
