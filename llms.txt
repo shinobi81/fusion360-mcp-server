@@ -17,6 +17,14 @@
 - [CONTRIBUTING.md](https://github.com/shinobi81/fusion360-mcp-server/blob/main/CONTRIBUTING.md):
   dev setup, the PR rules (`main` needs a reviewed PR), and the release process.
 
+- [ARCHITECTURE.md](https://github.com/shinobi81/fusion360-mcp-server/blob/main/ARCHITECTURE.md):
+  the main-thread bridge, the error envelope, and the sketch/undo semantics that
+  surprise people.
+- [examples/model-a-bracket.md](https://github.com/shinobi81/fusion360-mcp-server/blob/main/examples/model-a-bracket.md):
+  a worked session with the envelopes to expect.
+- [SUPPORT.md](https://github.com/shinobi81/fusion360-mcp-server/blob/main/SUPPORT.md):
+  where to ask what.
+
 ## Reference
 
 - [SECURITY.md](https://github.com/shinobi81/fusion360-mcp-server/blob/main/SECURITY.md):
