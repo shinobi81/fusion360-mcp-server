@@ -99,7 +99,7 @@ Any MCP Client ←(stdio MCP)→ This Server ←(TCP :9876)→ Fusion360MCP Add-
 
 Two components:
 
-1. **MCP Server** (this repo) — Python process that speaks MCP protocol to Claude and
+1. **MCP Server** (this repo) — Python process that speaks MCP to the client and
    forwards commands over TCP
 2. **Fusion360MCP Add-in** (installed in Fusion's AddIns folder) — runs inside Fusion
    360, executes API calls safely on the main thread

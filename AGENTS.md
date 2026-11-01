@@ -13,13 +13,66 @@ for CAD automation. It consists of two pieces:
 ## How the system works
 
 ```text
-Claude Code ──stdio──> MCP Server ──TCP :9876──> Fusion Add-in ──CustomEvent──> Main Thread
-                                   <──JSON──                    <──result──
+MCP client ──stdio──> MCP Server ──TCP :9876──> Fusion Add-in ──CustomEvent──> Main Thread
+  (Claude Code,                  <──JSON──                  <──result──
+   Codex, Cursor, …)
 ```
 
 The add-in uses a CustomEvent + work queue pattern to safely dispatch all Fusion API
 calls to the main thread. Socket threads submit work items and block on a per-item
 `threading.Event` until the main thread completes execution.
+
+## Commands
+
+```bash
+uv sync                        # install deps into .venv
+uv run pytest -q               # 426 tests, no Fusion needed
+uv run ruff check src/ tests/  # lint (this is what CI runs)
+uv run ruff format src/ tests/ addon/server/command_handler.py
+npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"
+```
+
+`uv run` **rebuilds the package** when `pyproject.toml` changes, and Windows will not let
+it replace `.venv/Scripts/fusion360-mcp-server.exe` while a running MCP server holds it
+(`os error 32`). When that bites, use `uv run --no-sync …`, or stop the server first.
+
+The add-in cannot be unit-imported (it needs Fusion's `adsk` runtime), so tests load
+`command_handler.py` against a fake `adsk`. Neither pyright nor mypy can resolve `adsk`;
+`addon/` is therefore excluded from both in `pyproject.toml`.
+
+## Adding a tool
+
+1. Handler method in `addon/server/command_handler.py`, registered in `_COMMANDS`
+2. Tool definition in `src/fusion360_mcp/tools.py` (`name` must match the command exactly)
+3. Mock handler in `src/fusion360_mcp/mock.py` + `_DISPATCH` entry — `test_addon_sync.py`
+   fails if the two lists drift
+4. Mutation commands go in `_MUTATION_COMMANDS` (add-in) and `_MUTATION_MOCKS` (mock)
+5. Annotations: `readOnlyHint`, `destructiveHint`, `idempotentHint`
+6. Update `tests/test_tools.py` expectations and add a mock test
+
+The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
+
+## Conventions
+
+- Tool names are `snake_case` and must match the add-in command names.
+- **All lengths are centimetres** — Fusion's internal unit. Not millimetres.
+- Wire format is newline-delimited JSON over TCP; `ping` never touches the Fusion API.
+- Errors are returned as data (`ok: false`, `error_kind`, `hints`), not raised across the
+  wire. New failure modes get a rule in `hints.py` — in **both** mirrors.
+- Every tool has a mock handler, so `--mode mock` works without Fusion.
+
+## Boundaries
+
+- **Never push to `main`.** The ruleset requires a reviewed PR, a green CI run and
+  resolved review threads; direct pushes and force-pushes are rejected. This applies to
+the maintainer too.
+- Never commit secrets. `.env` is gitignored — keep it that way.
+- Never edit `.venv/` by hand, and do not run `uv sync` while an MCP server is running.
+- Never call `close()` on the active Fusion document from `execute_code` — it crashed
+  Fusion 2705.
+- Do not "fix" `addon/` type errors by adding ignores; `adsk` genuinely cannot resolve
+  outside Fusion and the directory is excluded on purpose.
+- Do not edit `build/`, `.venv/`, or `uv.lock` by hand (`uv lock` regenerates it).
 
 ## Available tools (96)
 

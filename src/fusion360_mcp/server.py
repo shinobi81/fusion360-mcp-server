@@ -1,7 +1,7 @@
 """
 Fusion360 MCP Server — stdio transport.
 
-Bridges Claude Code ↔ Fusion 360 add-in via TCP socket on 127.0.0.1.
+Bridges MCP clients ↔ Fusion 360 add-in via TCP socket on 127.0.0.1.
 Supports ``--mode mock`` for testing without Fusion running.
 """
 
@@ -14,6 +14,7 @@ import anyio
 import click
 import mcp.types as types
 from mcp.server.lowlevel import Server
+from pydantic import AnyUrl
 
 from .connection import (
     _DEFAULT_HOST,
@@ -184,7 +185,7 @@ def _format_result(
     help="TCP port the Fusion 360 add-in listens on (env: FUSION_MCP_PORT)",
 )
 def main(mode: str, host: str, port: int) -> int:
-    """Fusion360 MCP Server — connects Claude to Fusion 360."""
+    """Fusion360 MCP Server — connects MCP clients to Fusion 360."""
 
     app = Server("fusion360-mcp-server")
 
@@ -232,19 +233,19 @@ def main(mode: str, host: str, port: int) -> int:
     async def list_resources() -> list[types.Resource]:
         return [
             types.Resource(
-                uri=types.AnyUrl("fusion360://status"),
+                uri=AnyUrl("fusion360://status"),
                 name="Connection Status",
                 description="Check whether Fusion 360 is reachable",
                 mimeType="application/json",
             ),
             types.Resource(
-                uri=types.AnyUrl("fusion360://design"),
+                uri=AnyUrl("fusion360://design"),
                 name="Design Tree",
                 description="Full design tree: bodies, sketches, features, components",
                 mimeType="application/json",
             ),
             types.Resource(
-                uri=types.AnyUrl("fusion360://parameters"),
+                uri=AnyUrl("fusion360://parameters"),
                 name="User Parameters",
                 description="All user-defined parameters in the design",
                 mimeType="application/json",
@@ -252,9 +253,9 @@ def main(mode: str, host: str, port: int) -> int:
         ]
 
     @app.read_resource()
-    async def read_resource(uri: types.AnyUrl) -> str:
-        uri = str(uri)
-        if uri == "fusion360://status":
+    async def read_resource(uri: AnyUrl) -> str:
+        uri_str = str(uri)
+        if uri_str == "fusion360://status":
             try:
                 result = _send(mode, "ping", host=host, port=port)
                 return json.dumps(
@@ -268,7 +269,7 @@ def main(mode: str, host: str, port: int) -> int:
                     indent=2,
                 )
 
-        if uri == "fusion360://design":
+        if uri_str == "fusion360://design":
             try:
                 result = _send(mode, "get_scene_info", host=host, port=port)
                 return json.dumps(result, indent=2)
@@ -276,7 +277,7 @@ def main(mode: str, host: str, port: int) -> int:
                 reset_connection()
                 return json.dumps({"error": str(exc)}, indent=2)
 
-        if uri == "fusion360://parameters":
+        if uri_str == "fusion360://parameters":
             try:
                 result = _send(
                     mode,
@@ -290,7 +291,7 @@ def main(mode: str, host: str, port: int) -> int:
                 return json.dumps({"error": str(exc)}, indent=2)
 
         # ── resource template matches ─────────────────────────────
-        body_match = re.match(r"^fusion360://body/(.+)$", uri)
+        body_match = re.match(r"^fusion360://body/(.+)$", uri_str)
         if body_match:
             name = body_match.group(1)
             try:
@@ -308,7 +309,7 @@ def main(mode: str, host: str, port: int) -> int:
 
         comp_match = re.match(
             r"^fusion360://component/(.+)$",
-            uri,
+            uri_str,
         )
         if comp_match:
             name = comp_match.group(1)
@@ -325,7 +326,7 @@ def main(mode: str, host: str, port: int) -> int:
                 reset_connection()
                 return json.dumps({"error": str(exc)}, indent=2)
 
-        raise ValueError(f"Unknown resource: {uri}")
+        raise ValueError(f"Unknown resource: {uri_str}")
 
     # ── resource templates ────────────────────────────────────────────
 
