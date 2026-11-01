@@ -1206,40 +1206,34 @@ class CommandHandler:
         axis_direction_z: float = 0,
         operation: str = "new_body",
     ):
+        """Revolve the profile about ``axis_origin`` + ``axis_direction``.
+
+        Both are **model space** (cm).  The axis is one of Fusion's own
+        construction axes when it is world-aligned and passes through the model
+        origin; otherwise it is a construction line in the profile's sketch, so
+        it must be coplanar with the profile — an axis leaving the sketch plane
+        is refused rather than silently projected onto it.
+        """
         root = self._root()
         sketch = self._last_sketch()
         if sketch.profiles.count == 0:
             raise RuntimeError("No profiles in sketch")
-        profile = sketch.profiles.item(profile_index)
+        # Read the frame before anything is created, so a failure here cannot
+        # report an error for geometry that was already built.
+        frame = self._sketch_frame(sketch)
 
-        # Determine axis entity first (required for createInput)
-        axis_entity = None
-        is_x = abs(axis_direction_x) > 0.99 and abs(axis_direction_y) < 0.01
-        is_y = abs(axis_direction_y) > 0.99 and abs(axis_direction_x) < 0.01
-        is_z = abs(axis_direction_z) > 0.99 and abs(axis_direction_x) < 0.01
-        if is_x and abs(axis_direction_z) < 0.01:
-            axis_entity = root.xConstructionAxis
-        elif is_y and abs(axis_direction_z) < 0.01:
-            axis_entity = root.yConstructionAxis
-        elif is_z and abs(axis_direction_y) < 0.01:
-            axis_entity = root.zConstructionAxis
-        else:
-            # Axis line lives in the **sketch's** frame, like every other sketch
-            # curve, so on an offset sketch an axis_origin_z is absolute in that
-            # frame rather than in model space. Known and unfixed — see
-            # HANDOVER §7. Converting through sketch.modelToSketchSpace and
-            # measuring it in Fusion is the fix, not a silent edit here.
-            origin = adsk.core.Point3D.create(
-                axis_origin_x, axis_origin_y, axis_origin_z
-            )
-            end_pt = adsk.core.Point3D.create(
-                axis_origin_x + axis_direction_x * 10,
-                axis_origin_y + axis_direction_y * 10,
-                axis_origin_z + axis_direction_z * 10,
-            )
-            line = sketch.sketchCurves.sketchLines.addByTwoPoints(origin, end_pt)
-            line.isConstruction = True
-            axis_entity = line
+        axis_entity, axis_report = self._revolve_axis(
+            root,
+            sketch,
+            frame,
+            (axis_origin_x, axis_origin_y, axis_origin_z),
+            (axis_direction_x, axis_direction_y, axis_direction_z),
+        )
+
+        # After the axis line, never before: adding geometry to the sketch
+        # invalidates the profile proxy, and Fusion then rejects the revolve
+        # with "invalid profile(s) for Revolve Feature".
+        profile = sketch.profiles.item(profile_index)
 
         rev_feats = root.features.revolveFeatures
         rev_input = rev_feats.createInput(
@@ -1250,7 +1244,99 @@ class CommandHandler:
         rev_input.setAngleExtent(False, angle_val)
 
         feat = rev_feats.add(rev_input)
-        return {"feature_name": feat.name, "angle": angle, "operation": operation}
+        return {
+            "feature_name": feat.name,
+            "angle": angle,
+            "operation": operation,
+            **axis_report,
+        }
+
+    @staticmethod
+    def _world_axis(root, direction):
+        """Fusion's own construction axis for a world-aligned direction, if any."""
+        dx, dy, dz = direction
+        scale = max(abs(dx), abs(dy), abs(dz))
+        if scale == 0:
+            return None
+        ux, uy, uz = dx / scale, dy / scale, dz / scale
+        if abs(ux) > 0.99 and abs(uy) < 0.01 and abs(uz) < 0.01:
+            return root.xConstructionAxis
+        if abs(uy) > 0.99 and abs(ux) < 0.01 and abs(uz) < 0.01:
+            return root.yConstructionAxis
+        if abs(uz) > 0.99 and abs(ux) < 0.01 and abs(uy) < 0.01:
+            return root.zConstructionAxis
+        return None
+
+    @classmethod
+    def _revolve_axis(cls, root, sketch, frame, origin, direction):
+        """The revolve axis as an entity, plus where it landed in model space.
+
+        ``origin`` and ``direction`` are model space.  A sketch line can only
+        live in the sketch's own plane, so the axis line is built from points
+        converted with ``modelToSketchSpace`` — passing model coordinates
+        straight through displaced the axis by the plane's offset (0.4.0) and
+        left it unrotated on a yz/xz sketch.
+        """
+        dx, dy, dz = direction
+        length = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if length == 0:
+            raise RuntimeError(
+                "Invalid input: revolve axis direction is zero-length — pass "
+                "axis_direction_x/y/z"
+            )
+        # A 10 cm probe along the unit direction: long enough to be visible in
+        # the sketch, and independent of the magnitude the caller passed.
+        ux, uy, uz = dx / length, dy / length, dz / length
+
+        world = cls._world_axis(root, direction)
+        if world is not None and max(abs(v) for v in origin) <= 1e-9:
+            return world, {
+                "axis_model_start": [0.0, 0.0, 0.0],
+                "axis_model_end": [ux * 10, uy * 10, uz * 10],
+            }
+
+        start = sketch.modelToSketchSpace(adsk.core.Point3D.create(*origin))
+        end = sketch.modelToSketchSpace(
+            adsk.core.Point3D.create(
+                origin[0] + ux * 10, origin[1] + uy * 10, origin[2] + uz * 10
+            )
+        )
+        # The direction, in the sketch's frame: a nonzero normal component means
+        # the axis cannot be a construction line, and projecting it would turn
+        # the profile about an axis the caller never asked for.
+        sdx, sdy, sdz = end.x - start.x, end.y - start.y, end.z - start.z
+        span = math.sqrt(sdx * sdx + sdy * sdy + sdz * sdz)
+        if abs(sdz) > 1e-6 * span:
+            off_plane = math.degrees(math.asin(min(1.0, abs(sdz) / span)))
+            raise RuntimeError(
+                "Invalid input: the revolve axis does not lie in the sketch "
+                f"plane — axis_direction is {off_plane:.3g}\u00b0 out of it. A "
+                "revolve axis built from axis_origin/axis_direction is a "
+                "construction line in the profile's sketch, so it must be "
+                "coplanar with the profile; sketch the profile on a plane that "
+                "contains the axis, or pass a world-aligned direction."
+            )
+
+        snapped = abs(start.z) > 1e-6
+        start_pt = adsk.core.Point3D.create(start.x, start.y, 0)
+        end_pt = adsk.core.Point3D.create(start.x + sdx, start.y + sdy, 0)
+        line = sketch.sketchCurves.sketchLines.addByTwoPoints(start_pt, end_pt)
+        line.isConstruction = True
+
+        report = {
+            "axis_model_start": cls._model_point(frame, start_pt.x, start_pt.y),
+            "axis_model_end": cls._model_point(frame, end_pt.x, end_pt.y),
+        }
+        if snapped:
+            report["axis_snapped_to_sketch_plane"] = True
+            report["note"] = (
+                "The requested axis origin is not on the profile's sketch "
+                "plane. A construction line cannot leave it, so the offset "
+                "along the plane normal was dropped and the axis lies in the "
+                "sketch plane — see axis_model_start/axis_model_end for where "
+                "it actually runs."
+            )
+        return line, report
 
     def sweep(
         self,

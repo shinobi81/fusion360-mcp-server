@@ -168,19 +168,59 @@ TOOLS: list[dict] = [
     {
         "name": "revolve",
         "title": "Revolve",
-        "description": "Revolve a sketch profile around an axis",
+        "description": (
+            "Revolve the most recent sketch's profile about an axis. "
+            "axis_origin and axis_direction are model space (cm). The axis "
+            "must be coplanar with the profile: a world-aligned direction "
+            "through the model origin uses Fusion's own construction axis, "
+            "anything else becomes a construction line in the sketch, and an "
+            "axis leaving the sketch plane is refused with AXIS_OUT_OF_PLANE. "
+            "The result reports axis_model_start/axis_model_end."
+        ),
         "inputSchema": {
             "type": "object",
             "required": ["angle"],
             "properties": {
                 "angle": {"type": "number", "minimum": 0.1, "maximum": 360},
-                "profile_index": {"type": "integer", "default": 0},
-                "axis_origin_x": {"type": "number", "default": 0},
-                "axis_origin_y": {"type": "number", "default": 0},
-                "axis_origin_z": {"type": "number", "default": 0},
-                "axis_direction_x": {"type": "number", "default": 1},
-                "axis_direction_y": {"type": "number", "default": 0},
-                "axis_direction_z": {"type": "number", "default": 0},
+                "profile_index": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Index of the profile in the most recent sketch",
+                },
+                "axis_origin_x": {
+                    "type": "number",
+                    "default": 0,
+                    "description": "Axis origin X, model space (cm)",
+                },
+                "axis_origin_y": {
+                    "type": "number",
+                    "default": 0,
+                    "description": "Axis origin Y, model space (cm)",
+                },
+                "axis_origin_z": {
+                    "type": "number",
+                    "default": 0,
+                    "description": (
+                        "Axis origin Z, model space (cm). Must be the "
+                        "profile's own plane height; an offset along the plane "
+                        "normal is dropped and reported."
+                    ),
+                },
+                "axis_direction_x": {
+                    "type": "number",
+                    "default": 1,
+                    "description": "Axis direction X, model space (normalised)",
+                },
+                "axis_direction_y": {
+                    "type": "number",
+                    "default": 0,
+                    "description": "Axis direction Y, model space (normalised)",
+                },
+                "axis_direction_z": {
+                    "type": "number",
+                    "default": 0,
+                    "description": "Axis direction Z, model space (normalised)",
+                },
                 "operation": {
                     "type": "string",
                     "enum": ["new_body", "join", "cut", "intersect"],

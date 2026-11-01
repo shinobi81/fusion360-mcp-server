@@ -7,6 +7,40 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [Unreleased]
+
+### Fixed
+
+- **`revolve` now turns the profile about the axis the caller asked for.** Two defects,
+  both measured in Fusion 2706.1.17 against a profile on a sketch offset to model
+  `z=-2` with `axis_origin=(0, 0, 0)`:
+  - The axis line was built in the **sketch's** frame, so it landed at model `z=-2`
+    instead of `z=0` — displaced by exactly the plane offset — and a direction given in
+    model space was left unrotated on a `yz`/`xz` sketch. `axis_origin_*` and
+    `axis_direction_*` are now documented and treated as **model space (cm)**, converted
+    through `modelToSketchSpace`. The result reports `axis_model_start` /
+    `axis_model_end`, and an origin off the sketch plane is snapped into it with
+    `axis_snapped_to_sketch_plane` plus a `note` rather than silently displaced.
+  - The profile proxy was fetched **before** the axis line was added to the same sketch,
+    and Fusion invalidates a proxy when the sketch changes: every non-world axis failed
+    with `3 : invalid profile(s) for Revolve Feature`. Held geometry and the axis fixed
+    and varied only that order — fetched-before fails, fetched-after builds the feature.
+- `axis_origin` is honoured for world-aligned directions too. Asking for a line parallel
+  to model X through `(0, 5, 0)` used to return the X axis through the model origin, the
+  origin argument silently dropped.
+- A revolve axis that cannot lie in the profile's sketch plane is refused with the new
+  `AXIS_OUT_OF_PLANE` error kind and hints, instead of being projected onto a different
+  axis.
+
+### Changed
+
+- A direction is normalised, so its magnitude no longer changes the axis.
+- A world-aligned direction **with a non-zero `axis_origin`** now builds the axis the
+  caller asked for instead of falling back to the axis through the model origin. When
+  that offset axis cannot lie in the sketch plane — `axis_direction_z` on an `xy` sketch
+  with `axis_origin=(3, 4, 0)`, say — it reports `AXIS_OUT_OF_PLANE` rather than silently
+  revolving about a different line.
+
 ## [0.4.0] - 2026-11-01
 
 ### Changed
