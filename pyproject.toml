@@ -8,9 +8,11 @@ license = "AGPL-3.0-or-later"
 license-files = ["LICENSE", "THIRD-PARTY-NOTICES.md"]
 authors = [{ name = "Andrea Camillacci" }]
 dependencies = [
-    "anyio>=4.5",
+    # Floors are the first patched releases for known advisories: a tag
+    # install resolves from these, not from uv.lock.
+    "anyio>=4.14.2",
     "click>=8.1",
-    "mcp>=1.0,<2",
+    "mcp>=1.27.2,<2",
 ]
 
 [project.urls]
@@ -55,6 +57,6 @@ ignore_missing_imports = true
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0",
+    "pytest>=9.0.3",
     "ruff>=0.6",
 ]

@@ -1,0 +1,48 @@
+---
+name: Scorecard
+
+on:
+  branch_protection_rule:
+  schedule:
+    # Weekly. Results are published to the public Scorecard API, which is what
+    # `api.securityscorecards.dev/projects/github.com/<owner>/<repo>` serves.
+    - cron: "30 1 * * 6"
+  push:
+    branches: [main]
+
+permissions: read-all
+
+jobs:
+  analysis:
+    runs-on: ubuntu-latest
+
+    permissions:
+      security-events: write
+      id-token: write  # required to publish results
+      contents: read
+      actions: read
+
+    steps:
+      # actions/checkout v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # ossf/scorecard-action v2.4.3
+      - uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      # actions/upload-artifact v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scorecard-results
+          path: results.sarif
+          retention-days: 5
+
+      # github/codeql-action v3
+      - uses: github/codeql-action/upload-sarif@4bfa242aa49c5f7c6770b98670d354a7dfac05f8  # yamllint disable-line rule:line-length
+        with:
+          sarif_file: results.sarif

@@ -1,0 +1,17 @@
+# Line-ending policy. Without this, every CRLF/LF round-trip shows up as a
+# modified file in `git status` — which is what kept happening on Windows.
+* text=auto eol=lf
+
+# Windows-native scripts must keep CRLF or cmd.exe misparses them.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary-ish assets: never normalise.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.whl binary
