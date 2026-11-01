@@ -1,3 +1,4 @@
+---
 name: CI
 
 on:
@@ -7,29 +8,69 @@ on:
     branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # github.ref is refs/pull/<n>/merge on PRs, so this still cancels per PR.
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Check names are contractual: "test (3.12)" is a required status check on
+  # main. Renaming this job or that matrix entry unprotects merges silently.
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.12"]
+        python-version: ["3.10", "3.12", "3.13"]
 
     steps:
-      - uses: actions/checkout@v7
+      # Actions are pinned to commit SHAs, not tags: a tag can be moved, a SHA
+      # cannot. The version each SHA corresponds to is on the line above.
+      # actions/checkout v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - uses: astral-sh/setup-uv@v10.3.3
+      # astral-sh/setup-uv v10.3.3 — no floating major exists past v7, so this
+      # must name an exact release.
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
 
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --dev --frozen
 
       - name: Lint
         run: uv run ruff check src/ tests/
 
       - name: Test
         run: uv run pytest -v
+
+  # This project has Windows-specific behaviour (loopback resolution, an .exe
+  # the running MCP server keeps open), so the suite runs there too.
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      # actions/checkout v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      # astral-sh/setup-uv v10.3.3
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+
+      - name: Install dependencies
+        run: uv sync --dev --frozen
+
+      - name: Test
+        run: uv run pytest -q
+
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      # actions/checkout v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      # actions/setup-node v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+
+      - name: Lint Markdown
+        run: npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"

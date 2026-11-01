@@ -1,0 +1,32 @@
+# Fusion360 MCP Server
+
+> MCP server that lets AI coding agents drive Autodesk Fusion 360: primitives,
+> sketching, features, assemblies, sheet metal, CAM, measurement and export — 96
+> tools over the Model Context Protocol, with errors returned as structured data.
+
+## Start here
+
+- [README](https://github.com/shinobi81/fusion360-mcp-server/blob/main/README.md):
+  install from a tag, the full tool catalogue, units (centimetres), and the error
+  envelope.
+- [AGENTS.md](https://github.com/shinobi81/fusion360-mcp-server/blob/main/AGENTS.md):
+  instructions for AI coding agents — commands, architecture, conventions, and the
+  boundaries that matter.
+- [CONTRIBUTING.md](https://github.com/shinobi81/fusion360-mcp-server/blob/main/CONTRIBUTING.md):
+  dev setup, the PR rules (`main` needs a reviewed PR), and the release process.
+
+## Reference
+
+- [SECURITY.md](https://github.com/shinobi81/fusion360-mcp-server/blob/main/SECURITY.md):
+  private reporting, supported versions, and the deliberate local-trust model of the
+  add-in socket.
+- [CHANGELOG.md](https://github.com/shinobi81/fusion360-mcp-server/blob/main/CHANGELOG.md):
+  what changed in each tagged release.
+- [THIRD-PARTY-NOTICES.md](https://github.com/shinobi81/fusion360-mcp-server/blob/main/THIRD-PARTY-NOTICES.md):
+  upstream MIT attribution. The project itself is AGPL-3.0-or-later.
+
+## Optional
+
+- [Upstream project](https://github.com/faust-machines/fusion360-mcp-server): this
+  repository is a maintained continuation; upstream has had no merges since
+  2026-10-06.
