@@ -7,7 +7,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
-## [Unreleased]
+## [0.4.0] - 2026-11-01
 
 ### Changed
 
@@ -48,9 +48,17 @@ and published; they are the fork history.
 - The README claimed 93 tools (three were missing from the catalogue), cited Fusion
   2705, and told you to install from PyPI while explaining elsewhere that the PyPI
   build is broken.
+- A body *named* after the other kind was misclassified: `Body 'Sketch1' not found` came
+  back as `SKETCH_NOT_FOUND`, because that rule spanned the whole message and was matched
+  first. Both `hints.py` mirrors anchor on the quoted name, and `BODY_NOT_FOUND` is
+  matched before `SKETCH_NOT_FOUND`.
 
 ### Docs / project
 
+- Property-based tests over `hints.classify` (the bug above came from them), coverage
+  measured on every run and floored at 80%, and a macOS CI leg.
+- `ARCHITECTURE.md` (main-thread boundary, error envelope, sketch/undo semantics),
+  `examples/model-a-bracket.md` (a worked session), `SUPPORT.md`.
 - `AGENTS.md` gained commands-first, how-to-add-a-tool, conventions and an explicit
   Boundaries section; the model-specific `.claude/CLAUDE.md` is gone.
 - `CODEOWNERS`, issue templates, a PR template, Dependabot (with security updates),
@@ -112,7 +120,7 @@ and published; they are the fork history.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
-[Unreleased]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.3.1...HEAD
+[0.4.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.2.1...v0.2.2
