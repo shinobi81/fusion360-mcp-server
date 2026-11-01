@@ -1,7 +1,7 @@
 """
 MCP tool definitions for every command the Fusion360MCP add-in supports.
 
-Each entry becomes a tool that Claude can call.  The ``inputSchema`` is
+Each entry becomes a tool an MCP client can call.  The ``inputSchema`` is
 JSON Schema that the MCP SDK validates before forwarding arguments.
 """
 
