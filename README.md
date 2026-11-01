@@ -1,5 +1,10 @@
 # Fusion360 MCP Server
 
+[![CI](https://github.com/shinobi81/fusion360-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/shinobi81/fusion360-mcp-server/actions/workflows/ci.yml)
+[![Licence: AGPL-3.0-or-later](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+[![MCP](https://img.shields.io/badge/protocol-MCP-8A2BE2.svg)](https://modelcontextprotocol.io)
+
 Last updated: 2026-11-01
 
 > **Beta** — This project is under active development. APIs and tool behavior may change
@@ -38,10 +43,10 @@ Changes in 0.3.1:
 
 Changes in 0.3.0:
 
-- **Licence change.** The work added in this repo is now AGPL-3.0-or-later; the code
-  inherited from upstream remains MIT and its notice is kept in `LICENSE-MIT`. See
-  `NOTICE`. Running a modified version as a network service therefore requires offering
-  its source to that service's users. Tags before 0.3.0 are still MIT.
+- **Licence change.** The project is licensed **AGPL-3.0-or-later**. The attribution
+  the inherited upstream code requires is kept in `THIRD-PARTY-NOTICES.md`. Running a
+  modified version as a network service requires offering its source to that service's
+  users. Tags before 0.3.0 are still MIT.
 
 Changes in 0.2.2:
 
@@ -77,11 +82,10 @@ Changes in 0.2.0:
 
 ### Licence
 
-The work added in this repo is **AGPL-3.0-or-later**. The code inherited from upstream
-remains **MIT**, and its notice is retained in [LICENSE-MIT](LICENSE-MIT) because that
-grant cannot be withdrawn. Both apply together; [NOTICE](NOTICE) explains which is
-which. Practically: if you run a modified version of this repo as a network service,
-AGPL section 13 requires you to offer the source to its users.
+**AGPL-3.0-or-later** — see [LICENSE](LICENSE). The attribution the inherited upstream
+code requires is kept in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md); it is not an
+alternative licence for this project. Practically: if you run a modified version as a
+network service, AGPL section 13 requires you to offer the source to its users.
 
 The upstream instructions below apply unchanged.
 
