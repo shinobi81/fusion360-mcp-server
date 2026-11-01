@@ -350,10 +350,12 @@ def _install_fake_adsk():
 
 @pytest.fixture(scope="module")
 def handler_module():
-    """command_handler.py, imported against the fake runtime."""
-    if FAKE_PACKAGE in sys.modules:
-        return sys.modules[f"{FAKE_PACKAGE}.server.command_handler"]
+    """command_handler.py, imported against the fake runtime.
 
+    Yields rather than returning a cached module: a module-scoped fixture runs
+    exactly once, so a cache check would be unreachable code — and mixing
+    ``return`` with ``yield`` in one fixture is a smell, not a shortcut.
+    """
     _install_fake_adsk()
     package = types.ModuleType(FAKE_PACKAGE)
     package.__path__ = [str(SERVER_DIR.parent)]

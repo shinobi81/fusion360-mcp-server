@@ -89,13 +89,10 @@ _RULES: list[tuple[str, str, list[str]]] = [
         r"revolve axis .{0,40}?sketch plane",
         "AXIS_OUT_OF_PLANE",
         [
-            "A revolve axis given as axis_origin/axis_direction is built as a "
-            "construction line in the profile's sketch, so it must be "
-            "coplanar with the profile.",
-            "World-aligned directions (axis_direction_x/y/z alone) are "
-            "supported directly and do not need to be coplanar.",
-            "For any other axis, sketch the profile on a plane that contains "
-            "it, then revolve.",
+            "The axis is a construction line in the profile's sketch.",
+            "So it must be coplanar with the profile: one sketch plane.",
+            "axis_origin/axis_direction are model space (cm).",
+            "World directions x/y/z use the model axes, no coplanarity.",
         ],
     ),
     (
