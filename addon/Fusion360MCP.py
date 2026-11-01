@@ -49,11 +49,15 @@ def run(context):
         _server = Fusion360MCPServer(_bridge, host=host, port=port)
         _server.start()
 
-        _log.info("Fusion360MCP loaded - server on %s:%s  (log: %s)",
-                  host, port, LOG_PATH)
+        _log.info(
+            "Fusion360MCP loaded - server on %s:%s  (log: %s)", host, port, LOG_PATH
+        )
         if host not in ("localhost", "127.0.0.1"):
-            _log.warning("Listening on non-loopback host %s — "
-                         "ensure this is a trusted LAN (no auth).", host)
+            _log.warning(
+                "Listening on non-loopback host %s — "
+                "ensure this is a trusted LAN (no auth).",
+                host,
+            )
 
     except Exception:
         msg = traceback.format_exc()

@@ -1026,6 +1026,7 @@ def _default_mock(p: dict) -> dict:
 
 # ── dispatch table ────────────────────────────────────────────────────
 
+
 def _new_document(p: dict) -> dict:
     return {
         "created": True,

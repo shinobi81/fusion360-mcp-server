@@ -53,11 +53,7 @@ class TestDeleteAll:
         every item, so delete_all removed nothing at all.
         """
         node = _method("delete_all")
-        attrs = {
-            n.attr
-            for n in ast.walk(node)
-            if isinstance(n, ast.Attribute)
-        }
+        attrs = {n.attr for n in ast.walk(node) if isinstance(n, ast.Attribute)}
         assert "entity" in attrs, (
             "delete_all must reach the feature through TimelineObject.entity; "
             "TimelineObject itself has no deleteMe()"
@@ -78,11 +74,7 @@ class TestDeleteAll:
         keys: set[str] = set()
         for ret in returns:
             if isinstance(ret.value, ast.Dict):
-                keys |= {
-                    k.value
-                    for k in ret.value.keys
-                    if isinstance(k, ast.Constant)
-                }
+                keys |= {k.value for k in ret.value.keys if isinstance(k, ast.Constant)}
         assert "remaining" in keys, (
             "delete_all should report what is still in the design, so a "
             "partial failure is visible to the caller"
@@ -99,19 +91,18 @@ class TestCheckInterference:
             "Design.createInterferenceInput() + Design.analyzeInterference()"
         )
         assert {"createInterferenceInput", "analyzeInterference"} <= called, (
-            "check_interference must go through the Design-level interference "
-            "API"
+            "check_interference must go through the Design-level interference API"
         )
 
     def test_iterates_results_as_a_collection(self):
         """analyzeInterference returns a collection with .count / .item()."""
         node = _method("check_interference")
-        attrs = {
-            n.attr for n in ast.walk(node) if isinstance(n, ast.Attribute)
-        }
+        attrs = {n.attr for n in ast.walk(node) if isinstance(n, ast.Attribute)}
         assert "interferenceResultCount" not in attrs, (
             "interferenceResultCount belongs to the old, non-existent API"
         )
+
+
 class TestDraftFaces:
     """``DraftFeatures.createInput(inputFaces, plane, isTangentChain)``.
 
@@ -174,8 +165,7 @@ class TestMeasureDistance:
         node = _method("measure_distance")
         attrs = {n.attr for n in ast.walk(node) if isinstance(n, ast.Attribute)}
         assert {"positionOne", "positionTwo"} <= attrs, (
-            "measure_distance must read MeasureResults.positionOne / "
-            "positionTwo"
+            "measure_distance must read MeasureResults.positionOne / positionTwo"
         )
         assert not attrs & {"pointOnEntityOne", "pointOnEntityTwo"}, (
             "MeasureResults has no pointOnEntityOne / pointOnEntityTwo"
