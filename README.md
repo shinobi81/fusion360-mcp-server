@@ -4,13 +4,18 @@ Last updated: 2026-11-01
 
 > **Beta** — This project is under active development. APIs and tool behavior may change
 > between releases. Use at your own discretion. Feedback and bug reports welcome via
-> [GitHub Issues](https://github.com/faust-machines/fusion360-mcp-server/issues).
+> [GitHub Issues](https://github.com/shinobi81/fusion360-mcp-server/issues).
 
-## This fork
+## This repo
 
-`shinobi81/fusion360-mcp-server` carries fixes that are not upstream yet. The upstream
-repository has had no merges since 2026-10-06, and the joint fixes are waiting there as
+`shinobi81/fusion360-mcp-server` is a maintained continuation of
+[faust-machines/fusion360-mcp-server](https://github.com/faust-machines/fusion360-mcp-server),
+carrying fixes that are not upstream yet. Upstream has had no merges since 2026-10-06,
+and the joint fixes are waiting there as
 [PR #35](https://github.com/faust-machines/fusion360-mcp-server/pull/35).
+
+Bugs and questions go here, in this repo's
+[issue tracker](https://github.com/shinobi81/fusion360-mcp-server/issues).
 
 Install from a tag rather than PyPI: the published 0.1.0 pins `mcp>=1.0` with no upper
 bound and crashes under mcp 2.x (upstream issue #30).
@@ -33,7 +38,7 @@ Changes in 0.3.1:
 
 Changes in 0.3.0:
 
-- **Licence change.** The work added in this fork is now AGPL-3.0-or-later; the code
+- **Licence change.** The work added in this repo is now AGPL-3.0-or-later; the code
   inherited from upstream remains MIT and its notice is kept in `LICENSE-MIT`. See
   `NOTICE`. Running a modified version as a network service therefore requires offering
   its source to that service's users. Tags before 0.3.0 are still MIT.
@@ -72,10 +77,10 @@ Changes in 0.2.0:
 
 ### Licence
 
-The work added in this fork is **AGPL-3.0-or-later**. The code inherited from upstream
+The work added in this repo is **AGPL-3.0-or-later**. The code inherited from upstream
 remains **MIT**, and its notice is retained in [LICENSE-MIT](LICENSE-MIT) because that
 grant cannot be withdrawn. Both apply together; [NOTICE](NOTICE) explains which is
-which. Practically: if you run a modified version of this fork as a network service,
+which. Practically: if you run a modified version of this repo as a network service,
 AGPL section 13 requires you to offer the source to its users.
 
 The upstream instructions below apply unchanged.
