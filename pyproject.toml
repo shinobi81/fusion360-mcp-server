@@ -8,8 +8,8 @@ license = "AGPL-3.0-or-later"
 license-files = ["LICENSE", "THIRD-PARTY-NOTICES.md"]
 authors = [{ name = "Andrea Camillacci" }]
 dependencies = [
-    "anyio>=4.5",
-    "click>=8.1",
+    "anyio>=4.15.1",
+    "click>=8.5.0",
     "mcp>=1.0,<2",
 ]
 
@@ -55,6 +55,6 @@ ignore_missing_imports = true
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0",
-    "ruff>=0.6",
+    "pytest>=9.1.1",
+    "ruff>=0.17.2",
 ]
