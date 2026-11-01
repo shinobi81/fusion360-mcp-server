@@ -1,0 +1,34 @@
+---
+version: 2
+
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    # Let a release age before it is proposed: a compromised or broken upload
+    # is usually caught by someone else in the first few days.
+    cooldown:
+      default-days: 7
+    groups:
+      # Minor and patch bumps arrive as one PR; a major stays separate because
+      # `mcp` majors have broken this package before (PyPI 0.1.0 pins mcp>=1.0
+      # with no upper bound and crashes under 2.x).
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci(deps)"
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
