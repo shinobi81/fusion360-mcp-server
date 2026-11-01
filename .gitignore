@@ -9,4 +9,8 @@ build/
 .ruff_cache/
 *.log
 
+# local editor / environment files
+.env
+.vscode/
+
 .worktrees
