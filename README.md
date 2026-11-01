@@ -4,6 +4,28 @@
 
 > **Beta** — This project is under active development. APIs and tool behavior may change between releases. Use at your own discretion. Feedback and bug reports welcome via [GitHub Issues](https://github.com/faust-machines/fusion360-mcp-server/issues).
 
+## This fork
+
+`shinobi81/fusion360-mcp-server` carries fixes that are not upstream yet. The
+upstream repository has had no merges since 2026-10-06, and the joint fixes are
+waiting there as [PR #35](https://github.com/faust-machines/fusion360-mcp-server/pull/35).
+
+Install from a tag rather than PyPI: the published 0.1.0 pins `mcp>=1.0` with no
+upper bound and crashes under mcp 2.x (upstream issue #30).
+
+```bash
+uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.2.0' fusion360-mcp-server --mode socket
+```
+
+Changes in 0.2.0:
+
+- `add_joint` and `create_as_built_joint` build joints from face geometry and
+  honour `joint_type` for all seven motion types.
+- `set_joint_value` drives ball and cylindrical joints, and treats slide values
+  as centimetres instead of converting them from degrees.
+
+The upstream instructions below apply unchanged.
+
 MCP server that connects AI coding agents to Autodesk Fusion 360 for CAD automation.
 
 Tested with [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Works with any MCP-compatible client — OpenCode, Codex, Cursor, or anything that speaks the [Model Context Protocol](https://modelcontextprotocol.io).
