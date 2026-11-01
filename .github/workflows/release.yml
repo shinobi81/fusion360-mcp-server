@@ -1,0 +1,60 @@
+---
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write  # create the release and upload assets
+      id-token: write  # required for build provenance attestation
+      attestations: write  # required for build provenance attestation
+
+    steps:
+      # actions/checkout v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      # astral-sh/setup-uv v10.3.3
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+
+      - name: Build wheel and sdist
+        run: uv build
+
+      # Scorecard's SBOM check looks for an SBOM among the release assets, so it
+      # is generated from the exact dependency set the wheel resolves.
+      - name: Generate SBOM (CycloneDX)
+        run: |
+          uv export --no-hashes --format requirements-txt -o /tmp/req.txt
+          grep -v '^fusion360-mcp-server' /tmp/req.txt > /tmp/req-audited.txt || true
+          uvx --from cyclonedx-bom cyclonedx-py requirements /tmp/req-audited.txt \
+            --output-format JSON -o dist/sbom.cdx.json
+
+      # SLSA-style provenance for the wheel and sdist: proves they were built
+      # by this workflow from this commit, not uploaded by hand.
+      # actions/attest-build-provenance v4.2.2
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-path: "dist/*.whl, dist/*.tar.gz"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/*.whl dist/*.tar.gz dist/sbom.cdx.json \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --verify-tag
+
+      - name: Summarise
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}"
