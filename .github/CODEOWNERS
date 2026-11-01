@@ -1,0 +1,16 @@
+# Code owners for shinobi81/fusion360-mcp-server.
+#
+# A pull request touching these paths needs an approving review from an owner.
+# The ruleset on `main` additionally requires one approval overall, a green CI
+# run, resolved review threads, and forbids direct pushes and force-pushes.
+#
+# Keep this list current: the default `*` rule makes the listed owner the
+# reviewer for every file, so a stale account here silently stops reviews being
+# requested.
+* @shinobi81
+
+# The wire protocol and the error envelope are the contract other agents code
+# against; changes there deserve a second look even if the rest looks routine.
+/src/fusion360_mcp/tools.py        @shinobi81
+/src/fusion360_mcp/hints.py        @shinobi81
+/addon/server/command_handler.py   @shinobi81
