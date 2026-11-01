@@ -51,7 +51,7 @@ verified on **Fusion 2706.1.17**.
 | Tool                  | Description                           |
 | --------------------- | ------------------------------------- |
 | `extrude`             | Extrude a sketch profile              |
-| `revolve`             | Revolve a profile around an axis      |
+| `revolve`             | Revolve about a model-space axis (must be coplanar with the profile) |
 | `sweep`               | Sweep a profile along a path          |
 | `loft`                | Loft between two or more profiles     |
 | `fillet`              | Round edges (all/top/bottom/vertical) |

@@ -295,7 +295,7 @@ of guessing whether an operation worked:
 ```
 
 Known `error_kind` values: `PROFILE_NOT_CLOSED`, `SKETCH_NOT_FOUND`, `BODY_NOT_FOUND`,
-`SELF_INTERSECTION`, `REGEN_FAILED`, `BOOLEAN_NO_OP`, `INVALID_INPUT`,
+`SELF_INTERSECTION`, `REGEN_FAILED`, `BOOLEAN_NO_OP`, `AXIS_OUT_OF_PLANE`, `INVALID_INPUT`,
 `NO_ACTIVE_DESIGN`, `DESIGN_TYPE_MISMATCH`, `NOT_ENTITLED`, `TIMEOUT`, `UNKNOWN_COMMAND`,
 `UNKNOWN`.
 
@@ -311,6 +311,15 @@ onto the sketch plane rather than added to its offset — passing the plane's ow
 `model_start` / `model_end` / `model_points` (model space, cm), plus `ignored_z` and a
 `note` whenever a non-zero `z` was discarded. To move geometry, move the plane:
 `create_sketch(z_offset=...)`.
+
+**`revolve`'s axis is model space, and must be coplanar with the profile.**
+`axis_origin_*` and `axis_direction_*` are model-space centimetres, not sketch
+coordinates — a direction is normalised, so its magnitude does not matter. A world axis
+through the model origin uses Fusion's own construction axis; anything else becomes a
+construction line in the profile's sketch, so an axis leaving the sketch plane is refused
+with `AXIS_OUT_OF_PLANE`. Read `axis_model_start` / `axis_model_end` to confirm where it
+actually ran; if the origin was off the plane, the result also carries
+`axis_snapped_to_sketch_plane: true` and a `note`.
 
 **`undo` steps the timeline back, and tells you whether it could verify that.** On a
 parametric design it moves the timeline marker back one step, which the API performs
