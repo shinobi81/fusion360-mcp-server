@@ -1,7 +1,7 @@
 """
 Fusion360 MCP Server — stdio transport.
 
-Bridges Claude Code ↔ Fusion 360 add-in via TCP socket on localhost.
+Bridges Claude Code ↔ Fusion 360 add-in via TCP socket on 127.0.0.1.
 Supports ``--mode mock`` for testing without Fusion running.
 """
 
@@ -165,7 +165,7 @@ def _format_result(
 @click.option(
     "--host",
     type=str,
-    default=lambda: os.environ.get("FUSION_MCP_HOST", "localhost"),
+    default=lambda: os.environ.get("FUSION_MCP_HOST", "127.0.0.1"),
     help=(
         "Host where the Fusion 360 add-in listens (env: FUSION_MCP_HOST). "
         "Use the Windows LAN IP when the MCP server runs on a different machine."

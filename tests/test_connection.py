@@ -1,6 +1,7 @@
 """Tests for the TCP connection module (no Fusion 360 required)."""
 
 import json
+import os
 import socket
 import threading
 
@@ -12,6 +13,21 @@ from fusion360_mcp.connection import (
     get_connection,
     reset_connection,
 )
+
+
+def test_default_host_is_the_loopback_literal():
+    """The default must be "127.0.0.1", never "localhost".
+
+    On Windows "localhost" resolves to ::1 first, and each connect attempt then
+    spends about two seconds failing over to IPv4 before it reaches the add-in.
+    A persistent socket hides most of it, but every reconnect pays it.
+    """
+    if os.environ.get("FUSION_MCP_HOST"):
+        pytest.skip("FUSION_MCP_HOST overrides the default host")
+
+    import fusion360_mcp.connection as connection
+
+    assert connection._DEFAULT_HOST == "127.0.0.1"
 
 
 def _start_echo_server(host="127.0.0.1", port=0):

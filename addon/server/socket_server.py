@@ -1,7 +1,7 @@
 """
 Fusion360 MCP Socket Server
 
-TCP socket on localhost:9876.  Each client gets its own daemon thread.
+TCP socket on 127.0.0.1:9876.  Each client gets its own daemon thread.
 All Fusion API work is dispatched through the EventBridge so it runs on
 the main thread.
 
@@ -26,7 +26,7 @@ _MAX_RESTARTS = 10  # consecutive restart cap before giving up
 class Fusion360MCPServer:
     """TCP server that receives JSON commands and dispatches via EventBridge."""
 
-    def __init__(self, event_bridge, host="localhost", port=9876):
+    def __init__(self, event_bridge, host="127.0.0.1", port=9876):
         self.host = host
         self.port = port
         self._bridge = event_bridge

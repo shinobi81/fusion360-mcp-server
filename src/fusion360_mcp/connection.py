@@ -1,7 +1,7 @@
 """
 TCP connection to the Fusion360MCP add-in running inside Fusion 360.
 
-The add-in listens on localhost:9876 by default and speaks
+The add-in listens on 127.0.0.1:9876 by default and speaks
 newline-delimited JSON. Override via env vars FUSION_MCP_HOST /
 FUSION_MCP_PORT for cross-machine setups (e.g. MCP server on a
 Mac Mini connecting to Fusion running on a Windows PC).
@@ -19,7 +19,10 @@ from .mock import _MUTATION_MOCKS as _MUTATION_COMMANDS
 
 log = logging.getLogger("fusion360_mcp.connection")
 
-_DEFAULT_HOST = os.environ.get("FUSION_MCP_HOST", "localhost")
+# The loopback literal, not "localhost": on Windows "localhost" resolves to
+# ::1 first, and every connect attempt then spends ~2s failing over to IPv4
+# before it reaches the add-in. That is paid on each reconnect.
+_DEFAULT_HOST = os.environ.get("FUSION_MCP_HOST", "127.0.0.1")
 
 
 def _default_port() -> int:
