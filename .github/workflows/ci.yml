@@ -101,3 +101,31 @@ jobs:
       # .yamllint.yml allows the long lines that SHA-pinned actions force.
       - name: Lint YAML
         run: uvx yamllint -c .yamllint.yml .github/
+
+  # Review threads must be resolved before a PR merges. The branch ruleset
+  # already says so (required_review_thread_resolution: true), but the code
+  # owner holds bypass_mode: pull_request and `gh pr merge --admin` bypasses
+  # the whole ruleset — which is how PR #19 merged with seven open CodeQL
+  # findings. This job is the copy that shows up in the checks list, where a
+  # human or an agent actually looks before bypassing anything.
+  threads:
+    runs-on: ubuntu-latest
+    # Only a PR has threads; a push to main has nothing to check.
+    if: github.event_name == 'pull_request'
+
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      # actions/checkout v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      # gh is preinstalled and authenticated with the job token. A failure to
+      # *query* is a failure, not a pass: an unchecked merge is the bug.
+      - name: No unresolved review threads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 scripts/check_review_threads.py
+          "${{ github.event.pull_request.number }}"

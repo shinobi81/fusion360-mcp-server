@@ -41,6 +41,18 @@ a pull request, and merging requires **one approving review** (from a code owner
 paths in [CODEOWNERS](.github/CODEOWNERS)), a green CI run, and resolved review threads.
 As a contributor you fork the repo and open the PR from your fork.
 
+**Unresolved review threads block the merge**, and that includes bot findings — CodeQL,
+dependabot, any inline comment. Check before merging, don't assume:
+
+```bash
+python scripts/check_review_threads.py <pr>   # exit 0 = clear, 1 = threads open
+```
+
+The same script runs as the `threads` CI job. Resolving a thread means engineering an
+answer, not silencing it: fix the finding, or reply explaining why it does not apply,
+then resolve. The code owner's `--admin` merge bypasses the ruleset that enforces this,
+so the check is a habit, not a guard rail.
+
 ```bash
 git checkout -b fix/short-description    # or feat/, docs/, chore/, test/
 # ... make the change, with tests ...

@@ -66,6 +66,9 @@ The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
 - **Never push to `main`.** The ruleset requires a reviewed PR, a green CI run and
   resolved review threads; direct pushes and force-pushes are rejected. This applies to
 the maintainer too.
+- **Never merge a PR that still has unresolved review threads.** Inline comments — the
+  CodeQL/Dependabot findings especially — are review threads. Resolve every one first,
+  by fixing it or by replying with why it does not apply. See _Merging_ below.
 - Never commit secrets. `.env` is gitignored — keep it that way.
 - Never edit `.venv/` by hand, and do not run `uv sync` while an MCP server is running.
 - Never call `close()` on the active Fusion document from `execute_code` — it crashed
@@ -73,6 +76,29 @@ the maintainer too.
 - Do not "fix" `addon/` type errors by adding ignores; `adsk` genuinely cannot resolve
   outside Fusion and the directory is excluded on purpose.
 - Do not edit `build/`, `.venv/`, or `uv.lock` by hand (`uv lock` regenerates it).
+
+## Merging
+
+`main` takes PRs only, and merging needs an approving review that a solo author cannot
+give themselves, so the merge is `gh pr merge <n> --squash --admin`. **`--admin` bypasses
+the entire ruleset**, including `required_review_thread_resolution` — the setting that is
+supposed to stop exactly this. GitHub will not save you; the check is yours to run:
+
+```bash
+python scripts/check_review_threads.py <pr>   # exit 0 = mergeable, 1 = threads open
+gh pr view <pr> --json reviews --jq '.reviews[] | "\(.author.login) [\(.state)]\n\(.body)"'
+gh pr merge <pr> --squash --admin            # only after the two commands above are clean
+```
+
+The `threads` CI job runs the same script, so a PR with open threads shows a failing
+check — that is the copy to look at, and a red `threads` check is never "fine, merge
+anyway". A failure to _query_ threads is also a failure: an unchecked merge is not a
+clean merge.
+
+Reading the bot findings is not a formality. PR #19 was merged with seven open CodeQL
+threads (six `implicit-string-concatenation-in-list` in a new `hints` rule, one
+`mixed-returns` in a test fixture) because the threads were never opened. Fix them or
+record why not — in the thread — before merging.
 
 ## Available tools (96)
 
