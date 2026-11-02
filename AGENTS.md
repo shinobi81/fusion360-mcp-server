@@ -26,7 +26,7 @@ calls to the main thread. Socket threads submit work items and block on a per-it
 
 ```bash
 uv sync                        # install deps into .venv
-uv run pytest -q               # 426 tests, no Fusion needed
+uv run pytest -q               # suite runs without Fusion
 uv run ruff check src/ tests/  # lint (this is what CI runs)
 uv run ruff format src/ tests/ addon/server/command_handler.py
 npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"

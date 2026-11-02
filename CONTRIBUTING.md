@@ -20,7 +20,7 @@ A change usually touches both, plus a mock handler and tests.
 git clone https://github.com/shinobi81/fusion360-mcp-server
 cd fusion360-mcp-server
 uv sync                        # python deps into .venv
-uv run pytest -q               # 426 tests, no Fusion required
+uv run pytest -q               # suite runs without Fusion
 uv run ruff check src/ tests/  # what CI runs
 ```
 
