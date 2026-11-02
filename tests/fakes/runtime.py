@@ -72,6 +72,13 @@ class FakeObjectCollection:
     def add(self, item: object) -> None:
         self.items.append(item)
 
+    @property
+    def count(self) -> int:
+        return len(self.items)
+
+    def item(self, index: int) -> object:
+        return self.items[index]
+
     def __iter__(self) -> Iterator[object]:
         return iter(self.items)
 
@@ -80,18 +87,24 @@ class FakeObjectCollection:
 
 
 class FakeValueInput:
-    """``adsk.core.ValueInput``: the two constructors the handler uses."""
+    """``adsk.core.ValueInput``: the two constructors, and which one was used.
 
-    def __init__(self, value: object):
+    ``kind`` records the factory.  Fusion distinguishes them — ``createByReal``
+    is read in internal units, ``createByString`` parses the unit — and that is
+    the difference the parameter tests exist to pin, so the fake keeps it.
+    """
+
+    def __init__(self, value: object, kind: str = "real"):
         self.value = value
+        self.kind = kind
 
     @classmethod
     def createByString(cls, value: object) -> FakeValueInput:
-        return cls(value)
+        return cls(value, "string")
 
     @classmethod
     def createByReal(cls, value: object) -> FakeValueInput:
-        return cls(value)
+        return cls(value, "real")
 
 
 def module(name: str, **attrs: object) -> types.ModuleType:

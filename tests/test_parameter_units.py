@@ -6,19 +6,20 @@ millimetres inflates it tenfold while the parameter still reads "mm". The
 rules live in ``addon/server/parameter_units.py``, which imports no ``adsk``
 and is loaded here by path.
 
-The AST guards cover the two call sites into Fusion's API, which unit tests
-cannot reach, in the same spirit as test_addon_sync.py.
+The two call sites into Fusion's API are covered by running the handler against
+the fake runtime, so a handler that rebuilt the choice inline fails here.
 """
 
 from __future__ import annotations
 
-import ast
 import importlib.util
 from pathlib import Path
 
 import pytest
 
 from fusion360_mcp.mock import mock_command
+from tests.fakes.design import FakeDesign
+from tests.fakes.runtime import FakeValueInput
 
 ADDON_SERVER = Path(__file__).resolve().parent.parent / "addon" / "server"
 
@@ -76,24 +77,6 @@ class TestNormaliseUnit:
         assert parameter_units.normalise_unit(given) == expected
 
 
-def _func(name: str) -> ast.FunctionDef:
-    tree = ast.parse((ADDON_SERVER / "command_handler.py").read_text())
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == name:
-            return node
-    raise AssertionError(f"{name} not found in command_handler.py")
-
-
-def _calls(node: ast.AST, attr: str) -> list[ast.Call]:
-    return [
-        n
-        for n in ast.walk(node)
-        if isinstance(n, ast.Call)
-        and isinstance(n.func, ast.Attribute)
-        and n.func.attr == attr
-    ]
-
-
 class TestBuildValueInput:
     """The choice between the two factories is the thing that was wrong."""
 
@@ -130,30 +113,44 @@ class TestBuildValueInput:
 
 
 class TestCallSites:
-    def test_create_parameter_delegates_the_choice(self):
-        # Constructing a ValueInput inline here would put the branch back
-        # where it cannot be tested.
-        create = _func("create_parameter")
-        assert _calls(create, "build_value_input"), (
-            "create_parameter must go through build_value_input()"
-        )
-        assert not _calls(create, "createByString")
-        assert not _calls(create, "createByReal")
+    """Both call sites must go through this module, not rebuild the choice.
 
-    def test_set_parameter_writes_the_expression_not_the_value(self):
-        assigned = {
-            target.attr: node.value
-            for node in ast.walk(_func("set_parameter"))
-            if isinstance(node, ast.Assign)
-            for target in node.targets
-            if isinstance(target, ast.Attribute)
-        }
-        assert "value" not in assigned, "Parameter.value is read in internal units"
-        assert "expression" in assigned
-        built = _calls(assigned["expression"], "expression_for")
-        assert built, "the expression must come from expression_for()"
-        names = {n.id for n in ast.walk(built[0]) if isinstance(n, ast.Name)}
-        assert {"value", "unit"} <= names
+    The fake records which ``ValueInput`` factory produced the parameter, so an
+    inline ``createByString(expression_for(...))`` — same text, wrong branch for
+    a unitless value — is still caught: a united parameter must take
+    ``createByString`` and a unitless one ``createByReal``.
+    """
+
+    def test_a_united_parameter_takes_the_string_factory(self, bound_handler):
+        design = FakeDesign(features=0)
+
+        bound_handler(design).create_parameter(name="length", value=1000, unit="mm")
+
+        stored = design.userParameters.itemByName("length")
+        assert stored is not None
+        assert stored.expression == "1000 mm"
+        assert stored.source == "string"
+
+    def test_a_unitless_parameter_takes_the_real_factory(self, bound_handler):
+        design = FakeDesign(features=0)
+
+        bound_handler(design).create_parameter(name="count", value=7, unit="")
+
+        stored = design.userParameters.itemByName("count")
+        assert stored is not None
+        assert stored.expression == "7"
+        assert stored.source == "real"
+
+    def test_set_parameter_writes_the_expression_not_the_value(self, bound_handler):
+        design = FakeDesign(features=0)
+        stored = design.userParameters.add(
+            "angle", FakeValueInput("90 deg", "string"), "deg", ""
+        )
+
+        bound_handler(design).set_parameter("angle", 45)
+
+        # A handler that hardcoded "mm" would pass on a length and fail here.
+        assert stored.expression == "45 deg"
 
 
 class TestMockContract:

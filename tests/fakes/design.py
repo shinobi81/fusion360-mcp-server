@@ -1,4 +1,4 @@
-"""Fake design tree: the document, its timeline, features and UI commands.
+"""Fake design tree: document, timeline, root component, features and UI.
 
 Two Fusion behaviours are modelled rather than stubbed, because both are the
 reason the tests in ``test_addon_undo.py`` and ``test_addon_revolve_axis.py``
@@ -9,15 +9,46 @@ exist:
   ``hasattr`` only swallows ``AttributeError``.
 * a revolve about a **stale profile proxy** is rejected, so reading the profile
   before adding the axis line to the same sketch fails instead of passing.
+
+``delete_all`` additionally needs deletions to be real: the timeline object
+wraps an entity, and only the *entity* has ``deleteMe()``.  Both are modelled
+here, so a sweep that calls the wrong one leaves the design populated and the
+test fails.
 """
 
 from __future__ import annotations
 
+from .bodies import FakeBody
+from .collection import FakeCollection, FakeDeletable
+from .features import (
+    FakeDraftFeatures,
+    FakeFeature,
+    FakeInterference,
+)
 from .runtime import DIRECT, PARAMETRIC
 
 
+class FakeTimelineEntity:
+    """The feature a timeline object wraps.  This is where ``deleteMe()`` lives."""
+
+    def __init__(self, name: str, remove):
+        self.name = name
+        self._remove = remove
+
+    def deleteMe(self) -> None:
+        self._remove()
+
+
+class FakeTimelineObject:
+    """``design.timeline.item(i)``: a name and an entity — and no ``deleteMe()``."""
+
+    def __init__(self, name: str, remove):
+        self.name = name
+        self.entity = FakeTimelineEntity(name, remove)
+
+
 class FakeTimeline:
-    """``design.timeline``: a count and a movable marker."""
+    """``design.timeline``: entries, a count and a movable marker."""
 
     def __init__(self, design: FakeDesign):
         self._design = design
@@ -25,6 +56,9 @@ class FakeTimeline:
     @property
     def count(self) -> int:
         return self._design.timeline_count
+
+    def item(self, index: int) -> FakeTimelineObject:
+        return self._design.timeline_entries[index]
 
     @property
     def markerPosition(self) -> int:
@@ -35,32 +69,89 @@ class FakeTimeline:
         self._design.set_marker(value)
 
 
-class FakeCollection:
-    """``.count`` / ``.item(i)`` over a list, the shape Fusion collections have."""
+class FakeParameter(FakeDeletable):
+    """A user parameter.  Assigning ``value`` is refused on purpose.
 
-    def __init__(self, items: list | None = None):
-        self._items = list(items or [])
+    Fusion reads ``Parameter.value`` in internal units, so a handler that
+    assigns it silently rescales anything measured in another unit; the fixed
+    handler writes ``expression`` instead.  Making the setter raise turns that
+    regression into a failure here.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        expression: str,
+        unit: str = "",
+        comment: str = "",
+        source: str = "string",
+    ):
+        super().__init__(name)
+        self.expression = expression
+        self.unit = unit
+        self.comment = comment
+        # Which ValueInput factory produced it: "string" or "real".
+        self.source = source
+
+    @property
+    def value(self) -> float:
+        """A simplification: Fusion reads centimetres, so "1000 mm" is 100.0.
+
+        Nothing reads this today; the tests assert on ``expression``, which is
+        what the handler must write, so the scale is not modelled.
+        """
+        first = self.expression.split()[0] if self.expression else "0"
+        return float(first)
+
+    @value.setter
+    def value(self, _new: float) -> None:
+        raise RuntimeError(
+            "Parameter.value is read in internal units; write the expression"
+        )
+
+
+class FakeUserParameters:
+    """``design.userParameters``: add, look up by name, count, iterate."""
+
+    def __init__(self):
+        self._parameters: dict[str, FakeParameter] = {}
+
+    def add(self, name, value_input, unit, comment) -> FakeParameter:
+        expression = (
+            value_input.value
+            if isinstance(value_input.value, str)
+            else str(value_input.value)
+        )
+        created = FakeParameter(name, expression, unit, comment, value_input.kind)
+        self._parameters[name] = created
+        return created
+
+    def itemByName(self, name: str) -> FakeParameter | None:
+        return self._parameters.get(name)
 
     @property
     def count(self) -> int:
-        return len(self._items)
-
-    def item(self, index: int):
-        return self._items[index]
+        return len(self._parameters)
 
     def __iter__(self):
-        return iter(self._items)
+        """Fusion's collection is iterable; ``get_parameters`` walks it."""
+        return iter(self._parameters.values())
 
 
-class FakeBody:
-    """A body with the attributes ``get_scene_info`` reads."""
-
-    def __init__(self, name: str = "Body1"):
+class FakeComponent:
+    def __init__(self, name: str, bodies=()):
         self.name = name
-        self.volume = 1.0
-        self.area = 6.0
-        self.material = None
-        self.isVisible = True
+        self.bRepBodies = FakeCollection(list(bodies))
+
+
+class FakeOccurrence:
+    def __init__(self, component: FakeComponent):
+        self.component = component
+
+    @property
+    def bRepBodies(self) -> FakeCollection:
+        """An occurrence reaches its component's bodies, as Fusion does."""
+        return self.component.bRepBodies
 
 
 class FakeAxes:
@@ -70,9 +161,18 @@ class FakeAxes:
     """
 
     def __init__(self):
-        self.xConstructionAxis = type("Axis", (), {"name": "X"})()
-        self.yConstructionAxis = type("Axis", (), {"name": "Y"})()
-        self.zConstructionAxis = type("Axis", (), {"name": "Z"})()
+        self.xConstructionAxis = FakeDeletable("X")
+        self.yConstructionAxis = FakeDeletable("Y")
+        self.zConstructionAxis = FakeDeletable("Z")
+
+
+class FakePlanes:
+    """The three base construction planes, as ``_construction_plane`` expects."""
+
+    def __init__(self):
+        self.xYConstructionPlane = FakeDeletable("XY")
+        self.yZConstructionPlane = FakeDeletable("YZ")
+        self.xZConstructionPlane = FakeDeletable("XZ")
 
 
 class FakeRevolveInput:
@@ -86,11 +186,6 @@ class FakeRevolveInput:
     def setAngleExtent(self, symmetric, angle) -> None:
         self.symmetric = symmetric
         self.angle = angle
-
-
-class FakeFeature:
-    def __init__(self, name: str):
-        self.name = name
 
 
 class FakeRevolveFeatures:
@@ -117,11 +212,12 @@ class FakeRevolveFeatures:
 
 
 class FakeFeatures:
-    """``root.features``: a count plus the revolve collection."""
+    """``root.features``: a count, the revolve collection and the draft one."""
 
     def __init__(self, design: FakeDesign | None = None):
         self._design = design
         self.revolveFeatures = FakeRevolveFeatures()
+        self.draftFeatures = FakeDraftFeatures()
 
     @property
     def count(self) -> int:
@@ -129,22 +225,48 @@ class FakeFeatures:
 
 
 class FakeRoot:
-    """``design.rootComponent``: bodies, sketches, features and world axes."""
+    """``design.rootComponent``: everything ``delete_all`` sweeps, plus planes."""
 
-    def __init__(self, design: FakeDesign | None = None, sketches=()):
-        body_count = design.bodies if design else 0
-        bodies = [FakeBody(f"Body{i + 1}") for i in range(body_count)]
-        self.bRepBodies = FakeCollection(bodies)
+    def __init__(
+        self,
+        design: FakeDesign | None = None,
+        sketches=(),
+        bodies=None,
+    ):
+        self.bRepBodies = FakeCollection(
+            list(bodies) if bodies is not None else _default_bodies(design)
+        )
         self.sketches = FakeCollection(list(sketches))
         self.features = FakeFeatures(design)
+        self.joints = FakeCollection()
+        self.asBuiltJoints = FakeCollection()
+        self.rigidGroups = FakeCollection()
+        self.occurrences = FakeCollection()
+        self.constructionPlanes = FakeCollection()
+        self.constructionAxes = FakeCollection()
+        self.constructionPoints = FakeCollection()
         axes = FakeAxes()
         self.xConstructionAxis = axes.xConstructionAxis
         self.yConstructionAxis = axes.yConstructionAxis
         self.zConstructionAxis = axes.zConstructionAxis
+        planes = FakePlanes()
+        self.xYConstructionPlane = planes.xYConstructionPlane
+        self.yZConstructionPlane = planes.yZConstructionPlane
+        self.xZConstructionPlane = planes.xZConstructionPlane
+
+    @property
+    def allOccurrences(self) -> FakeCollection:
+        """``check_interference`` walks every occurrence in the design."""
+        return self.occurrences
+
+
+def _default_bodies(design: FakeDesign | None) -> list[FakeBody]:
+    count = design.bodies if design else 0
+    return [FakeBody(f"Body{i + 1}") for i in range(count)]
 
 
 class FakeDesign:
-    """A design: timeline, type, root component, and a document behind it.
+    """A design: timeline, type, root component, parameters and interference.
 
     ``features=0`` means empty: no bodies, no timeline entries.  A direct design
     raises on ``design.timeline`` unless a test says otherwise — a more
@@ -159,10 +281,10 @@ class FakeDesign:
         marker_switches_type: bool = False,
         timeline_raises: bool | None = None,
         sketches=(),
+        bodies=None,
+        interferences=(),
     ):
-        self.timeline_count = features
         self.marker = features if marker is None else marker
-        self.bodies = 1 if features else 0
         self.features = features
         self.designType = design_type
         self.productType = "DesignProductType"
@@ -170,11 +292,34 @@ class FakeDesign:
         self.timeline_raises = (
             design_type == DIRECT if timeline_raises is None else timeline_raises
         )
+        self.timeline_entries: list[FakeTimelineObject] = [
+            self._new_entry(index) for index in range(features)
+        ]
+        self.bodies = len(bodies) if bodies is not None else (1 if features else 0)
+        self.userParameters = FakeUserParameters()
+        self.interference = FakeInterference(list(interferences))
         self._timeline = FakeTimeline(self)
-        self.rootComponent = FakeRoot(self, sketches)
+        self.rootComponent = FakeRoot(self, sketches, bodies)
         self.undo_commands_executed = 0
         self.marker_writes: list[int] = []
         self.parentDocument = type("FakeDocument", (), {"name": "fake-design"})()
+
+    @property
+    def timeline_count(self) -> int:
+        """Derived, so a deletion is visible to anything that reads it."""
+        return len(self.timeline_entries)
+
+    def _new_entry(self, index: int) -> FakeTimelineObject:
+        holder: dict[str, FakeTimelineObject] = {}
+
+        def remove() -> None:
+            entry = holder["entry"]
+            if entry in self.timeline_entries:
+                self.timeline_entries.remove(entry)
+
+        entry = FakeTimelineObject(f"Feature{index + 1}", remove)
+        holder["entry"] = entry
+        return entry
 
     @property
     def timeline(self) -> FakeTimeline:
@@ -187,6 +332,13 @@ class FakeDesign:
         self.marker = value
         if self.marker_switches_type:
             self.designType = DIRECT
+
+    # The interference API lives on Design, not on Component.
+    def createInterferenceInput(self, entities):
+        return self.interference.createInterferenceInput(entities)
+
+    def analyzeInterference(self, inp):
+        return self.interference.analyzeInterference(inp)
 
 
 class FakeCommandDefinition:

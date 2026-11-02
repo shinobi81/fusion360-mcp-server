@@ -6,6 +6,11 @@ module deliberately has no such dependency.
 
 The AST guards at the bottom cover the two things that can only be seen at
 the call site into Fusion's API, in the same spirit as test_addon_sync.py.
+They stay static for now: converting them needs a hole-feature model in
+``tests/fakes/`` (faces with ``maxPoint``/``pointOnFace``, a sketch on a face,
+``sketchPoints`` and ``HoleFeatureInput``), which is a follow-up rather than
+something worth growing the shared fake for today.  ``create_hole`` has not
+regressed since they were written, so the cost of waiting is low.
 """
 
 from __future__ import annotations
