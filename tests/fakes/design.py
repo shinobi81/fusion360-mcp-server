@@ -13,10 +13,7 @@ exist:
 
 from __future__ import annotations
 
-from .sketch import FakeSketch
-
-PARAMETRIC = "ParametricDesignType"
-DIRECT = "DirectDesignType"
+from .runtime import DIRECT, PARAMETRIC
 
 
 class FakeTimeline:
@@ -55,8 +52,22 @@ class FakeCollection:
         return iter(self._items)
 
 
+class FakeBody:
+    """A body with the attributes ``get_scene_info`` reads."""
+
+    def __init__(self, name: str = "Body1"):
+        self.name = name
+        self.volume = 1.0
+        self.area = 6.0
+        self.material = None
+        self.isVisible = True
+
+
 class FakeAxes:
-    """The three world axes; a revolve about one must not build geometry."""
+    """The three world construction axes, one distinct object each.
+
+    Distinct objects are what make ``axis is root.xConstructionAxis`` meaningful.
+    """
 
     def __init__(self):
         self.xConstructionAxis = type("Axis", (), {"name": "X"})()
@@ -85,8 +96,7 @@ class FakeFeature:
 class FakeRevolveFeatures:
     """``features.revolveFeatures``: records inputs, rejects stale profiles."""
 
-    def __init__(self, sketch: FakeSketch | None):
-        self._sketch = sketch
+    def __init__(self):
         self.inputs: list[FakeRevolveInput] = []
         self.added: list[FakeRevolveInput] = []
 
@@ -96,9 +106,11 @@ class FakeRevolveFeatures:
         return created
 
     def add(self, inp: FakeRevolveInput) -> FakeFeature:
-        # What Fusion 2706 does: a profile proxy captured before the sketch was
-        # modified is stale, and the revolve is rejected outright.
-        if self._sketch is not None and inp.profile.version != self._sketch.version:
+        # What Fusion 2706 does: a profile proxy captured before its sketch was
+        # modified is stale, and the revolve is rejected outright.  The check
+        # goes through the profile's own sketch, so it holds for any sketch in
+        # the design, not just the first.
+        if inp.profile.version != inp.profile.sketch.version:
             raise RuntimeError("3 : invalid profile(s) for Revolve Feature")
         self.added.append(inp)
         return FakeFeature("Revolve1")
@@ -107,13 +119,9 @@ class FakeRevolveFeatures:
 class FakeFeatures:
     """``root.features``: a count plus the revolve collection."""
 
-    def __init__(
-        self,
-        design: FakeDesign | None = None,
-        sketch: FakeSketch | None = None,
-    ):
+    def __init__(self, design: FakeDesign | None = None):
         self._design = design
-        self.revolveFeatures = FakeRevolveFeatures(sketch)
+        self.revolveFeatures = FakeRevolveFeatures()
 
     @property
     def count(self) -> int:
@@ -125,9 +133,10 @@ class FakeRoot:
 
     def __init__(self, design: FakeDesign | None = None, sketches=()):
         body_count = design.bodies if design else 0
-        self.bRepBodies = FakeCollection([object() for _ in range(body_count)])
+        bodies = [FakeBody(f"Body{i + 1}") for i in range(body_count)]
+        self.bRepBodies = FakeCollection(bodies)
         self.sketches = FakeCollection(list(sketches))
-        self.features = FakeFeatures(design, sketches[0] if sketches else None)
+        self.features = FakeFeatures(design)
         axes = FakeAxes()
         self.xConstructionAxis = axes.xConstructionAxis
         self.yConstructionAxis = axes.yConstructionAxis
@@ -156,6 +165,7 @@ class FakeDesign:
         self.bodies = 1 if features else 0
         self.features = features
         self.designType = design_type
+        self.productType = "DesignProductType"
         self.marker_switches_type = marker_switches_type
         self.timeline_raises = (
             design_type == DIRECT if timeline_raises is None else timeline_raises
@@ -199,30 +209,3 @@ class FakeCommandDefinitions:
 class FakeUI:
     def __init__(self, definitions: dict):
         self.commandDefinitions = FakeCommandDefinitions(definitions)
-
-
-class UndoRig:
-    """A handler wired to a fake design, with the UI undo/redo commands stubbed."""
-
-    def __init__(self, handler_module, design: FakeDesign, defs: dict):
-        self.design = design
-        self.handler = handler_module.CommandHandler.__new__(
-            handler_module.CommandHandler
-        )
-        self.handler.ui = FakeUI(defs)
-        self.handler._design = lambda: design
-
-
-def undo_rig(handler_module, design=None, with_undo=True, with_redo=True) -> UndoRig:
-    """Build an :class:`UndoRig`; ``with_undo=False`` models the missing command."""
-    design = design or FakeDesign()
-    defs = {}
-    if with_undo:
-
-        def undo_execute():
-            design.undo_commands_executed += 1
-
-        defs["UndoCommand"] = FakeCommandDefinition("UndoCommand", undo_execute)
-    if with_redo:
-        defs["RedoCommand"] = FakeCommandDefinition("RedoCommand", lambda: None)
-    return UndoRig(handler_module, design, defs)

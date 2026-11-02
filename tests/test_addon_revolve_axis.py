@@ -32,7 +32,7 @@ from tests.fakes.sketch import FakePoint3D, FakeSketch, xy_sketch_at, yz_sketch
 class Rig:
     """A bound handler plus the fake design it drives."""
 
-    def __init__(self, handler, sketch: FakeSketch, root):
+    def __init__(self, handler, sketch, root):
         self.handler = handler
         self.sketch = sketch
         self.root = root

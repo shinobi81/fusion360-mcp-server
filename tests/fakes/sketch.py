@@ -67,16 +67,6 @@ def yz_sketch() -> FakeTransform:
     )
 
 
-def xz_sketch() -> FakeTransform:
-    """Sketch x is model x, sketch y is model z, normal is model -y."""
-    return FakeTransform(
-        origin=(0.0, 0.0, 0.0),
-        x_axis=(1.0, 0.0, 0.0),
-        y_axis=(0.0, 0.0, 1.0),
-        z_axis=(0.0, -1.0, 0.0),
-    )
-
-
 class FakeLine:
     """A sketch line.  ``isConstruction`` is the only attribute the add-in sets."""
 
@@ -89,25 +79,43 @@ class FakeLine:
         return f"FakeLine({self.start} -> {self.end})"
 
 
-class _Recorder:
-    """One sketch-curve collection, recording what the handler drew on it."""
+class _CurveRecorder:
+    """Shared base: records a call as ``(kind, payload)`` on the sketch."""
 
     def __init__(self, sketch: FakeSketch, kind: str):
         self._sketch = sketch
         self._kind = kind
 
+    def _record(self, **payload: object) -> None:
+        self._sketch.curve_calls.append((self._kind, payload))
+
+
+class _CircleRecorder(_CurveRecorder):
+    """``sketchCircles``: Fusion's only constructor takes centre and radius."""
+
     def addByCenterRadius(self, center, radius) -> None:
-        self._sketch.curve_calls.append(
-            (self._kind, {"center": center, "radius": radius})
-        )
+        self._record(center=center, radius=radius)
+
+
+class _ArcRecorder(_CurveRecorder):
+    """``sketchArcs``: centre, start and sweep angle."""
 
     def addByCenterStartSweep(self, center, start, sweep) -> None:
-        self._sketch.curve_calls.append(
-            (self._kind, {"center": center, "start": start, "sweep": sweep})
-        )
+        self._record(center=center, start=start, sweep=sweep)
 
-    def add(self, points, *args) -> None:
-        self._sketch.curve_calls.append((self._kind, {"points": list(points)}))
+
+class _PointRecorder(_CurveRecorder):
+    """``sketchFittedSplines``: points only — a second argument is a bug."""
+
+    def add(self, points) -> None:
+        self._record(points=list(points))
+
+
+class _PointDegreeRecorder(_CurveRecorder):
+    """``sketchControlPointSplines``: points and a degree."""
+
+    def add(self, points, degree) -> None:
+        self._record(points=list(points), degree=degree)
 
 
 class FakeSketchLines:
@@ -129,7 +137,18 @@ class FakeSketchLines:
         return line
 
     def addTwoPointRectangle(self, p1, p2) -> None:
+        # Fusion builds four edges; the revolve tests probe ``lines`` for
+        # "no geometry was created", so a rectangle has to appear there.
+        corners = [
+            FakePoint3D(p1.x, p1.y, 0.0),
+            FakePoint3D(p2.x, p1.y, 0.0),
+            FakePoint3D(p2.x, p2.y, 0.0),
+            FakePoint3D(p1.x, p2.y, 0.0),
+        ]
+        for index, start in enumerate(corners):
+            self._sketch.lines.append(FakeLine(start, corners[(index + 1) % 4]))
         self._sketch.curve_calls.append(("line", {"points": [p1, p2]}))
+        self._sketch.bump()
 
     @property
     def count(self) -> int:
@@ -140,19 +159,22 @@ class FakeSketchLines:
 
 
 class FakeSketchCurves:
+    """Each collection offers only the constructors Fusion has on it."""
+
     def __init__(self, sketch: FakeSketch):
         self.sketchLines = FakeSketchLines(sketch)
-        self.sketchCircles = _Recorder(sketch, "circle")
-        self.sketchArcs = _Recorder(sketch, "arc")
-        self.sketchFittedSplines = _Recorder(sketch, "fit_spline")
-        self.sketchControlPointSplines = _Recorder(sketch, "control_spline")
+        self.sketchCircles = _CircleRecorder(sketch, "circle")
+        self.sketchArcs = _ArcRecorder(sketch, "arc")
+        self.sketchFittedSplines = _PointRecorder(sketch, "fit_spline")
+        self.sketchControlPointSplines = _PointDegreeRecorder(sketch, "control_spline")
 
 
 class FakeProfile:
     """A profile proxy: tied to the sketch state it was read from."""
 
-    def __init__(self, version: int):
-        self.version = version
+    def __init__(self, sketch: FakeSketch):
+        self.sketch = sketch
+        self.version = sketch.version
 
 
 class FakeProfiles:
@@ -161,7 +183,7 @@ class FakeProfiles:
         self.count = count
 
     def item(self, index: int) -> FakeProfile:
-        return FakeProfile(self._sketch.version)
+        return FakeProfile(self._sketch)
 
 
 class FakeSketch:
@@ -174,6 +196,7 @@ class FakeSketch:
         profile_count: int = 1,
     ):
         self.name = name
+        self.isVisible = True
         self.isComputeDeferred = False
         self.transform = transform if transform is not None else FakeTransform()
         self.version = 0

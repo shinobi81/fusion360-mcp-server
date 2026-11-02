@@ -15,7 +15,7 @@ Two rules keep the fakes honest (design §7):
   API fails loudly instead of being swallowed.
 
 Geometry lives in ``tests.fakes.sketch`` and the design tree in
-``tests.fakes.design``; this module holds only what ``adsk`` itself provides.
+``tests.fakes.design``; this module also owns the loader that installs it.
 """
 
 from __future__ import annotations
@@ -35,6 +35,11 @@ SERVER_DIR = REPO_ROOT / "addon" / "server"
 # once per test module, and a stable name keeps ``sys.modules`` bookkeeping
 # trivial.
 FAKE_PACKAGE = "addon_handler_under_test"
+
+# One source of truth for the design-type strings: ``undo`` compares against the
+# copy the runtime hands the handler, so the fake design must use that same one.
+PARAMETRIC = "ParametricDesignType"
+DIRECT = "DirectDesignType"
 
 
 class FakePoint3D:
@@ -99,8 +104,8 @@ def module(name: str, **attrs: object) -> types.ModuleType:
 
 def _design_types() -> types.SimpleNamespace:
     return types.SimpleNamespace(
-        ParametricDesignType="ParametricDesignType",
-        DirectDesignType="DirectDesignType",
+        ParametricDesignType=PARAMETRIC,
+        DirectDesignType=DIRECT,
     )
 
 
@@ -120,8 +125,8 @@ def install() -> None:
     """Put a fake ``adsk`` in ``sys.modules``.
 
     The surface is the union of what the three add-in test modules need: a
-    small, fixed set of constructors and enums.  Nothing here models behaviour,
-    so keeping it in one place cannot make a test pass that should fail.
+    small, fixed set of constructors and enums.  Adding a name here is the only
+    way to widen it, so it stays reviewable.
     """
     core = module(
         "adsk.core",

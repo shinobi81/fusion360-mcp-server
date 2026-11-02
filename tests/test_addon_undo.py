@@ -28,7 +28,8 @@ from __future__ import annotations
 
 import pytest
 
-from tests.fakes.design import DIRECT, PARAMETRIC, FakeDesign, undo_rig
+from tests.fakes.design import FakeCommandDefinition, FakeDesign, FakeUI
+from tests.fakes.runtime import DIRECT, PARAMETRIC
 
 
 @pytest.fixture
@@ -36,13 +37,22 @@ def rig(handler_module):
     """A handler wired to a fake design, with both UI commands stubbed."""
 
     def factory(design=None, with_undo=True, with_redo=True):
-        built = undo_rig(
-            handler_module,
-            design=design,
-            with_undo=with_undo,
-            with_redo=with_redo,
-        )
-        return built.design, built.handler
+        design = design or FakeDesign()
+        defs = {}
+
+        if with_undo:
+
+            def undo_execute():
+                design.undo_commands_executed += 1
+
+            defs["UndoCommand"] = FakeCommandDefinition("UndoCommand", undo_execute)
+        if with_redo:
+            defs["RedoCommand"] = FakeCommandDefinition("RedoCommand", lambda: None)
+
+        handler = handler_module.CommandHandler.__new__(handler_module.CommandHandler)
+        handler.ui = FakeUI(defs)
+        handler._design = lambda: design
+        return design, handler
 
     return factory
 
@@ -119,7 +129,6 @@ class TestDirectModeFallback:
         design, handler = rig(
             FakeDesign(features=0, design_type=DIRECT, timeline_raises=True)
         )
-        design.productType = "DesignProductType"
         handler._camera_info = lambda: {}
 
         result = handler.get_scene_info()
