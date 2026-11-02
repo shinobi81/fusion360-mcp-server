@@ -60,7 +60,9 @@ testpaths = ["tests"]
 # Coverage is measured on every run so a regression is visible in the diff, and
 # floored just under the current number rather than at a round figure.  95 leaves
 # about 13 statements of slack, which covers the permanent gaps below and any one
-# deliberate dead branch; 97 would leave one, and redden four CI jobs at once.
+# deliberate dead branch; 97 would leave one, and redden five CI jobs at once.
+# This lives in addopts, so run a subset with `--no-cov` (see AGENTS.md): the
+# floor is about the whole suite, not one file.
 #
 # Permanently uncovered, by design: `server.py` line 91 (`bbox_before` is never set
 # by a mock), line 444 (the unreachable prompt fallback), 493-494 (`app.run` inside

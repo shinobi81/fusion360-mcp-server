@@ -34,10 +34,8 @@ class FakeTimelineEntity:
     def __init__(self, name: str, remove):
         self.name = name
         self._remove = remove
-        self.deleted = False
 
     def deleteMe(self) -> None:
-        self.deleted = True
         self._remove()
 
 
@@ -57,7 +55,7 @@ class FakeTimeline:
 
     @property
     def count(self) -> int:
-        return len(self._design.timeline_entries)
+        return self._design.timeline_count
 
     def item(self, index: int) -> FakeTimelineObject:
         return self._design.timeline_entries[index]
@@ -80,14 +78,28 @@ class FakeParameter(FakeDeletable):
     regression into a failure here.
     """
 
-    def __init__(self, name: str, expression: str, unit: str = "", comment: str = ""):
+    def __init__(
+        self,
+        name: str,
+        expression: str,
+        unit: str = "",
+        comment: str = "",
+        source: str = "string",
+    ):
         super().__init__(name)
         self.expression = expression
         self.unit = unit
         self.comment = comment
+        # Which ValueInput factory produced it: "string" or "real".
+        self.source = source
 
     @property
     def value(self) -> float:
+        """A simplification: Fusion reads centimetres, so "1000 mm" is 100.0.
+
+        Nothing reads this today; the tests assert on ``expression``, which is
+        what the handler must write, so the scale is not modelled.
+        """
         first = self.expression.split()[0] if self.expression else "0"
         return float(first)
 
@@ -99,7 +111,7 @@ class FakeParameter(FakeDeletable):
 
 
 class FakeUserParameters:
-    """``design.userParameters``: add, look up by name, count."""
+    """``design.userParameters``: add, look up by name, count, iterate."""
 
     def __init__(self):
         self._parameters: dict[str, FakeParameter] = {}
@@ -110,7 +122,7 @@ class FakeUserParameters:
             if isinstance(value_input.value, str)
             else str(value_input.value)
         )
-        created = FakeParameter(name, expression, unit, comment)
+        created = FakeParameter(name, expression, unit, comment, value_input.kind)
         self._parameters[name] = created
         return created
 
@@ -120,6 +132,10 @@ class FakeUserParameters:
     @property
     def count(self) -> int:
         return len(self._parameters)
+
+    def __iter__(self):
+        """Fusion's collection is iterable; ``get_parameters`` walks it."""
+        return iter(self._parameters.values())
 
 
 class FakeComponent:
@@ -268,7 +284,6 @@ class FakeDesign:
         bodies=None,
         interferences=(),
     ):
-        self.timeline_count = features
         self.marker = features if marker is None else marker
         self.features = features
         self.designType = design_type
@@ -288,6 +303,11 @@ class FakeDesign:
         self.undo_commands_executed = 0
         self.marker_writes: list[int] = []
         self.parentDocument = type("FakeDocument", (), {"name": "fake-design"})()
+
+    @property
+    def timeline_count(self) -> int:
+        """Derived, so a deletion is visible to anything that reads it."""
+        return len(self.timeline_entries)
 
     def _new_entry(self, index: int) -> FakeTimelineObject:
         holder: dict[str, FakeTimelineObject] = {}

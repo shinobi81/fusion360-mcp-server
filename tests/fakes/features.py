@@ -40,7 +40,6 @@ class FakeDraftFeatures:
     """
 
     def __init__(self):
-        self.inputs: list[FakeDraftInput] = []
         self.added: list[FakeDraftInput] = []
 
     def createInput(self, input_faces, plane, is_tangent_chain) -> FakeDraftInput:
@@ -49,9 +48,7 @@ class FakeDraftFeatures:
                 "Wrong number or type of arguments for overloaded function "
                 "'DraftFeatures_createInput'"
             )
-        created = FakeDraftInput(input_faces, plane, is_tangent_chain)
-        self.inputs.append(created)
-        return created
+        return FakeDraftInput(input_faces, plane, is_tangent_chain)
 
     def add(self, inp: FakeDraftInput) -> FakeFeature:
         self.added.append(inp)

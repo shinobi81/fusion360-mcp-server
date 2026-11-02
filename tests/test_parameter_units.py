@@ -115,40 +115,42 @@ class TestBuildValueInput:
 class TestCallSites:
     """Both call sites must go through this module, not rebuild the choice.
 
-    A handler that called ``createByReal`` with a millimetre value would produce
-    an inflated expression; one that wrote ``Parameter.value`` would hit the
-    fake's setter, which refuses because Fusion reads that value in internal
-    units.
+    The fake records which ``ValueInput`` factory produced the parameter, so an
+    inline ``createByString(expression_for(...))`` — same text, wrong branch for
+    a unitless value — is still caught: a united parameter must take
+    ``createByString`` and a unitless one ``createByReal``.
     """
 
-    def test_create_parameter_writes_the_expression(self, handler_module):
+    def test_a_united_parameter_takes_the_string_factory(self, bound_handler):
         design = FakeDesign(features=0)
 
-        result = _handler(handler_module, design).create_parameter(
-            name="length", value=1000, unit="mm"
-        )
+        bound_handler(design).create_parameter(name="length", value=1000, unit="mm")
 
-        assert result["expression"] == "1000 mm"
         stored = design.userParameters.itemByName("length")
         assert stored is not None
         assert stored.expression == "1000 mm"
+        assert stored.source == "string"
 
-    def test_set_parameter_writes_the_expression_not_the_value(self, handler_module):
+    def test_a_unitless_parameter_takes_the_real_factory(self, bound_handler):
+        design = FakeDesign(features=0)
+
+        bound_handler(design).create_parameter(name="count", value=7, unit="")
+
+        stored = design.userParameters.itemByName("count")
+        assert stored is not None
+        assert stored.expression == "7"
+        assert stored.source == "real"
+
+    def test_set_parameter_writes_the_expression_not_the_value(self, bound_handler):
         design = FakeDesign(features=0)
         stored = design.userParameters.add(
-            "length", FakeValueInput("1000 mm"), "mm", ""
+            "angle", FakeValueInput("90 deg", "string"), "deg", ""
         )
 
-        _handler(handler_module, design).set_parameter("length", 1200)
+        bound_handler(design).set_parameter("angle", 45)
 
-        assert stored.expression == "1200 mm"
-
-
-def _handler(handler_module, design):
-    handler = handler_module.CommandHandler.__new__(handler_module.CommandHandler)
-    handler._design = lambda: design
-    handler._root = lambda: design.rootComponent
-    return handler
+        # A handler that hardcoded "mm" would pass on a length and fail here.
+        assert stored.expression == "45 deg"
 
 
 class TestMockContract:

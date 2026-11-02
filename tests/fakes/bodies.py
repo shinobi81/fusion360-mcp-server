@@ -26,8 +26,8 @@ class FakeEvaluator:
         self._normal = normal
 
     def getNormalAtPoint(self, point):
-        """Fusion returns ``(point, normal)``; callers usually keep the normal."""
-        return point, FakeVector3D(*self._normal)
+        """Fusion returns ``(result_flag, normal)``, not the point."""
+        return True, FakeVector3D(*self._normal)
 
 
 class FakeFace:

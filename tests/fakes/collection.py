@@ -16,11 +16,9 @@ class FakeDeletable:
 
     def __init__(self, name: str = "Item1"):
         self.name = name
-        self.deleted = False
         self._collection: FakeCollection | None = None
 
     def deleteMe(self) -> None:
-        self.deleted = True
         if self._collection is not None:
             self._collection.remove(self)
 
@@ -32,10 +30,6 @@ class FakeCollection:
         self._items: list = []
         for item in items or []:
             self.add(item)
-
-    @property
-    def items(self) -> list:
-        return list(self._items)
 
     @property
     def count(self) -> int:
