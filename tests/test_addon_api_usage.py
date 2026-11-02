@@ -1,172 +1,169 @@
-"""Guards against add-in code calling Fusion APIs that do not exist.
+"""Guards against the add-in calling Fusion APIs that do not exist.
 
-The add-in cannot be imported here — it needs Fusion's ``adsk`` runtime — so
-these checks read it with ``ast`` the same way ``test_addon_sync.py`` does.
+Each test runs a handler against the fake runtime in ``tests/fakes/`` and asserts
+on what it produced.  The fakes implement only the API Fusion actually has, so a
+handler that calls ``TimelineObject.deleteMe()``, ``Component.interfere()`` or
+reads ``MeasureResults.pointOnEntityOne`` raises ``AttributeError`` here exactly
+as it did in Fusion — which is what the old source-reading guards caught.
 
-Both bugs these cover shared a root cause: the failing call sat inside a bare
-``except Exception: pass``, so the tool reported success while doing nothing.
-Neither would have been caught by a test that only asserted on return values.
+``add_joint`` still has source guards in ``test_addon_joints.py``: modelling
+joint motions costs more fake than those guards are worth today, and that
+conversion is a follow-up rather than a silent omission.
 """
 
 from __future__ import annotations
 
-import ast
-from pathlib import Path
+import pytest
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-HANDLER = REPO_ROOT / "addon" / "server" / "command_handler.py"
-
-
-def _method(name: str) -> ast.FunctionDef:
-    tree = ast.parse(HANDLER.read_text())
-    for cls in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
-        if cls.name != "CommandHandler":
-            continue
-        for node in cls.body:
-            if isinstance(node, ast.FunctionDef) and node.name == name:
-                return node
-    raise AssertionError(f"CommandHandler.{name} not found in {HANDLER}")
+from tests.fakes.bodies import FakeBody, body_with_faces
+from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
+from tests.fakes.features import FakeInterferenceResult, FakeMeasureManager
 
 
-def _called_attrs(node: ast.AST) -> set[str]:
-    """Every ``x.name(...)`` attribute name called within *node*."""
-    return {
-        n.func.attr
-        for n in ast.walk(node)
-        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
-    }
-
-
-def _has_silent_except(node: ast.AST) -> bool:
-    """True if any handler's whole body is ``pass``."""
-    for handler in (n for n in ast.walk(node) if isinstance(n, ast.ExceptHandler)):
-        if all(isinstance(stmt, ast.Pass) for stmt in handler.body):
-            return True
-    return False
+def bound(handler_module, design, app=None):
+    """A ``CommandHandler`` wired to *design*, with no Fusion application."""
+    handler = handler_module.CommandHandler.__new__(handler_module.CommandHandler)
+    handler._design = lambda: design
+    handler._root = lambda: design.rootComponent
+    if app is not None:
+        handler.app = app
+    return handler
 
 
 class TestDeleteAll:
-    def test_deletes_via_the_timeline_entity(self):
+    def test_deletes_through_the_timeline_entity(self, handler_module):
         """TimelineObject has no deleteMe(); the entity it wraps does.
 
-        Calling deleteMe() on the TimelineObject raises AttributeError on
-        every item, so delete_all removed nothing at all.
+        Calling deleteMe() on the TimelineObject raised AttributeError on every
+        item, so delete_all removed nothing — and then reported success.
         """
-        node = _method("delete_all")
-        attrs = {n.attr for n in ast.walk(node) if isinstance(n, ast.Attribute)}
-        assert "entity" in attrs, (
-            "delete_all must reach the feature through TimelineObject.entity; "
-            "TimelineObject itself has no deleteMe()"
-        )
+        design = FakeDesign(features=2)
 
-    def test_does_not_swallow_failures(self):
-        node = _method("delete_all")
-        assert not _has_silent_except(node), (
-            "delete_all must not use a bare 'except: pass' — that is what let "
-            "it report success while deleting nothing"
-        )
+        result = bound(handler_module, design).delete_all()
 
-    def test_reports_what_it_did(self):
-        """The return value must carry enough to tell success from a no-op."""
-        node = _method("delete_all")
-        returns = [n for n in ast.walk(node) if isinstance(n, ast.Return)]
-        assert returns, "delete_all must return a result"
-        keys: set[str] = set()
-        for ret in returns:
-            if isinstance(ret.value, ast.Dict):
-                keys |= {k.value for k in ret.value.keys if isinstance(k, ast.Constant)}
-        assert "remaining" in keys, (
-            "delete_all should report what is still in the design, so a "
-            "partial failure is visible to the caller"
-        )
+        assert result["deleted"]["timeline"] == 2
+        assert result["remaining"]["timeline"] == 0
+
+    def test_raises_when_something_survives(self, handler_module):
+        """A bare ``except: pass`` is what let it claim success doing nothing."""
+
+        class StubbornBody(FakeBody):
+            def deleteMe(self):
+                raise RuntimeError("Fusion refused")
+
+        design = FakeDesign(features=0, bodies=[StubbornBody("Keeper")])
+
+        with pytest.raises(RuntimeError, match="did not clear the design"):
+            bound(handler_module, design).delete_all()
+
+    def test_reports_what_it_did(self, handler_module):
+        design = FakeDesign(features=2)
+
+        result = bound(handler_module, design).delete_all()
+
+        assert result["deleted"]["bodies"] == 1
+        assert result["errors"] == []
+        assert set(result["remaining"]) == {
+            "bodies",
+            "sketches",
+            "occurrences",
+            "joints",
+            "construction",
+            "timeline",
+        }
 
 
 class TestCheckInterference:
-    def test_uses_the_design_level_api(self):
+    def test_reports_the_interfering_pairs(self, handler_module):
         """Component.interfere() does not exist; the API is on Design."""
-        node = _method("check_interference")
-        called = _called_attrs(node)
-        assert "interfere" not in called, (
-            "Component.interfere() does not exist in the Fusion API — use "
-            "Design.createInterferenceInput() + Design.analyzeInterference()"
+        body_a, body_b = FakeBody("Base"), FakeBody("Lid")
+        design = FakeDesign(
+            features=0,
+            interferences=[FakeInterferenceResult(body_a, body_b, volume=0.75)],
         )
-        assert {"createInterferenceInput", "analyzeInterference"} <= called, (
-            "check_interference must go through the Design-level interference API"
+        design.rootComponent.occurrences.add(
+            FakeOccurrence(FakeComponent("Base", [body_a]))
+        )
+        design.rootComponent.occurrences.add(
+            FakeOccurrence(FakeComponent("Lid", [body_b]))
         )
 
-    def test_iterates_results_as_a_collection(self):
-        """analyzeInterference returns a collection with .count / .item()."""
-        node = _method("check_interference")
-        attrs = {n.attr for n in ast.walk(node) if isinstance(n, ast.Attribute)}
-        assert "interferenceResultCount" not in attrs, (
-            "interferenceResultCount belongs to the old, non-existent API"
+        result = bound(handler_module, design).check_interference(["Base", "Lid"])
+
+        assert result["count"] == 1
+        assert result["interferences"] == [
+            {"body_one": "Base", "body_two": "Lid", "volume": 0.75}
+        ]
+
+    def test_requires_two_components_with_bodies(self, handler_module):
+        design = FakeDesign(features=0)
+        design.rootComponent.occurrences.add(
+            FakeOccurrence(FakeComponent("Base", [FakeBody("Only")]))
         )
+
+        with pytest.raises(RuntimeError, match="at least 2 components"):
+            bound(handler_module, design).check_interference(["Base"])
 
 
 class TestDraftFaces:
     """``DraftFeatures.createInput(inputFaces, plane, isTangentChain)``.
 
-    ``inputFaces`` is a BRepFace *array* — an ObjectCollection is rejected —
-    and the angle is not a parameter at all; it goes on the returned input via
-    ``setSingleAngle(isSymmetric, angle)``. Passing four arguments raised
-    "Wrong number or type of arguments for overloaded function", so every
-    ``draft_faces`` call failed.
+    ``inputFaces`` is a BRepFace *array* — an ObjectCollection is rejected — and
+    the angle goes on the returned input via ``setSingleAngle(isSymmetric,
+    angle)``.  The fake rejects a non-sequence with the same TypeError Fusion
+    raises, so passing the collection by mistake fails here.
     """
 
-    def test_create_input_takes_three_arguments(self):
-        node = _method("draft_faces")
-        calls = [
-            n
-            for n in ast.walk(node)
-            if isinstance(n, ast.Call)
-            and isinstance(n.func, ast.Attribute)
-            and n.func.attr == "createInput"
-        ]
-        assert calls, "draft_faces must build a DraftFeatureInput"
-        for call in calls:
-            assert len(call.args) == 3, (
-                "DraftFeatures.createInput takes (inputFaces, plane, "
-                "isTangentChain); the angle is not a createInput parameter"
-            )
+    def test_builds_the_feature_and_reports_the_face_count(self, handler_module):
+        body = body_with_faces("Plate", [(1.0, 0.0, 0.0), (0.0, 0.0, 1.0)])
+        design = FakeDesign(features=2, bodies=[body])
 
-    def test_sets_the_angle_on_the_input(self):
-        node = _method("draft_faces")
-        assert "setSingleAngle" in _called_attrs(node), (
-            "the draft angle must be applied with setSingleAngle(isSymmetric, "
-            "angle) on the DraftFeatureInput, not passed to createInput"
-        )
+        result = bound(handler_module, design).draft_faces(body_name="Plate", angle=5)
 
-    def test_passes_faces_as_an_array(self):
-        node = _method("draft_faces")
-        builds_a_list = any(
-            isinstance(n, (ast.ListComp, ast.List)) for n in ast.walk(node)
-        )
-        assert builds_a_list, (
-            "inputFaces must be a BRepFace array — _select_faces returns an "
-            "ObjectCollection, which createInput rejects"
-        )
+        assert result == {"feature_name": "Draft1", "angle": 5, "face_count": 1}
 
-    def test_does_not_swallow_failures(self):
-        node = _method("draft_faces")
-        assert not _has_silent_except(node), (
-            "draft_faces must not use a bare 'except: pass'"
-        )
+    def test_passes_faces_as_an_array(self, handler_module):
+        body = body_with_faces("Plate", [(1.0, 0.0, 0.0)])
+        design = FakeDesign(features=2, bodies=[body])
+        drafts = design.rootComponent.features.draftFeatures
+
+        bound(handler_module, design).draft_faces(body_name="Plate", angle=5)
+
+        assert isinstance(drafts.added[0].faces, list)
+
+    def test_sets_the_angle_on_the_input(self, handler_module):
+        body = body_with_faces("Plate", [(1.0, 0.0, 0.0)])
+        design = FakeDesign(features=2, bodies=[body])
+        drafts = design.rootComponent.features.draftFeatures
+
+        bound(handler_module, design).draft_faces(body_name="Plate", angle=5)
+
+        inp = drafts.added[0]
+        assert inp.angle is not None, "the draft angle was never set on the input"
+        assert inp.angle.value == "5 deg"
+        assert inp.symmetric is False
 
 
 class TestMeasureDistance:
-    """``MeasureResults`` exposes ``positionOne`` / ``positionTwo``.
+    """``MeasureResults`` exposes ``positionOne``/``positionTwo`` and nothing else."""
 
-    ``pointOnEntityOne`` / ``pointOnEntityTwo`` do not exist, so every
-    ``measure_distance`` call raised AttributeError after Fusion had already
-    computed the distance.
-    """
+    def test_reads_the_result_positions(self, handler_module):
+        design = FakeDesign(features=0, bodies=[FakeBody("A"), FakeBody("B")])
+        app = _app(FakeMeasureManager(value=2.5, point_two=(2.5, 0.0, 0.0)))
 
-    def test_reads_the_result_positions(self):
-        node = _method("measure_distance")
-        attrs = {n.attr for n in ast.walk(node) if isinstance(n, ast.Attribute)}
-        assert {"positionOne", "positionTwo"} <= attrs, (
-            "measure_distance must read MeasureResults.positionOne / positionTwo"
-        )
-        assert not attrs & {"pointOnEntityOne", "pointOnEntityTwo"}, (
-            "MeasureResults has no pointOnEntityOne / pointOnEntityTwo"
-        )
+        result = bound(handler_module, design, app).measure_distance("A", "B")
+
+        assert result["distance"] == 2.5
+        assert result["point_one"] == [0.0, 0.0, 0.0]
+        assert result["point_two"] == [2.5, 0.0, 0.0]
+
+    def test_unknown_entity_is_refused(self, handler_module):
+        design = FakeDesign(features=0)
+        app = _app(FakeMeasureManager())
+
+        with pytest.raises(RuntimeError, match="not found"):
+            bound(handler_module, design, app).measure_distance("Ghost", "Ghost")
+
+
+def _app(measure_manager: FakeMeasureManager):
+    return type("FakeApp", (), {"measureManager": measure_manager})()

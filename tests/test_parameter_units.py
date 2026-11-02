@@ -6,19 +6,20 @@ millimetres inflates it tenfold while the parameter still reads "mm". The
 rules live in ``addon/server/parameter_units.py``, which imports no ``adsk``
 and is loaded here by path.
 
-The AST guards cover the two call sites into Fusion's API, which unit tests
-cannot reach, in the same spirit as test_addon_sync.py.
+The two call sites into Fusion's API are covered by running the handler against
+the fake runtime, so a handler that rebuilt the choice inline fails here.
 """
 
 from __future__ import annotations
 
-import ast
 import importlib.util
 from pathlib import Path
 
 import pytest
 
 from fusion360_mcp.mock import mock_command
+from tests.fakes.design import FakeDesign
+from tests.fakes.runtime import FakeValueInput
 
 ADDON_SERVER = Path(__file__).resolve().parent.parent / "addon" / "server"
 
@@ -76,24 +77,6 @@ class TestNormaliseUnit:
         assert parameter_units.normalise_unit(given) == expected
 
 
-def _func(name: str) -> ast.FunctionDef:
-    tree = ast.parse((ADDON_SERVER / "command_handler.py").read_text())
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == name:
-            return node
-    raise AssertionError(f"{name} not found in command_handler.py")
-
-
-def _calls(node: ast.AST, attr: str) -> list[ast.Call]:
-    return [
-        n
-        for n in ast.walk(node)
-        if isinstance(n, ast.Call)
-        and isinstance(n.func, ast.Attribute)
-        and n.func.attr == attr
-    ]
-
-
 class TestBuildValueInput:
     """The choice between the two factories is the thing that was wrong."""
 
@@ -130,30 +113,42 @@ class TestBuildValueInput:
 
 
 class TestCallSites:
-    def test_create_parameter_delegates_the_choice(self):
-        # Constructing a ValueInput inline here would put the branch back
-        # where it cannot be tested.
-        create = _func("create_parameter")
-        assert _calls(create, "build_value_input"), (
-            "create_parameter must go through build_value_input()"
-        )
-        assert not _calls(create, "createByString")
-        assert not _calls(create, "createByReal")
+    """Both call sites must go through this module, not rebuild the choice.
 
-    def test_set_parameter_writes_the_expression_not_the_value(self):
-        assigned = {
-            target.attr: node.value
-            for node in ast.walk(_func("set_parameter"))
-            if isinstance(node, ast.Assign)
-            for target in node.targets
-            if isinstance(target, ast.Attribute)
-        }
-        assert "value" not in assigned, "Parameter.value is read in internal units"
-        assert "expression" in assigned
-        built = _calls(assigned["expression"], "expression_for")
-        assert built, "the expression must come from expression_for()"
-        names = {n.id for n in ast.walk(built[0]) if isinstance(n, ast.Name)}
-        assert {"value", "unit"} <= names
+    A handler that called ``createByReal`` with a millimetre value would produce
+    an inflated expression; one that wrote ``Parameter.value`` would hit the
+    fake's setter, which refuses because Fusion reads that value in internal
+    units.
+    """
+
+    def test_create_parameter_writes_the_expression(self, handler_module):
+        design = FakeDesign(features=0)
+
+        result = _handler(handler_module, design).create_parameter(
+            name="length", value=1000, unit="mm"
+        )
+
+        assert result["expression"] == "1000 mm"
+        stored = design.userParameters.itemByName("length")
+        assert stored is not None
+        assert stored.expression == "1000 mm"
+
+    def test_set_parameter_writes_the_expression_not_the_value(self, handler_module):
+        design = FakeDesign(features=0)
+        stored = design.userParameters.add(
+            "length", FakeValueInput("1000 mm"), "mm", ""
+        )
+
+        _handler(handler_module, design).set_parameter("length", 1200)
+
+        assert stored.expression == "1200 mm"
+
+
+def _handler(handler_module, design):
+    handler = handler_module.CommandHandler.__new__(handler_module.CommandHandler)
+    handler._design = lambda: design
+    handler._root = lambda: design.rootComponent
+    return handler
 
 
 class TestMockContract:

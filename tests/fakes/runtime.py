@@ -72,6 +72,13 @@ class FakeObjectCollection:
     def add(self, item: object) -> None:
         self.items.append(item)
 
+    @property
+    def count(self) -> int:
+        return len(self.items)
+
+    def item(self, index: int) -> object:
+        return self.items[index]
+
     def __iter__(self) -> Iterator[object]:
         return iter(self.items)
 

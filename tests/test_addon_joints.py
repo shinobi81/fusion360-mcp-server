@@ -18,6 +18,13 @@ The old geometry source is also gone on purpose: component origin points are
 not valid joint geometry - ``joints.add`` rejects them with
 ``Invalid parameter point`` because a bare point carries no component
 association. A joint therefore needs a face pair, and the schema says so.
+
+Why these are still source checks: ``test_addon_api_usage.py`` and
+``test_parameter_units.py`` no longer read the source, because the fake runtime
+in ``tests/fakes/`` can now carry their claims.  Joints are different —
+converting them needs a joint model with per-motion attribute tables
+(``_JOINT_VALUE_ATTRIBUTES``, the seven ``setAs*JointMotion`` signatures) and
+driveable motions, which is a follow-up PR rather than an omission.
 """
 
 from __future__ import annotations
