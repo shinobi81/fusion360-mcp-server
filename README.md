@@ -210,7 +210,7 @@ npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"
 ```
 
 The add-in can't be imported under pytest — it needs Fusion's `adsk` runtime — so tests
-load `command_handler.py` against a fake `adsk`. Start with
+load `command_handler.py` against the fake runtime in `tests/fakes/`. Start with
 **[CONTRIBUTING.md](CONTRIBUTING.md)**; architecture and tool conventions are in
 **[AGENTS.md](AGENTS.md)**.
 

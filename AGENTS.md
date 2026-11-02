@@ -37,7 +37,10 @@ it replace `.venv/Scripts/fusion360-mcp-server.exe` while a running MCP server h
 (`os error 32`). When that bites, use `uv run --no-sync …`, or stop the server first.
 
 The add-in cannot be unit-imported (it needs Fusion's `adsk` runtime), so tests load
-`command_handler.py` against a fake `adsk`. Neither pyright nor mypy can resolve `adsk`;
+`command_handler.py` against the fake runtime in `tests/fakes/` — `runtime.py` for the
+`adsk` surface and the loader, `sketch.py` and `design.py` for geometry and the document
+tree. The `handler_module` fixture in `tests/conftest.py` installs it for a whole test
+module and restores `sys.modules` afterwards. Neither pyright nor mypy can resolve `adsk`;
 `addon/` is therefore excluded from both in `pyproject.toml`.
 
 ## Adding a tool
