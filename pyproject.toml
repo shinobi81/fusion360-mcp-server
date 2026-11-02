@@ -57,9 +57,17 @@ select = ["E", "F", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Coverage is measured on every run so a regression is visible in the diff,
-# and floored just under the current number rather than at a round figure.
-addopts = "--cov --cov-report=term-missing --cov-fail-under=80"
+# Coverage is measured on every run so a regression is visible in the diff, and
+# floored just under the current number rather than at a round figure.  95 leaves
+# about 13 statements of slack, which covers the permanent gaps below and any one
+# deliberate dead branch; 97 would leave one, and redden four CI jobs at once.
+#
+# Permanently uncovered, by design: `server.py` line 91 (`bbox_before` is never set
+# by a mock), line 444 (the unreachable prompt fallback), 493-494 (`app.run` inside
+# main()'s stdio coroutine), and `__main__.py`'s click entry point.  Adding
+# `addon/` to `source` — the last step of the test refactor — will drop the total
+# and needs this floor re-based.
+addopts = "--cov --cov-report=term-missing --cov-fail-under=95"
 
 # The add-in imports Fusion's `adsk` runtime, which exists only inside Fusion.
 # No static type checker can resolve it, and each unresolved import cascades into
