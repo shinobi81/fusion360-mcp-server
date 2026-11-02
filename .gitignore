@@ -24,3 +24,6 @@ Thumbs.db
 .vscode/
 
 .worktrees
+
+# local planning notes — design/spec docs stay out of the repo
+docs/superpowers/

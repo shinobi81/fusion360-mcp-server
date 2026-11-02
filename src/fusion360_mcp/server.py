@@ -162,30 +162,14 @@ def _format_result(
     return content
 
 
-@click.command()
-@click.option(
-    "--mode",
-    type=click.Choice(["socket", "mock"]),
-    default="socket",
-    help="'socket' connects to Fusion, 'mock' returns test data",
-)
-@click.option(
-    "--host",
-    type=str,
-    default=lambda: os.environ.get("FUSION_MCP_HOST", "127.0.0.1"),
-    help=(
-        "Host where the Fusion 360 add-in listens (env: FUSION_MCP_HOST). "
-        "Use the Windows LAN IP when the MCP server runs on a different machine."
-    ),
-)
-@click.option(
-    "--port",
-    type=int,
-    default=lambda: int(os.environ.get("FUSION_MCP_PORT", "9876")),
-    help="TCP port the Fusion 360 add-in listens on (env: FUSION_MCP_PORT)",
-)
-def main(mode: str, host: str, port: int) -> int:
-    """Fusion360 MCP Server — connects MCP clients to Fusion 360."""
+def build_server(mode: str, host: str, port: int) -> Server:
+    """Build the MCP server: tool, resource, template and prompt handlers.
+
+    Extracted from :func:`main` so the wiring is reachable without the CLI:
+    an in-process client session can drive it through the real protocol.
+    ``mode``/``host``/``port`` are captured by the handlers and forwarded to
+    :func:`_send`.
+    """
 
     app = Server("fusion360-mcp-server")
 
@@ -471,6 +455,35 @@ def main(mode: str, host: str, port: int) -> int:
                 ),
             ],
         )
+
+    return app
+
+
+@click.command()
+@click.option(
+    "--mode",
+    type=click.Choice(["socket", "mock"]),
+    default="socket",
+    help="'socket' connects to Fusion, 'mock' returns test data",
+)
+@click.option(
+    "--host",
+    type=str,
+    default=lambda: os.environ.get("FUSION_MCP_HOST", "127.0.0.1"),
+    help=(
+        "Host where the Fusion 360 add-in listens (env: FUSION_MCP_HOST). "
+        "Use the Windows LAN IP when the MCP server runs on a different machine."
+    ),
+)
+@click.option(
+    "--port",
+    type=int,
+    default=lambda: int(os.environ.get("FUSION_MCP_PORT", "9876")),
+    help="TCP port the Fusion 360 add-in listens on (env: FUSION_MCP_PORT)",
+)
+def main(mode: str, host: str, port: int) -> int:
+    """Fusion360 MCP Server — connects MCP clients to Fusion 360."""
+    app = build_server(mode, host, port)
 
     # ── run ──────────────────────────────────────────────────────────
 
