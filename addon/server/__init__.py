@@ -13,9 +13,11 @@ _logger.setLevel(logging.DEBUG)
 # File handler — rotates at 2 MB, keeps 3 backups
 _fh = RotatingFileHandler(LOG_PATH, maxBytes=2 * 1024 * 1024, backupCount=3)
 _fh.setLevel(logging.DEBUG)
-_fh.setFormatter(logging.Formatter(
-    "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"))
+_fh.setFormatter(
+    logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
+)
 _logger.addHandler(_fh)
 
 # Also echo to Fusion's TEXT COMMANDS (stdout/stderr)
