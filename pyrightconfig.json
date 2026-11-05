@@ -3,6 +3,6 @@
   "exclude": ["addon", "build", ".venv", "node_modules"],
   "venvPath": ".",
   "venv": ".venv",
-  "pythonVersion": "3.10",
+  "pythonVersion": "3.14",
   "typeCheckingMode": "basic"
 }

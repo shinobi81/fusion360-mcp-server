@@ -98,10 +98,14 @@ dev = [
 # on a workstation cannot fail the sync.  The marker's floor is now the window
 # itself, not decoration: uv locks every version in `requires-python`, atheris
 # 3.1.0's newest wheel is cp314, so inside a >=3.14 window the lock narrows to
-# that one wheel.  On 3.15 atheris publishes neither a wheel nor an sdist, which
-# leaves the group empty there — sync it with `uv sync --only-group fuzz --python
-# 3.14`, or a target stops at `import atheris` with nothing to say why.  Do not
-# hardcode a `< 3.15` cap: it goes stale the day a cp315 wheel lands.
+# that one wheel.  On 3.15 atheris publishes neither a wheel nor an sdist while
+# the marker above still asks for it, so a sync at 3.15 FAILS LOUDLY at resolve
+# time — which is the behaviour you want.  It is not a silent no-op, and the
+# group is only "empty" on non-Linux platforms, where the marker's
+# `sys_platform == 'linux'` half excludes it.  Sync it with
+# `uv sync --only-group fuzz --python 3.14`, or a target stops at
+# `import atheris` with nothing to say why.  Do not hardcode a `< 3.15` cap: it
+# goes stale the day a cp315 wheel lands.
 fuzz = [
     "atheris==3.1.0; sys_platform == 'linux' and python_full_version >= '3.12'",
 ]

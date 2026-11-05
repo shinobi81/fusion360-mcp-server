@@ -10,11 +10,14 @@ the floor that can drift independently.
 
 from __future__ import annotations
 
+import json
+import re
 import tomllib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
+PYRIGHTCONFIG = REPO_ROOT / "pyrightconfig.json"
 
 
 def _pyproject() -> dict:
@@ -25,7 +28,12 @@ def _pyproject() -> dict:
 def _floor_minor() -> int:
     """The minor of ``requires-python``, e.g. 14 for ``">=3.14"``."""
     spec = _pyproject()["project"]["requires-python"]
-    return int(spec.removeprefix(">=").split(".")[1])
+    match = re.fullmatch(r">=\s*3\.(\d+)", spec)
+    assert match, (
+        f"requires-python is {spec!r}; this guard only understands a bare '>=3.X' "
+        "floor, and a compound specifier would be misread instead of failing"
+    )
+    return int(match.group(1))
 
 
 def _classifier_minors() -> set[int]:
@@ -52,6 +60,22 @@ def test_the_floor_itself_is_classified():
 
 
 def test_ruff_has_no_second_copy_of_the_floor():
-    assert "target-version" not in _pyproject()["tool"]["ruff"], (
+    assert "target-version" not in _pyproject()["tool"].get("ruff", {}), (
         "ruff must infer its target from project.requires-python; a second copy drifts"
+    )
+
+
+def test_pyright_does_not_pin_an_older_python_than_the_floor():
+    """pyright cannot infer from ``requires-python``, so its copy needs a guard.
+
+    A ``pyrightconfig.json`` that lags the floor is not cosmetic: pinned at 3.10
+    it resolves ``tomllib`` (standard library from 3.11) as a missing import and
+    reports an error on supported code.
+    """
+    with PYRIGHTCONFIG.open(encoding="utf-8") as fh:
+        declared = json.load(fh)["pythonVersion"]
+    declared_minor = int(declared.split(".")[1])
+    assert declared_minor >= _floor_minor(), (
+        f"pyrightconfig.json pins pyright to {declared}, "
+        f"below the 3.{_floor_minor()} floor"
     )

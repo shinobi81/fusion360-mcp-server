@@ -29,8 +29,8 @@ claude mcp add fusion360 -- uvx --from 'git+https://github.com/shinobi81/fusion3
 
 Then call `ping` — `{"ok": true, "status": "pong"}` means you are connected.
 
-Requirements: [uv](https://docs.astral.sh/uv/), Autodesk Fusion 360, and any MCP client
-(Claude Code, Codex, Cursor, VS Code, …).
+Requirements: Python 3.14+ ([uv](https://docs.astral.sh/uv/) installs it for you),
+Autodesk Fusion 360, and any MCP client (Claude Code, Codex, Cursor, VS Code, …).
 
 ## What it can do
 
