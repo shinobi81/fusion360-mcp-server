@@ -1,23 +1,22 @@
 """Drift guards for the Python support window.
 
-The window is stated in two places in ``pyproject.toml``: ``requires-python``
-and the ``Programming Language :: Python :: 3.x`` classifiers.  Once, they
-disagreed for four years while nobody looked — the floor said 3.10 and 3.10
-was already EOL.  These tests read the floor and fail the suite when the
-classifiers fall out of step with it, or when ruff grows a second copy of
-the floor that can drift independently.
+The window is stated in ``requires-python``, in the ``Programming Language ::
+Python :: 3.x`` classifiers, and in ``[tool.pyright]`` (a type checker cannot
+infer it).  Once, these disagreed for four years while nobody looked — the floor
+said 3.10 and 3.10 was already EOL.  These tests read the floor and fail the
+suite when any surface falls out of step with it, when a tool grows a second copy
+of the floor that can drift independently, or when a document quotes a lint rule
+set the configuration no longer has.
 """
 
 from __future__ import annotations
 
-import json
 import re
 import tomllib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
-PYRIGHTCONFIG = REPO_ROOT / "pyrightconfig.json"
 
 
 def _pyproject() -> dict:
@@ -65,17 +64,61 @@ def test_ruff_has_no_second_copy_of_the_floor():
     )
 
 
-def test_pyright_does_not_pin_an_older_python_than_the_floor():
-    """pyright cannot infer from ``requires-python``, so its copy needs a guard.
+def test_pyright_pins_exactly_the_floor():
+    """pyright cannot infer from ``requires-python``, so its value needs a guard.
 
-    A ``pyrightconfig.json`` that lags the floor is not cosmetic: pinned at 3.10
-    it resolves ``tomllib`` (standard library from 3.11) as a missing import and
-    reports an error on supported code.
+    "At or above" is not enough.  Pinned *below* the floor, pyright reports errors
+    on supported code — a 3.10 pin resolves ``tomllib`` (stdlib from 3.11) as a
+    missing import, which is exactly how this was found.  Pinned *above* it, the
+    checker accepts syntax the package still advertises as unsupported.  The
+    checked version must be the lowest one we support.
     """
-    with PYRIGHTCONFIG.open(encoding="utf-8") as fh:
-        declared = json.load(fh)["pythonVersion"]
-    declared_minor = int(declared.split(".")[1])
-    assert declared_minor >= _floor_minor(), (
-        f"pyrightconfig.json pins pyright to {declared}, "
-        f"below the 3.{_floor_minor()} floor"
+    declared = _pyproject()["tool"].get("pyright", {}).get("pythonVersion")
+    assert declared is not None, (
+        "pyproject.toml's [tool.pyright] states no pythonVersion; pyright cannot "
+        "infer it from requires-python"
+    )
+    assert int(declared.split(".")[1]) == _floor_minor(), (
+        f"[tool.pyright] pins {declared}; the floor is 3.{_floor_minor()}"
+    )
+
+
+def test_there_is_no_second_pyright_config():
+    """``pyrightconfig.json`` silently wins over ``[tool.pyright]``; keep one.
+
+    Two config files is how ``pythonVersion`` said 3.10 for a year while the lint
+    target said something else, and it is why the same change had to touch the
+    same value twice.  If a second file ever returns, it must be because someone
+    deleted this test on purpose.
+    """
+    second = REPO_ROOT / "pyrightconfig.json"
+    assert not second.exists(), (
+        "pyrightconfig.json takes precedence over [tool.pyright] in pyproject.toml; "
+        "a second config file shadows the one this suite checks"
+    )
+
+
+def test_documents_quoting_the_ruff_selection_match_the_config():
+    """A quoted ``select = [...]`` in docs is a claim about this config.
+
+    Four stale copies of the rule set have surfaced in three changes, one of them
+    in the Scorecard evidence table that argues a criterion is met.  Quoting the
+    list in a document is fine; quoting a list the configuration no longer has is
+    a false claim that no reader can be expected to catch.
+    """
+    configured = sorted(_pyproject()["tool"]["ruff"]["lint"]["select"])
+    quoted = re.compile(r"select = \[([^\]]*)\]")
+    offenders = []
+    for doc in (REPO_ROOT / "docs" / "BADGE.md", REPO_ROOT / "CONTRIBUTING.md"):
+        if not doc.exists():
+            continue
+        for number, line in enumerate(doc.read_text(encoding="utf-8").splitlines(), 1):
+            found = quoted.search(line)
+            if found is None:
+                continue
+            stated = sorted(re.findall(r'"([^"]+)"', found.group(1)))
+            if stated != configured:
+                offenders.append(f"{doc.name}:{number} quotes {stated}")
+    assert offenders == [], (
+        f"{'; '.join(offenders)}; pyproject configures {configured}"
     )

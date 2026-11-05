@@ -75,12 +75,24 @@ addopts = "--cov --cov-report=term-missing --cov-fail-under=95"
 # No static type checker can resolve it, and each unresolved import cascades into
 # dozens of false attribute/argument errors, so the add-on is excluded from type
 # checking (ruff and the test suite still cover it — see the CI workflow).
+#
+# This is pyright's **only** configuration.  A `pyrightconfig.json` would silently
+# take precedence over this block, which is how `pythonVersion` came to say 3.10
+# while the rest of the project had moved on; `tests/test_packaging.py` now fails
+# if one reappears.  `.venv` and `node_modules` are excluded because they are
+# installed trees rather than source, and `typeCheckingMode` is pinned so the
+# checked set cannot change by omission.
 [tool.pyright]
-exclude = ["addon", "build"]
+exclude = ["addon", "build", ".venv", "node_modules"]
+typeCheckingMode = "basic"
 # Resolve imports from the project venv, otherwise third-party packages read
 # as unresolved no matter what is installed.
 venvPath = "."
 venv = ".venv"
+# The support window, restated because pyright cannot infer it from
+# `requires-python`.  It must equal the floor exactly: lower reports errors on
+# supported code, higher accepts syntax we do not support.
+pythonVersion = "3.14"
 
 [tool.mypy]
 exclude = ["^addon/", "^build/"]

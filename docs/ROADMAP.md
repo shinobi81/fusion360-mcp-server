@@ -14,7 +14,7 @@ evidence, and only `warnings_strict` below comes from that map.
   questionnaire from [BADGE.md](BADGE.md). Four MUST criteria there are answers only the
   maintainer has: `report_responses`, `vulnerability_report_response`,
   `know_secure_design`, `know_common_errors`.
-- Widen the ruff selection in `pyproject.toml` beyond `E`, `F`, `I` - `warnings_strict`
+- Widen the ruff selection in `pyproject.toml` beyond `E`, `F`, `I`, `RUF` - `warnings_strict`
   is SUGGESTED, so it does not block Passing, and it is the one gap in BADGE.md that is
   work in this repository rather than a questionnaire answer.
 - Add the badge markup to `README.md` once a project id exists - that is the only

@@ -1,8 +1,0 @@
-{
-  "//": "addon/ imports Fusion's `adsk` runtime, which exists only inside Fusion and cannot be resolved by any static checker. build/ is generated. Everything else is checked.",
-  "exclude": ["addon", "build", ".venv", "node_modules"],
-  "venvPath": ".",
-  "venv": ".venv",
-  "pythonVersion": "3.14",
-  "typeCheckingMode": "basic"
-}

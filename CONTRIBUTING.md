@@ -88,7 +88,7 @@ error that motivated it.
 
 ## Style
 
-- Python: `ruff check` and `ruff format` (line length 88, rules `E`, `F`, `I`).
+- Python: `ruff check` and `ruff format` (line length 88, rules `E`, `F`, `I`, `RUF`).
 - Markdown: `npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"` — 88-column
   prose, tables exempt (see `.markdownlint-cli2.jsonc`).
 - `addon/` is excluded from pyright/mypy on purpose: it imports Fusion's `adsk` runtime,
