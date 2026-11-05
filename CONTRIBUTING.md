@@ -21,7 +21,7 @@ git clone https://github.com/shinobi81/fusion360-mcp-server
 cd fusion360-mcp-server
 uv sync                        # python deps into .venv
 uv run pytest -q               # suite runs without Fusion
-uv run ruff check src/ tests/ fuzz/  # what CI runs
+uv run ruff check src/ tests/ fuzz/ addon/  # what CI runs
 ```
 
 Optional, for live testing against Fusion:

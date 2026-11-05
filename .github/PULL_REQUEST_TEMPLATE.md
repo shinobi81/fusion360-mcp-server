@@ -5,7 +5,7 @@
 ## How it was verified
 
 - [ ] `uv run pytest -q` — all tests pass
-- [ ] `uv run ruff check src/ tests/ fuzz/`
+- [ ] `uv run ruff check src/ tests/ fuzz/ addon/`
 - [ ] `npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"`
 - [ ] Live Fusion check if this touches the add-in (`ping` → `pong`, then the operation)
 
