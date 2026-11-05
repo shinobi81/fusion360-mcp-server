@@ -489,10 +489,20 @@ class TestCamEntryGuards:
     moved back below ``setups.add`` / ``operations.add`` fails here.
     """
 
-    def test_setup_refuses_a_non_finite_stock_offset_first(self, bound_handler):
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"stock_offset_sides": float("inf")},
+            {"stock_offset_top": float("nan")},
+            {"stock_offset_bottom": float("-inf")},
+        ],
+    )
+    def test_setup_refuses_a_non_finite_stock_offset_first(self, bound_handler, kwargs):
+        # All three offsets, not just the first: a guard deleted from any one of
+        # them must fail here, which is the failure mode this test exists for.
         handler = bound_handler(None)
         with pytest.raises(ValueError, match="invalid parameter value"):
-            handler.cam_create_setup("Body1", stock_offset_sides=float("inf"))
+            handler.cam_create_setup("Body1", **kwargs)
 
     @pytest.mark.parametrize(
         "kwargs",
