@@ -29,8 +29,8 @@ uv sync                        # install deps into .venv
 uv run pytest -q               # suite runs without Fusion
 uv run pytest -q --no-cov tests/test_tools.py   # subset: the coverage floor
                                                 # applies to the whole suite
-uv run ruff check src/ tests/  # lint (this is what CI runs)
-uv run ruff format src/ tests/ addon/server/command_handler.py
+uv run ruff check src/ tests/ fuzz/  # lint (this is what CI runs)
+uv run ruff format src/ tests/ fuzz/ addon/server/command_handler.py
 npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"
 ```
 
@@ -44,6 +44,11 @@ The add-in cannot be unit-imported (it needs Fusion's `adsk` runtime), so tests 
 tree. The `handler_module` fixture in `tests/conftest.py` installs it for a whole test
 module and restores `sys.modules` afterwards. Neither pyright nor mypy can resolve `adsk`;
 `addon/` is therefore excluded from both in `pyproject.toml`.
+
+`fuzz/` is the other test surface: four atheris targets whose `check(data)` functions are
+also driven by `tests/test_fuzz_targets.py`, so their invariants run in the ordinary
+suite on every platform while atheris itself stays Linux-only and CI-only. Running them
+by hand, and what the job needs, is in `docs/TESTING.md`.
 
 ## Adding a tool
 

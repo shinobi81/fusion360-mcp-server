@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from addon.server.hints import classify
 from fusion360_mcp.mock import mock_command
 from tests.fakes.design import FakeDesign
 from tests.fakes.runtime import FakeValueInput
@@ -110,6 +111,184 @@ class TestBuildValueInput:
         calls, from_string, from_real = self._factories()
         parameter_units.build_value_input(3, "cm", from_string, from_real)
         assert calls == [("string", "3 cm")]
+
+
+class TestRequireFinite:
+    """A non-finite value has to be refused before it reaches Fusion.
+
+    ``json.loads`` accepts the non-standard ``Infinity`` and ``NaN`` literals,
+    so a socket client can deliver one; written through, it becomes the
+    expression ``"inf mm"``, which Fusion rejects as an opaque API error.
+    """
+
+    @pytest.mark.parametrize(
+        ("value", "rendered"),
+        [
+            (float("inf"), "inf"),
+            (float("-inf"), "-inf"),
+            (float("nan"), "nan"),
+        ],
+    )
+    def test_a_non_finite_value_is_refused(self, value, rendered):
+        with pytest.raises(ValueError, match="invalid parameter value") as exc_info:
+            parameter_units.require_finite(value)
+        # The message has to name the offending value and the reason.
+        assert rendered in str(exc_info.value)
+        assert "is not finite" in str(exc_info.value)
+
+    @pytest.mark.parametrize("value", [2.5, 0, -7, 1e300])
+    def test_a_finite_value_passes_through_unchanged(self, value):
+        assert parameter_units.require_finite(value) == value
+
+    def test_the_refusal_classifies_as_invalid_input(self):
+        with pytest.raises(ValueError) as exc_info:
+            parameter_units.require_finite(float("nan"))
+        assert classify(str(exc_info.value))[0] == "INVALID_INPUT"
+
+    def test_the_refusal_points_at_the_value_not_the_units(self):
+        """The hints are the repair channel; the generic ones would mislead.
+
+        ``INVALID_INPUT``'s general text blames units and enums, but Fusion
+        never saw this value -- so the finiteness rule has to supply its own.
+        """
+        with pytest.raises(ValueError) as exc_info:
+            parameter_units.require_finite(float("inf"))
+
+        kind, hints = classify(str(exc_info.value))
+
+        assert kind == "INVALID_INPUT"
+        assert hints, "the finiteness rule must supply its own hints"
+        assert any("finite" in hint.lower() for hint in hints)
+        # Not the units/enum wording: units have nothing to do with an infinity.
+        assert not any("unit" in hint.lower() for hint in hints)
+        assert not any("cm" in hint for hint in hints)
+
+
+class TestNonFiniteCallSites:
+    """Both handlers refuse the value, and leave the design untouched."""
+
+    @pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+    def test_create_parameter_refuses_a_non_finite_value(self, bound_handler, value):
+        design = FakeDesign(features=0)
+
+        handler = bound_handler(design)
+        with pytest.raises(ValueError, match="invalid parameter value"):
+            handler.create_parameter(name="length", value=value, unit="mm")
+
+        # Nothing may be added: a rejected value must not leave "inf mm" behind.
+        assert design.userParameters.count == 0
+        assert design.userParameters.itemByName("length") is None
+
+    @pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+    def test_set_parameter_refuses_a_non_finite_value(self, bound_handler, value):
+        design = FakeDesign(features=0)
+        stored = design.userParameters.add(
+            "angle", FakeValueInput("90 deg", "string"), "deg", ""
+        )
+
+        with pytest.raises(ValueError, match="invalid parameter value"):
+            bound_handler(design).set_parameter("angle", value)
+
+        assert stored.expression == "90 deg"
+
+    def test_set_parameter_judges_the_value_before_the_name(self, bound_handler):
+        # Same order as create_parameter: a bad argument outranks a name that
+        # does not exist, so the message names the real problem.
+        design = FakeDesign(features=0)
+
+        with pytest.raises(ValueError, match="invalid parameter value"):
+            bound_handler(design).set_parameter("no_such_parameter", float("inf"))
+
+
+class TestNonNumberValues:
+    """A value that is not a number is not this guard's business.
+
+    ``math.isfinite`` raises ``TypeError`` on a string, and no hints rule
+    matches that, so judging one would report ``UNKNOWN`` with no hints. Both
+    handlers used to accept one: ``create_parameter(value="2.5")`` reached
+    Fusion as ``createByString("2.5 mm")`` and ``set_parameter`` writes the
+    same text into the parameter's own unit. Fusion's API does the type
+    checking, and the tool schema declares ``value`` as a number, so a
+    non-number is the caller's problem -- not a finiteness failure.
+    """
+
+    def test_require_finite_passes_a_non_number_through(self):
+        assert parameter_units.require_finite("2.5") == "2.5"
+
+    def test_create_parameter_still_takes_the_value_as_text(self, bound_handler):
+        design = FakeDesign(features=0)
+
+        result = bound_handler(design).create_parameter(
+            name="length", value="2.5", unit="mm"
+        )
+
+        assert result["expression"] == "2.5 mm"
+        stored = design.userParameters.itemByName("length")
+        assert stored is not None
+        assert stored.source == "string"
+
+    def test_set_parameter_still_writes_the_value_as_text(self, bound_handler):
+        design = FakeDesign(features=0)
+        stored = design.userParameters.add(
+            "angle", FakeValueInput("90 deg", "string"), "deg", ""
+        )
+
+        bound_handler(design).set_parameter("angle", "45")
+
+        assert stored.expression == "45 deg"
+
+    def test_mock_mode_accepts_it_the_way_the_handler_does(self):
+        # Mock mode leaves a non-number alone too; a mock that refused here
+        # would be stricter than the add-in it advertises itself as matching.
+        result = mock_command(
+            "create_parameter", {"name": "length", "value": "2.5", "unit": "mm"}
+        )
+
+        assert result["ok"] is True
+        assert result["expression"] == "2.5 mm"
+
+
+class TestTheRefusalIsTheSameOnBothSides:
+    """Mock mode promises to report what the add-in would report.
+
+    The refusal text lives twice -- ``parameter_units.require_finite`` raises
+    it, ``mock._non_finite_error`` returns it -- and mock mode is what a caller
+    without Fusion develops against. Pinned as an equality because reviewing
+    two similar strings is not a test: an edit to one has to fail here.
+    """
+
+    @pytest.mark.parametrize(
+        "value", [float("inf"), float("-inf"), float("nan")], ids=str
+    )
+    def test_create_parameter(self, bound_handler, value):
+        with pytest.raises(ValueError) as exc_info:
+            bound_handler(FakeDesign(features=0)).create_parameter(
+                name="length", value=value, unit="mm"
+            )
+
+        result = mock_command(
+            "create_parameter", {"name": "length", "value": value, "unit": "mm"}
+        )
+
+        assert result["ok"] is False
+        assert result["error_message"] == str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "value", [float("inf"), float("-inf"), float("nan")], ids=str
+    )
+    def test_set_parameter(self, bound_handler, value):
+        design = FakeDesign(features=0)
+        design.userParameters.add(
+            "angle", FakeValueInput("90 deg", "string"), "deg", ""
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            bound_handler(design).set_parameter("angle", value)
+
+        result = mock_command("set_parameter", {"name": "angle", "value": value})
+
+        assert result["ok"] is False
+        assert result["error_message"] == str(exc_info.value)
 
 
 class TestCallSites:

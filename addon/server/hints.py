@@ -99,6 +99,21 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # Ahead of the generic INVALID_INPUT rule below, whose pattern
+        # ("invalid parameter") also matches this message. Fusion never saw the
+        # value -- the add-in refused it -- so that rule's units and enum hints
+        # would point the caller at the wrong cause.
+        r"is not finite",
+        "INVALID_INPUT",
+        [
+            # One line each: a wrapped pair in a list trips CodeQL's
+            # implicit-concatenation query, which cannot tell a deliberate wrap
+            # from a missing comma.
+            "inf, -inf and nan are not numbers Fusion can store; nothing was written.",
+            "Send a finite number, or set the real value later with set_parameter.",
+        ],
+    ),
+    (
         r"invalid (argument|input|parameter)|bad (argument|input|value)",
         "INVALID_INPUT",
         [

@@ -205,7 +205,7 @@ call is safe.
 ```bash
 uv sync --dev                    # deps
 uv run pytest -q                 # full suite, no Fusion needed
-uv run ruff check src/ tests/    # lint (what CI runs)
+uv run ruff check src/ tests/ fuzz/    # lint (what CI runs)
 npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"
 ```
 
@@ -213,6 +213,11 @@ The add-in can't be imported under pytest â€” it needs Fusion's `adsk` runtime â
 load `command_handler.py` against the fake runtime in `tests/fakes/`. Start with
 **[CONTRIBUTING.md](CONTRIBUTING.md)**; architecture and tool conventions are in
 **[AGENTS.md](AGENTS.md)**.
+
+Deeper notes: **[docs/TESTING.md](docs/TESTING.md)** (how the suite and the fuzz targets
+run, what they deliberately cannot run), **[docs/ROADMAP.md](docs/ROADMAP.md)** (what is
+planned and why it is not here yet) and **[docs/BADGE.md](docs/BADGE.md)** (every OpenSSF
+Best Practices passing criterion mapped to the file that answers it).
 
 ## This repo
 

@@ -7,9 +7,13 @@ Every response includes ``"mode": "mock"`` so callers know it's simulated.
 
 The envelope matches the real addon: success results carry ``ok: True``,
 mutation results carry a ``deltas`` sub-dict, and an ``__mock_error__``
-sentinel in params forces a classified error response for tests.
+sentinel in params forces a classified error response for tests.  A refusal --
+invalid input, or a value the addon itself refuses -- is that same classified
+error envelope and carries no ``deltas``: nothing changed, so a failed mutation
+must not read as work done.
 """
 
+import math
 from typing import Any
 
 from .hints import classify as _classify
@@ -74,6 +78,34 @@ _MOCK_DELTAS = {
 }
 
 
+def _mock_error(message: str) -> dict:
+    """The envelope the addon returns when a command fails.
+
+    ``error_kind`` and ``hints`` come from the same rules the addon classifies
+    with, so mock mode reports a failure the way real mode would.
+    """
+    kind, hint_list = _classify(message)
+    return {
+        "ok": False,
+        "error_kind": kind,
+        "error_message": message,
+        "hints": hint_list,
+        "traceback": f"MockError: {message}",
+        "mode": "mock",
+    }
+
+
+def _non_finite_error(value: Any) -> dict | None:
+    """The addon's refusal of Infinity/NaN, or None for a usable value.
+
+    ``math.isfinite`` is only meaningful for a number; a schema-invalid
+    non-number is left alone here rather than guessed at.
+    """
+    if isinstance(value, (int, float)) and not math.isfinite(value):
+        return _mock_error(f"invalid parameter value: {value} is not finite")
+    return None
+
+
 def mock_command(command_type: str, params: dict[str, Any] | None = None) -> dict:
     """Return a plausible mock response for *command_type*.
 
@@ -85,20 +117,14 @@ def mock_command(command_type: str, params: dict[str, Any] | None = None) -> dic
 
     forced = params.get("__mock_error__")
     if forced is not None:
-        kind, hint_list = _classify(str(forced))
-        return {
-            "ok": False,
-            "error_kind": kind,
-            "error_message": str(forced),
-            "hints": hint_list,
-            "traceback": f"MockError: {forced}",
-            "mode": "mock",
-        }
+        return _mock_error(str(forced))
 
     handler = _DISPATCH.get(command_type, _default_mock)
     result = handler(params)
     result.setdefault("ok", True)
-    if command_type in _MUTATION_MOCKS and "deltas" not in result:
+    # A refusal carries no deltas: nothing changed, and the synthetic "body
+    # appeared" numbers would claim otherwise.
+    if result["ok"] and command_type in _MUTATION_MOCKS and "deltas" not in result:
         # undo removes work; the synthetic "body appeared" deltas would read
         # as a growth and are exactly what an agent must not be told.
         if command_type != "undo":
@@ -551,6 +577,11 @@ def _get_parameters(_p: dict) -> dict:
 
 def _create_parameter(p: dict) -> dict:
     value = p.get("value", 0)
+    # The addon refuses Infinity/NaN before either ValueInput factory, so mock
+    # mode refuses them too instead of returning an "inf mm" expression.
+    error = _non_finite_error(value)
+    if error is not None:
+        return error
     # The addon trims the unit and treats blank as unitless; mirror both so
     # mock and real modes agree. "unit" is required by the schema, so the
     # default only covers a caller that omitted it entirely.
@@ -566,6 +597,9 @@ def _create_parameter(p: dict) -> dict:
 
 
 def _set_parameter(p: dict) -> dict:
+    error = _non_finite_error(p.get("value", 0))
+    if error is not None:
+        return error
     # The real handler reports the unit the target parameter already declares
     # and the expression Fusion stored. Mock mode holds no design, so it
     # cannot know either -- report null rather than invent "mm".
