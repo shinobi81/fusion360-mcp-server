@@ -12,6 +12,7 @@ from addon.server.hole_geometry import plane_z_at  # noqa: E402
 from fuzz.fuzz_hints_classify import check, classify  # noqa: E402
 from fuzz.fuzz_hole_geometry import check as check_geom  # noqa: E402
 from fuzz.fuzz_parameter_units import check as check_units  # noqa: E402
+from fuzz.fuzz_socket_framing import check as check_frames  # noqa: E402
 
 
 def test_classify_survives_hostile_text():
@@ -89,3 +90,51 @@ def test_a_non_finite_origin_is_not_asserted_against():
     # not report that as a crash: only an all-finite input owes a finite Z.
     for origin_z in (float("inf"), float("nan")):
         check_geom(struct.pack("<5d", 1.0, origin_z, 0.0, 0.0, 0.0))
+
+
+def test_an_http_request_dispatches_nothing():
+    check_frames(b'GET / HTTP/1.1\r\nHost: x\r\n\r\n{"type": "execute_code"}\n')
+
+
+def test_a_partial_frame_dispatches_nothing():
+    check_frames(b'{"type": "ping"')
+
+
+def test_a_bad_line_after_a_good_one_stops_dispatch():
+    check_frames(b'{"type": "ping"}\nnot json\n{"type": "ping"}\n')
+
+
+def test_clean_frames_all_dispatch():
+    check_frames(b'{"type": "ping"}\n{"type": "get_scene_info"}\n')
+
+
+def test_an_empty_payload_is_not_an_error():
+    # atheris feeds b"" first: no complete line, so no dispatch and no reply.
+    check_frames(b"")
+
+
+def test_blank_lines_are_not_frames():
+    for data in (b"\n\n\n", b"   \n  \n"):
+        check_frames(data)
+
+
+def test_a_frame_without_a_trailing_newline_is_still_a_frame():
+    # The handler's raw-JSON fallback dispatches an unterminated blob that
+    # parses, so the frame count has to include it -- otherwise a plain fuzz
+    # input like b"123" reports a dispatch the contract allowed.
+    check_frames(b'{"type": "ping"}')
+    check_frames(b"123")
+
+
+def test_a_line_is_stripped_before_it_is_parsed():
+    # \x0c is not JSON whitespace but bytes.strip() removes it, so the handler
+    # dispatches this line: a target parsing the raw line would call it bad.
+    check_frames(b"\x0c{}\x0c\n")
+
+
+def test_a_line_that_is_not_text_closes_without_the_error_reply():
+    # json.loads fails on UTF-8 before it ever tries JSON, and _handle_client
+    # only catches JSONDecodeError, so these bytes end the connection without
+    # the reply. Nothing is dispatched either way, so #11 still holds.
+    check_frames(b"\x80 not text\n")
+    check_frames(b'{"type": "ping"}\n\x80 not text\n')
