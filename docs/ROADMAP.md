@@ -17,8 +17,10 @@ evidence, and only `warnings_strict` below comes from that map.
 - Widen the ruff selection in `pyproject.toml` beyond `E`, `F`, `I` - `warnings_strict`
   is SUGGESTED, so it does not block Passing, and it is the one gap in BADGE.md that is
   work in this repository rather than a questionnaire answer.
-- Attach the Scorecard attestation bundle to a release as an asset, and add the badge
-  markup to `README.md` once a project id exists. Both wait on steps outside the code.
+- Add the badge markup to `README.md` once a project id exists - that is the only
+  step left outside the code. The Scorecard `Signed-Releases` asset is done:
+  `release.yml` attaches the attestation bundle as `provenance.sigstore.json`, the
+  name the check reads; the score reaches 8/10 once five releases carry it.
 
 ## 2. The test refactor
 
