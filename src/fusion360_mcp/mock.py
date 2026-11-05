@@ -549,6 +549,12 @@ def _import_mesh(p: dict) -> dict:
 
 
 def _create_box_parametric(p: dict) -> dict:
+    # The add-in refuses a non-finite dimension or extent at method entry, so
+    # mock mode must not report success for a value Fusion would never accept.
+    for key in ("length", "width", "height", "origin_x", "origin_y", "origin_z"):
+        refusal = _non_finite_error(p.get(key, 0))
+        if refusal is not None:
+            return refusal
     return {
         "created": True,
         "body_name": p.get("body_name") or "BoxParametric_mock",

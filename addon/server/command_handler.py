@@ -4000,6 +4000,12 @@ class CommandHandler:
         stock_offset_top: float = 0,
         stock_offset_bottom: float = 0,
     ):
+        # Judged before any object exists: the refusal's hint says nothing was
+        # written, so a setup must not already be in the tree when it fires.
+        stock_offset_sides = _param_units.require_finite(stock_offset_sides)
+        stock_offset_top = _param_units.require_finite(stock_offset_top)
+        stock_offset_bottom = _param_units.require_finite(stock_offset_bottom)
+
         cam = self._get_cam()
         body = self._body_by_name(body_name)
 
@@ -4071,6 +4077,10 @@ class CommandHandler:
     def _set_cam_parameter(target, param_name, value, by_string=False):
         """Set a CAM parameter on a setup or operation. Returns success.
 
+        Raises ``ValueError`` for a non-finite numeric value — that is a bad
+        argument, not an unavailable parameter name, and the two callers would
+        otherwise report it as the latter.
+
         CAMParameter.value is read-only on current Fusion builds — values
         must be assigned via the ``expression`` property.  Enum parameters
         (e.g. tool_coolant) take quoted lowercase strings ('flood').
@@ -4105,6 +4115,11 @@ class CommandHandler:
         spindle_speed: float | None = None,
         coolant: str = "flood",
     ):
+        # Judged before the operation is created, so a refusal's hint ("nothing
+        # was written") stays true: a bad value is not an unavailable name.
+        for _numeric in (stepdown, stepover, feed_rate, spindle_speed):
+            _param_units.require_finite(_numeric)
+
         cam = self._get_cam()
         setup = self._find_setup(cam, setup_name)
 
@@ -4137,6 +4152,7 @@ class CommandHandler:
             ("tool_spindleSpeed", spindle_speed, False),
             ("tool_coolant", coolant, True),
         ):
+
             if value is None:
                 continue
             if self._set_cam_parameter(op, param_name, value, by_string):

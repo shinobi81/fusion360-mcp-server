@@ -445,3 +445,36 @@ class TestValueInputFor:
     def test_a_non_finite_number_is_refused(self, value):
         with pytest.raises(ValueError, match="invalid parameter value"):
             parameter_units.value_input_for(value)
+
+
+class TestCreateBoxParametricRefusesNonFinite:
+    """The call site, not just the decision: fails if the guards stop being called."""
+
+    @pytest.mark.parametrize(
+        "override",
+        [
+            {"length": float("inf")},
+            {"width": float("nan")},
+            {"height": float("-inf")},
+            {"origin_x": float("inf")},
+            {"origin_z": float("-inf")},
+        ],
+    )
+    def test_the_guard_fires_before_any_fusion_call(self, bound_handler, override):
+        # ``bound_handler(None)``: the guards run before the design is ever
+        # reached, which is exactly the ordering being pinned. If they moved
+        # below ``self._root()`` this would raise AttributeError instead.
+        handler = bound_handler(None)
+        args = {"length": 1, "width": 1, "height": 1, **override}
+        with pytest.raises(ValueError, match="invalid parameter value"):
+            handler.create_box_parametric(**args)
+
+    def test_the_mock_refuses_the_same_value(self):
+        # Mirrors the entry guard: mock mode must not report a box the add-in
+        # would refuse, or a caller develops against a fiction.
+        result = mock_command(
+            "create_box_parametric",
+            {"length": float("inf"), "width": 1, "height": 1},
+        )
+        assert result.get("ok") is False
+        assert result.get("error_kind") == "INVALID_INPUT"
