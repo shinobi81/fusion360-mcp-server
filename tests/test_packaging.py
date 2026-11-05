@@ -79,3 +79,21 @@ def test_pyright_does_not_pin_an_older_python_than_the_floor():
         f"pyrightconfig.json pins pyright to {declared}, "
         f"below the 3.{_floor_minor()} floor"
     )
+
+
+def test_pyproject_pyright_section_states_the_floor_too():
+    """``pyrightconfig.json`` wins for pyright; this copy is for everything else.
+
+    A tool that reads only ``pyproject.toml`` — or a reader skimming it — must not
+    find a different support window there than ``requires-python`` declares. That
+    split is what let the ``tomllib`` report survive: the value was wrong in one
+    file while the other looked right.
+    """
+    declared = _pyproject()["tool"].get("pyright", {}).get("pythonVersion")
+    assert declared is not None, (
+        "pyproject.toml's [tool.pyright] states no pythonVersion; every config "
+        "surface must state the floor"
+    )
+    assert int(declared.split(".")[1]) >= _floor_minor(), (
+        f"[tool.pyright] pins {declared}, below the 3.{_floor_minor()} floor"
+    )

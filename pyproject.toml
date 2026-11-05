@@ -81,6 +81,11 @@ exclude = ["addon", "build"]
 # as unresolved no matter what is installed.
 venvPath = "."
 venv = ".venv"
+pythonVersion = "3.14"
+# The support window, stated for the tools and readers that consult pyproject.toml.
+# pyright itself prefers pyrightconfig.json, which carries the same value plus the
+# same exclude list; `tests/test_packaging.py` fails if either drifts below
+# `requires-python`. Keep the two in step.
 
 [tool.mypy]
 exclude = ["^addon/", "^build/"]
