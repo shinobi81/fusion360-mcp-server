@@ -204,15 +204,11 @@ class TestResourceTemplates:
 
     def test_body_uri_regex_match(self):
         """The body URI regex should extract the name."""
-        import re
-
         m = re.match(r"^fusion360://body/(.+)$", "fusion360://body/Box1")
         assert m is not None
         assert m.group(1) == "Box1"
 
     def test_component_uri_regex_match(self):
-        import re
-
         m = re.match(
             r"^fusion360://component/(.+)$",
             "fusion360://component/Arm",

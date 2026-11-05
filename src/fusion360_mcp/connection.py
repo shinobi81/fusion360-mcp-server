@@ -12,6 +12,7 @@ import logging
 import os
 import socket
 import time
+from contextlib import suppress
 from typing import Any
 
 from .hints import classify as _classify
@@ -84,10 +85,8 @@ class Fusion360Connection:
 
     def disconnect(self):
         if self._sock:
-            try:
+            with suppress(Exception):
                 self._sock.close()
-            except Exception:
-                pass
             self._sock = None
 
     def reconnect(self) -> bool:

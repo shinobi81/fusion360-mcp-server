@@ -14,7 +14,7 @@ import os
 import tempfile
 import time
 import traceback
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, suppress
 
 import adsk.cam
 import adsk.core
@@ -291,12 +291,10 @@ class CommandHandler:
         """
         doc = self.app.activeDocument
         if doc is not None:
-            try:
+            with suppress(Exception):
                 design = doc.products.itemByProductType("DesignProductType")
                 if design is not None:
                     return design
-            except Exception:
-                pass
         d = self.app.activeProduct
         if d is None or not hasattr(d, "rootComponent"):
             raise RuntimeError(
@@ -513,12 +511,10 @@ class CommandHandler:
         elif selection == "vertical":
             for face in body.faces:
                 # Check if face normal is roughly horizontal (vertical face)
-                try:
+                with suppress(Exception):
                     _, normal_vec = face.evaluator.getNormalAtPoint(face.pointOnFace)
                     if abs(normal_vec.z) < 0.1:
                         coll.add(face)
-                except Exception:
-                    pass
         else:
             raise RuntimeError(
                 f"Unknown face_selection '{selection}' — use all/top/bottom/vertical"
@@ -2190,6 +2186,7 @@ class CommandHandler:
                 f"Unknown units '{units}'. Expected one of: {sorted(unit_map)}"
             )
 
+        mesh_body = None  # bound by whichever import path below succeeds
         try:
             # MeshBodies.add(fullFilename, units) — the current API.
             # Returns a MeshBodyList (a file can contain several bodies).
@@ -2872,10 +2869,9 @@ class CommandHandler:
 
         ucs = root.userCoordinateSystems.add(inp)
         if name:
-            try:
+            # A rejected name must not cost us the UCS we just created.
+            with suppress(Exception):
                 ucs.name = name
-            except Exception:
-                pass
         return {
             "name": ucs.name,
             "origin": [x, y, z],
@@ -3940,10 +3936,8 @@ class CommandHandler:
         if hasattr(op, "parameters"):
             params = {}
             for param in op.parameters:
-                try:
+                with suppress(Exception):
                     params[param.name] = param.expression
-                except Exception:
-                    pass
             info["parameters"] = params
 
         return info
@@ -4414,10 +4408,8 @@ class CommandHandler:
                     # body_count (which includes occurrence bodies).
                     mass_kg = float(root.physicalProperties.mass)
                     for occ in root.allOccurrences:
-                        try:
+                        with suppress(Exception):
                             mass_kg += float(occ.physicalProperties.mass)
-                        except Exception:
-                            pass
                     mass_g = mass_kg * 1000.0
                 except Exception:
                     mass_g = 0.0
@@ -4510,10 +4502,8 @@ class CommandHandler:
                 with open(path, "rb") as f:
                     data = f.read()
             finally:
-                try:
+                with suppress(Exception):
                     os.remove(path)
-                except Exception:
-                    pass
         finally:
             if repositioned:
                 cam = viewport.camera
@@ -4523,10 +4513,8 @@ class CommandHandler:
                 cam.target = adsk.core.Point3D.create(*orig_state["target"])
                 cam.upVector = adsk.core.Vector3D.create(*orig_state["up"])
                 viewport.camera = cam
-                try:
+                with suppress(Exception):
                     viewport.refresh()
-                except Exception:
-                    pass
 
         return {
             "view": view,
@@ -4550,7 +4538,7 @@ class CommandHandler:
         target = adsk.core.Point3D.create(0.0, 0.0, 0.0)
         distance = 20.0
         if root is not None and root.bRepBodies.count > 0:
-            try:
+            with suppress(Exception):
                 bbox = root.boundingBox
                 if bbox is not None:
                     cx = (bbox.minPoint.x + bbox.maxPoint.x) * 0.5
@@ -4561,8 +4549,6 @@ class CommandHandler:
                     dy = bbox.maxPoint.y - bbox.minPoint.y
                     dz = bbox.maxPoint.z - bbox.minPoint.z
                     distance = max(dx, dy, dz, 1.0) * 2.5
-            except Exception:
-                pass
 
         eye = adsk.core.Point3D.create(
             target.x + eye_dir[0] * distance,

@@ -3,7 +3,9 @@
 import json
 import os
 import socket
+import sys
 import threading
+from contextlib import suppress
 
 import pytest
 
@@ -25,9 +27,7 @@ def test_default_host_is_the_loopback_literal():
     if os.environ.get("FUSION_MCP_HOST"):
         pytest.skip("FUSION_MCP_HOST overrides the default host")
 
-    import fusion360_mcp.connection as connection
-
-    assert connection._DEFAULT_HOST == "127.0.0.1"
+    assert Fusion360Connection().host == "127.0.0.1"
 
 
 def _start_echo_server(host="127.0.0.1", port=0):
@@ -41,7 +41,7 @@ def _start_echo_server(host="127.0.0.1", port=0):
     def handler():
         conn, _ = srv.accept()
         buf = b""
-        try:
+        with suppress(Exception):
             while True:
                 chunk = conn.recv(4096)
                 if not chunk:
@@ -58,11 +58,8 @@ def _start_echo_server(host="127.0.0.1", port=0):
                         },
                     }
                     conn.sendall((json.dumps(resp) + "\n").encode())
-        except Exception:
-            pass
-        finally:
-            conn.close()
-            srv.close()
+        conn.close()
+        srv.close()
 
     t = threading.Thread(target=handler, daemon=True)
     t.start()
@@ -84,7 +81,7 @@ def _start_multi_accept_server(host="127.0.0.1", port=0, max_accepts=3):
             except OSError:
                 break
             buf = b""
-            try:
+            with suppress(Exception):
                 while True:
                     chunk = conn.recv(4096)
                     if not chunk:
@@ -101,10 +98,7 @@ def _start_multi_accept_server(host="127.0.0.1", port=0, max_accepts=3):
                             },
                         }
                         conn.sendall((json.dumps(resp) + "\n").encode())
-            except Exception:
-                pass
-            finally:
-                conn.close()
+            conn.close()
         srv.close()
 
     t = threading.Thread(target=handler, daemon=True)
@@ -199,6 +193,7 @@ class TestReconnect:
         conn.connect()
 
         # Simulate a dropped connection by closing the socket directly
+        assert conn._sock is not None  # connect() above
         conn._sock.close()
         conn._sock = None
 
@@ -226,6 +221,7 @@ class TestRetry:
         monkeypatch.setattr("fusion360_mcp.connection._RETRY_DELAY", 0.05)
 
         # Kill the underlying socket to simulate a dropped connection
+        assert conn._sock is not None  # connect() above
         conn._sock.close()
 
         # send_command should reconnect and succeed
@@ -313,45 +309,35 @@ class TestRecvJson:
 class TestGetConnectionSingleton:
     """Verify the module-level singleton behavior."""
 
-    def test_reset_clears_singleton(self):
-        """reset_connection should clear the cached connection."""
-        import fusion360_mcp.connection as mod
+    def test_reset_clears_singleton(self, monkeypatch):
+        """reset_connection drops the cache, so the next call rebuilds it."""
+        port, srv, _ = _start_echo_server()
+        monkeypatch.setattr("fusion360_mcp.connection._connection", None)
 
-        saved = mod._connection
-        try:
-            mod._connection = Fusion360Connection("127.0.0.1", 1)
-            reset_connection()
-            assert mod._connection is None
-        finally:
-            mod._connection = saved
+        first = get_connection(port=port)
+        assert get_connection(port=port) is first  # cached
 
-    def test_reset_when_no_connection(self):
-        """reset_connection should not error when nothing cached."""
-        import fusion360_mcp.connection as mod
+        reset_connection()
 
-        saved = mod._connection
-        try:
-            mod._connection = None
-            reset_connection()  # should not raise
-            assert mod._connection is None
-        finally:
-            mod._connection = saved
+        second = get_connection(port=port)
+        assert second is not first
+        second.disconnect()
 
-    def test_get_connection_returns_same_instance(self):
+    def test_reset_when_no_connection(self, monkeypatch):
+        """reset_connection should not error when nothing is cached."""
+        monkeypatch.setattr("fusion360_mcp.connection._connection", None)
+        reset_connection()  # must not raise
+        assert sys.modules["fusion360_mcp.connection"]._connection is None
+
+    def test_get_connection_returns_same_instance(self, monkeypatch):
         """Repeated calls return the same connection object."""
         port, srv, _ = _start_echo_server()
-        import fusion360_mcp.connection as mod
+        monkeypatch.setattr("fusion360_mcp.connection._connection", None)
 
-        saved = mod._connection
-        mod._connection = None
-        try:
-            c1 = get_connection(port=port)
-            c2 = get_connection(port=port)
-            assert c1 is c2
-        finally:
-            if mod._connection:
-                mod._connection.disconnect()
-            mod._connection = saved
+        c1 = get_connection(port=port)
+        c2 = get_connection(port=port)
+        assert c1 is c2
+        c1.disconnect()
 
 
 class TestMultipleCommands:
@@ -455,17 +441,16 @@ class TestMutationTimeoutSafety:
 
         def handler():
             try:
-                for _ in range(max_accepts):
-                    c, _ = srv.accept()
-                    c.settimeout(5)
-                    try:
-                        data = c.recv(4096)
-                        if data:
-                            received.append(json.loads(data.split(b"\n")[0]))
-                    finally:
-                        c.close()
-            except OSError:
-                pass
+                with suppress(OSError):
+                    for _ in range(max_accepts):
+                        c, _ = srv.accept()
+                        c.settimeout(5)
+                        try:
+                            data = c.recv(4096)
+                            if data:
+                                received.append(json.loads(data.split(b"\n")[0]))
+                        finally:
+                            c.close()
             finally:
                 srv.close()
 
@@ -521,34 +506,22 @@ class TestEndpointChange:
     """get_connection must not silently reuse a connection aimed at a
     different host/port."""
 
-    def test_different_port_recreates_connection(self):
+    def test_different_port_recreates_connection(self, monkeypatch):
         port, srv, _ = _start_echo_server()
-        import fusion360_mcp.connection as mod
+        monkeypatch.setattr("fusion360_mcp.connection._connection", None)
 
-        saved = mod._connection
-        mod._connection = None
-        try:
-            c1 = get_connection(port=port)
-            c2 = get_connection(port=port + 1)  # nothing listens there
-            assert c2 is not c1
-            assert c2.port == port + 1
-            assert c2.connected is False  # connect() failed, object replaced
-        finally:
-            if mod._connection:
-                mod._connection.disconnect()
-            mod._connection = saved
+        c1 = get_connection(port=port)
+        c2 = get_connection(port=port + 1)  # nothing listens there
+        assert c2 is not c1
+        assert c2.port == port + 1
+        assert c2.connected is False  # connect() failed, object replaced
+        c1.disconnect()
 
-    def test_same_endpoint_reuses_connection(self):
+    def test_same_endpoint_reuses_connection(self, monkeypatch):
         port, srv, _ = _start_echo_server()
-        import fusion360_mcp.connection as mod
+        monkeypatch.setattr("fusion360_mcp.connection._connection", None)
 
-        saved = mod._connection
-        mod._connection = None
-        try:
-            c1 = get_connection(port=port)
-            c2 = get_connection(port=port)
-            assert c1 is c2
-        finally:
-            if mod._connection:
-                mod._connection.disconnect()
-            mod._connection = saved
+        c1 = get_connection(port=port)
+        c2 = get_connection(port=port)
+        assert c1 is c2
+        c1.disconnect()

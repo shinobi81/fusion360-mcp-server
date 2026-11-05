@@ -10,6 +10,7 @@ import queue
 import threading
 import time
 import traceback
+from contextlib import suppress
 
 import adsk.core
 
@@ -165,10 +166,8 @@ class EventBridge:
         while self._timer_running:
             time.sleep(interval)
             if not self._queue.empty():
-                try:
+                with suppress(Exception):
                     self._app.fireCustomEvent(CUSTOM_EVENT_ID)
-                except Exception:
-                    pass
 
     # ------------------------------------------------------------------
     # Hot reload
@@ -212,12 +211,8 @@ class EventBridge:
             item.cancelled = True
             item.error = "Add-in stopped before the command executed"
             item.done.set()
-        try:
+        with suppress(Exception):
             self._event.remove(self._event_handler)
-        except Exception:
-            pass
-        try:
+        with suppress(Exception):
             self._app.unregisterCustomEvent(CUSTOM_EVENT_ID)
-        except Exception:
-            pass
         log.info("EventBridge stopped")
