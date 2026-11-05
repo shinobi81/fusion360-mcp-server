@@ -14,6 +14,7 @@ import socket
 import threading
 import time
 import traceback
+from contextlib import suppress
 
 from . import get_logger
 
@@ -60,14 +61,10 @@ class Fusion360MCPServer:
         with self._clients_lock:
             clients = list(self._clients)
         for c in clients:
-            try:
+            with suppress(Exception):
                 c.shutdown(socket.SHUT_RDWR)
-            except Exception:
-                pass
-            try:
+            with suppress(Exception):
                 c.close()
-            except Exception:
-                pass
         if self._accept_thread and self._accept_thread.is_alive():
             self._accept_thread.join(timeout=2.0)
         self._accept_thread = None
@@ -99,10 +96,8 @@ class Fusion360MCPServer:
 
     def _close_socket(self):
         if self._socket:
-            try:
+            with suppress(Exception):
                 self._socket.close()
-            except Exception:
-                pass
             self._socket = None
 
     # ------------------------------------------------------------------
@@ -219,10 +214,8 @@ class Fusion360MCPServer:
         finally:
             with self._clients_lock:
                 self._clients.discard(client)
-            try:
+            with suppress(Exception):
                 client.close()
-            except Exception:
-                pass
             log.info("Client disconnected")
 
     # ------------------------------------------------------------------

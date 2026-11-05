@@ -14,6 +14,7 @@ import pathlib
 import socket
 import sys
 import threading
+from contextlib import suppress
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -48,17 +49,14 @@ def _exchange(payload: bytes, timeout: float = 5.0):
 
     replies = b""
     client_end.settimeout(timeout)
-    try:
+    with suppress(socket.timeout):
         while True:
             chunk = client_end.recv(4096)
             if not chunk:
                 break
             replies += chunk
-    except socket.timeout:
-        pass
-    finally:
-        client_end.close()
-        thread.join(timeout)
+    client_end.close()
+    thread.join(timeout)
 
     return bridge, [json.loads(line) for line in replies.splitlines() if line.strip()]
 
