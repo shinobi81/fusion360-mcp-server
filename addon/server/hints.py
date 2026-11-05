@@ -106,10 +106,11 @@ _RULES: list[tuple[str, str, list[str]]] = [
         r"is not finite",
         "INVALID_INPUT",
         [
-            "inf, -inf and nan are not numbers Fusion can store — the value was "
-            "refused before it reached the model, so nothing was written.",
-            "Send a finite number, or create the parameter with a placeholder "
-            "and set the real value later with set_parameter.",
+            # One line each: a wrapped pair in a list trips CodeQL's
+            # implicit-concatenation query, which cannot tell a deliberate wrap
+            # from a missing comma.
+            "inf, -inf and nan are not numbers Fusion can store; nothing was written.",
+            "Send a finite number, or set the real value later with set_parameter.",
         ],
     ),
     (
