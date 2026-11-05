@@ -45,6 +45,11 @@ tree. The `handler_module` fixture in `tests/conftest.py` installs it for a whol
 module and restores `sys.modules` afterwards. Neither pyright nor mypy can resolve `adsk`;
 `addon/` is therefore excluded from both in `pyproject.toml`.
 
+`fuzz/` is the other test surface: four atheris targets whose `check(data)` functions are
+also driven by `tests/test_fuzz_targets.py`, so their invariants run in the ordinary
+suite on every platform while atheris itself stays Linux-only and CI-only. Running them
+by hand, and what the job needs, is in `docs/TESTING.md`.
+
 ## Adding a tool
 
 1. Handler method in `addon/server/command_handler.py`, registered in `_COMMANDS`

@@ -8,7 +8,7 @@ pull request merges. Why the fakes exist and what they model is in
 
 ```bash
 uv sync --dev                            # deps into .venv, no Fusion needed
-uv run pytest -q                         # the whole suite: 508 tests, ~16s
+uv run pytest -q                         # the whole suite, ~16s
 uv run pytest -q --no-cov tests/test_tools.py   # one file, without the coverage floor
 uv run pytest -q -k revolve              # by name
 uv run ruff check src/ tests/ fuzz/      # what CI runs
@@ -20,7 +20,7 @@ Nothing in the suite needs Fusion, a network, or a display. The socket tests bin
 ## The coverage floor
 
 `addopts` in `pyproject.toml` measures coverage on every run and fails below **95%**;
-the suite currently sits at **97.54%** (610 statements, 15 uncovered). The floor lives in
+the suite currently sits at **97.59%** (623 statements, 15 uncovered). The floor lives in
 `addopts`, so it applies to the whole suite and not to one file - that is why a subset is
 run with `--no-cov`. The statements that are uncovered on purpose, and the reason the
 floor is 95 rather than a rounder 100, are listed in the comment above `addopts`.

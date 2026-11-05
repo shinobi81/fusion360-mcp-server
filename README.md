@@ -214,6 +214,11 @@ load `command_handler.py` against the fake runtime in `tests/fakes/`. Start with
 **[CONTRIBUTING.md](CONTRIBUTING.md)**; architecture and tool conventions are in
 **[AGENTS.md](AGENTS.md)**.
 
+Deeper notes: **[docs/TESTING.md](docs/TESTING.md)** (how the suite and the fuzz targets
+run, what they deliberately cannot run), **[docs/ROADMAP.md](docs/ROADMAP.md)** (what is
+planned and why it is not here yet) and **[docs/BADGE.md](docs/BADGE.md)** (every OpenSSF
+Best Practices passing criterion mapped to the file that answers it).
+
 ## This repo
 
 A maintained continuation of
