@@ -101,7 +101,11 @@ def _non_finite_error(value: Any) -> dict | None:
     ``math.isfinite`` is only meaningful for a number; a schema-invalid
     non-number is left alone here rather than guessed at.
     """
-    if isinstance(value, (int, float)) and not math.isfinite(value):
+    # Mirrors parameter_units.require_finite: an int is always finite (and a huge
+    # one raises OverflowError if converted to float), a non-number is left alone.
+    if isinstance(value, int):
+        return None
+    if isinstance(value, float) and not math.isfinite(value):
         return _mock_error(f"invalid parameter value: {value} is not finite")
     return None
 
@@ -545,6 +549,12 @@ def _import_mesh(p: dict) -> dict:
 
 
 def _create_box_parametric(p: dict) -> dict:
+    # The add-in refuses a non-finite dimension or extent at method entry, so
+    # mock mode must not report success for a value Fusion would never accept.
+    for key in ("length", "width", "height", "origin_x", "origin_y", "origin_z"):
+        refusal = _non_finite_error(p.get(key, 0))
+        if refusal is not None:
+            return refusal
     return {
         "created": True,
         "body_name": p.get("body_name") or "BoxParametric_mock",

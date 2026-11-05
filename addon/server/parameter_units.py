@@ -24,9 +24,35 @@ def require_finite(value: float) -> float:
     no hints for a value that used to work: ``create_parameter(value="2.5")``
     reaches Fusion as ``createByString("2.5 mm")``, which is fine.
     """
-    if isinstance(value, (int, float)) and not math.isfinite(value):
+    # An int is always finite, and converting an oversized one to float raises
+    # OverflowError (a 401-digit JSON integer does exactly that), so ints skip
+    # the conversion entirely rather than being judged by it.
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and not math.isfinite(value):
         raise ValueError(f"invalid parameter value: {value} is not finite")
     return value
+
+
+def value_input_for(value: object) -> tuple[str, object]:
+    """How a Fusion numeric input should be written: real, or expression.
+
+    ``("real", float)`` goes through ``createByReal`` / ``parameter.value``;
+    ``("expression", str)`` goes through ``createByString`` / ``parameter.expression``.
+
+    A non-finite number is refused here (so it classifies as ``INVALID_INPUT``),
+    an int too large for ``float`` becomes an expression rather than raising
+    ``OverflowError``, and a string expression — ``"boxL"``, ``"56 mm"`` — passes
+    through as the expression it already is.
+    """
+    value = require_finite(value)
+    if isinstance(value, (int, float)):
+        try:
+            return "real", float(value)
+        except OverflowError:
+            # Finite, but beyond float: let Fusion judge the magnitude.
+            return "expression", str(value)
+    return "expression", str(value)
 
 
 def normalise_unit(unit: str | None) -> str:

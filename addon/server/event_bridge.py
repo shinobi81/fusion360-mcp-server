@@ -26,11 +26,11 @@ TIMER_INTERVAL_MS = 200  # backup polling interval
 class WorkItem:
     """One unit of work submitted from a socket thread."""
 
-    __slots__ = ("command", "result", "error", "done", "cancelled")
+    __slots__ = ("cancelled", "command", "done", "error", "result")
 
     def __init__(self, command: dict):
         self.command = command
-        self.result = None
+        self.result: dict | None = None
         self.error = None
         self.done = threading.Event()
         # Set when the waiting socket thread gave up (timeout).  A
@@ -122,6 +122,9 @@ class EventBridge:
             }
 
         log.debug("Command %s completed", cmd_type)
+        # The wait above succeeded and error is None, so the main thread
+        # stored a result; the assert documents that for the type checker.
+        assert item.result is not None
         return item.result
 
     # ------------------------------------------------------------------

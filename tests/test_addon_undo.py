@@ -126,7 +126,7 @@ class TestDirectModeFallback:
         AttributeError and the property raises RuntimeError — so the tool undo's
         own hint sends agents to was an UNKNOWN error in exactly that mode.
         """
-        design, handler = rig(
+        _design, handler = rig(
             FakeDesign(features=0, design_type=DIRECT, timeline_raises=True)
         )
         handler._camera_info = lambda: {}

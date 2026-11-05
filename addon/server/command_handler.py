@@ -15,6 +15,7 @@ import tempfile
 import time
 import traceback
 from contextlib import redirect_stdout, suppress
+from typing import Any, ClassVar
 
 import adsk.cam
 import adsk.core
@@ -39,11 +40,11 @@ class CommandHandler:
     # Dispatch
     # ------------------------------------------------------------------
 
-    _COMMANDS = None  # populated lazily
+    _COMMANDS: ClassVar[dict[str, Any] | None] = None  # populated lazily
 
     # Canonical camera presets, (eye_dir, up_vec) in Fusion's Z-up world.
     # Shared by render_view and export_view_sheet.
-    _VIEW_DIRS = {
+    _VIEW_DIRS: ClassVar[dict[str, Any]] = {
         "iso": ((1.0, -1.0, 1.0), (0.0, 0.0, 1.0)),
         "iso_ne": ((1.0, 1.0, 1.0), (0.0, 0.0, 1.0)),
         "iso_nw": ((-1.0, 1.0, 1.0), (0.0, 0.0, 1.0)),
@@ -306,7 +307,7 @@ class CommandHandler:
     # joint_type -> (JointInput setter, number of direction arguments it takes).
     # The arities were verified against the running Fusion API: one direction for
     # revolute/slider/cylindrical/planar, two for pin_slot and ball, none for rigid.
-    _JOINT_MOTION_SETTERS = {
+    _JOINT_MOTION_SETTERS: ClassVar[dict[str, Any]] = {
         "rigid": ("setAsRigidJointMotion", 0),
         "revolute": ("setAsRevoluteJointMotion", 1),
         "slider": ("setAsSliderJointMotion", 1),
@@ -316,20 +317,20 @@ class CommandHandler:
         "ball": ("setAsBallJointMotion", 2),
     }
 
-    _JOINT_AXES = {
+    _JOINT_AXES: ClassVar[dict[str, Any]] = {
         "x": "XAxisJointDirection",
         "y": "YAxisJointDirection",
         "z": "ZAxisJointDirection",
     }
 
-    _JOINT_QUADRANTS = {
+    _JOINT_QUADRANTS: ClassVar[dict[str, Any]] = {
         "start": "StartJointQuadrantAngleType",
         "quarter": "QuarterJointQuadrantAngleType",
         "middle": "MiddleJointQuadrantAngleType",
         "third_quarter": "ThirdQuarterJointQuadrantAngleType",
     }
 
-    _JOINT_KEY_POINTS = {
+    _JOINT_KEY_POINTS: ClassVar[dict[str, Any]] = {
         "start": "StartKeyPoint",
         "middle": "MiddleKeyPoint",
         "center": "CenterKeyPoint",
@@ -2591,6 +2592,16 @@ class CommandHandler:
         (e.g. 'boxL', '56 mm'). Expressions are applied via Fusion's
         parameter system so later changes to User Parameters propagate.
         """
+        # Every numeric argument that reaches Fusion is judged here: a string
+        # expression passes through untouched, and inf/nan is refused rather than
+        # written into a dimension or an extrude extent.
+        length = _param_units.require_finite(length)
+        width = _param_units.require_finite(width)
+        height = _param_units.require_finite(height)
+        origin_x = _param_units.require_finite(origin_x)
+        origin_y = _param_units.require_finite(origin_y)
+        origin_z = _param_units.require_finite(origin_z)
+
         comp = (
             self._component_by_name(component_name) if component_name else self._root()
         )
@@ -2606,7 +2617,13 @@ class CommandHandler:
         sketch = comp.sketches.add(sketch_plane)
 
         def _initial(val):
-            return float(val) if isinstance(val, (int, float)) else 1.0
+            # A placeholder only: the dimensions below carry the real value. An int
+            # too large for float must not fail here, or the dimension's expression
+            # fallback would be unreachable code.
+            try:
+                return float(val) if isinstance(val, (int, float)) else 1.0
+            except OverflowError:
+                return 1.0
 
         p1 = adsk.core.Point3D.create(origin_x, origin_y, 0)
         p2 = adsk.core.Point3D.create(
@@ -2618,10 +2635,11 @@ class CommandHandler:
         text_pt = adsk.core.Point3D.create(0, 0, 0)
 
         def _set_dim(dim, value):
-            if isinstance(value, (int, float)):
-                dim.parameter.value = float(value)
+            kind, payload = _param_units.value_input_for(value)
+            if kind == "real":
+                dim.parameter.value = payload
             else:
-                dim.parameter.expression = str(value)
+                dim.parameter.expression = payload
 
         bottom = rect.item(0)
         length_dim = dims.addDistanceDimension(
@@ -2649,10 +2667,11 @@ class CommandHandler:
         ext_input = ext_feats.createInput(
             profile, adsk.fusion.FeatureOperations.NewBodyFeatureOperation
         )
-        if isinstance(height, (int, float)):
-            h_vi = adsk.core.ValueInput.createByReal(float(height))
+        kind, payload = _param_units.value_input_for(height)
+        if kind == "real":
+            h_vi = adsk.core.ValueInput.createByReal(payload)
         else:
-            h_vi = adsk.core.ValueInput.createByString(str(height))
+            h_vi = adsk.core.ValueInput.createByString(payload)
         ext_input.setDistanceExtent(False, h_vi)
         feat = ext_feats.add(ext_input)
 
@@ -3178,7 +3197,7 @@ class CommandHandler:
     # with the value_kind names that select it. BallJointMotion exposes
     # pitchValue/yawValue/rollValue and no rotationValue; cylindrical, pin-slot
     # and planar joints carry both an angle and slide values.
-    _JOINT_VALUE_ATTRIBUTES = {
+    _JOINT_VALUE_ATTRIBUTES: ClassVar[dict[str, Any]] = {
         "RevoluteJointMotion": {"rotation": "rotationValue"},
         "SliderJointMotion": {"slide": "slideValue"},
         "CylindricalJointMotion": {
@@ -3981,6 +4000,12 @@ class CommandHandler:
         stock_offset_top: float = 0,
         stock_offset_bottom: float = 0,
     ):
+        # Judged before any object exists: the refusal's hint says nothing was
+        # written, so a setup must not already be in the tree when it fires.
+        stock_offset_sides = _param_units.require_finite(stock_offset_sides)
+        stock_offset_top = _param_units.require_finite(stock_offset_top)
+        stock_offset_bottom = _param_units.require_finite(stock_offset_bottom)
+
         cam = self._get_cam()
         body = self._body_by_name(body_name)
 
@@ -4052,10 +4077,18 @@ class CommandHandler:
     def _set_cam_parameter(target, param_name, value, by_string=False):
         """Set a CAM parameter on a setup or operation. Returns success.
 
+        Raises ``ValueError`` for a non-finite numeric value — that is a bad
+        argument, not an unavailable parameter name, and the two callers would
+        otherwise report it as the latter.
+
         CAMParameter.value is read-only on current Fusion builds — values
         must be assigned via the ``expression`` property.  Enum parameters
         (e.g. tool_coolant) take quoted lowercase strings ('flood').
         """
+        # Judged outside the try so a bad value classifies as INVALID_INPUT instead
+        # of being reported as False - which both callers read as "that parameter
+        # name is unavailable" and would answer by retrying the same value.
+        value = _param_units.require_finite(value)
         try:
             params = getattr(target, "parameters", None)
             if params is None:
@@ -4082,6 +4115,11 @@ class CommandHandler:
         spindle_speed: float | None = None,
         coolant: str = "flood",
     ):
+        # Judged before the operation is created, so a refusal's hint ("nothing
+        # was written") stays true: a bad value is not an unavailable name.
+        for _numeric in (tool_number, stepdown, stepover, feed_rate, spindle_speed):
+            _param_units.require_finite(_numeric)
+
         cam = self._get_cam()
         setup = self._find_setup(cam, setup_name)
 

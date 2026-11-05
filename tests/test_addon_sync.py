@@ -40,9 +40,16 @@ def _extract_class_attr_set(path: Path, class_name: str, attr: str) -> set[str]:
         if cls.name != class_name:
             continue
         for stmt in cls.body:
-            if not isinstance(stmt, ast.Assign):
+            # Annotated (``X: ClassVar[...] = {...}``) and plain assignments are
+            # the same invariant; skipping the annotated form would let the table
+            # drift out of this guard with a misleading "not found" error.
+            if isinstance(stmt, ast.Assign):
+                targets = stmt.targets
+            elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
+                targets = [stmt.target]
+            else:
                 continue
-            if not any(isinstance(t, ast.Name) and t.id == attr for t in stmt.targets):
+            if not any(isinstance(t, ast.Name) and t.id == attr for t in targets):
                 continue
             value = stmt.value
             # frozenset({...})  →  unwrap the set literal arg
@@ -135,3 +142,19 @@ def test_tools_match_addon_dispatch():
         f"  tools without handler: {sorted(tool_names - dispatch)}\n"
         f"  handlers without tool: {sorted(dispatch - tool_names)}"
     )
+
+
+def test_an_annotated_table_is_read_the_same_as_a_plain_one(tmp_path):
+    """The AnnAssign branch, exercised: a ClassVar table must not slip the guard."""
+    source = tmp_path / "annotated.py"
+    source.write_text(
+        "from typing import ClassVar\n"
+        "\n"
+        "\n"
+        "class Handler:\n"
+        "    PLAIN = frozenset({'a'})\n"
+        "    ANNOTATED: ClassVar[frozenset[str]] = frozenset({'b', 'c'})\n",
+        encoding="utf-8",
+    )
+    assert _extract_class_attr_set(source, "Handler", "PLAIN") == {"a"}
+    assert _extract_class_attr_set(source, "Handler", "ANNOTATED") == {"b", "c"}

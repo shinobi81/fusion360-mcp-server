@@ -13,6 +13,7 @@ the fake runtime, so a handler that rebuilt the choice inline fails here.
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -362,3 +363,158 @@ class TestMockContract:
         assert result["value"] == 1200
         assert result["unit"] is None
         assert result["expression"] is None
+
+
+class TestOversizedIntegers:
+    """An int is finite; converting a huge one to float is what used to fail."""
+
+    def test_a_401_digit_int_is_accepted(self):
+        # json.loads('1' + '0' * 400) yields exactly this shape, and
+        # math.isfinite raises OverflowError converting it to float.
+        huge = json.loads("1" + "0" * 400)
+        assert parameter_units.require_finite(huge) == huge
+
+    def test_a_normal_int_still_passes_through(self):
+        assert parameter_units.require_finite(7) == 7
+
+    def test_the_mock_accepts_the_same_huge_int(self):
+        # The two mirrors are the contract (AGENTS.md): mock mode must not raise
+        # where the add-in now succeeds, or --mode mock reports a failure that
+        # the real call does not have.
+        huge = json.loads("1" + "0" * 400)
+        result = mock_command(
+            "create_parameter", {"name": "w", "value": huge, "unit": "mm"}
+        )
+        assert result.get("ok") is True
+
+
+class TestCamParameterRefusesNonFinite:
+    """CAM parameter values reach Fusion as expressions, so inf/nan is refused."""
+
+    class _Param:
+        def __init__(self):
+            self.expression = None
+
+    class _Params:
+        def __init__(self, param):
+            self._param = param
+
+        def itemByName(self, _name):
+            return self._param
+
+    def _target(self):
+        param = self._Param()
+        return type("Target", (), {"parameters": self._Params(param)})(), param
+
+    @pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+    def test_a_non_finite_value_is_refused(self, handler_module, value):
+        # Refused before the call's broad except, so it classifies as
+        # INVALID_INPUT rather than False - which callers read as "no such
+        # parameter" and would answer by retrying the same value.
+        target, param = self._target()
+        with pytest.raises(ValueError, match="invalid parameter value"):
+            handler_module.CommandHandler._set_cam_parameter(target, "stepdown", value)
+        assert param.expression is None
+
+    def test_a_finite_value_is_written(self, handler_module):
+        target, param = self._target()
+        assert handler_module.CommandHandler._set_cam_parameter(target, "stepdown", 2.0)
+        assert param.expression == "2.0"
+
+
+class TestValueInputFor:
+    """The real-or-expression decision, which the handler adapters just apply."""
+
+    def test_a_finite_float_is_written_as_a_real(self):
+        assert parameter_units.value_input_for(2.5) == ("real", 2.5)
+
+    def test_an_int_is_written_as_a_real(self):
+        assert parameter_units.value_input_for(7) == ("real", 7.0)
+
+    def test_an_int_too_large_for_float_becomes_an_expression(self):
+        huge = json.loads("1" + "0" * 400)
+        kind, payload = parameter_units.value_input_for(huge)
+        assert kind == "expression"
+        assert payload == str(huge)
+
+    @pytest.mark.parametrize("expression", ["boxL", "56 mm", "outer - 2*wall_t"])
+    def test_a_string_expression_passes_through(self, expression):
+        assert parameter_units.value_input_for(expression) == ("expression", expression)
+
+    @pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+    def test_a_non_finite_number_is_refused(self, value):
+        with pytest.raises(ValueError, match="invalid parameter value"):
+            parameter_units.value_input_for(value)
+
+
+class TestCreateBoxParametricRefusesNonFinite:
+    """The call site, not just the decision: fails if the guards stop being called."""
+
+    @pytest.mark.parametrize(
+        "override",
+        [
+            {"length": float("inf")},
+            {"width": float("nan")},
+            {"height": float("-inf")},
+            {"origin_x": float("inf")},
+            {"origin_y": float("nan")},
+            {"origin_z": float("-inf")},
+        ],
+    )
+    def test_the_guard_fires_before_any_fusion_call(self, bound_handler, override):
+        # ``bound_handler(None)``: the guards run before the design is ever
+        # reached, which is exactly the ordering being pinned. If they moved
+        # below ``self._root()`` this would raise AttributeError instead.
+        handler = bound_handler(None)
+        args = {"length": 1, "width": 1, "height": 1, **override}
+        with pytest.raises(ValueError, match="invalid parameter value"):
+            handler.create_box_parametric(**args)
+
+    def test_the_mock_refuses_the_same_value(self):
+        # Mirrors the entry guard: mock mode must not report a box the add-in
+        # would refuse, or a caller develops against a fiction.
+        result = mock_command(
+            "create_box_parametric",
+            {"length": float("inf"), "width": 1, "height": 1},
+        )
+        assert result.get("ok") is False
+        assert result.get("error_kind") == "INVALID_INPUT"
+
+
+class TestCamEntryGuards:
+    """The CAM guards, pinned at the call site rather than inside the helper.
+
+    ``bound_handler(None)`` cannot satisfy ``_get_cam``; reaching it would be an
+    AttributeError, so a passing test proves the guard fired first — and a guard
+    moved back below ``setups.add`` / ``operations.add`` fails here.
+    """
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"stock_offset_sides": float("inf")},
+            {"stock_offset_top": float("nan")},
+            {"stock_offset_bottom": float("-inf")},
+        ],
+    )
+    def test_setup_refuses_a_non_finite_stock_offset_first(self, bound_handler, kwargs):
+        # All three offsets, not just the first: a guard deleted from any one of
+        # them must fail here, which is the failure mode this test exists for.
+        handler = bound_handler(None)
+        with pytest.raises(ValueError, match="invalid parameter value"):
+            handler.cam_create_setup("Body1", **kwargs)
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"stepdown": float("inf")},
+            {"stepover": float("nan")},
+            {"feed_rate": float("-inf")},
+            {"spindle_speed": float("inf")},
+            {"tool_number": float("inf")},
+        ],
+    )
+    def test_operation_refuses_a_non_finite_value_first(self, bound_handler, kwargs):
+        handler = bound_handler(None)
+        with pytest.raises(ValueError, match="invalid parameter value"):
+            handler.cam_create_operation("Setup1", "adaptive", **kwargs)

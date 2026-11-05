@@ -59,7 +59,7 @@ class TestGeometryLandsOnTheSketchPlane:
         ``x_axis.y``/``y_axis.x`` in the model-position math would pass every
         other test here.
         """
-        sketch, handler = draw(
+        _sketch, handler = draw(
             offset=0.0, x_axis=(0.0, 1.0, 0.0), y_axis=(0.0, 0.0, 1.0)
         )
 
@@ -151,7 +151,7 @@ class TestNothingChangesWhenZIsOmitted:
         assert "ignored_z" not in result
 
     def test_unoffset_sketch_model_position_matches_sketch_position(self, draw):
-        sketch, handler = draw(offset=0.0)
+        _sketch, handler = draw(offset=0.0)
 
         result = handler.draw_circle(radius=1, center_x=3, center_y=4)
 
