@@ -457,6 +457,7 @@ class TestCreateBoxParametricRefusesNonFinite:
             {"width": float("nan")},
             {"height": float("-inf")},
             {"origin_x": float("inf")},
+            {"origin_y": float("nan")},
             {"origin_z": float("-inf")},
         ],
     )
@@ -478,3 +479,32 @@ class TestCreateBoxParametricRefusesNonFinite:
         )
         assert result.get("ok") is False
         assert result.get("error_kind") == "INVALID_INPUT"
+
+
+class TestCamEntryGuards:
+    """The CAM guards, pinned at the call site rather than inside the helper.
+
+    ``bound_handler(None)`` cannot satisfy ``_get_cam``; reaching it would be an
+    AttributeError, so a passing test proves the guard fired first — and a guard
+    moved back below ``setups.add`` / ``operations.add`` fails here.
+    """
+
+    def test_setup_refuses_a_non_finite_stock_offset_first(self, bound_handler):
+        handler = bound_handler(None)
+        with pytest.raises(ValueError, match="invalid parameter value"):
+            handler.cam_create_setup("Body1", stock_offset_sides=float("inf"))
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"stepdown": float("inf")},
+            {"stepover": float("nan")},
+            {"feed_rate": float("-inf")},
+            {"spindle_speed": float("inf")},
+            {"tool_number": float("inf")},
+        ],
+    )
+    def test_operation_refuses_a_non_finite_value_first(self, bound_handler, kwargs):
+        handler = bound_handler(None)
+        with pytest.raises(ValueError, match="invalid parameter value"):
+            handler.cam_create_operation("Setup1", "adaptive", **kwargs)

@@ -4117,7 +4117,7 @@ class CommandHandler:
     ):
         # Judged before the operation is created, so a refusal's hint ("nothing
         # was written") stays true: a bad value is not an unavailable name.
-        for _numeric in (stepdown, stepover, feed_rate, spindle_speed):
+        for _numeric in (tool_number, stepdown, stepover, feed_rate, spindle_speed):
             _param_units.require_finite(_numeric)
 
         cam = self._get_cam()
@@ -4152,7 +4152,6 @@ class CommandHandler:
             ("tool_spindleSpeed", spindle_speed, False),
             ("tool_coolant", coolant, True),
         ):
-
             if value is None:
                 continue
             if self._set_cam_parameter(op, param_name, value, by_string):

@@ -142,3 +142,19 @@ def test_tools_match_addon_dispatch():
         f"  tools without handler: {sorted(tool_names - dispatch)}\n"
         f"  handlers without tool: {sorted(dispatch - tool_names)}"
     )
+
+
+def test_an_annotated_table_is_read_the_same_as_a_plain_one(tmp_path):
+    """The AnnAssign branch, exercised: a ClassVar table must not slip the guard."""
+    source = tmp_path / "annotated.py"
+    source.write_text(
+        "from typing import ClassVar\n"
+        "\n"
+        "\n"
+        "class Handler:\n"
+        "    PLAIN = frozenset({'a'})\n"
+        "    ANNOTATED: ClassVar[frozenset[str]] = frozenset({'b', 'c'})\n",
+        encoding="utf-8",
+    )
+    assert _extract_class_attr_set(source, "Handler", "PLAIN") == {"a"}
+    assert _extract_class_attr_set(source, "Handler", "ANNOTATED") == {"b", "c"}
