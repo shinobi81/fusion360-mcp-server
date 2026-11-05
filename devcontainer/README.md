@@ -143,7 +143,7 @@ connected end-to-end.
   Docker Desktop populates automatically)
 - **`uv`** in the devcontainer (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - **Python 3.8+** in the devcontainer for the TCP relay, which uses only the standard
-  library. The MCP server itself requires **3.14+**; `uv` installs it inside the container.
+  library. The MCP server itself requires **3.14+**; `uv` installs it for you.
 - The wrapper script must be executable: `chmod +x devcontainer/fusion-mcp-wrapper.sh`
 
 ## Troubleshooting

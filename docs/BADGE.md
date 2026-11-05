@@ -108,7 +108,7 @@ finished; what is left is the form.
 | `tests_documented_added` - It is SUGGESTED that this policy on adding tests (see test_policy) be documented in the instructions for change proposals. | SUGGESTED | `met` | `.github/PULL_REQUEST_TEMPLATE.md` - the "How it was verified" list and the tick-box for a watched-failing test; `CONTRIBUTING.md` - the same rule in prose. |
 | `warnings` - The project MUST enable one or more compiler warning flags, a "safe" language mode, or use a separate "linter" tool to look for code quality errors or common simple mistakes, if there is at least one FLOSS tool that can implement this criterion in the selected language. | MUST | `met` | `pyproject.toml` `[tool.ruff.lint]` (`select = ["E", "F", "I", "RUF"]`, `line-length = 88`), run as a required step in `.github/workflows/ci.yml`. |
 | `warnings_fixed` - The project MUST address warnings. | MUST | `met` | `.github/workflows/ci.yml` - the `Lint` step (`uv run ruff check src/ tests/ fuzz/ addon/`) must pass for the job to be green, and a red run blocks the merge. |
-| `warnings_strict` - It is SUGGESTED that projects be maximally strict with warnings in the software produced by the project, where practical. | SUGGESTED | `gap: needs a wider lint rule set` | ruff selects `E`, `F`, `I` only (`pyproject.toml`) - that is a linter, not a maximally strict one; `B`, `SIM` and `RUF` are the obvious next step. SUGGESTED, so it does not block the badge. Planned in `docs/ROADMAP.md`. |
+| `warnings_strict` - It is SUGGESTED that projects be maximally strict with warnings in the software produced by the project, where practical. | SUGGESTED | `gap: needs a wider lint rule set` | ruff selects `E`, `F`, `I`, `RUF` (`pyproject.toml`) - that is a linter, not a maximally strict one; `B` and `SIM` are the obvious next step. SUGGESTED, so it does not block the badge. Planned in `docs/ROADMAP.md`. |
 
 ### Security
 
@@ -163,7 +163,7 @@ Four are answers only the maintainer has, at the questionnaire:
 
 One gap is work in this repository, and it does not block Passing:
 
-- `warnings_strict` (SUGGESTED) - widen the ruff selection beyond `E`, `F`, `I`.
+- `warnings_strict` (SUGGESTED) - widen the ruff selection beyond `E`, `F`, `I`, `RUF`.
   Tracked in [ROADMAP.md](ROADMAP.md).
 
 ## What this page does not do
