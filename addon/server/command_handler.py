@@ -2186,7 +2186,7 @@ class CommandHandler:
                 f"Unknown units '{units}'. Expected one of: {sorted(unit_map)}"
             )
 
-        mesh_body = None  # bound on either branch below, so the type is clear
+        mesh_body = None  # bound by whichever import path below succeeds
         try:
             # MeshBodies.add(fullFilename, units) — the current API.
             # Returns a MeshBodyList (a file can contain several bodies).

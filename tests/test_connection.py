@@ -3,6 +3,7 @@
 import json
 import os
 import socket
+import sys
 import threading
 from contextlib import suppress
 
@@ -26,9 +27,7 @@ def test_default_host_is_the_loopback_literal():
     if os.environ.get("FUSION_MCP_HOST"):
         pytest.skip("FUSION_MCP_HOST overrides the default host")
 
-    import fusion360_mcp.connection as connection
-
-    assert connection._DEFAULT_HOST == "127.0.0.1"
+    assert Fusion360Connection().host == "127.0.0.1"
 
 
 def _start_echo_server(host="127.0.0.1", port=0):
@@ -328,7 +327,7 @@ class TestGetConnectionSingleton:
         """reset_connection should not error when nothing is cached."""
         monkeypatch.setattr("fusion360_mcp.connection._connection", None)
         reset_connection()  # must not raise
-        reset_connection()  # and stays harmless when called again
+        assert sys.modules["fusion360_mcp.connection"]._connection is None
 
     def test_get_connection_returns_same_instance(self, monkeypatch):
         """Repeated calls return the same connection object."""
@@ -441,17 +440,19 @@ class TestMutationTimeoutSafety:
         port = srv.getsockname()[1]
 
         def handler():
-            with suppress(OSError):
-                for _ in range(max_accepts):
-                    c, _ = srv.accept()
-                    c.settimeout(5)
-                    try:
-                        data = c.recv(4096)
-                        if data:
-                            received.append(json.loads(data.split(b"\n")[0]))
-                    finally:
-                        c.close()
-            srv.close()
+            try:
+                with suppress(OSError):
+                    for _ in range(max_accepts):
+                        c, _ = srv.accept()
+                        c.settimeout(5)
+                        try:
+                            data = c.recv(4096)
+                            if data:
+                                received.append(json.loads(data.split(b"\n")[0]))
+                        finally:
+                            c.close()
+            finally:
+                srv.close()
 
         threading.Thread(target=handler, daemon=True).start()
         return port

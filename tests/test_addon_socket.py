@@ -49,14 +49,16 @@ def _exchange(payload: bytes, timeout: float = 5.0):
 
     replies = b""
     client_end.settimeout(timeout)
-    with suppress(socket.timeout):
-        while True:
-            chunk = client_end.recv(4096)
-            if not chunk:
-                break
-            replies += chunk
-    client_end.close()
-    thread.join(timeout)
+    try:
+        with suppress(socket.timeout):
+            while True:
+                chunk = client_end.recv(4096)
+                if not chunk:
+                    break
+                replies += chunk
+    finally:
+        client_end.close()
+        thread.join(timeout)
 
     return bridge, [json.loads(line) for line in replies.splitlines() if line.strip()]
 
