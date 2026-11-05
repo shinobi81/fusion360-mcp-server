@@ -29,7 +29,7 @@ uv sync                        # install deps into .venv
 uv run pytest -q               # suite runs without Fusion
 uv run pytest -q --no-cov tests/test_tools.py   # subset: the coverage floor
                                                 # applies to the whole suite
-uv run ruff check src/ tests/  # lint (this is what CI runs)
+uv run ruff check src/ tests/ fuzz/  # lint (this is what CI runs)
 uv run ruff format src/ tests/ addon/server/command_handler.py
 npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"
 ```

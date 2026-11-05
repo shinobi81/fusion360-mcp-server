@@ -42,7 +42,7 @@ jobs:
         run: uv sync --dev --frozen
 
       - name: Lint
-        run: uv run ruff check src/ tests/
+        run: uv run ruff check src/ tests/ fuzz/
 
       - name: Test
         run: uv run pytest -v
