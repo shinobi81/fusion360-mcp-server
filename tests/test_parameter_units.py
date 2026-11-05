@@ -200,6 +200,97 @@ class TestNonFiniteCallSites:
             bound_handler(design).set_parameter("no_such_parameter", float("inf"))
 
 
+class TestNonNumberValues:
+    """A value that is not a number is not this guard's business.
+
+    ``math.isfinite`` raises ``TypeError`` on a string, and no hints rule
+    matches that, so judging one would report ``UNKNOWN`` with no hints. Both
+    handlers used to accept one: ``create_parameter(value="2.5")`` reached
+    Fusion as ``createByString("2.5 mm")`` and ``set_parameter`` writes the
+    same text into the parameter's own unit. Fusion's API does the type
+    checking, and the tool schema declares ``value`` as a number, so a
+    non-number is the caller's problem -- not a finiteness failure.
+    """
+
+    def test_require_finite_passes_a_non_number_through(self):
+        assert parameter_units.require_finite("2.5") == "2.5"
+
+    def test_create_parameter_still_takes_the_value_as_text(self, bound_handler):
+        design = FakeDesign(features=0)
+
+        result = bound_handler(design).create_parameter(
+            name="length", value="2.5", unit="mm"
+        )
+
+        assert result["expression"] == "2.5 mm"
+        stored = design.userParameters.itemByName("length")
+        assert stored is not None
+        assert stored.source == "string"
+
+    def test_set_parameter_still_writes_the_value_as_text(self, bound_handler):
+        design = FakeDesign(features=0)
+        stored = design.userParameters.add(
+            "angle", FakeValueInput("90 deg", "string"), "deg", ""
+        )
+
+        bound_handler(design).set_parameter("angle", "45")
+
+        assert stored.expression == "45 deg"
+
+    def test_mock_mode_accepts_it_the_way_the_handler_does(self):
+        # Mock mode leaves a non-number alone too; a mock that refused here
+        # would be stricter than the add-in it advertises itself as matching.
+        result = mock_command(
+            "create_parameter", {"name": "length", "value": "2.5", "unit": "mm"}
+        )
+
+        assert result["ok"] is True
+        assert result["expression"] == "2.5 mm"
+
+
+class TestTheRefusalIsTheSameOnBothSides:
+    """Mock mode promises to report what the add-in would report.
+
+    The refusal text lives twice -- ``parameter_units.require_finite`` raises
+    it, ``mock._non_finite_error`` returns it -- and mock mode is what a caller
+    without Fusion develops against. Pinned as an equality because reviewing
+    two similar strings is not a test: an edit to one has to fail here.
+    """
+
+    @pytest.mark.parametrize(
+        "value", [float("inf"), float("-inf"), float("nan")], ids=str
+    )
+    def test_create_parameter(self, bound_handler, value):
+        with pytest.raises(ValueError) as exc_info:
+            bound_handler(FakeDesign(features=0)).create_parameter(
+                name="length", value=value, unit="mm"
+            )
+
+        result = mock_command(
+            "create_parameter", {"name": "length", "value": value, "unit": "mm"}
+        )
+
+        assert result["ok"] is False
+        assert result["error_message"] == str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "value", [float("inf"), float("-inf"), float("nan")], ids=str
+    )
+    def test_set_parameter(self, bound_handler, value):
+        design = FakeDesign(features=0)
+        design.userParameters.add(
+            "angle", FakeValueInput("90 deg", "string"), "deg", ""
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            bound_handler(design).set_parameter("angle", value)
+
+        result = mock_command("set_parameter", {"name": "angle", "value": value})
+
+        assert result["ok"] is False
+        assert result["error_message"] == str(exc_info.value)
+
+
 class TestCallSites:
     """Both call sites must go through this module, not rebuild the choice.
 

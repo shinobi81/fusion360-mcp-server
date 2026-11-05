@@ -18,8 +18,13 @@ def require_finite(value: float) -> float:
     so a socket client can deliver one; written through, it becomes the
     expression ``"inf mm"``, which Fusion rejects as an opaque API error.  The
     message is shaped to classify as ``INVALID_INPUT``.
+
+    Only a number is judged.  ``math.isfinite`` raises ``TypeError`` on anything
+    else, no hints rule matches that, and the caller would see ``UNKNOWN`` with
+    no hints for a value that used to work: ``create_parameter(value="2.5")``
+    reaches Fusion as ``createByString("2.5 mm")``, which is fine.
     """
-    if not math.isfinite(value):
+    if isinstance(value, (int, float)) and not math.isfinite(value):
         raise ValueError(f"invalid parameter value: {value} is not finite")
     return value
 
