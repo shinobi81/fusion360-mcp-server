@@ -205,7 +205,7 @@ call is safe.
 ```bash
 uv sync --dev                    # deps
 uv run pytest -q                 # full suite, no Fusion needed
-uv run ruff check src/ tests/    # lint (what CI runs)
+uv run ruff check src/ tests/ fuzz/    # lint (what CI runs)
 npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"
 ```
 
