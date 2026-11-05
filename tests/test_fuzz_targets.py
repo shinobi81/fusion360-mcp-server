@@ -2,9 +2,10 @@ import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-from fuzz.fuzz_hints_classify import check  # noqa: E402
+from fuzz.fuzz_hints_classify import check, classify  # noqa: E402
 
 
 def test_classify_survives_hostile_text():
@@ -20,8 +21,8 @@ def test_classify_survives_hostile_text():
 
 
 def test_a_known_message_reaches_a_real_rule():
-    check(b"no profiles in sketch")
+    assert classify("no profiles in sketch")[0] == "PROFILE_NOT_CLOSED"
 
 
 def test_unknown_text_falls_back():
-    check(b"\xc3\x28 not a rule")
+    assert classify("not a rule at all")[0] == "UNKNOWN"
