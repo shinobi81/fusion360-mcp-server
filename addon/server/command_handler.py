@@ -3632,6 +3632,10 @@ class CommandHandler:
         }
 
     def set_parameter(self, name: str, value: float):
+        # Same order as create_parameter: the argument is judged before the
+        # design and the name are looked up, so a bad value outranks
+        # NO_ACTIVE_DESIGN and a misspelt name instead of hiding behind them.
+        value = _param_units.require_finite(value)
         design = self._design()
         param = design.userParameters.itemByName(name)
         if not param:
@@ -3640,9 +3644,7 @@ class CommandHandler:
         # any parameter whose unit is not the internal one. Write the
         # expression, in the unit the parameter already declares.
         unit = _param_units.normalise_unit(param.unit)
-        param.expression = _param_units.expression_for(
-            _param_units.require_finite(value), unit
-        )
+        param.expression = _param_units.expression_for(value, unit)
         return {
             "updated": True,
             "name": name,

@@ -439,6 +439,8 @@ class TestMockParametersRefuseNonFiniteValues:
         assert result["error_message"].startswith("invalid parameter value")
         assert rendered in result["error_message"]
         assert result["hints"], "the hints come from classify(), not from prose"
+        # The finiteness rule, not the generic INVALID_INPUT one that blames units.
+        assert not any("unit" in hint.lower() for hint in result["hints"])
         assert result["mode"] == "mock"
         assert "expression" not in result
 

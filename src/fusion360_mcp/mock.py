@@ -7,7 +7,10 @@ Every response includes ``"mode": "mock"`` so callers know it's simulated.
 
 The envelope matches the real addon: success results carry ``ok: True``,
 mutation results carry a ``deltas`` sub-dict, and an ``__mock_error__``
-sentinel in params forces a classified error response for tests.
+sentinel in params forces a classified error response for tests.  A refusal --
+invalid input, or a value the addon itself refuses -- is that same classified
+error envelope and carries no ``deltas``: nothing changed, so a failed mutation
+must not read as work done.
 """
 
 import math

@@ -145,6 +145,24 @@ class TestRequireFinite:
             parameter_units.require_finite(float("nan"))
         assert classify(str(exc_info.value))[0] == "INVALID_INPUT"
 
+    def test_the_refusal_points_at_the_value_not_the_units(self):
+        """The hints are the repair channel; the generic ones would mislead.
+
+        ``INVALID_INPUT``'s general text blames units and enums, but Fusion
+        never saw this value -- so the finiteness rule has to supply its own.
+        """
+        with pytest.raises(ValueError) as exc_info:
+            parameter_units.require_finite(float("inf"))
+
+        kind, hints = classify(str(exc_info.value))
+
+        assert kind == "INVALID_INPUT"
+        assert hints, "the finiteness rule must supply its own hints"
+        assert any("finite" in hint.lower() for hint in hints)
+        # Not the units/enum wording: units have nothing to do with an infinity.
+        assert not any("unit" in hint.lower() for hint in hints)
+        assert not any("cm" in hint for hint in hints)
+
 
 class TestNonFiniteCallSites:
     """Both handlers refuse the value, and leave the design untouched."""
@@ -172,6 +190,14 @@ class TestNonFiniteCallSites:
             bound_handler(design).set_parameter("angle", value)
 
         assert stored.expression == "90 deg"
+
+    def test_set_parameter_judges_the_value_before_the_name(self, bound_handler):
+        # Same order as create_parameter: a bad argument outranks a name that
+        # does not exist, so the message names the real problem.
+        design = FakeDesign(features=0)
+
+        with pytest.raises(ValueError, match="invalid parameter value"):
+            bound_handler(design).set_parameter("no_such_parameter", float("inf"))
 
 
 class TestCallSites:
