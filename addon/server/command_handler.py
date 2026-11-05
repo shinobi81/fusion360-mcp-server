@@ -345,7 +345,7 @@ class CommandHandler:
     def _root(self):
         return self._design().rootComponent
 
-    def new_document(self, name: str = None):
+    def new_document(self, name: str | None = None):
         """Create a design document and make it active.
 
         Fusion starts at the data tab with no active product, and every command
@@ -737,7 +737,7 @@ class CommandHandler:
             )
         return result
 
-    def create_sketch(self, plane: str = "xy", z_offset: float = None):
+    def create_sketch(self, plane: str = "xy", z_offset: float | None = None):
         root = self._root()
 
         if z_offset is not None and z_offset != 0:
@@ -1115,7 +1115,11 @@ class CommandHandler:
         return {"sketch": sketch.name, "offset_distance": offset_distance}
 
     def trim_curve(
-        self, curve_index: int, point_x: float, point_y: float, sketch_name: str = None
+        self,
+        curve_index: int,
+        point_x: float,
+        point_y: float,
+        sketch_name: str | None = None,
     ):
         sketch = (
             self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
@@ -1127,7 +1131,11 @@ class CommandHandler:
         return {"sketch": sketch.name, "trimmed": True}
 
     def extend_curve(
-        self, curve_index: int, point_x: float, point_y: float, sketch_name: str = None
+        self,
+        curve_index: int,
+        point_x: float,
+        point_y: float,
+        sketch_name: str | None = None,
     ):
         sketch = (
             self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
@@ -1139,7 +1147,7 @@ class CommandHandler:
         return {"sketch": sketch.name, "extended": True}
 
     def project_geometry(
-        self, source_name: str, is_linked: bool = True, sketch_name: str = None
+        self, source_name: str, is_linked: bool = True, sketch_name: str | None = None
     ):
         sketch = (
             self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
@@ -1475,7 +1483,9 @@ class CommandHandler:
             "faces_removed": faces.count,
         }
 
-    def mirror(self, mirror_plane: str, body_name: str = None, body_index: int = 0):
+    def mirror(
+        self, mirror_plane: str, body_name: str | None = None, body_index: int = 0
+    ):
         root = self._root()
         body = (
             self._body_by_name(body_name)
@@ -1829,7 +1839,7 @@ class CommandHandler:
         feat = move_feats.add(inp)
         return {"feature_name": feat.name, "body": body_name, "translation": [x, y, z]}
 
-    def export_stl(self, body_name: str, file_path: str = None):
+    def export_stl(self, body_name: str, file_path: str | None = None):
         body = self._body_by_name(body_name)
 
         if file_path is None:
@@ -1872,7 +1882,7 @@ class CommandHandler:
 
         return {"exported": True, "body": body_name, "file_path": file_path}
 
-    def export_step(self, body_name: str, file_path: str = None):
+    def export_step(self, body_name: str, file_path: str | None = None):
         body = self._body_by_name(body_name)
 
         if file_path is None:
@@ -1909,7 +1919,7 @@ class CommandHandler:
 
         return {"exported": True, "body": body_name, "file_path": file_path}
 
-    def export_f3d(self, file_path: str = None):
+    def export_f3d(self, file_path: str | None = None):
         design = self._design()
         doc_name = design.parentDocument.name
 
@@ -2140,7 +2150,12 @@ class CommandHandler:
             "image_size": [width, height],
         }
 
-    def export(self, format: str = None, body_name: str = None, file_path: str = None):
+    def export(
+        self,
+        format: str | None = None,
+        body_name: str | None = None,
+        file_path: str | None = None,
+    ):
         """Unified export — dispatches to export_stl/export_step/export_f3d."""
         fmt = format.lower() if format else None
         if not fmt and file_path:
@@ -2164,7 +2179,7 @@ class CommandHandler:
         raise RuntimeError(f"Unknown format: {fmt}. Expected: stl, step, f3d")
 
     def import_mesh(
-        self, file_path: str, component_name: str = None, units: str = "mm"
+        self, file_path: str, component_name: str | None = None, units: str = "mm"
     ):
         """Import mesh file (STL/OBJ/3MF) as mesh body. Values returned in cm."""
         if not os.path.exists(file_path):
@@ -2883,7 +2898,7 @@ class CommandHandler:
     # Assembly
     # ------------------------------------------------------------------
 
-    def create_component(self, name: str, parent_name: str = None):
+    def create_component(self, name: str, parent_name: str | None = None):
         root = self._root()
         parent = self._component_by_name(parent_name) if parent_name else root
 
@@ -3606,7 +3621,9 @@ class CommandHandler:
             )
         return {"parameters": params, "count": len(params)}
 
-    def create_parameter(self, name: str, value: float, unit: str, comment: str = None):
+    def create_parameter(
+        self, name: str, value: float, unit: str, comment: str | None = None
+    ):
         # Validated before the design is looked up, deliberately: a bad argument
         # is wrong whichever document is open, so INVALID_INPUT outranks
         # NO_ACTIVE_DESIGN. Before either factory too -- "inf mm" is an
@@ -3815,7 +3832,7 @@ class CommandHandler:
         feat = flat_patterns.add(inp)
         return {"feature_name": feat.name}
 
-    def unfold(self, body_name: str, bend_indices: list = None):
+    def unfold(self, body_name: str, bend_indices: list | None = None):
         root = self._root()
         body = self._body_by_name(body_name)
 
