@@ -4,10 +4,6 @@ Every target exposes ``check(data: bytes) -> None`` so the same function can be
 driven by atheris, by the pytest suite, and by any seed corpus.
 """
 
-import pathlib
-
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-
 
 def decode(data: bytes) -> str:
     """Turn fuzz bytes into the ``str`` the code under test actually receives.

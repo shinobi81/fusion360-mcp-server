@@ -100,11 +100,15 @@ def check(data: bytes) -> None:
 
     replies: list[dict] = []
     try:
-        ours.sendall(data)
+        # Bounded before the send, not after it: a large payload can fill both
+        # socket-pair buffers and block in sendall, and a timeout set afterwards
+        # never governs the call that hung.
+        ours.settimeout(TIMEOUT_S)
+        with suppress(socket.timeout):
+            ours.sendall(data)
         # End of input: the handler's recv returns b"" and it exits. Nothing
         # would close the connection otherwise, so the read below is bounded.
         ours.shutdown(socket.SHUT_WR)
-        ours.settimeout(TIMEOUT_S)
         buffer = b""
         with suppress(socket.timeout):
             while True:
@@ -128,7 +132,7 @@ def check(data: bytes) -> None:
 
     expected, bad = _frames(data)
     # Nothing after a refused line was dispatched -- the handler returns on it --
-    # and that count is the whole claim for "not_text" too. Its reply is
+    # and that list is the whole claim for "not_text" too. Its reply is
     # undecided: undecodable bytes are closed silently today because
     # UnicodeDecodeError escapes the handler's `except json.JSONDecodeError`,
     # and that gap is deferred, so asserting the *absence* of the error reply
