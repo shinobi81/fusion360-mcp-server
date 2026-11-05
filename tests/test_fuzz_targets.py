@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from addon.server.hole_geometry import plane_z_at  # noqa: E402
+from addon.server.parameter_units import expression_for  # noqa: E402
 from fuzz.fuzz_hints_classify import check, classify  # noqa: E402
 from fuzz.fuzz_hole_geometry import check as check_geom  # noqa: E402
 from fuzz.fuzz_parameter_units import check as check_units  # noqa: E402
@@ -56,10 +57,18 @@ def test_a_blank_unit_reaches_the_unitless_expression():
     # The packed double's own bytes are never blank, so the unitless arm of
     # expression_for needs an input that actually strips to "".
     check_units(struct.pack("<d", 3.0) + b"   ")
+    # And the arm's result, independent of how the target slices: check_units
+    # only inspects the number token, so a target that took the unit from the
+    # whole payload would still render "3.0 ..." and pass every case above.
+    # fuzz/ is outside the coverage source, so nothing else would notice.
+    assert expression_for(3.0, "   ") == "3.0"
 
 
-def test_a_non_finite_value_is_not_asserted_yet():
-    # Parcel 3 changes this behaviour; the target must tolerate it until then.
+def test_the_formatter_tolerates_non_finite_values():
+    # By design: require_finite refuses at the handlers, expression_for stays
+    # formatting. Its docstring says so, and both handlers already hold the
+    # guard -- moving the refusal in here would give a pure formatter an error
+    # channel it has no way to signal through.
     check_units(struct.pack("<d", float("inf")) + b"mm")
     check_units(struct.pack("<d", float("nan")) + b"")
 
@@ -90,6 +99,15 @@ def test_a_non_finite_origin_is_not_asserted_against():
     # not report that as a crash: only an all-finite input owes a finite Z.
     for origin_z in (float("inf"), float("nan")):
         check_geom(struct.pack("<5d", 1.0, origin_z, 0.0, 0.0, 0.0))
+
+
+def test_a_non_finite_coordinate_is_not_asserted_against():
+    # The finiteness guard is over all four inputs, not just the two Z values.
+    # A horizontal normal has zero x and y components, so 0 * inf and 0 * nan
+    # both leave a nan Z -- narrowing the guard to (nz, oz) therefore turns
+    # these three inputs red, and nothing else in this file would.
+    for x, y in ((float("inf"), 0.0), (float("-inf"), 0.0), (0.0, float("nan"))):
+        check_geom(struct.pack("<5d", 1.0, 0.0, x, y, 0.0))
 
 
 def test_an_http_request_dispatches_nothing():
@@ -130,6 +148,14 @@ def test_a_line_is_stripped_before_it_is_parsed():
     # \x0c is not JSON whitespace but bytes.strip() removes it, so the handler
     # dispatches this line: a target parsing the raw line would call it bad.
     check_frames(b"\x0c{}\x0c\n")
+
+
+def test_a_truncated_residual_dispatches_nothing():
+    # No newline, so this is a residual rather than a line, and it does not
+    # parse: the handler's no-newline fallback ignores an incomplete buffer and
+    # closes silently. Nothing is dispatched and no reply is owed -- calling it
+    # a bad line instead would demand an "Invalid JSON" reply that never comes.
+    check_frames(b'{"type": "ping"')
 
 
 def test_a_line_that_is_not_text_dispatches_nothing():
