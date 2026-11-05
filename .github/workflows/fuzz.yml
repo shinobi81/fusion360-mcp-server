@@ -7,7 +7,7 @@ name: fuzz
 on:
   pull_request:
     branches: [main]
-    paths: ["addon/server/**", "fuzz/**", ".github/workflows/fuzz.yml"]
+    paths: ["addon/server/**", "fuzz/**", ".github/workflows/fuzz.yml", "pyproject.toml", "uv.lock"]
   schedule:
     # Weekly. A fuzzer earns its keep on the inputs nobody thought to write.
     - cron: "13 4 * * 3"

@@ -98,6 +98,9 @@ dev = [
 # on a workstation cannot fail the sync.  The Python floor is not optional: uv
 # locks every version in `requires-python`, atheris 3.1.0 ships cp312/cp313/
 # cp314 wheels only, and a bare linux marker leaves the lock with no solution.
+# The floor also means the group is empty on 3.10/3.11: sync it with
+# `uv sync --only-group fuzz` on a 3.12 interpreter, or a target stops at
+# `import atheris` with nothing to say why.
 fuzz = [
     "atheris==3.1.0; sys_platform == 'linux' and python_full_version >= '3.12'",
 ]
