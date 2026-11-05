@@ -7,6 +7,46 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.5.0] - 2026-11-05
+
+### Added
+
+- `tests/test_packaging.py`, a drift guard for the Python support window. It compares
+  `requires-python` against the `Programming Language :: Python :: 3.x` classifiers in
+  both directions, rejects a re-introduced ruff `target-version`, and fails when
+  `pyrightconfig.json` pins an interpreter below the floor. That last check was written
+  after pyright was found reading `tomllib` through a stale 3.10 lens and reporting
+  `Import "tomllib" could not be resolved` on the new test file.
+
+### Changed
+
+- **The project requires Python 3.14+ and is tested on 3.14 and 3.15.** CI runs both on
+  Ubuntu; the `windows` and `macos` jobs now name Python 3.15 and pass `--python` to
+  `uv sync` instead of floating on whatever the runner image ships, and the matrix leg
+  does the same, so a job cannot report a version's check name while running a different
+  interpreter.
+- **ruff's `target-version` is gone.** ruff infers its target from
+  `project.requires-python`, so the window is stated once. That second copy is what
+  drifted: it still said `py310` long after 3.10 was end-of-life.
+- `pyrightconfig.json` moves from `pythonVersion` 3.10 to 3.14, the last hand-maintained
+  copy of the floor.
+- The fuzz job runs Python **3.14**. `atheris==3.1.0` publishes cp312/cp313/cp314 wheels
+  and no sdist, so with a `>=3.14` floor that is the only interpreter the group can be
+  synced with; `uv lock` narrows it to the single cp314 wheel.
+- `README.md`, `ARCHITECTURE.md`, `docs/BADGE.md` and `docs/TESTING.md` state the new
+  window.
+
+### Removed
+
+- **Support for Python 3.10, 3.11, 3.12 and 3.13.** 3.10 reached end-of-life on
+  2026-10-01, and 3.11 and 3.12 are already security-only, so the old floor promised
+  support for interpreters nobody upstream can fix. A `pip install` on any of them now
+  refuses at `Requires-Python` with a version message, rather than installing a server
+  that fails at import. `uvx` users are unaffected — uv installs 3.14 for them.
+- `tomli` and `exceptiongroup` from the lock. They existed only below 3.11, so raising
+  the floor removes them, along with the per-interpreter fork entries that made the lock
+  four times its current size.
+
 ## [0.4.1] - 2026-11-01
 
 ### Added
@@ -165,6 +205,7 @@ and published; they are the fork history.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.5.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.3.0...v0.3.1
