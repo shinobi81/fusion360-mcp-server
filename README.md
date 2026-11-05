@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/shinobi81/fusion360-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/shinobi81/fusion360-mcp-server/actions/workflows/ci.yml)
 [![Licence: AGPL-3.0-or-later](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue.svg)](pyproject.toml)
 [![MCP](https://img.shields.io/badge/protocol-MCP-8A2BE2.svg)](https://modelcontextprotocol.io)
 
 An MCP server that lets AI coding agents drive **Autodesk Fusion 360**: create sketches
@@ -29,8 +29,8 @@ claude mcp add fusion360 -- uvx --from 'git+https://github.com/shinobi81/fusion3
 
 Then call `ping` — `{"ok": true, "status": "pong"}` means you are connected.
 
-Requirements: [uv](https://docs.astral.sh/uv/), Autodesk Fusion 360, and any MCP client
-(Claude Code, Codex, Cursor, VS Code, …).
+Requirements: Python 3.14+ ([uv](https://docs.astral.sh/uv/) installs it for you),
+Autodesk Fusion 360, and any MCP client (Claude Code, Codex, Cursor, VS Code, …).
 
 ## What it can do
 

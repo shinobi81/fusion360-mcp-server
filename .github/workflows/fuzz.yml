@@ -29,17 +29,22 @@ jobs:
       # astral-sh/setup-uv v10.3.3
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
 
-      # The `fuzz` group floors itself at 3.12 (atheris 3.1.0 ships cp312,
-      # cp313 and cp314 wheels only), so install that interpreter explicitly
-      # rather than depend on whatever ubuntu-latest currently defaults to.
-      - name: Set up Python 3.12
-        run: uv python install 3.12
+      # The `fuzz` group is pinned to 3.14, and inside a `>=3.14` project that
+      # is the only interpreter it can be synced with: atheris 3.1.0 ships
+      # cp312/cp313/cp314 wheels and nothing for 3.15 — no cp315 wheel, no sdist
+      # either — so `uv lock` narrows the group to the cp314 wheel and a sync at
+      # 3.15 fails at resolve time.  That failure is the one you want: loud, at
+      # sync, instead of a target stopping at `import atheris` mid-run.  The
+      # project's floor also refuses 3.12 outright, which is why this is no
+      # longer the lowest CI version.
+      - name: Set up Python 3.14
+        run: uv python install 3.14
 
       # `--only-group fuzz` installs atheris and nothing else — the project and
       # the `dev` group are both skipped. That is sound here because every
       # target imports the standard library plus `addon.server`, nothing more.
       - name: Install the fuzz group
-        run: uv sync --frozen --only-group fuzz --python 3.12
+        run: uv sync --frozen --only-group fuzz --python 3.14
 
       # No PYTHONOPTIMIZE in this job, ever. The targets' invariants are bare
       # `assert`s, and `-O` compiles them out — a fuzzer that reports clean

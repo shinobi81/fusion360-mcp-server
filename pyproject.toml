@@ -3,7 +3,7 @@ name = "fusion360-mcp-server"
 version = "0.4.1"
 description = "MCP server for Autodesk Fusion 360 — bridges AI coding agents to the add-in"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 keywords = ["fusion360", "autodesk", "cad", "mcp", "model-context-protocol", "ai-agents"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -12,10 +12,8 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Topic :: Scientific/Engineering",
 ]
 license = "AGPL-3.0-or-later"
@@ -50,7 +48,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+# No `target-version`: ruff infers it from `project.requires-python` above, so the
+# support window is stated once.  A second copy is a copy that drifts — the floor
+# said 3.10 for four years after 3.10 was EOL.
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "RUF"]
@@ -95,12 +95,17 @@ dev = [
 ]
 # Not in `dev`: `ci.yml` syncs `--dev` on three platforms, and atheris publishes
 # no Windows wheel — the marker keeps the group empty off Linux, so asking for it
-# on a workstation cannot fail the sync.  The Python floor is not optional: uv
-# locks every version in `requires-python`, atheris 3.1.0 ships cp312/cp313/
-# cp314 wheels only, and a bare linux marker leaves the lock with no solution.
-# The floor also means the group is empty on 3.10/3.11: sync it with
-# `uv sync --only-group fuzz --python 3.12`, or a target stops at `import atheris`
-# with nothing to say why.
+# on a workstation cannot fail the sync.  The marker's floor is now the window
+# itself, not decoration: uv locks every version in `requires-python`, atheris
+# 3.1.0's newest wheel is cp314, so inside a >=3.14 window the lock narrows to
+# that one wheel.  On 3.15 atheris publishes neither a wheel nor an sdist while
+# the marker above still asks for it, so a sync at 3.15 FAILS LOUDLY at resolve
+# time — which is the behaviour you want.  It is not a silent no-op, and the
+# group is only "empty" on non-Linux platforms, where the marker's
+# `sys_platform == 'linux'` half excludes it.  Sync it with
+# `uv sync --only-group fuzz --python 3.14`, or a target stops at
+# `import atheris` with nothing to say why.  Do not hardcode a `< 3.15` cap: it
+# goes stale the day a cp315 wheel lands.
 fuzz = [
     "atheris==3.1.0; sys_platform == 'linux' and python_full_version >= '3.12'",
 ]

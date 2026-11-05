@@ -87,6 +87,6 @@ written to `timeline`, the command definition executed. That is why the fakes mo
 Fusion's awkwardness on purpose: `design.timeline` raises in direct mode, and a queued
 undo does not land until the next event pump.
 
-`src/` is tested directly, including `--mode mock`. The suite runs on Python 3.10–3.13
+`src/` is tested directly, including `--mode mock`. The suite runs on Python 3.14–3.15
 and on Windows, because several behaviours (loopback resolution, the `.exe` handle) only
 differ there.
