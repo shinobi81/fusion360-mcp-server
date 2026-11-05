@@ -25,7 +25,7 @@ _sh.setFormatter(logging.Formatter("[MCP] %(message)s"))
 _logger.addHandler(_sh)
 
 
-def get_logger(name: str = None) -> logging.Logger:
+def get_logger(name: str | None = None) -> logging.Logger:
     """Return a child logger.  ``get_logger("bridge")`` → ``fusion360mcp.bridge``."""
     if name:
         return _logger.getChild(name)
