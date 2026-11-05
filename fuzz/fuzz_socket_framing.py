@@ -32,18 +32,22 @@ def _verdict(line: bytes) -> str:
 
     ``"dispatch"`` is a well-formed frame. ``"invalid"`` is a syntax error,
     which is answered with one ``Invalid JSON`` reply and the connection.
-    ``"not_text"`` is bytes it cannot decode: ``json.loads`` raises
-    ``UnicodeDecodeError`` there, which is not a ``JSONDecodeError``, so the
-    handler closes without replying. That gap is named here, not enforced: #11
-    is about what gets *dispatched*, and both arms dispatch nothing, so this
-    verdict may only ever constrain the dispatch count -- never the replies, or
-    the target would go red the day the handler learns to answer.
+    ``"not_text"`` is a line the parser refuses *without* a syntax error, so
+    the handler closes without replying: ``json.loads`` raises
+    ``UnicodeDecodeError`` for bytes it cannot decode, and ``RecursionError``
+    once nesting is deeper than it will descend, and neither is a
+    ``JSONDecodeError``. Both belong here because this arm asserts nothing
+    about replies -- it holds under the handler as it stands and under the
+    deferred answer-the-undecodable fix, and #11 is about what gets
+    *dispatched*.
     """
     try:
         json.loads(line)
     except json.JSONDecodeError:
         return "invalid"
     except ValueError:
+        return "not_text"
+    except RecursionError:
         return "not_text"
     return "dispatch"
 
@@ -76,6 +80,14 @@ def _frames(data: bytes) -> tuple[list[bytes], str | None]:
 
 
 def check(data: bytes) -> None:
+    # Out of range for the job -- libFuzzer's default max_len is 4096 -- and the
+    # cheap way to keep the "cannot hang, cannot leak" claim true: past this
+    # size the sendall below could fill both socket-pair buffers and block, and
+    # the handler's own 16 MB _MAX_BUFFER_BYTES break would stop it reading the
+    # frames this model counts. Neither is what the target pins.
+    if len(data) > 1 << 16:
+        return
+
     bridge = RecordingBridge()
     server = Fusion360MCPServer(bridge)
     # _handle_client loops on this flag, but the peer closing its write side is
@@ -122,13 +134,20 @@ def check(data: bytes) -> None:
     # and that gap is deferred, so asserting the *absence* of the error reply
     # would turn the target red the day it is fixed. Replies are pinned only
     # where the answer is settled.
-    assert len(bridge.commands) == len(expected), (bridge.commands, expected)
+    #
+    # Compare what was dispatched, not merely how much: #11 was a command read
+    # out of an HTTP body, which a count alone cannot see. Canonicalised
+    # through json.dumps because a payload may carry NaN, which never equals
+    # itself.
+    dispatched = [json.dumps(command, sort_keys=True) for command in bridge.commands]
+    owed = [json.dumps(json.loads(line), sort_keys=True) for line in expected]
+    assert dispatched == owed, (bridge.commands, expected)
     if bad == "invalid":
         errors = [reply for reply in replies if reply == INVALID_JSON_REPLY]
         assert errors == [INVALID_JSON_REPLY], replies
         # Last of the stream: the handler returned on the bad line, so nothing
         # from after it was dispatched.
-        assert replies[-1] == INVALID_JSON_REPLY
+        assert replies and replies[-1] == INVALID_JSON_REPLY
     elif bad is None:
         assert all(reply.get("status") == "success" for reply in replies), replies
 

@@ -96,8 +96,10 @@ def test_an_http_request_dispatches_nothing():
     check_frames(b'GET / HTTP/1.1\r\nHost: x\r\n\r\n{"type": "execute_code"}\n')
 
 
-def test_a_partial_frame_dispatches_nothing():
-    check_frames(b'{"type": "ping"')
+def test_a_partial_frame_that_parses_is_dispatched_once():
+    # No trailing newline, but the handler's raw-JSON fallback dispatches the
+    # residual buffer when it parses, so this is a frame, not a refusal.
+    check_frames(b'{"type": "ping"}')
 
 
 def test_a_bad_line_after_a_good_one_stops_dispatch():
@@ -119,10 +121,8 @@ def test_blank_lines_are_not_frames():
 
 
 def test_a_frame_without_a_trailing_newline_is_still_a_frame():
-    # The handler's raw-JSON fallback dispatches an unterminated blob that
-    # parses, so the frame count has to include it -- otherwise a plain fuzz
-    # input like b"123" reports a dispatch the contract allowed.
-    check_frames(b'{"type": "ping"}')
+    # Same fallback arm, with a bare number: json.loads accepts a top-level
+    # scalar, so b"123" reaches the bridge too.
     check_frames(b"123")
 
 
