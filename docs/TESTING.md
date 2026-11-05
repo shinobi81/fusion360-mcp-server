@@ -61,15 +61,17 @@ a marker that keeps it empty everywhere else. Run them from the repository root,
 mode:
 
 ```bash
-uv sync --frozen --only-group fuzz --python 3.12
+uv sync --frozen --only-group fuzz --python 3.14
 uv run --no-sync python -m fuzz.fuzz_hints_classify -max_total_time=60 -rss_limit_mb=2048
 ```
 
 `-m` is not a style choice. The targets import their shared plumbing package-relatively
 (`from ._common import decode`), so `python fuzz/fuzz_hints_classify.py` fails on that
 import; module mode is the only mode that works, and it also puts the repository root on
-`sys.path`, which is how `from addon.server... import` resolves. The group floors itself
-at Python 3.12 because atheris 3.1.0 ships cp312, cp313 and cp314 wheels only.
+`sys.path`, which is how `from addon.server... import` resolves. The group is pinned to
+Python 3.14 because that is the only interpreter inside the project's `>=3.14` window that
+atheris 3.1.0 has a wheel for: it publishes cp312, cp313 and cp314 wheels and nothing for
+3.15 (no wheel, no sdist), so at 3.15 the group does not resolve at all.
 
 Two more things the job depends on:
 

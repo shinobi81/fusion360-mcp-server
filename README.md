@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/shinobi81/fusion360-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/shinobi81/fusion360-mcp-server/actions/workflows/ci.yml)
 [![Licence: AGPL-3.0-or-later](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue.svg)](pyproject.toml)
 [![MCP](https://img.shields.io/badge/protocol-MCP-8A2BE2.svg)](https://modelcontextprotocol.io)
 
 An MCP server that lets AI coding agents drive **Autodesk Fusion 360**: create sketches
