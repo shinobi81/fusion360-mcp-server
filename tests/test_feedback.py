@@ -111,7 +111,7 @@ class TestMockForcedError:
         )
         assert result["ok"] is False
         assert result["error_kind"] == "PROFILE_NOT_CLOSED"
-        assert "hints" in result and result["hints"]
+        assert result.get("hints")
         assert result["error_message"] == "No profiles in sketch"
         assert result["mode"] == "mock"
 

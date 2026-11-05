@@ -27,3 +27,7 @@ Thumbs.db
 
 # local planning notes — design/spec docs stay out of the repo
 docs/superpowers/
+
+# review/PR scratch files: a 'git add -A' must not swallow these
+.review-diff*
+.pr-body*
