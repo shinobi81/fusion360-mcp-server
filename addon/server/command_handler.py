@@ -3605,9 +3605,11 @@ class CommandHandler:
         return {"parameters": params, "count": len(params)}
 
     def create_parameter(self, name: str, value: float, unit: str, comment: str = None):
-        # Before either factory: "inf mm" is an expression Fusion will reject,
-        # and the caller gets no clue why. json.loads accepts Infinity/NaN, so
-        # a socket client can deliver one.
+        # Validated before the design is looked up, deliberately: a bad argument
+        # is wrong whichever document is open, so INVALID_INPUT outranks
+        # NO_ACTIVE_DESIGN. Before either factory too -- "inf mm" is an
+        # expression Fusion would reject with no clue why, and json.loads
+        # accepts Infinity/NaN, so a socket client can deliver one.
         value = _param_units.require_finite(value)
         design = self._design()
         params = design.userParameters

@@ -417,6 +417,60 @@ class TestMockParameters:
         assert result["deleted"] is True
 
 
+class TestMockParametersRefuseNonFiniteValues:
+    """The add-in refuses Infinity/NaN; mock mode must not advertise them.
+
+    ``json.loads`` accepts those literals, so a caller can deliver one. Mock
+    mode advertises itself as agreeing with the add-in, and an ``ok: True``
+    carrying ``"inf mm"`` would hide the very failure the add-in refuses.
+    """
+
+    @pytest.mark.parametrize(
+        ("value", "rendered"),
+        [(float("inf"), "inf"), (float("-inf"), "-inf"), (float("nan"), "nan")],
+    )
+    def test_create_parameter_refuses_a_non_finite_value(self, value, rendered):
+        result = mock_command(
+            "create_parameter",
+            {"name": "wall_thickness", "value": value, "unit": "mm"},
+        )
+        assert result["ok"] is False
+        assert result["error_kind"] == "INVALID_INPUT"
+        assert result["error_message"].startswith("invalid parameter value")
+        assert rendered in result["error_message"]
+        assert result["hints"], "the hints come from classify(), not from prose"
+        assert result["mode"] == "mock"
+        assert "expression" not in result
+
+    @pytest.mark.parametrize(
+        ("value", "rendered"),
+        [(float("inf"), "inf"), (float("-inf"), "-inf"), (float("nan"), "nan")],
+    )
+    def test_set_parameter_refuses_a_non_finite_value(self, value, rendered):
+        result = mock_command(
+            "set_parameter", {"name": "wall_thickness", "value": value}
+        )
+        assert result["ok"] is False
+        assert result["error_kind"] == "INVALID_INPUT"
+        assert rendered in result["error_message"]
+        # set_parameter is a mutation mock, but a refusal must not report the
+        # synthetic "body appeared" deltas.
+        assert "deltas" not in result
+
+    def test_a_finite_value_still_creates_the_parameter(self):
+        result = mock_command(
+            "create_parameter",
+            {"name": "wall_thickness", "value": 2.5, "unit": "mm"},
+        )
+        assert result["ok"] is True
+        assert result["expression"] == "2.5 mm"
+
+    def test_a_finite_value_still_sets_the_parameter(self):
+        result = mock_command("set_parameter", {"name": "wall_thickness", "value": 3.0})
+        assert result["ok"] is True
+        assert "deltas" in result
+
+
 class TestMockConstraints:
     def test_add_constraint_coincident(self):
         result = mock_command(
