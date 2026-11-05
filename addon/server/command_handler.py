@@ -3605,6 +3605,10 @@ class CommandHandler:
         return {"parameters": params, "count": len(params)}
 
     def create_parameter(self, name: str, value: float, unit: str, comment: str = None):
+        # Before either factory: "inf mm" is an expression Fusion will reject,
+        # and the caller gets no clue why. json.loads accepts Infinity/NaN, so
+        # a socket client can deliver one.
+        value = _param_units.require_finite(value)
         design = self._design()
         params = design.userParameters
         unit = _param_units.normalise_unit(unit)
@@ -3634,7 +3638,9 @@ class CommandHandler:
         # any parameter whose unit is not the internal one. Write the
         # expression, in the unit the parameter already declares.
         unit = _param_units.normalise_unit(param.unit)
-        param.expression = _param_units.expression_for(value, unit)
+        param.expression = _param_units.expression_for(
+            _param_units.require_finite(value), unit
+        )
         return {
             "updated": True,
             "name": name,

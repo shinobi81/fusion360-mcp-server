@@ -8,6 +8,21 @@ so the rules can be unit-tested without a running Fusion instance.
 
 from __future__ import annotations
 
+import math
+
+
+def require_finite(value: float) -> float:
+    """Return *value*, refusing infinity and NaN.
+
+    ``json.loads`` accepts the non-standard ``Infinity`` and ``NaN`` literals,
+    so a socket client can deliver one; written through, it becomes the
+    expression ``"inf mm"``, which Fusion rejects as an opaque API error.  The
+    message is shaped to classify as ``INVALID_INPUT``.
+    """
+    if not math.isfinite(value):
+        raise ValueError(f"invalid parameter value: {value} is not finite")
+    return value
+
 
 def normalise_unit(unit: str | None) -> str:
     """Trim a unit to its canonical form; blank means unitless."""
@@ -19,7 +34,8 @@ def expression_for(value: float, unit: str | None) -> str:
 
     A unitless parameter has nothing to interpolate, so it keeps the bare
     number -- Fusion then reads it as internal units, which is what unitless
-    means.
+    means.  Formatting only: reject a non-finite value with
+    :func:`require_finite` before calling this.
     """
     unit = normalise_unit(unit)
     return f"{value} {unit}" if unit else f"{value}"

@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from addon.server.hints import classify
 from fusion360_mcp.mock import mock_command
 from tests.fakes.design import FakeDesign
 from tests.fakes.runtime import FakeValueInput
@@ -110,6 +111,67 @@ class TestBuildValueInput:
         calls, from_string, from_real = self._factories()
         parameter_units.build_value_input(3, "cm", from_string, from_real)
         assert calls == [("string", "3 cm")]
+
+
+class TestRequireFinite:
+    """A non-finite value has to be refused before it reaches Fusion.
+
+    ``json.loads`` accepts the non-standard ``Infinity`` and ``NaN`` literals,
+    so a socket client can deliver one; written through, it becomes the
+    expression ``"inf mm"``, which Fusion rejects as an opaque API error.
+    """
+
+    @pytest.mark.parametrize(
+        ("value", "rendered"),
+        [
+            (float("inf"), "inf"),
+            (float("-inf"), "-inf"),
+            (float("nan"), "nan"),
+        ],
+    )
+    def test_a_non_finite_value_is_refused(self, value, rendered):
+        with pytest.raises(ValueError, match="invalid parameter value") as exc_info:
+            parameter_units.require_finite(value)
+        # The message has to name the offending value and the reason.
+        assert rendered in str(exc_info.value)
+        assert "is not finite" in str(exc_info.value)
+
+    @pytest.mark.parametrize("value", [2.5, 0, -7, 1e300])
+    def test_a_finite_value_passes_through_unchanged(self, value):
+        assert parameter_units.require_finite(value) == value
+
+    def test_the_refusal_classifies_as_invalid_input(self):
+        with pytest.raises(ValueError) as exc_info:
+            parameter_units.require_finite(float("nan"))
+        assert classify(str(exc_info.value))[0] == "INVALID_INPUT"
+
+
+class TestNonFiniteCallSites:
+    """Both handlers refuse the value, and leave the design untouched."""
+
+    @pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+    def test_create_parameter_refuses_a_non_finite_value(self, bound_handler, value):
+        design = FakeDesign(features=0)
+
+        handler = bound_handler(design)
+        with pytest.raises(ValueError, match="invalid parameter value"):
+            handler.create_parameter(name="length", value=value, unit="mm")
+
+        # Nothing may be added: a rejected value must not leave "inf mm" behind.
+        assert design.userParameters.count == 0
+        assert design.userParameters.itemByName("length") is None
+
+    @pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+    def test_set_parameter_refuses_a_non_finite_value(self, bound_handler, value):
+        design = FakeDesign(features=0)
+        stored = design.userParameters.add(
+            "angle", FakeValueInput("90 deg", "string"), "deg", ""
+        )
+
+        with pytest.raises(ValueError, match="invalid parameter value"):
+            bound_handler(design).set_parameter("angle", value)
+
+        assert stored.expression == "90 deg"
 
 
 class TestCallSites:
