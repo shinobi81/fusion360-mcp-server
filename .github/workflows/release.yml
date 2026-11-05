@@ -40,15 +40,22 @@ jobs:
       # by this workflow from this commit, not uploaded by hand.
       # actions/attest-build-provenance v4.2.2
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        id: attest
         with:
           subject-path: "dist/*.whl, dist/*.tar.gz"
 
+      # Scorecard's Signed-Releases check reads release asset *names* only: its
+      # releasesAreSigned probe looks for .asc/.minisig/.sig/.sign/.sigstore/
+      # .sigstore.json. The bundle the step above writes is a sigstore bundle, so it
+      # ships under that name and the release counts as signed.
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
         run: |
+          cp "${BUNDLE_PATH}" dist/provenance.sigstore.json
           gh release create "${GITHUB_REF_NAME}" \
-            dist/*.whl dist/*.tar.gz dist/sbom.cdx.json \
+            dist/*.whl dist/*.tar.gz dist/sbom.cdx.json dist/provenance.sigstore.json \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \
             --generate-notes \
