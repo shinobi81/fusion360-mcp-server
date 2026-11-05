@@ -53,7 +53,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
         run: |
-          cp "${BUNDLE_PATH}" dist/provenance.sigstore.json
+          cp "${BUNDLE_PATH:?bundle-path output was empty}" dist/provenance.sigstore.json
           gh release create "${GITHUB_REF_NAME}" \
             dist/*.whl dist/*.tar.gz dist/sbom.cdx.json dist/provenance.sigstore.json \
             --repo "${GITHUB_REPOSITORY}" \
