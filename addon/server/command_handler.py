@@ -15,6 +15,7 @@ import tempfile
 import time
 import traceback
 from contextlib import redirect_stdout, suppress
+from typing import Any, ClassVar
 
 import adsk.cam
 import adsk.core
@@ -39,11 +40,11 @@ class CommandHandler:
     # Dispatch
     # ------------------------------------------------------------------
 
-    _COMMANDS = None  # populated lazily
+    _COMMANDS: ClassVar[dict[str, Any] | None] = None  # populated lazily
 
     # Canonical camera presets, (eye_dir, up_vec) in Fusion's Z-up world.
     # Shared by render_view and export_view_sheet.
-    _VIEW_DIRS = {
+    _VIEW_DIRS: ClassVar[dict[str, Any]] = {
         "iso": ((1.0, -1.0, 1.0), (0.0, 0.0, 1.0)),
         "iso_ne": ((1.0, 1.0, 1.0), (0.0, 0.0, 1.0)),
         "iso_nw": ((-1.0, 1.0, 1.0), (0.0, 0.0, 1.0)),
@@ -306,7 +307,7 @@ class CommandHandler:
     # joint_type -> (JointInput setter, number of direction arguments it takes).
     # The arities were verified against the running Fusion API: one direction for
     # revolute/slider/cylindrical/planar, two for pin_slot and ball, none for rigid.
-    _JOINT_MOTION_SETTERS = {
+    _JOINT_MOTION_SETTERS: ClassVar[dict[str, Any]] = {
         "rigid": ("setAsRigidJointMotion", 0),
         "revolute": ("setAsRevoluteJointMotion", 1),
         "slider": ("setAsSliderJointMotion", 1),
@@ -316,20 +317,20 @@ class CommandHandler:
         "ball": ("setAsBallJointMotion", 2),
     }
 
-    _JOINT_AXES = {
+    _JOINT_AXES: ClassVar[dict[str, Any]] = {
         "x": "XAxisJointDirection",
         "y": "YAxisJointDirection",
         "z": "ZAxisJointDirection",
     }
 
-    _JOINT_QUADRANTS = {
+    _JOINT_QUADRANTS: ClassVar[dict[str, Any]] = {
         "start": "StartJointQuadrantAngleType",
         "quarter": "QuarterJointQuadrantAngleType",
         "middle": "MiddleJointQuadrantAngleType",
         "third_quarter": "ThirdQuarterJointQuadrantAngleType",
     }
 
-    _JOINT_KEY_POINTS = {
+    _JOINT_KEY_POINTS: ClassVar[dict[str, Any]] = {
         "start": "StartKeyPoint",
         "middle": "MiddleKeyPoint",
         "center": "CenterKeyPoint",
@@ -2618,8 +2619,16 @@ class CommandHandler:
         text_pt = adsk.core.Point3D.create(0, 0, 0)
 
         def _set_dim(dim, value):
+            # A dimension is a number Fusion stores, so inf/nan is refused here
+            # rather than surfacing later as an opaque API error.
+            value = _param_units.require_finite(value)
             if isinstance(value, (int, float)):
-                dim.parameter.value = float(value)
+                try:
+                    dim.parameter.value = float(value)
+                except OverflowError:
+                    # Finite but too large for a float: write the expression and
+                    # let Fusion judge the magnitude instead of raising UNKNOWN.
+                    dim.parameter.expression = str(value)
             else:
                 dim.parameter.expression = str(value)
 
@@ -3178,7 +3187,7 @@ class CommandHandler:
     # with the value_kind names that select it. BallJointMotion exposes
     # pitchValue/yawValue/rollValue and no rotationValue; cylindrical, pin-slot
     # and planar joints carry both an angle and slide values.
-    _JOINT_VALUE_ATTRIBUTES = {
+    _JOINT_VALUE_ATTRIBUTES: ClassVar[dict[str, Any]] = {
         "RevoluteJointMotion": {"rotation": "rotationValue"},
         "SliderJointMotion": {"slide": "slideValue"},
         "CylindricalJointMotion": {
@@ -4057,6 +4066,10 @@ class CommandHandler:
         (e.g. tool_coolant) take quoted lowercase strings ('flood').
         """
         try:
+            # CAM parameters are set through an expression too, so a non-finite
+            # value is refused before it reaches the API.  The except below
+            # already converts a refusal into False with the reason logged.
+            value = _param_units.require_finite(value)
             params = getattr(target, "parameters", None)
             if params is None:
                 return False

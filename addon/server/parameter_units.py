@@ -24,7 +24,12 @@ def require_finite(value: float) -> float:
     no hints for a value that used to work: ``create_parameter(value="2.5")``
     reaches Fusion as ``createByString("2.5 mm")``, which is fine.
     """
-    if isinstance(value, (int, float)) and not math.isfinite(value):
+    # An int is always finite, and converting an oversized one to float raises
+    # OverflowError (a 401-digit JSON integer does exactly that), so ints skip
+    # the conversion entirely rather than being judged by it.
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and not math.isfinite(value):
         raise ValueError(f"invalid parameter value: {value} is not finite")
     return value
 

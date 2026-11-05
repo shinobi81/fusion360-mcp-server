@@ -45,9 +45,19 @@ def _class_assign(attr: str):
         if cls.name != "CommandHandler":
             continue
         for stmt in cls.body:
-            if not isinstance(stmt, ast.Assign):
+            # The tables are static, whether declared plain (``X = {...}``) or
+            # annotated (``X: ClassVar[...] = {...}``, which is ast.AnnAssign and
+            # has a single target).  Both are the same invariant; skipping the
+            # annotated form would let a table drift out of this guard silently.
+            if isinstance(stmt, ast.Assign):
+                targets = stmt.targets
+            elif isinstance(stmt, ast.AnnAssign):
+                targets = [stmt.target]
+            else:
                 continue
-            if any(isinstance(t, ast.Name) and t.id == attr for t in stmt.targets):
+            if stmt.value is not None and any(
+                isinstance(t, ast.Name) and t.id == attr for t in targets
+            ):
                 value = stmt.value
                 # frozenset({...}) / set({...}) -> unwrap the set literal
                 if (

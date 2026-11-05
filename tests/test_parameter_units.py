@@ -13,6 +13,7 @@ the fake runtime, so a handler that rebuilt the choice inline fails here.
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -362,3 +363,49 @@ class TestMockContract:
         assert result["value"] == 1200
         assert result["unit"] is None
         assert result["expression"] is None
+
+
+class TestOversizedIntegers:
+    """An int is finite; converting a huge one to float is what used to fail."""
+
+    def test_a_401_digit_int_is_accepted(self):
+        # json.loads('1' + '0' * 400) yields exactly this shape, and
+        # math.isfinite raises OverflowError converting it to float.
+        huge = json.loads("1" + "0" * 400)
+        assert parameter_units.require_finite(huge) == huge
+
+    def test_a_normal_int_still_passes_through(self):
+        assert parameter_units.require_finite(7) == 7
+
+
+class TestCamParameterRefusesNonFinite:
+    """CAM parameter values reach Fusion as expressions, so inf/nan is refused."""
+
+    class _Param:
+        def __init__(self):
+            self.expression = None
+
+    class _Params:
+        def __init__(self, param):
+            self._param = param
+
+        def itemByName(self, _name):
+            return self._param
+
+    def _target(self):
+        param = self._Param()
+        return type("Target", (), {"parameters": self._Params(param)})(), param
+
+    @pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+    def test_a_non_finite_value_is_not_written(self, handler_module, value):
+        target, param = self._target()
+        assert (
+            handler_module.CommandHandler._set_cam_parameter(target, "stepdown", value)
+            is False
+        )
+        assert param.expression is None
+
+    def test_a_finite_value_is_written(self, handler_module):
+        target, param = self._target()
+        assert handler_module.CommandHandler._set_cam_parameter(target, "stepdown", 2.0)
+        assert param.expression == "2.0"
