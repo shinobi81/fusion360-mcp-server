@@ -34,8 +34,10 @@ def _verdict(line: bytes) -> str:
     which is answered with one ``Invalid JSON`` reply and the connection.
     ``"not_text"`` is bytes it cannot decode: ``json.loads`` raises
     ``UnicodeDecodeError`` there, which is not a ``JSONDecodeError``, so the
-    handler closes without replying. That gap is recorded here, not enforced:
-    #11 is about what gets *dispatched*, and both arms dispatch nothing.
+    handler closes without replying. That gap is named here, not enforced: #11
+    is about what gets *dispatched*, and both arms dispatch nothing, so this
+    verdict may only ever constrain the dispatch count -- never the replies, or
+    the target would go red the day the handler learns to answer.
     """
     try:
         json.loads(line)
@@ -113,6 +115,13 @@ def check(data: bytes) -> None:
             thread.join(TIMEOUT_S)
 
     expected, bad = _frames(data)
+    # Nothing after a refused line was dispatched -- the handler returns on it --
+    # and that count is the whole claim for "not_text" too. Its reply is
+    # undecided: undecodable bytes are closed silently today because
+    # UnicodeDecodeError escapes the handler's `except json.JSONDecodeError`,
+    # and that gap is deferred, so asserting the *absence* of the error reply
+    # would turn the target red the day it is fixed. Replies are pinned only
+    # where the answer is settled.
     assert len(bridge.commands) == len(expected), (bridge.commands, expected)
     if bad == "invalid":
         errors = [reply for reply in replies if reply == INVALID_JSON_REPLY]
@@ -120,10 +129,7 @@ def check(data: bytes) -> None:
         # Last of the stream: the handler returned on the bad line, so nothing
         # from after it was dispatched.
         assert replies[-1] == INVALID_JSON_REPLY
-    elif bad is not None:
-        # Undecodable bytes end the connection with no reply at all.
-        assert not any(reply == INVALID_JSON_REPLY for reply in replies), replies
-    else:
+    elif bad is None:
         assert all(reply.get("status") == "success" for reply in replies), replies
 
 

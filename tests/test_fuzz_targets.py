@@ -132,9 +132,10 @@ def test_a_line_is_stripped_before_it_is_parsed():
     check_frames(b"\x0c{}\x0c\n")
 
 
-def test_a_line_that_is_not_text_closes_without_the_error_reply():
-    # json.loads fails on UTF-8 before it ever tries JSON, and _handle_client
-    # only catches JSONDecodeError, so these bytes end the connection without
-    # the reply. Nothing is dispatched either way, so #11 still holds.
+def test_a_line_that_is_not_text_dispatches_nothing():
+    # json.loads fails on UTF-8 before it ever tries JSON, so these bytes are
+    # refused. Whether a reply follows is undecided -- the handler currently
+    # closes silently -- and the target must stay green either way, so only the
+    # dispatch side is pinned here.
     check_frames(b"\x80 not text\n")
     check_frames(b'{"type": "ping"}\n\x80 not text\n')
