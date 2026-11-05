@@ -34,6 +34,27 @@ def require_finite(value: float) -> float:
     return value
 
 
+def value_input_for(value: object) -> tuple[str, object]:
+    """How a Fusion numeric input should be written: real, or expression.
+
+    ``("real", float)`` goes through ``createByReal`` / ``parameter.value``;
+    ``("expression", str)`` goes through ``createByString`` / ``parameter.expression``.
+
+    A non-finite number is refused here (so it classifies as ``INVALID_INPUT``),
+    an int too large for ``float`` becomes an expression rather than raising
+    ``OverflowError``, and a string expression — ``"boxL"``, ``"56 mm"`` — passes
+    through as the expression it already is.
+    """
+    value = require_finite(value)
+    if isinstance(value, (int, float)):
+        try:
+            return "real", float(value)
+        except OverflowError:
+            # Finite, but beyond float: let Fusion judge the magnitude.
+            return "expression", str(value)
+    return "expression", str(value)
+
+
 def normalise_unit(unit: str | None) -> str:
     """Trim a unit to its canonical form; blank means unitless."""
     return (unit or "").strip()

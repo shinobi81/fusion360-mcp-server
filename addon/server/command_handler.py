@@ -2592,6 +2592,16 @@ class CommandHandler:
         (e.g. 'boxL', '56 mm'). Expressions are applied via Fusion's
         parameter system so later changes to User Parameters propagate.
         """
+        # Every numeric argument that reaches Fusion is judged here: a string
+        # expression passes through untouched, and inf/nan is refused rather than
+        # written into a dimension or an extrude extent.
+        length = _param_units.require_finite(length)
+        width = _param_units.require_finite(width)
+        height = _param_units.require_finite(height)
+        origin_x = _param_units.require_finite(origin_x)
+        origin_y = _param_units.require_finite(origin_y)
+        origin_z = _param_units.require_finite(origin_z)
+
         comp = (
             self._component_by_name(component_name) if component_name else self._root()
         )
@@ -2607,7 +2617,13 @@ class CommandHandler:
         sketch = comp.sketches.add(sketch_plane)
 
         def _initial(val):
-            return float(val) if isinstance(val, (int, float)) else 1.0
+            # A placeholder only: the dimensions below carry the real value. An int
+            # too large for float must not fail here, or the dimension's expression
+            # fallback would be unreachable code.
+            try:
+                return float(val) if isinstance(val, (int, float)) else 1.0
+            except OverflowError:
+                return 1.0
 
         p1 = adsk.core.Point3D.create(origin_x, origin_y, 0)
         p2 = adsk.core.Point3D.create(
@@ -2619,18 +2635,11 @@ class CommandHandler:
         text_pt = adsk.core.Point3D.create(0, 0, 0)
 
         def _set_dim(dim, value):
-            # A dimension is a number Fusion stores, so inf/nan is refused here
-            # rather than surfacing later as an opaque API error.
-            value = _param_units.require_finite(value)
-            if isinstance(value, (int, float)):
-                try:
-                    dim.parameter.value = float(value)
-                except OverflowError:
-                    # Finite but too large for a float: write the expression and
-                    # let Fusion judge the magnitude instead of raising UNKNOWN.
-                    dim.parameter.expression = str(value)
+            kind, payload = _param_units.value_input_for(value)
+            if kind == "real":
+                dim.parameter.value = payload
             else:
-                dim.parameter.expression = str(value)
+                dim.parameter.expression = payload
 
         bottom = rect.item(0)
         length_dim = dims.addDistanceDimension(
@@ -2658,10 +2667,11 @@ class CommandHandler:
         ext_input = ext_feats.createInput(
             profile, adsk.fusion.FeatureOperations.NewBodyFeatureOperation
         )
-        if isinstance(height, (int, float)):
-            h_vi = adsk.core.ValueInput.createByReal(float(height))
+        kind, payload = _param_units.value_input_for(height)
+        if kind == "real":
+            h_vi = adsk.core.ValueInput.createByReal(payload)
         else:
-            h_vi = adsk.core.ValueInput.createByString(str(height))
+            h_vi = adsk.core.ValueInput.createByString(payload)
         ext_input.setDistanceExtent(False, h_vi)
         feat = ext_feats.add(ext_input)
 
@@ -4065,11 +4075,11 @@ class CommandHandler:
         must be assigned via the ``expression`` property.  Enum parameters
         (e.g. tool_coolant) take quoted lowercase strings ('flood').
         """
+        # Judged outside the try so a bad value classifies as INVALID_INPUT instead
+        # of being reported as False - which both callers read as "that parameter
+        # name is unavailable" and would answer by retrying the same value.
+        value = _param_units.require_finite(value)
         try:
-            # CAM parameters are set through an expression too, so a non-finite
-            # value is refused before it reaches the API.  The except below
-            # already converts a refusal into False with the reason logged.
-            value = _param_units.require_finite(value)
             params = getattr(target, "parameters", None)
             if params is None:
                 return False

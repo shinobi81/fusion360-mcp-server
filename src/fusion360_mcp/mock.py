@@ -101,7 +101,11 @@ def _non_finite_error(value: Any) -> dict | None:
     ``math.isfinite`` is only meaningful for a number; a schema-invalid
     non-number is left alone here rather than guessed at.
     """
-    if isinstance(value, (int, float)) and not math.isfinite(value):
+    # Mirrors parameter_units.require_finite: an int is always finite (and a huge
+    # one raises OverflowError if converted to float), a non-number is left alone.
+    if isinstance(value, int):
+        return None
+    if isinstance(value, float) and not math.isfinite(value):
         return _mock_error(f"invalid parameter value: {value} is not finite")
     return None
 

@@ -40,9 +40,16 @@ def _extract_class_attr_set(path: Path, class_name: str, attr: str) -> set[str]:
         if cls.name != class_name:
             continue
         for stmt in cls.body:
-            if not isinstance(stmt, ast.Assign):
+            # Annotated (``X: ClassVar[...] = {...}``) and plain assignments are
+            # the same invariant; skipping the annotated form would let the table
+            # drift out of this guard with a misleading "not found" error.
+            if isinstance(stmt, ast.Assign):
+                targets = stmt.targets
+            elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
+                targets = [stmt.target]
+            else:
                 continue
-            if not any(isinstance(t, ast.Name) and t.id == attr for t in stmt.targets):
+            if not any(isinstance(t, ast.Name) and t.id == attr for t in targets):
                 continue
             value = stmt.value
             # frozenset({...})  →  unwrap the set literal arg

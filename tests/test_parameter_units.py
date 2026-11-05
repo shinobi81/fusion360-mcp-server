@@ -377,6 +377,16 @@ class TestOversizedIntegers:
     def test_a_normal_int_still_passes_through(self):
         assert parameter_units.require_finite(7) == 7
 
+    def test_the_mock_accepts_the_same_huge_int(self):
+        # The two mirrors are the contract (AGENTS.md): mock mode must not raise
+        # where the add-in now succeeds, or --mode mock reports a failure that
+        # the real call does not have.
+        huge = json.loads("1" + "0" * 400)
+        result = mock_command(
+            "create_parameter", {"name": "w", "value": huge, "unit": "mm"}
+        )
+        assert result.get("ok") is True
+
 
 class TestCamParameterRefusesNonFinite:
     """CAM parameter values reach Fusion as expressions, so inf/nan is refused."""
@@ -397,15 +407,41 @@ class TestCamParameterRefusesNonFinite:
         return type("Target", (), {"parameters": self._Params(param)})(), param
 
     @pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
-    def test_a_non_finite_value_is_not_written(self, handler_module, value):
+    def test_a_non_finite_value_is_refused(self, handler_module, value):
+        # Refused before the call's broad except, so it classifies as
+        # INVALID_INPUT rather than False - which callers read as "no such
+        # parameter" and would answer by retrying the same value.
         target, param = self._target()
-        assert (
+        with pytest.raises(ValueError, match="invalid parameter value"):
             handler_module.CommandHandler._set_cam_parameter(target, "stepdown", value)
-            is False
-        )
         assert param.expression is None
 
     def test_a_finite_value_is_written(self, handler_module):
         target, param = self._target()
         assert handler_module.CommandHandler._set_cam_parameter(target, "stepdown", 2.0)
         assert param.expression == "2.0"
+
+
+class TestValueInputFor:
+    """The real-or-expression decision, which the handler adapters just apply."""
+
+    def test_a_finite_float_is_written_as_a_real(self):
+        assert parameter_units.value_input_for(2.5) == ("real", 2.5)
+
+    def test_an_int_is_written_as_a_real(self):
+        assert parameter_units.value_input_for(7) == ("real", 7.0)
+
+    def test_an_int_too_large_for_float_becomes_an_expression(self):
+        huge = json.loads("1" + "0" * 400)
+        kind, payload = parameter_units.value_input_for(huge)
+        assert kind == "expression"
+        assert payload == str(huge)
+
+    @pytest.mark.parametrize("expression", ["boxL", "56 mm", "outer - 2*wall_t"])
+    def test_a_string_expression_passes_through(self, expression):
+        assert parameter_units.value_input_for(expression) == ("expression", expression)
+
+    @pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+    def test_a_non_finite_number_is_refused(self, value):
+        with pytest.raises(ValueError, match="invalid parameter value"):
+            parameter_units.value_input_for(value)

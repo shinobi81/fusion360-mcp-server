@@ -108,7 +108,7 @@ def _start_multi_accept_server(host="127.0.0.1", port=0, max_accepts=3):
 
 class TestFusion360Connection:
     def test_connect_to_echo_server(self):
-        port, srv, _ = _start_echo_server()
+        port, _srv, _ = _start_echo_server()
         conn = Fusion360Connection(host="127.0.0.1", port=port)
         assert conn.connect() is True
         assert conn.connected is True
@@ -116,7 +116,7 @@ class TestFusion360Connection:
         assert conn.connected is False
 
     def test_send_command_round_trip(self):
-        port, srv, _ = _start_echo_server()
+        port, _srv, _ = _start_echo_server()
         conn = Fusion360Connection(host="127.0.0.1", port=port)
         conn.connect()
 
@@ -162,7 +162,7 @@ class TestFusion360Connection:
 
 class TestPing:
     def test_ping_returns_true_when_connected(self):
-        port, srv, _ = _start_echo_server()
+        port, _srv, _ = _start_echo_server()
         conn = Fusion360Connection(host="127.0.0.1", port=port)
         conn.connect()
         assert conn.ping() is True
@@ -175,7 +175,7 @@ class TestPing:
 
 class TestReconnect:
     def test_reconnect_after_disconnect(self):
-        port, srv, _ = _start_multi_accept_server()
+        port, _srv, _ = _start_multi_accept_server()
         conn = Fusion360Connection(host="127.0.0.1", port=port)
         conn.connect()
         assert conn.connected is True
@@ -188,7 +188,7 @@ class TestReconnect:
         conn.disconnect()
 
     def test_ensure_connected_recovers(self):
-        port, srv, _ = _start_multi_accept_server()
+        port, _srv, _ = _start_multi_accept_server()
         conn = Fusion360Connection(host="127.0.0.1", port=port)
         conn.connect()
 
@@ -201,7 +201,7 @@ class TestReconnect:
         conn.disconnect()
 
     def test_ensure_connected_on_healthy_connection(self):
-        port, srv, _ = _start_echo_server()
+        port, _srv, _ = _start_echo_server()
         conn = Fusion360Connection(host="127.0.0.1", port=port)
         conn.connect()
 
@@ -213,7 +213,7 @@ class TestReconnect:
 class TestRetry:
     def test_send_command_retries_on_broken_connection(self, monkeypatch):
         """When the socket dies mid-command, send_command reconnects and retries."""
-        port, srv, _ = _start_multi_accept_server()
+        port, _srv, _ = _start_multi_accept_server()
         conn = Fusion360Connection(host="127.0.0.1", port=port)
         conn.connect()
 
@@ -311,7 +311,7 @@ class TestGetConnectionSingleton:
 
     def test_reset_clears_singleton(self, monkeypatch):
         """reset_connection drops the cache, so the next call rebuilds it."""
-        port, srv, _ = _start_echo_server()
+        port, _srv, _ = _start_echo_server()
         monkeypatch.setattr("fusion360_mcp.connection._connection", None)
 
         first = get_connection(port=port)
@@ -331,7 +331,7 @@ class TestGetConnectionSingleton:
 
     def test_get_connection_returns_same_instance(self, monkeypatch):
         """Repeated calls return the same connection object."""
-        port, srv, _ = _start_echo_server()
+        port, _srv, _ = _start_echo_server()
         monkeypatch.setattr("fusion360_mcp.connection._connection", None)
 
         c1 = get_connection(port=port)
@@ -344,7 +344,7 @@ class TestMultipleCommands:
     """Verify sending multiple commands on one connection."""
 
     def test_sequential_commands(self):
-        port, srv, _ = _start_echo_server()
+        port, _srv, _ = _start_echo_server()
         conn = Fusion360Connection(host="127.0.0.1", port=port)
         conn.connect()
 
@@ -356,7 +356,7 @@ class TestMultipleCommands:
         conn.disconnect()
 
     def test_command_with_empty_params(self):
-        port, srv, _ = _start_echo_server()
+        port, _srv, _ = _start_echo_server()
         conn = Fusion360Connection(host="127.0.0.1", port=port)
         conn.connect()
         result = conn.send_command("ping")
@@ -365,7 +365,7 @@ class TestMultipleCommands:
         conn.disconnect()
 
     def test_command_with_nested_params(self):
-        port, srv, _ = _start_echo_server()
+        port, _srv, _ = _start_echo_server()
         conn = Fusion360Connection(host="127.0.0.1", port=port)
         conn.connect()
         params = {
@@ -507,7 +507,7 @@ class TestEndpointChange:
     different host/port."""
 
     def test_different_port_recreates_connection(self, monkeypatch):
-        port, srv, _ = _start_echo_server()
+        port, _srv, _ = _start_echo_server()
         monkeypatch.setattr("fusion360_mcp.connection._connection", None)
 
         c1 = get_connection(port=port)
@@ -518,7 +518,7 @@ class TestEndpointChange:
         c1.disconnect()
 
     def test_same_endpoint_reuses_connection(self, monkeypatch):
-        port, srv, _ = _start_echo_server()
+        port, _srv, _ = _start_echo_server()
         monkeypatch.setattr("fusion360_mcp.connection._connection", None)
 
         c1 = get_connection(port=port)
