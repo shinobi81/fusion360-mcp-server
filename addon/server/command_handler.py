@@ -345,7 +345,7 @@ class CommandHandler:
     def _root(self):
         return self._design().rootComponent
 
-    def new_document(self, name: str = None):
+    def new_document(self, name: str | None = None):
         """Create a design document and make it active.
 
         Fusion starts at the data tab with no active product, and every command
@@ -737,7 +737,7 @@ class CommandHandler:
             )
         return result
 
-    def create_sketch(self, plane: str = "xy", z_offset: float = None):
+    def create_sketch(self, plane: str = "xy", z_offset: float | None = None):
         root = self._root()
 
         if z_offset is not None and z_offset != 0:
@@ -958,10 +958,10 @@ class CommandHandler:
     def add_constraint(
         self,
         constraint_type: str,
-        entity_one: int = None,
-        entity_two: int = None,
-        symmetry_line: int = None,
-        sketch_name: str = None,
+        entity_one: int | None = None,
+        entity_two: int | None = None,
+        symmetry_line: int | None = None,
+        sketch_name: str | None = None,
     ):
         sketch = (
             self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
@@ -998,7 +998,7 @@ class CommandHandler:
 
     def auto_constrain(
         self,
-        sketch_name: str = None,
+        sketch_name: str | None = None,
         result_option: int = 1,
     ):
         """Auto-constrain a sketch using Fusion's AutoConstrain (Jan 2026+).
@@ -1047,9 +1047,9 @@ class CommandHandler:
         self,
         dimension_type: str,
         value: float,
-        entity_one: int = None,
-        entity_two: int = None,
-        sketch_name: str = None,
+        entity_one: int | None = None,
+        entity_two: int | None = None,
+        sketch_name: str | None = None,
     ):
         sketch = (
             self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
@@ -1100,7 +1100,7 @@ class CommandHandler:
         offset_distance: float,
         direction_x: float = 1,
         direction_y: float = 0,
-        sketch_name: str = None,
+        sketch_name: str | None = None,
     ):
         sketch = (
             self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
@@ -1115,7 +1115,11 @@ class CommandHandler:
         return {"sketch": sketch.name, "offset_distance": offset_distance}
 
     def trim_curve(
-        self, curve_index: int, point_x: float, point_y: float, sketch_name: str = None
+        self,
+        curve_index: int,
+        point_x: float,
+        point_y: float,
+        sketch_name: str | None = None,
     ):
         sketch = (
             self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
@@ -1127,7 +1131,11 @@ class CommandHandler:
         return {"sketch": sketch.name, "trimmed": True}
 
     def extend_curve(
-        self, curve_index: int, point_x: float, point_y: float, sketch_name: str = None
+        self,
+        curve_index: int,
+        point_x: float,
+        point_y: float,
+        sketch_name: str | None = None,
     ):
         sketch = (
             self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
@@ -1139,7 +1147,7 @@ class CommandHandler:
         return {"sketch": sketch.name, "extended": True}
 
     def project_geometry(
-        self, source_name: str, is_linked: bool = True, sketch_name: str = None
+        self, source_name: str, is_linked: bool = True, sketch_name: str | None = None
     ):
         sketch = (
             self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
@@ -1382,7 +1390,7 @@ class CommandHandler:
     def fillet(
         self,
         radius: float,
-        body_name: str = None,
+        body_name: str | None = None,
         body_index: int = 0,
         edge_selection: str = "all",
     ):
@@ -1405,7 +1413,7 @@ class CommandHandler:
     def chamfer(
         self,
         distance: float,
-        body_name: str = None,
+        body_name: str | None = None,
         body_index: int = 0,
         edge_selection: str = "all",
     ):
@@ -1430,7 +1438,7 @@ class CommandHandler:
     def shell(
         self,
         thickness: float,
-        body_name: str = None,
+        body_name: str | None = None,
         body_index: int = 0,
         face_selection: str = "top",
     ):
@@ -1475,7 +1483,9 @@ class CommandHandler:
             "faces_removed": faces.count,
         }
 
-    def mirror(self, mirror_plane: str, body_name: str = None, body_index: int = 0):
+    def mirror(
+        self, mirror_plane: str, body_name: str | None = None, body_index: int = 0
+    ):
         root = self._root()
         body = (
             self._body_by_name(body_name)
@@ -1495,7 +1505,7 @@ class CommandHandler:
         self,
         diameter: float,
         depth: float,
-        body_name: str = None,
+        body_name: str | None = None,
         body_index: int = 0,
         face_selection: str = "top",
         center_x: float = 0,
@@ -1634,7 +1644,7 @@ class CommandHandler:
         thread_class: str = "6g",
         is_modeled: bool = False,
         is_full_length: bool = True,
-        thread_length: float = None,
+        thread_length: float | None = None,
     ):
         root = self._root()
         body = self._body_by_name(body_name)
@@ -1681,7 +1691,7 @@ class CommandHandler:
         self,
         body_name: str,
         splitting_plane: str = "xy",
-        splitting_body: str = None,
+        splitting_body: str | None = None,
         extend_tool: bool = True,
     ):
         root = self._root()
@@ -1701,7 +1711,7 @@ class CommandHandler:
     def split_face(
         self,
         body_name: str,
-        face_indices: list = None,
+        face_indices: list | None = None,
         splitting_plane: str = "xy",
         extend_tool: bool = True,
     ):
@@ -1728,7 +1738,7 @@ class CommandHandler:
         body_name: str,
         distance: float,
         face_selection: str = "top",
-        face_indices: list = None,
+        face_indices: list | None = None,
     ):
         root = self._root()
         body = self._body_by_name(body_name)
@@ -1753,9 +1763,9 @@ class CommandHandler:
         self,
         body_name: str,
         scale: float,
-        scale_x: float = None,
-        scale_y: float = None,
-        scale_z: float = None,
+        scale_x: float | None = None,
+        scale_y: float | None = None,
+        scale_z: float | None = None,
         anchor_x: float = 0,
         anchor_y: float = 0,
         anchor_z: float = 0,
@@ -1829,7 +1839,7 @@ class CommandHandler:
         feat = move_feats.add(inp)
         return {"feature_name": feat.name, "body": body_name, "translation": [x, y, z]}
 
-    def export_stl(self, body_name: str, file_path: str = None):
+    def export_stl(self, body_name: str, file_path: str | None = None):
         body = self._body_by_name(body_name)
 
         if file_path is None:
@@ -1872,7 +1882,7 @@ class CommandHandler:
 
         return {"exported": True, "body": body_name, "file_path": file_path}
 
-    def export_step(self, body_name: str, file_path: str = None):
+    def export_step(self, body_name: str, file_path: str | None = None):
         body = self._body_by_name(body_name)
 
         if file_path is None:
@@ -1909,7 +1919,7 @@ class CommandHandler:
 
         return {"exported": True, "body": body_name, "file_path": file_path}
 
-    def export_f3d(self, file_path: str = None):
+    def export_f3d(self, file_path: str | None = None):
         design = self._design()
         doc_name = design.parentDocument.name
 
@@ -1983,11 +1993,11 @@ class CommandHandler:
 
     def export_view_sheet(
         self,
-        title: str = None,
+        title: str | None = None,
         notes: str = "",
-        views: list = None,
-        image_size: list = None,
-        output_dir: str = None,
+        views: list | None = None,
+        image_size: list | None = None,
+        output_dir: str | None = None,
     ):
         """Render canonical views as PNGs + a shareable HTML sheet.
 
@@ -2140,7 +2150,12 @@ class CommandHandler:
             "image_size": [width, height],
         }
 
-    def export(self, format: str = None, body_name: str = None, file_path: str = None):
+    def export(
+        self,
+        format: str | None = None,
+        body_name: str | None = None,
+        file_path: str | None = None,
+    ):
         """Unified export — dispatches to export_stl/export_step/export_f3d."""
         fmt = format.lower() if format else None
         if not fmt and file_path:
@@ -2164,7 +2179,7 @@ class CommandHandler:
         raise RuntimeError(f"Unknown format: {fmt}. Expected: stl, step, f3d")
 
     def import_mesh(
-        self, file_path: str, component_name: str = None, units: str = "mm"
+        self, file_path: str, component_name: str | None = None, units: str = "mm"
     ):
         """Import mesh file (STL/OBJ/3MF) as mesh body. Values returned in cm."""
         if not os.path.exists(file_path):
@@ -2499,7 +2514,7 @@ class CommandHandler:
         }
 
     def _undo_by_command(self, design):
-        """Direct designs have no timeline; issue Fusion's undo, admit it's unverified."""
+        """Direct designs have no timeline; undo is issued, unverified."""
         cmd_def = self.ui.commandDefinitions.itemById("UndoCommand")
         if cmd_def is None:
             raise RuntimeError(
@@ -2567,8 +2582,8 @@ class CommandHandler:
         origin_y: float = 0.0,
         origin_z: float = 0.0,
         plane: str = "xy",
-        component_name: str = None,
-        body_name: str = None,
+        component_name: str | None = None,
+        body_name: str | None = None,
     ):
         """Parametric box: sketch rectangle + dimensions + extrude.
 
@@ -2745,15 +2760,15 @@ class CommandHandler:
     def create_construction_plane(
         self,
         method: str,
-        plane: str = None,
-        offset: float = None,
-        angle: float = None,
-        edge_name: str = None,
-        plane_one: str = None,
-        plane_two: str = None,
-        point_one: list = None,
-        point_two: list = None,
-        point_three: list = None,
+        plane: str | None = None,
+        offset: float | None = None,
+        angle: float | None = None,
+        edge_name: str | None = None,
+        plane_one: str | None = None,
+        plane_two: str | None = None,
+        point_one: list | None = None,
+        point_two: list | None = None,
+        point_three: list | None = None,
     ):
         root = self._root()
         planes = root.constructionPlanes
@@ -2790,12 +2805,12 @@ class CommandHandler:
     def create_construction_axis(
         self,
         method: str,
-        point_one: list = None,
-        point_two: list = None,
-        plane_one: str = None,
-        plane_two: str = None,
-        body_name: str = None,
-        edge_index: int = None,
+        point_one: list | None = None,
+        point_two: list | None = None,
+        plane_one: str | None = None,
+        plane_two: str | None = None,
+        body_name: str | None = None,
+        edge_index: int | None = None,
     ):
         root = self._root()
         axes = root.constructionAxes
@@ -2824,7 +2839,7 @@ class CommandHandler:
 
     def create_ucs(
         self,
-        name: str = None,
+        name: str | None = None,
         x: float = 0,
         y: float = 0,
         z: float = 0,
@@ -2883,7 +2898,7 @@ class CommandHandler:
     # Assembly
     # ------------------------------------------------------------------
 
-    def create_component(self, name: str, parent_name: str = None):
+    def create_component(self, name: str, parent_name: str | None = None):
         root = self._root()
         parent = self._component_by_name(parent_name) if parent_name else root
 
@@ -2927,12 +2942,12 @@ class CommandHandler:
         component_one: str,
         component_two: str,
         joint_type: str = "rigid",
-        body_one: str = None,
-        face_one: int = None,
-        body_two: str = None,
-        face_two: int = None,
+        body_one: str | None = None,
+        face_one: int | None = None,
+        body_two: str | None = None,
+        face_two: int | None = None,
         axis: str = "x",
-        second_axis: str = None,
+        second_axis: str | None = None,
         quadrant: str = "middle",
         key_point: str = "end",
     ):
@@ -2974,12 +2989,14 @@ class CommandHandler:
         quadrant_attr = self._JOINT_QUADRANTS.get(quadrant)
         if quadrant_attr is None:
             raise RuntimeError(
-                f"Unknown quadrant: {quadrant}. Use one of {sorted(self._JOINT_QUADRANTS)}"
+                "Unknown quadrant: "
+                f"{quadrant}. Use one of {sorted(self._JOINT_QUADRANTS)}"
             )
         key_point_attr = self._JOINT_KEY_POINTS.get(key_point)
         if key_point_attr is None:
             raise RuntimeError(
-                f"Unknown key_point: {key_point}. Use one of {sorted(self._JOINT_KEY_POINTS)}"
+                "Unknown key_point: "
+                f"{key_point}. Use one of {sorted(self._JOINT_KEY_POINTS)}"
             )
         quadrant_value = getattr(adsk.fusion.JointQuadrantAngleTypes, quadrant_attr)
         key_point_value = getattr(adsk.fusion.JointKeyPointTypes, key_point_attr)
@@ -3080,12 +3097,12 @@ class CommandHandler:
         component_one: str,
         component_two: str,
         joint_type: str = "rigid",
-        body_one: str = None,
-        face_one: int = None,
-        body_two: str = None,
-        face_two: int = None,
+        body_one: str | None = None,
+        face_one: int | None = None,
+        body_two: str | None = None,
+        face_two: int | None = None,
         axis: str = "x",
-        second_axis: str = None,
+        second_axis: str | None = None,
         quadrant: str = "middle",
         key_point: str = "end",
     ):
@@ -3195,10 +3212,10 @@ class CommandHandler:
     def set_joint_value(
         self,
         value: float,
-        joint_name: str = None,
+        joint_name: str | None = None,
         joint_index: int = 0,
         units: str = "deg",
-        value_kind: str = None,
+        value_kind: str | None = None,
         as_built: bool = True,
     ):
         """Drive a joint to *value* and confirm Fusion kept it.
@@ -3496,7 +3513,7 @@ class CommandHandler:
         target_name: str,
         appearance_name: str,
         target_type: str = "body",
-        face_index: int = None,
+        face_index: int | None = None,
     ):
         # Find appearance in library — try both known library names
         app_lib = self.app.materialLibraries.itemByName("Fusion Appearance Library")
@@ -3604,7 +3621,9 @@ class CommandHandler:
             )
         return {"parameters": params, "count": len(params)}
 
-    def create_parameter(self, name: str, value: float, unit: str, comment: str = None):
+    def create_parameter(
+        self, name: str, value: float, unit: str, comment: str | None = None
+    ):
         # Validated before the design is looked up, deliberately: a bad argument
         # is wrong whichever document is open, so INVALID_INPUT outranks
         # NO_ACTIVE_DESIGN. Before either factory too -- "inf mm" is an
@@ -3763,7 +3782,7 @@ class CommandHandler:
         edge_index: int,
         height: float = 1.0,
         angle: float = 90,
-        bend_radius: float = None,
+        bend_radius: float | None = None,
     ):
         root = self._root()
         body = self._body_by_name(body_name)
@@ -3782,9 +3801,9 @@ class CommandHandler:
     def create_bend(
         self,
         body_name: str,
-        bend_line_sketch: str = None,
+        bend_line_sketch: str | None = None,
         angle: float = 90,
-        bend_radius: float = None,
+        bend_radius: float | None = None,
     ):
         root = self._root()
         body = self._body_by_name(body_name)
@@ -3813,7 +3832,7 @@ class CommandHandler:
         feat = flat_patterns.add(inp)
         return {"feature_name": feat.name}
 
-    def unfold(self, body_name: str, bend_indices: list = None):
+    def unfold(self, body_name: str, bend_indices: list | None = None):
         root = self._root()
         body = self._body_by_name(body_name)
 
@@ -3955,7 +3974,7 @@ class CommandHandler:
     def cam_create_setup(
         self,
         body_name: str,
-        name: str = None,
+        name: str | None = None,
         operation_type: str = "milling",
         stock_mode: str = "relative_box",
         stock_offset_sides: float = 0,
@@ -4054,13 +4073,13 @@ class CommandHandler:
         self,
         setup_name: str,
         strategy: str,
-        name: str = None,
-        tool_number: int = None,
-        tool_diameter: float = None,
-        stepdown: float = None,
-        stepover: float = None,
-        feed_rate: float = None,
-        spindle_speed: float = None,
+        name: str | None = None,
+        tool_number: int | None = None,
+        tool_diameter: float | None = None,
+        stepdown: float | None = None,
+        stepover: float | None = None,
+        feed_rate: float | None = None,
+        spindle_speed: float | None = None,
         coolant: str = "flood",
     ):
         cam = self._get_cam()
@@ -4134,8 +4153,8 @@ class CommandHandler:
 
     def cam_generate_toolpath(
         self,
-        setup_name: str = None,
-        operation_name: str = None,
+        setup_name: str | None = None,
+        operation_name: str | None = None,
         generate_all: bool = False,
     ):
         cam = self._get_cam()
@@ -4170,9 +4189,9 @@ class CommandHandler:
     def cam_post_process(
         self,
         setup_name: str,
-        operation_name: str = None,
+        operation_name: str | None = None,
         post_processor: str = "fanuc",
-        output_folder: str = None,
+        output_folder: str | None = None,
         output_units: str = "mm",
     ):
         cam = self._get_cam()
