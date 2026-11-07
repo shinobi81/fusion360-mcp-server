@@ -164,9 +164,9 @@ record why not — in the thread — before merging.
 
 | Tool                  | Description                           |
 | --------------------- | ------------------------------------- |
-| `extrude`             | Extrude a sketch profile              |
+| `extrude`             | Extrude a sketch profile; `target_body` limits a cut/join/intersect |
 | `revolve`             | Revolve a profile around an axis; `target_body` limits a cut/join/intersect |
-| `sweep`               | Sweep a profile along a path          |
+| `sweep`               | Sweep a profile along a path; `target_body` limits a cut/join/intersect |
 | `loft`                | Loft between two or more profiles; `target_body` limits a cut/join/intersect |
 | `fillet`              | Round edges: all/top/bottom/vertical, or `edge_indices` / `edge_points` |
 | `chamfer`             | Chamfer edges: same three selectors as `fillet` |
@@ -367,14 +367,14 @@ with `AXIS_OUT_OF_PLANE`. Read `axis_model_start` / `axis_model_end` to confirm 
 actually ran; if the origin was off the plane, the result also carries
 `axis_snapped_to_sketch_plane: true` and a `note`.
 
-**A `revolve` or `loft` cut hits every body the profile reaches — name `target_body`
-unless that is what you want.** Measured on Fusion 2706: a loft whose sections spanned the
-seam between two touching blocks cut **both**. Left out, the choice stays Fusion's own
-inference (`participantBodies` empty); `target_body` sets that property and nothing is
-copied or recreated. Naming a body that does not exist is refused as `BODY_NOT_FOUND`,
-and naming one with `operation="new_body"` is refused as `INVALID_INPUT`: a new body is
-the feature's output, so there is nothing to target. `extrude` and `sweep` do not take it
-yet.
+**An `extrude`, `revolve`, `sweep` or `loft` cut hits every body the profile reaches —
+name `target_body` unless that is what you want.** Measured on Fusion 2706: a loft whose
+sections spanned the seam between two touching blocks cut **both**. Left out, the choice
+stays Fusion's own inference (`participantBodies` empty); `target_body` sets that property
+and nothing is copied or recreated. Naming a body that does not exist is refused as
+`BODY_NOT_FOUND`, and naming one with `operation="new_body"` is refused as `INVALID_INPUT`:
+a new body is the feature's output, so there is nothing to target. A mistyped `operation`
+is refused before any of that, because it invalidates the whole call.
 
 **`undo` steps the timeline back, and tells you whether it could verify that.** On a
 parametric design it moves the timeline marker back one step, which the API performs

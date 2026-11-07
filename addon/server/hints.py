@@ -212,6 +212,17 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # Fusion's own refusal when a cut reaches no body — found live on a sweep
+        # whose profile sat outside every block. It classified as UNKNOWN with no
+        # hints, so the caller learned nothing about why nothing was cut.
+        r"no intersecting target body|NO_TARGET_SWEEP_BODY",
+        "INVALID_INPUT",
+        [
+            "The feature reaches no body, so there is nothing to cut.",
+            "Move the profile onto the body, or name target_body explicitly.",
+        ],
+    ),
+    (
         # The add-in refuses this itself, before a feature input exists: a new
         # body is the feature's output, so there is nothing to target. Without a
         # rule the generic "invalid input" hints pointed at units and enums for
