@@ -1034,10 +1034,18 @@ def _cam_create_setup(p: dict) -> dict:
         refusal = _non_finite_error(p.get(key, 0))
         if refusal is not None:
             return refusal
+    # The handler maps the string onto adsk.cam.OperationTypes and refuses
+    # anything it does not know, before an operation object exists.  Echoing an
+    # arbitrary string described a setup Fusion would never create.
+    operation_type = p.get("operation_type", "milling")
+    if operation_type not in ("milling", "turning", "cutting"):
+        return _mock_error(
+            f"Unknown operation_type '{operation_type}' — use milling/turning/cutting"
+        )
     return {
         "setup_name": p.get("name", "Setup1"),
         "body_name": p.get("body_name", "Body1"),
-        "operation_type": p.get("operation_type", "milling"),
+        "operation_type": operation_type,
         "stock_mode": p.get("stock_mode", "relative_box"),
     }
 

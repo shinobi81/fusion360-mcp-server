@@ -127,6 +127,19 @@ class TestBuildValueInput:
         parameter_units.build_value_input(huge, unit, from_string, from_real)
         assert calls == [("string", str(huge))]
 
+    @pytest.mark.parametrize("unit", ["", None])
+    def test_a_unitless_expression_is_passed_through_as_text(self, unit):
+        """A unitless parameter may be handed an expression, not only a number.
+
+        ``create_parameter(value="boxL")`` is legal, and ``createByReal`` would
+        refuse the string; it took that path until the real-or-expression
+        decision moved here.  Pinned so the next change to this function cannot
+        quietly route text into a factory that cannot carry it.
+        """
+        calls, from_string, from_real = self._factories()
+        parameter_units.build_value_input("boxL", unit, from_string, from_real)
+        assert calls == [("string", "boxL")]
+
 
 class TestRequireFinite:
     """A non-finite value has to be refused before it reaches Fusion.

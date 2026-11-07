@@ -119,8 +119,28 @@ _RULES: list[tuple[str, str, list[str]]] = [
         "INVALID_INPUT",
         [
             "An operation takes a tool, not a diameter; nothing was written.",
-            "Pick the tool with tool_number (or add it to the CAM tool library) "
-            "and set the diameter there.",
+            "Set the diameter on the tool itself, then pass tool_number.",
+        ],
+    ),
+    (
+        # The CAM entry point refuses this itself, before an operation exists.
+        # Without the rule it was UNKNOWN with no hints, so the caller could not
+        # learn the three words Fusion accepts.
+        r"unknown operation_type",
+        "INVALID_INPUT",
+        [
+            "That CAM operation type does not exist; nothing was written.",
+            "Use operation_type milling, turning or cutting.",
+        ],
+    ),
+    (
+        # Our CAM lookups quote the name they could not find.  Anchored on the
+        # quoted name so the BODY/SKETCH rules above keep their own wording.
+        r"(?:setup|operation)\s+['\"][^'\"]*['\"]\s+(?:not found|does not exist)",
+        "INVALID_INPUT",
+        [
+            "No CAM setup or operation in this design has that name.",
+            "cam_list_setups (then cam_list_operations) lists the real names.",
         ],
     ),
     (

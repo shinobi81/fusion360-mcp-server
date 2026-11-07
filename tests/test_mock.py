@@ -1024,6 +1024,27 @@ class TestMockCAM:
         assert result["error_kind"] == "INVALID_INPUT"
         assert any("tool_number" in hint for hint in result["hints"])
 
+    def test_cam_create_setup_refuses_an_unknown_operation_type(self):
+        """The handler refuses any type outside milling/turning/cutting.
+
+        Mock mode echoed the string back, so a setup that cannot exist read as
+        created — and the real refusal matched no hints rule.
+        """
+        result = mock_command(
+            "cam_create_setup", {"body_name": "Part1", "operation_type": "laser"}
+        )
+        assert result["ok"] is False
+        assert result["error_kind"] == "INVALID_INPUT"
+        assert any("milling" in hint for hint in result["hints"])
+
+    @pytest.mark.parametrize("operation_type", ["milling", "turning", "cutting"])
+    def test_cam_create_setup_accepts_the_three_types(self, operation_type):
+        result = mock_command(
+            "cam_create_setup", {"body_name": "Part1", "operation_type": operation_type}
+        )
+        assert result["ok"] is True
+        assert result["operation_type"] == operation_type
+
 
 class TestMockDesignTypeSafety:
     def test_get_design_type(self):
