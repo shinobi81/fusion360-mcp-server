@@ -271,6 +271,24 @@ def _draw_line(p: dict) -> dict:
     }
 
 
+def _target_body_error(p: dict) -> dict | None:
+    """The add-in's refusal of ``target_body`` on a new body, or None.
+
+    Mirrors ``CommandHandler._resolve_target_body``, wording included, because
+    the hint rule matches on it.  An unknown body name is *not* refused here:
+    mock mode has no design to look it up in.
+    """
+    if p.get("target_body") is None:
+        return None
+    if p.get("operation", "new_body") == "new_body":
+        return _mock_error(
+            "Invalid input: target_body applies only to cut, join or "
+            "intersect \u2014 new_body builds a body of its own, so there is "
+            "nothing to target"
+        )
+    return None
+
+
 def _extrude(p: dict) -> dict:
     return {
         "body_name": "Body_mock",
@@ -281,11 +299,15 @@ def _extrude(p: dict) -> dict:
 
 
 def _revolve(p: dict) -> dict:
+    refused = _target_body_error(p)
+    if refused is not None:
+        return refused
     return {
         "body_name": "Body_mock_revolve",
         "sketch": p.get("sketch_name") or "Sketch_mock_xy",
         "angle": p.get("angle", 360),
         "operation": p.get("operation", "new_body"),
+        "target_body": p.get("target_body"),
     }
 
 
@@ -416,10 +438,23 @@ def _sweep(p: dict) -> dict:
 
 
 def _loft(p: dict) -> dict:
+    refused = _target_body_error(p)
+    if refused is not None:
+        return refused
+    names = p.get("profile_sketch_names")
+    # The schema requires two, but a raw socket caller is not the schema. A
+    # *missing* list is left alone: real mode rejects that in dispatch before the
+    # handler sees it, so refusing here would invent a failure real mode cannot
+    # produce (and would break the deltas guard for every empty-params mock).
+    if names is not None and len(names) < 2:
+        return _mock_error(
+            f"Invalid input: a loft needs at least two profiles — got {len(names)}"
+        )
     return {
         "body_name": "Body_mock_loft",
-        "profile_sketch_names": p.get("profile_sketch_names", []),
+        "profile_sketch_names": names or [],
         "operation": p.get("operation", "new_body"),
+        "target_body": p.get("target_body"),
     }
 
 

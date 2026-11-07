@@ -442,6 +442,25 @@ class CommandHandler:
             raise RuntimeError(f"Unknown axis '{axis}' — use x, y, or z")
         return a
 
+    def _resolve_target_body(self, target_body: str | None, operation: str):
+        """The body an operation is restricted to, or None to let Fusion choose.
+
+        Both revolve and loft inputs carry ``participantBodies``, and leaving it
+        empty means "every body the profile reaches".  Measured on Fusion 2706:
+        a loft whose sections spanned the seam between two touching blocks cut
+        *both* of them, and a caller had no way to cut one.  Resolution happens
+        before any geometry is created, so a refusal leaves nothing behind.
+        """
+        if target_body is None:
+            return None
+        if operation == "new_body":
+            raise RuntimeError(
+                "Invalid input: target_body applies only to cut, join or "
+                "intersect — new_body builds a body of its own, so there is "
+                "nothing to target"
+            )
+        return self._body_by_name(target_body)
+
     @staticmethod
     def _operation_type(name: str):
         m = {
@@ -1486,6 +1505,7 @@ class CommandHandler:
         axis_direction_z: float = 0,
         operation: str = "new_body",
         sketch_name: str | None = None,
+        target_body: str | None = None,
     ):
         """Revolve the profile about ``axis_origin`` + ``axis_direction``.
 
@@ -1494,6 +1514,9 @@ class CommandHandler:
         origin; otherwise it is a construction line in the profile's sketch, so
         it must be coplanar with the profile — an axis leaving the sketch plane
         is refused rather than silently projected onto it.
+
+        ``target_body`` names the body a cut/join/intersect applies to; without
+        it Fusion applies the operation to every body the profile reaches.
         """
         root = self._root()
         sketch = (
@@ -1504,6 +1527,11 @@ class CommandHandler:
         # Read the frame before anything is created, so a failure here cannot
         # report an error for geometry that was already built.
         frame = self._sketch_frame(sketch)
+        # The operation first: a mistyped one invalidates any target, and a
+        # caller sent looking for a body would fix it and be refused again.
+        feature_operation = self._operation_type(operation)
+        # Before the axis line exists: a refused target must leave no geometry.
+        target = self._resolve_target_body(target_body, operation)
 
         axis_entity, axis_report = self._revolve_axis(
             root,
@@ -1519,12 +1547,12 @@ class CommandHandler:
         profile = sketch.profiles.item(profile_index)
 
         rev_feats = root.features.revolveFeatures
-        rev_input = rev_feats.createInput(
-            profile, axis_entity, self._operation_type(operation)
-        )
+        rev_input = rev_feats.createInput(profile, axis_entity, feature_operation)
 
         angle_val = adsk.core.ValueInput.createByString(f"{angle} deg")
         rev_input.setAngleExtent(False, angle_val)
+        if target is not None:
+            rev_input.participantBodies = [target]
 
         feat = rev_feats.add(rev_input)
         return {
@@ -1532,6 +1560,7 @@ class CommandHandler:
             "sketch": sketch.name,
             "angle": angle,
             "operation": operation,
+            "target_body": target_body,
             **axis_report,
         }
 
@@ -1656,10 +1685,28 @@ class CommandHandler:
             "operation": operation,
         }
 
-    def loft(self, profile_sketch_names: list, operation: str = "new_body"):
+    def loft(
+        self,
+        profile_sketch_names: list,
+        operation: str = "new_body",
+        target_body: str | None = None,
+    ):
+        """Loft through the first profile of each named sketch.
+
+        ``target_body`` names the body a cut/join/intersect applies to; without
+        it Fusion applies the operation to every body the loft reaches.
+        """
         root = self._root()
+        # The operation first: a mistyped one invalidates everything after it.
+        feature_operation = self._operation_type(operation)
+        if len(profile_sketch_names) < 2:
+            raise RuntimeError(
+                "Invalid input: a loft needs at least two profiles — got "
+                f"{len(profile_sketch_names)}"
+            )
+        target = self._resolve_target_body(target_body, operation)
         loft_feats = root.features.loftFeatures
-        loft_input = loft_feats.createInput(self._operation_type(operation))
+        loft_input = loft_feats.createInput(feature_operation)
 
         for sketch_name in profile_sketch_names:
             sketch = self._sketch_by_name(sketch_name)
@@ -1667,11 +1714,14 @@ class CommandHandler:
                 raise RuntimeError(f"No profiles in sketch '{sketch_name}'")
             loft_input.loftSections.add(sketch.profiles.item(0))
 
+        if target is not None:
+            loft_input.participantBodies = [target]
         feat = loft_feats.add(loft_input)
         return {
             "feature_name": feat.name,
             "operation": operation,
             "profile_count": len(profile_sketch_names),
+            "target_body": target_body,
         }
 
     def fillet(

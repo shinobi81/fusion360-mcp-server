@@ -147,6 +147,29 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # Every feature tool raises this itself for a mistyped ``operation``.
+        # Without a rule it classified as UNKNOWN with no hints, so a caller that
+        # wrote ``union`` was told nothing at all. Anchored on the quoted name so
+        # the CAM rule above keeps its own wording for ``operation_type``.
+        r"unknown (?:boolean )?(?:operation|op)\s+'",
+        "INVALID_INPUT",
+        [
+            "Fusion has no operation by that name; nothing was written.",
+            "Features take new_body/join/cut/intersect, booleans join/cut/intersect.",
+        ],
+    ),
+    (
+        # Fusion's own refusal ("A loft needs at least two sections") classified
+        # as UNKNOWN with no hints. The add-in checks first so the caller is told
+        # what a loft actually needs.
+        r"a loft needs at least two",
+        "INVALID_INPUT",
+        [
+            "A loft interpolates between sections; nothing was written.",
+            "Pass two or more profile_sketch_names, in loft order.",
+        ],
+    ),
+    (
         # A caller who passes two selectors has not decided which edges to round;
         # picking one silently would round whatever the other happened to match.
         r"only one of edge_indices|cannot be combined with edge_indices",
@@ -186,6 +209,18 @@ _RULES: list[tuple[str, str, list[str]]] = [
         [
             "No single edge matched that point; nothing was written.",
             "Call list_edges and select by edge_indices, or raise edge_tolerance.",
+        ],
+    ),
+    (
+        # The add-in refuses this itself, before a feature input exists: a new
+        # body is the feature's output, so there is nothing to target. Without a
+        # rule the generic "invalid input" hints pointed at units and enums for
+        # a parameter whose only mistake was its operation.
+        r"target_body applies only to",
+        "INVALID_INPUT",
+        [
+            "A new body is the feature's output, so there is nothing to target.",
+            "Pass target_body only with operation cut, join or intersect.",
         ],
     ),
     (

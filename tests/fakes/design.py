@@ -182,6 +182,10 @@ class FakeRevolveInput:
         self.operation = operation
         self.angle = None
         self.symmetric = None
+        # Empty means "let Fusion pick the bodies this operation touches" —
+        # and Fusion picks every body the profile reaches, which is how a cut
+        # land on a body the caller never named.  See FakeLoftInput too.
+        self.participantBodies: list = []
 
     def setAngleExtent(self, symmetric, angle) -> None:
         self.symmetric = symmetric
@@ -209,6 +213,38 @@ class FakeRevolveFeatures:
             raise RuntimeError("3 : invalid profile(s) for Revolve Feature")
         self.added.append(inp)
         return FakeFeature("Revolve1")
+
+
+class FakeLoftInput:
+    """``loftFeatures.createInput(operation)``: sections, then participants."""
+
+    def __init__(self, operation):
+        self.operation = operation
+        self.loftSections = FakeCollection()
+        self.participantBodies: list = []
+
+
+class FakeLoftFeatures:
+    """``features.loftFeatures``: what each loft was built from.
+
+    Fusion needs two sections at minimum; a loft with fewer is refused there,
+    so the fake refuses it too rather than recording a loft that cannot exist.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakeLoftInput] = []
+        self.added: list[FakeLoftInput] = []
+
+    def createInput(self, operation) -> FakeLoftInput:
+        created = FakeLoftInput(operation)
+        self.inputs.append(created)
+        return created
+
+    def add(self, inp: FakeLoftInput) -> FakeFeature:
+        if inp.loftSections.count < 2:
+            raise RuntimeError("2 : A loft needs at least two sections")
+        self.added.append(inp)
+        return FakeFeature(f"Loft{len(self.inputs)}")
 
 
 class FakeCombineInput:
@@ -363,6 +399,7 @@ class FakeFeatures:
         self.chamferFeatures = FakeChamferFeatures()
         self.extrudeFeatures = FakeExtrudeFeatures()
         self.sweepFeatures = FakeSweepFeatures()
+        self.loftFeatures = FakeLoftFeatures()
         self.combineFeatures = FakeCombineFeatures()
 
     def createPath(self, curve):

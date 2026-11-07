@@ -204,7 +204,9 @@ TOOLS: list[dict] = [
             "through the model origin uses Fusion's own construction axis, "
             "anything else becomes a construction line in the sketch, and an "
             "axis leaving the sketch plane is refused with AXIS_OUT_OF_PLANE. "
-            "The result reports axis_model_start/axis_model_end."
+            "The result reports axis_model_start/axis_model_end. A "
+            "cut/join/intersect applies to target_body when named; without it "
+            "Fusion applies the operation to every body the profile reaches."
         ),
         "inputSchema": {
             "type": "object",
@@ -263,6 +265,14 @@ TOOLS: list[dict] = [
                     "type": "string",
                     "enum": ["new_body", "join", "cut", "intersect"],
                     "default": "new_body",
+                },
+                "target_body": {
+                    "type": "string",
+                    "description": (
+                        "Body the cut/join/intersect applies to. Without it "
+                        "Fusion applies the operation to every body the "
+                        "profile reaches."
+                    ),
                 },
             },
         },
@@ -560,7 +570,11 @@ TOOLS: list[dict] = [
     {
         "name": "loft",
         "title": "Loft",
-        "description": "Loft between two or more sketch profiles",
+        "description": (
+            "Loft between two or more sketch profiles. A cut/join/intersect "
+            "applies to target_body when named; without it Fusion applies the "
+            "operation to every body the loft reaches."
+        ),
         "inputSchema": {
             "type": "object",
             "required": ["profile_sketch_names"],
@@ -578,6 +592,14 @@ TOOLS: list[dict] = [
                     "type": "string",
                     "enum": ["new_body", "join", "cut", "intersect"],
                     "default": "new_body",
+                },
+                "target_body": {
+                    "type": "string",
+                    "description": (
+                        "Body the cut/join/intersect applies to. Without it "
+                        "Fusion applies the operation to every body the loft "
+                        "reaches."
+                    ),
                 },
             },
         },
