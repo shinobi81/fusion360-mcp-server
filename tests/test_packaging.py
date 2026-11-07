@@ -5,8 +5,9 @@ Python :: 3.x`` classifiers, and in ``[tool.pyright]`` (a type checker cannot
 infer it).  Once, these disagreed for four years while nobody looked — the floor
 said 3.10 and 3.10 was already EOL.  These tests read the floor and fail the
 suite when any surface falls out of step with it, when a tool grows a second copy
-of the floor that can drift independently, or when a document quotes a lint rule
-set the configuration no longer has.
+of the floor that can drift independently, when a document quotes a lint rule set
+the configuration no longer has, or when CI stops running a gate those
+configurations describe.
 """
 
 from __future__ import annotations
@@ -123,8 +124,36 @@ def test_documents_quoting_the_ruff_selection_match_the_config():
     assert offenders == [], f"{'; '.join(offenders)}; pyproject configures {configured}"
 
 
+def _ci_lint_step_lines() -> list[str]:
+    """The lines of ci.yml's ``- name: Lint`` step, header to the next step.
+
+    Scoped to the step rather than to the file: a command that exists somewhere in
+    the workflow gates nothing when it sits in a job that does not run on a pull
+    request.  Returns ``[]`` when the step is gone, which the test reports.
+    """
+    lines = CI_WORKFLOW.read_text(encoding="utf-8").splitlines()
+    start = next(
+        (i for i, line in enumerate(lines) if line.strip() == "- name: Lint"),
+        None,
+    )
+    if start is None:
+        return []
+    indent = len(lines[start]) - len(lines[start].lstrip())
+    rest = lines[start + 1 :]
+    end = next(
+        (
+            offset
+            for offset, line in enumerate(rest)
+            if line.strip().startswith("- name:")
+            and len(line) - len(line.lstrip()) == indent
+        ),
+        len(rest),
+    )
+    return [lines[start], *rest[:end]]
+
+
 def _ci_ruff_commands() -> list[str]:
-    """The `uv run ruff …` shell lines CI actually executes.
+    """The `uv run ruff …` shell lines the `Lint` step executes.
 
     Deliberately a line scan, not a YAML parse: PyYAML is not a dependency, and
     each command is a single line inside the `run:` block.  Comment lines fail
@@ -132,7 +161,7 @@ def _ci_ruff_commands() -> list[str]:
     """
     return [
         stripped
-        for line in CI_WORKFLOW.read_text(encoding="utf-8").splitlines()
+        for line in _ci_lint_step_lines()
         if (stripped := line.strip()).startswith("uv run ruff")
     ]
 
@@ -145,17 +174,33 @@ def test_ci_gates_the_formatter_as_well_as_the_linter():
     notes, not a gate.  A claim no gate backs is the failure mode this whole
     module exists to prevent, so the gate itself is asserted here.
 
-    `addon/` must stay out of the formatter line: it runs on Fusion's embedded
-    interpreter, and finishing its one remaining reformat would move the add-in
-    to 3.14-only syntax.  If that exclusion is ever lifted, lift it here too.
+    `addon/` must stay out of the formatter line: it runs on Fusion's own
+    interpreter, which `requires-python` does not govern, and finishing its one
+    remaining reformat would move the add-in to 3.14-only syntax.  If that
+    exclusion is ever lifted, lift it here too.
+
+    The shape is pinned on purpose — one `Lint` step, one formatter command, the
+    three directories spelled out — because every looser form of this test was a
+    form that passed with the gate disarmed.
     """
+    block = _ci_lint_step_lines()
+    assert block, "ci.yml has no `- name: Lint` step"
+    disarmed = [
+        line.strip()
+        for line in block
+        if line.strip().startswith(("if:", "continue-on-error:"))
+    ]
+    assert disarmed == [], (
+        f"the Lint step must not be conditional or allowed to fail: {disarmed}"
+    )
     commands = _ci_ruff_commands()
     assert "uv run ruff check src/ tests/ fuzz/ addon/" in commands, (
-        f"ci.yml no longer lints src/ tests/ fuzz/ addon/ in one gate: {commands}"
+        f"the Lint step no longer lints all four directories in one gate: {commands}"
     )
     format_commands = [cmd for cmd in commands if "ruff format --check" in cmd]
     assert len(format_commands) == 1, (
-        f"ci.yml must run `ruff format --check` exactly once, found {format_commands}"
+        "the Lint step must run `ruff format --check` exactly once, "
+        f"found {format_commands}"
     )
     # Strip the fixed prefix rather than slicing by index: an index into a
     # command someone reorders is a guard that fails for the wrong reason.

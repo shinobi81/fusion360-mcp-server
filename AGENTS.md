@@ -36,10 +36,12 @@ npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"
 ```
 
 `addon/` is linted but not format-gated, and this file used to say to format
-`addon/server/command_handler.py` — don't. The add-in runs on Fusion's embedded
-interpreter, which `requires-python` does not govern, and at the 3.14 target ruff
-rewrites `except (TypeError, ValueError):` as `except TypeError, ValueError:`,
-which is PEP 758 syntax that interpreter may not parse.
+`addon/server/command_handler.py` by hand — don't. The add-in runs on Fusion's own
+interpreter, which `requires-python` does not govern, so a rewrite that is legal for
+this package is not safe to apply there. The directory's sole remaining drift is
+exactly that: ruff turns `except (TypeError, ValueError):` into
+`except TypeError, ValueError:`, PEP 758 syntax, because the target it infers is
+3.14.
 
 `uv run` **rebuilds the package** when `pyproject.toml` changes, and Windows will not let
 it replace `.venv/Scripts/fusion360-mcp-server.exe` while a running MCP server holds it
