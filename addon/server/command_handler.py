@@ -1422,9 +1422,12 @@ class CommandHandler:
         profile_index: int = 0,
         operation: str = "new_body",
         direction: str = "positive",
+        sketch_name: str | None = None,
     ):
         root = self._root()
-        sketch = self._last_sketch()
+        sketch = (
+            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
+        )
         if sketch.profiles.count == 0:
             raise RuntimeError("No profiles in sketch")
         profile = sketch.profiles.item(profile_index)
@@ -1440,6 +1443,7 @@ class CommandHandler:
         feat = ext_feats.add(ext_input)
         return {
             "feature_name": feat.name,
+            "sketch": sketch.name,
             "height": height,
             "operation": operation,
             "direction": direction,
@@ -1456,6 +1460,7 @@ class CommandHandler:
         axis_direction_y: float = 0,
         axis_direction_z: float = 0,
         operation: str = "new_body",
+        sketch_name: str | None = None,
     ):
         """Revolve the profile about ``axis_origin`` + ``axis_direction``.
 
@@ -1466,7 +1471,9 @@ class CommandHandler:
         is refused rather than silently projected onto it.
         """
         root = self._root()
-        sketch = self._last_sketch()
+        sketch = (
+            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
+        )
         if sketch.profiles.count == 0:
             raise RuntimeError("No profiles in sketch")
         # Read the frame before anything is created, so a failure here cannot
@@ -1497,6 +1504,7 @@ class CommandHandler:
         feat = rev_feats.add(rev_input)
         return {
             "feature_name": feat.name,
+            "sketch": sketch.name,
             "angle": angle,
             "operation": operation,
             **axis_report,
@@ -1595,9 +1603,12 @@ class CommandHandler:
         path_sketch_name: str,
         path_curve_index: int = 0,
         operation: str = "new_body",
+        sketch_name: str | None = None,
     ):
         root = self._root()
-        sketch = self._last_sketch()
+        sketch = (
+            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
+        )
         path_sketch = self._sketch_by_name(path_sketch_name)
 
         if sketch.profiles.count == 0:
@@ -1614,7 +1625,11 @@ class CommandHandler:
             profile, path, self._operation_type(operation)
         )
         feat = sweep_feats.add(sweep_input)
-        return {"feature_name": feat.name, "operation": operation}
+        return {
+            "feature_name": feat.name,
+            "sketch": sketch.name,
+            "operation": operation,
+        }
 
     def loft(self, profile_sketch_names: list, operation: str = "new_body"):
         root = self._root()

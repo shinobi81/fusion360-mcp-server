@@ -180,6 +180,23 @@ class FakeSketchCurves:
         other_curves = sum(1 for kind, _ in self._sketch.curve_calls if kind != "line")
         return len(self._sketch.lines) + other_curves
 
+    def __iter__(self):
+        """One entry per curve, matching ``count``.
+
+        Lines are the objects ``sketchLines`` builds — a rectangle is *four*
+        lines from one call, and ``add_constraint`` indexes this collection by
+        curve — and the other types are proxies standing for their recorded
+        calls.  Keeping ``len(list(...)) == count`` matters: a caller that takes
+        ``curves[index]`` must not see a different number than the one it read.
+        """
+        curves: list = list(self._sketch.lines)
+        curves.extend(
+            type("FakeCurve", (), {"kind": kind, "payload": payload})()
+            for kind, payload in self._sketch.curve_calls
+            if kind != "line"
+        )
+        return iter(curves)
+
 
 class FakeProfile:
     """A profile proxy: tied to the sketch state it was read from."""

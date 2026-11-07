@@ -166,7 +166,15 @@ TOOLS: list[dict] = [
             "required": ["height"],
             "properties": {
                 "height": {"type": "number"},
-                "profile_index": {"type": "integer", "default": 0, "minimum": 0},
+                "profile_index": {
+                    "type": "integer",
+                    "default": 0,
+                    "minimum": 0,
+                    "description": (
+                        "Index of the profile in the chosen sketch "
+                        "(sketch_name, default the most recent one)"
+                    ),
+                },
                 "operation": {
                     "type": "string",
                     "enum": ["new_body", "join", "cut", "intersect"],
@@ -177,6 +185,12 @@ TOOLS: list[dict] = [
                     "enum": ["positive", "negative", "symmetric"],
                     "default": "positive",
                 },
+                "sketch_name": {
+                    "type": "string",
+                    "description": (
+                        "Sketch holding the profile (default: the most recent sketch)"
+                    ),
+                },
             },
         },
     },
@@ -184,7 +198,7 @@ TOOLS: list[dict] = [
         "name": "revolve",
         "title": "Revolve",
         "description": (
-            "Revolve the most recent sketch's profile about an axis. "
+            "Revolve a sketch profile (default: the most recent sketch) about an axis. "
             "axis_origin and axis_direction are model space (cm). The axis "
             "must be coplanar with the profile: a world-aligned direction "
             "through the model origin uses Fusion's own construction axis, "
@@ -200,7 +214,16 @@ TOOLS: list[dict] = [
                 "profile_index": {
                     "type": "integer",
                     "default": 0,
-                    "description": "Index of the profile in the most recent sketch",
+                    "description": (
+                        "Index of the profile in the chosen sketch "
+                        "(sketch_name, default the most recent one)"
+                    ),
+                },
+                "sketch_name": {
+                    "type": "string",
+                    "description": (
+                        "Sketch holding the profile (default: the most recent sketch)"
+                    ),
                 },
                 "axis_origin_x": {
                     "type": "number",
@@ -498,12 +521,26 @@ TOOLS: list[dict] = [
             "type": "object",
             "required": ["profile_index", "path_sketch_name"],
             "properties": {
-                "profile_index": {"type": "integer", "default": 0, "minimum": 0},
+                "profile_index": {
+                    "type": "integer",
+                    "default": 0,
+                    "minimum": 0,
+                    "description": (
+                        "Index of the profile in the chosen sketch "
+                        "(sketch_name, default the most recent one)"
+                    ),
+                },
                 "path_sketch_name": {
                     "type": "string",
                     "description": "Name of the sketch containing the sweep path",
                 },
                 "path_curve_index": {"type": "integer", "default": 0, "minimum": 0},
+                "sketch_name": {
+                    "type": "string",
+                    "description": (
+                        "Sketch holding the profile (default: the most recent sketch)"
+                    ),
+                },
                 "operation": {
                     "type": "string",
                     "enum": ["new_body", "join", "cut", "intersect"],
