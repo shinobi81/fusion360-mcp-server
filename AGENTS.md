@@ -190,7 +190,7 @@ record why not — in the thread — before merging.
 | ------------------- | ------------------------------------------------ |
 | `move_body`         | Translate a body by (x, y, z)                    |
 | `rename_body`       | Rename a body (searches root and all components) |
-| `boolean_operation` | Join/cut/intersect two bodies; `keep_tool` keeps the tool  |
+| `boolean_operation` | Join/cut/intersect two bodies; `keep_tool` keeps the tool |
 | `delete_all`        | Clear the design                                 |
 | `undo`              | Step back one operation; see the note below      |
 
@@ -378,8 +378,9 @@ verified: false}` and must confirm with `get_scene_info` before undoing again.
 
 **Use the deltas to sanity-check without a render.** A `boolean_operation` that reports
 `body_count_delta: 0, mass_g_delta: 0` did nothing — follow up with `check_interference`
-before retrying. An `extrude` that shifts mass by three orders of magnitude is probably
-using the wrong units.
+before retrying. With `keep_tool=True` the body count does not drop even when the cut
+worked, so read `mass_g_delta` there. An `extrude` that shifts mass by three orders of
+magnitude is probably using the wrong units.
 
 **Use `render_view` sparingly** — it returns ~200KB–2MB of base64 image data. Render
 after a logical checkpoint (finished a feature, about to commit), not after every
