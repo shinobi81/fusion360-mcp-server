@@ -160,7 +160,11 @@ TOOLS: list[dict] = [
     {
         "name": "extrude",
         "title": "Extrude",
-        "description": "Extrude a sketch profile",
+        "description": (
+            "Extrude a sketch profile. A cut/join/intersect applies to "
+            "target_body when named; without it Fusion applies the operation "
+            "to every body the profile reaches."
+        ),
         "inputSchema": {
             "type": "object",
             "required": ["height"],
@@ -189,6 +193,14 @@ TOOLS: list[dict] = [
                     "type": "string",
                     "description": (
                         "Sketch holding the profile (default: the most recent sketch)"
+                    ),
+                },
+                "target_body": {
+                    "type": "string",
+                    "description": (
+                        "Body the cut/join/intersect applies to. Without it "
+                        "Fusion applies the operation to every body the "
+                        "profile reaches."
                     ),
                 },
             },
@@ -534,7 +546,11 @@ TOOLS: list[dict] = [
     {
         "name": "sweep",
         "title": "Sweep",
-        "description": "Sweep a sketch profile along a path (sketch curve)",
+        "description": (
+            "Sweep a sketch profile along a path (sketch curve). A "
+            "cut/join/intersect applies to target_body when named; without it "
+            "Fusion applies the operation to every body the sweep reaches."
+        ),
         "inputSchema": {
             "type": "object",
             "required": ["profile_index", "path_sketch_name"],
@@ -563,6 +579,14 @@ TOOLS: list[dict] = [
                     "type": "string",
                     "enum": ["new_body", "join", "cut", "intersect"],
                     "default": "new_body",
+                },
+                "target_body": {
+                    "type": "string",
+                    "description": (
+                        "Body the cut/join/intersect applies to. Without it "
+                        "Fusion applies the operation to every body the sweep "
+                        "reaches."
+                    ),
                 },
             },
         },
