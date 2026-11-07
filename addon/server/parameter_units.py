@@ -9,9 +9,12 @@ so the rules can be unit-tested without a running Fusion instance.
 from __future__ import annotations
 
 import math
+from typing import TypeVar
+
+_T = TypeVar("_T")
 
 
-def require_finite(value: float) -> float:
+def require_finite(value: _T) -> _T:
     """Return *value*, refusing infinity and NaN.
 
     ``json.loads`` accepts the non-standard ``Infinity`` and ``NaN`` literals,
@@ -23,6 +26,11 @@ def require_finite(value: float) -> float:
     else, no hints rule matches that, and the caller would see ``UNKNOWN`` with
     no hints for a value that used to work: ``create_parameter(value="2.5")``
     reaches Fusion as ``createByString("2.5 mm")``, which is fine.
+
+    The value is returned unchanged, so the signature is a ``TypeVar``: a caller
+    holding a ``float`` still has a ``float`` afterwards, and ``value_input_for``
+    -- which accepts any object because a string expression passes through -- is
+    not a type error at its own call site.
     """
     # An int is always finite, and converting an oversized one to float raises
     # OverflowError (a 401-digit JSON integer does exactly that), so ints skip
@@ -86,4 +94,11 @@ def build_value_input(value: float, unit: str | None, from_string, from_real):
     """
     if needs_expression(unit):
         return from_string(expression_for(value, unit))
-    return from_real(value)
+    # Unitless: a real is the honest form, except where a real cannot carry the
+    # number.  ``value_input_for`` already decides that -- a 401-digit JSON
+    # integer goes to the expression form -- and ``createByReal`` raises
+    # OverflowError on one, which matches no hints rule and surfaces as UNKNOWN.
+    # The value itself is passed through untouched; only the choice of factory
+    # comes from that decision.
+    kind, _ = value_input_for(value)
+    return from_real(value) if kind == "real" else from_string(str(value))

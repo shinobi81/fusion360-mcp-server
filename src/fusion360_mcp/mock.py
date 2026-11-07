@@ -1027,6 +1027,13 @@ def _unfold(p: dict) -> dict:
 
 
 def _cam_create_setup(p: dict) -> dict:
+    # The add-in calls require_finite on all three offsets before it looks up the
+    # body or touches the CAM tree, so mock mode must not report a setup Fusion
+    # would refuse.  Mock mode is where an agent develops the sequence it replays.
+    for key in ("stock_offset_sides", "stock_offset_top", "stock_offset_bottom"):
+        refusal = _non_finite_error(p.get(key, 0))
+        if refusal is not None:
+            return refusal
     return {
         "setup_name": p.get("name", "Setup1"),
         "body_name": p.get("body_name", "Body1"),
@@ -1036,11 +1043,24 @@ def _cam_create_setup(p: dict) -> dict:
 
 
 def _cam_create_operation(p: dict) -> dict:
+    # Same order as the handler: the numeric guards fire before the refusal, and
+    # the refusal fires before any operation exists.  tool_diameter is not a
+    # parameter at all -- tool geometry comes from the CAM tool library -- and
+    # echoing it back here described an operation Fusion would never create.
+    for key in ("tool_number", "stepdown", "stepover", "feed_rate", "spindle_speed"):
+        refusal = _non_finite_error(p.get(key))
+        if refusal is not None:
+            return refusal
+    if p.get("tool_diameter") is not None:
+        return _mock_error(
+            "tool_diameter cannot be set on an operation — tool geometry comes "
+            "from a tool in the CAM tool library. Select the tool via "
+            "tool_number instead."
+        )
     return {
         "setup_name": p.get("setup_name", "Setup1"),
         "operation_name": p.get("name", "Operation1"),
         "strategy": p.get("strategy", "2d_contour"),
-        "tool_diameter": p.get("tool_diameter", 0.6),
     }
 
 

@@ -113,6 +113,20 @@ class TestBuildValueInput:
         parameter_units.build_value_input(3, "cm", from_string, from_real)
         assert calls == [("string", "3 cm")]
 
+    @pytest.mark.parametrize("unit", ["", "   ", None])
+    def test_a_unitless_value_too_large_for_a_real_is_written_as_text(self, unit):
+        """A 401-digit JSON integer is finite but not representable as a double.
+
+        ``createByReal`` cannot carry it, and the OverflowError it raises matches
+        no hints rule, so the caller saw ``UNKNOWN`` with no hints.  The rule is
+        already written next door: ``value_input_for`` sends such an integer to
+        the expression form, because Fusion should judge the magnitude.
+        """
+        huge = 10**400
+        calls, from_string, from_real = self._factories()
+        parameter_units.build_value_input(huge, unit, from_string, from_real)
+        assert calls == [("string", str(huge))]
+
 
 class TestRequireFinite:
     """A non-finite value has to be refused before it reaches Fusion.

@@ -114,6 +114,19 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # The add-in refuses this itself, before any CAM object exists: tool
+        # geometry belongs to the tool library, so there is no diameter to set
+        # on an operation. Without a rule it classified as UNKNOWN with no
+        # hints, and the caller had no way to learn where the diameter lives.
+        r"tool_diameter cannot be set",
+        "INVALID_INPUT",
+        [
+            "An operation takes a tool, not a diameter; nothing was written.",
+            "Pick the tool with tool_number (or add it to the CAM tool library) "
+            "and set the diameter there.",
+        ],
+    ),
+    (
         r"invalid (argument|input|parameter)|bad (argument|input|value)",
         "INVALID_INPUT",
         [

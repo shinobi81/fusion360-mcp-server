@@ -57,6 +57,22 @@ class TestHintClassification:
         assert kind == expected_kind, f"'{msg}' classified as {kind}"
         assert hints, f"'{expected_kind}' should ship with at least one hint"
 
+    def test_tool_diameter_refusal_points_at_the_tool_library(self):
+        """The add-in refuses ``tool_diameter`` on an operation, and had no rule.
+
+        Without one it classified as ``UNKNOWN`` with no hints, so the caller was
+        told nothing about where tool geometry actually comes from — the failure
+        mode ``hints.py`` exists to stop shipping.
+        """
+        msg = (
+            "tool_diameter cannot be set on an operation — tool geometry comes "
+            "from a tool in the CAM tool library. Select the tool via "
+            "tool_number instead."
+        )
+        kind, hints = classify(msg)
+        assert kind == "INVALID_INPUT"
+        assert any("tool_number" in hint for hint in hints)
+
     @pytest.mark.parametrize(
         "msg",
         [
