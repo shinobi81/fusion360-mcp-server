@@ -835,6 +835,31 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "list_edges",
+        "title": "List Edges",
+        "description": (
+            "List a body's edges with index, endpoints, midpoint, length and curve "
+            "type; the indices are what fillet and chamfer take as edge_indices"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "body_name": {
+                    "type": "string",
+                    "description": "Body name (default: the body at body_index)",
+                },
+                "body_index": {"type": "integer", "default": 0},
+                "limit": {
+                    "type": "integer",
+                    "default": 200,
+                    "minimum": 1,
+                    "maximum": 5000,
+                    "description": "Maximum edges returned; count is the real total",
+                },
+            },
+        },
+    },
+    {
         "name": "list_components",
         "title": "List Components",
         "description": "List all components in the design",
@@ -2808,6 +2833,7 @@ TOOLS: list[dict] = [
 _READ_ONLY = {
     "get_scene_info",
     "get_object_info",
+    "list_edges",
     "get_bounding_box",
     "list_components",
     "get_parameters",
@@ -2828,6 +2854,7 @@ _IDEMPOTENT = {
     "ping",
     "get_scene_info",
     "get_object_info",
+    "list_edges",
     "get_bounding_box",
     "list_components",
     "get_parameters",

@@ -166,6 +166,40 @@ def _get_object_info(p: dict) -> dict:
     }
 
 
+def _list_edges(p: dict) -> dict:
+    """Two edges of a plate, in the shape the handler returns.
+
+    ``limit`` is honoured here too: a mock that ignored it would report a
+    truncated list as complete, which is the one thing the real response exists
+    to make impossible.
+    """
+    edges = [
+        {
+            "index": 0,
+            "start": [0.0, 0.0, 0.0],
+            "end": [4.0, 0.0, 0.0],
+            "midpoint": [2.0, 0.0, 0.0],
+            "length": 4.0,
+            "curve_type": "Line3D",
+        },
+        {
+            "index": 1,
+            "start": [4.0, 0.0, 0.0],
+            "end": [4.0, 2.0, 0.0],
+            "midpoint": [4.0, 1.0, 0.0],
+            "length": 2.0,
+            "curve_type": "Line3D",
+        },
+    ]
+    limit = max(1, int(p.get("limit") or 200))
+    return {
+        "body_name": p.get("body_name") or "Body1",
+        "count": len(edges),
+        "truncated": len(edges) > limit,
+        "edges": edges[:limit],
+    }
+
+
 def _get_bounding_box(p: dict) -> dict:
     name = p.get("name", "Unknown")
     return {
@@ -1180,6 +1214,7 @@ _DISPATCH: dict[str, Any] = {
     "new_document": _new_document,
     "get_scene_info": _get_scene_info,
     "get_object_info": _get_object_info,
+    "list_edges": _list_edges,
     "get_bounding_box": _get_bounding_box,
     "create_sketch": _create_sketch,
     "draw_rectangle": _draw_rectangle,

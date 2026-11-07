@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import pytest
 
+from fusion360_mcp.hints import classify
+from fusion360_mcp.mock import mock_command
 from tests.fakes.bodies import body_with_edges
 from tests.fakes.design import FakeDesign
 
@@ -111,3 +113,79 @@ def test_a_body_with_no_edges_refuses_rather_than_selecting_nothing(select):
     with pytest.raises(RuntimeError) as raised:
         select([], "all")
     assert "No edges matched" in str(raised.value)
+
+
+# ── list_edges ────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def list_body(bound_handler):
+    """``list_body(pairs)`` -> a handler bound to that body, and the body."""
+
+    def factory(pairs, curve_type="Line3D"):
+        body = body_with_edges("Plate", pairs, curve_type=curve_type)
+        return bound_handler(FakeDesign(bodies=[body])), body
+
+    return factory
+
+
+def test_list_edges_reports_every_edge_in_index_order(list_body):
+    handler, _ = list_body(
+        [((0, 0, 0), (4, 0, 0)), ((4, 0, 0), (4, 0, 2))],
+    )
+    result = handler.list_edges(body_name="Plate")
+    assert result["body_name"] == "Plate"
+    assert result["count"] == 2
+    assert result["truncated"] is False
+    assert [edge["index"] for edge in result["edges"]] == [0, 1]
+
+
+def test_list_edges_reports_the_geometry_of_each_edge(list_body):
+    """Midpoints are what an agent uses to pick an edge by eye."""
+    handler, _ = list_body([((0, 0, 2), (4, 0, 2))])
+    edge = handler.list_edges(body_name="Plate")["edges"][0]
+    assert edge["start"] == [0.0, 0.0, 2.0]
+    assert edge["end"] == [4.0, 0.0, 2.0]
+    assert edge["midpoint"] == [2.0, 0.0, 2.0]
+    assert edge["length"] == pytest.approx(4.0)
+    assert edge["curve_type"] == "Line3D"
+
+
+def test_list_edges_truncates_but_reports_the_real_count(list_body):
+    """``count`` is the body's count, not the length of the list handed back."""
+    handler, _ = list_body(
+        [((0, 0, 0), (1, 0, 0)), ((0, 0, 1), (1, 0, 1)), ((0, 0, 2), (1, 0, 2))],
+    )
+    result = handler.list_edges(body_name="Plate", limit=2)
+    assert result["count"] == 3
+    assert result["truncated"] is True
+    assert len(result["edges"]) == 2
+
+
+def test_list_edges_of_a_body_with_no_edges_is_empty_not_an_error(list_body):
+    handler, _ = list_body([])
+    result = handler.list_edges(body_name="Plate")
+    assert result["count"] == 0
+    assert result["edges"] == []
+    assert result["truncated"] is False
+
+
+def test_list_edges_names_an_unknown_body(list_body):
+    handler, _ = list_body([((0, 0, 0), (1, 0, 0))])
+    with pytest.raises(RuntimeError) as raised:
+        handler.list_edges(body_name="Nope")
+    assert classify(raised.value)[0] == "BODY_NOT_FOUND"
+
+
+def test_mock_list_edges_returns_the_same_shape():
+    result = mock_command("list_edges", {"body_name": "Plate"})
+    assert result["body_name"] == "Plate"
+    assert result["edges"]
+    assert set(result["edges"][0]) == {
+        "index",
+        "start",
+        "end",
+        "midpoint",
+        "length",
+        "curve_type",
+    }

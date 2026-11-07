@@ -1,6 +1,6 @@
 # Tools
 
-All 96 tools this server exposes, grouped by what they do. Every tool returns the same
+All 97 tools this server exposes, grouped by what they do. Every tool returns the same
 envelope — `ok`, plus tool-specific fields, plus `deltas` for mutations — and failures come
 back as data (`error_kind`, `hints`, `traceback`) rather than exceptions.
 
@@ -15,6 +15,7 @@ verified on **Fusion 2706.1.17**.
 | `ping`             | Health check (instant, no Fusion API)                                                                       |
 | `get_scene_info`   | Design name, bodies, sketches, features, camera                                                             |
 | `get_object_info`  | Detailed info about a named body or sketch                                                                  |
+| `list_edges`      | A body's edges: index, endpoints, midpoint, length, curve type                      |
 | `get_bounding_box` | Axis-aligned bbox (min/max/size/center) for body or component; unions all bodies when called on a component |
 | `list_components`  | List all components in the design                                                                           |
 

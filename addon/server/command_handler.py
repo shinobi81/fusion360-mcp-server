@@ -121,6 +121,7 @@ class CommandHandler:
                 "new_document": self.new_document,
                 "get_scene_info": self.get_scene_info,
                 "get_object_info": self.get_object_info,
+                "list_edges": self.list_edges,
                 "get_bounding_box": self.get_bounding_box,
                 "list_components": self.list_components,
                 # sketch
@@ -618,6 +619,53 @@ class CommandHandler:
                 }
 
         return {"found": False, "name": name}
+
+    def list_edges(
+        self,
+        body_name: str | None = None,
+        body_index: int = 0,
+        limit: int = 200,
+    ):
+        """Every edge of a body, with the geometry needed to choose one.
+
+        ``count`` is the body's real edge count and ``truncated`` says whether
+        ``limit`` clipped the list — a body with thousands of edges must not
+        flood a caller's context, but a caller that reads ``count`` as "how many
+        I got back" would plan against a shorter list than the body has.
+        """
+        root = self._root()
+        body = (
+            self._body_by_name(body_name)
+            if body_name
+            else root.bRepBodies.item(body_index)
+        )
+        count = body.edges.count
+        limit = max(1, int(limit))
+
+        def coords(point):
+            return [point.x, point.y, point.z]
+
+        edges = []
+        for index in range(min(count, limit)):
+            edge = body.edges.item(index)
+            edges.append(
+                {
+                    "index": index,
+                    "start": coords(edge.startVertex.geometry),
+                    "end": coords(edge.endVertex.geometry),
+                    "midpoint": coords(edge.pointOnEdge),
+                    "length": edge.length,
+                    # The class name (``Line3D``, ``Circle3D``) rather than an
+                    # enum number: an agent reads it without a lookup table.
+                    "curve_type": type(edge.geometry).__name__,
+                }
+            )
+        return {
+            "body_name": body.name,
+            "count": count,
+            "truncated": len(edges) < count,
+            "edges": edges,
+        }
 
     def list_components(self):
         root = self._root()
