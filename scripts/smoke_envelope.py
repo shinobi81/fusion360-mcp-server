@@ -2,6 +2,8 @@
 
 import json
 
+from mcp import types
+
 from fusion360_mcp.mock import mock_command
 from fusion360_mcp.server import _format_result
 
@@ -23,17 +25,19 @@ def dump(label, name, params=None):
 
     formatted = _format_result(name, result)
     print("\nFORMATTED (what the agent sees):")
-    if hasattr(formatted, "content"):
-        is_err = getattr(formatted, "isError", False)
-        print(f"[isError={is_err}]")
-        for block in formatted.content:
-            print(block.text)
+    # ``_format_result`` returns either an error's CallToolResult or a plain list
+    # of blocks; isinstance narrows both the container and each block, which is
+    # what the previous hasattr/type-string dance was doing by hand.
+    if isinstance(formatted, types.CallToolResult):
+        print(f"[isError={formatted.isError}]")
+        blocks = formatted.content
     else:
-        for block in formatted:
-            if block.type == "text":
-                print(block.text)
-            elif block.type == "image":
-                print(f"<IMAGE BLOCK: {block.mimeType}, {len(block.data)} b64 chars>")
+        blocks = formatted
+    for block in blocks:
+        if isinstance(block, types.TextContent):
+            print(block.text)
+        elif isinstance(block, types.ImageContent):
+            print(f"<IMAGE BLOCK: {block.mimeType}, {len(block.data)} b64 chars>")
 
 
 dump("1. SUCCESS with deltas (extrude)", "extrude", {"height": 3.0})

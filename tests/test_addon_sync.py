@@ -52,6 +52,8 @@ def _extract_class_attr_set(path: Path, class_name: str, attr: str) -> set[str]:
             if not any(isinstance(t, ast.Name) and t.id == attr for t in targets):
                 continue
             value = stmt.value
+            if value is None:  # an annotation with no value assigns nothing
+                continue
             # frozenset({...})  →  unwrap the set literal arg
             if (
                 isinstance(value, ast.Call)
