@@ -508,7 +508,6 @@ def _create_hole(p: dict) -> dict:
         "diameter": diameter,
         "depth": p.get("depth", 1),
         "actual_diameter": diameter,
-        "cut_bodies": [body],
         "resolved_center": [p.get("center_x", 0), p.get("center_y", 0), 0.0],
     }
 

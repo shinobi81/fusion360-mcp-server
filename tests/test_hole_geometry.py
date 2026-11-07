@@ -165,6 +165,19 @@ class TestCreateHoleCallSite:
             if isinstance(v, ast.List)
         ] == [["body"]], "participantBodies must be limited to the target body"
 
+    def test_the_response_does_not_read_feat_bodies(self):
+        # ``Feature.bodies`` reports the participants this function set, not what
+        # was cut — measured on 2706: a cut naming a body it never reaches still
+        # reports that body. Any response field derived from it echoes its own
+        # input, so ``cut_bodies`` was removed; this keeps it gone, whatever it
+        # is called next time.
+        read = [
+            node
+            for node in ast.walk(_create_hole_ast())
+            if isinstance(node, ast.Attribute) and node.attr == "bodies"
+        ]
+        assert read == [], "create_hole must not derive a result from Feature.bodies"
+
     def test_hole_centre_is_converted_from_model_space(self):
         # Feeding model XY straight into the face's sketch space put the hole
         # somewhere else entirely; the point must go through the conversion.
