@@ -211,6 +211,33 @@ class FakeRevolveFeatures:
         return FakeFeature("Revolve1")
 
 
+class FakeCombineInput:
+    """``combineFeatures.createInput(target, tools)``: records what it was told."""
+
+    def __init__(self, target, tools):
+        self.targetBody = target
+        self.toolBodies = list(tools)
+        self.operation = None
+        self.isKeepToolBodies = False
+
+
+class FakeCombineFeatures:
+    """``features.combineFeatures``: the bool a boolean was built with."""
+
+    def __init__(self):
+        self.inputs: list[FakeCombineInput] = []
+        self.added: list[FakeCombineInput] = []
+
+    def createInput(self, target, tools) -> FakeCombineInput:
+        inp = FakeCombineInput(target, tools)
+        self.inputs.append(inp)
+        return inp
+
+    def add(self, inp):
+        self.added.append(inp)
+        return type("FakeFeature", (), {"name": f"Combine{len(self.inputs)}"})()
+
+
 class FakeExtrudeInput:
     """``extrudeFeatures.createInput(profile, operation)`` and its two extents."""
 
@@ -336,6 +363,7 @@ class FakeFeatures:
         self.chamferFeatures = FakeChamferFeatures()
         self.extrudeFeatures = FakeExtrudeFeatures()
         self.sweepFeatures = FakeSweepFeatures()
+        self.combineFeatures = FakeCombineFeatures()
 
     def createPath(self, curve):
         """``features.createPath``: a sweep needs a Path around the curve."""

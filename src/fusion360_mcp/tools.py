@@ -467,6 +467,14 @@ TOOLS: list[dict] = [
                     "enum": ["join", "cut", "intersect"],
                     "default": "join",
                 },
+                "keep_tool": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": (
+                        "Keep the tool body after combining (Fusion consumes it "
+                        "by default)"
+                    ),
+                },
             },
         },
     },

@@ -362,6 +362,9 @@ def _boolean_operation(p: dict) -> dict:
         "target_body": p.get("target_body", "Body1"),
         "tool_body": p.get("tool_body", "Body2"),
         "operation": p.get("operation", "join"),
+        # Echoed raw, like the add-in: coercing here would report ``True`` for a
+        # malformed ``"false"`` that Fusion would reject.
+        "keep_tool": p.get("keep_tool", False),
         "result_body": p.get("target_body", "Body1"),
     }
 
