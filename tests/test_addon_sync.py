@@ -44,14 +44,13 @@ def _extract_class_attr_set(path: Path, class_name: str, attr: str) -> set[str]:
             # the same invariant; skipping the annotated form would let the table
             # drift out of this guard with a misleading "not found" error.
             if isinstance(stmt, ast.Assign):
-                targets = stmt.targets
+                targets, value = stmt.targets, stmt.value
             elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
-                targets = [stmt.target]
+                targets, value = [stmt.target], stmt.value
             else:
                 continue
             if not any(isinstance(t, ast.Name) and t.id == attr for t in targets):
                 continue
-            value = stmt.value
             # frozenset({...})  →  unwrap the set literal arg
             if (
                 isinstance(value, ast.Call)
