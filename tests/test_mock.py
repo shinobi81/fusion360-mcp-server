@@ -986,6 +986,65 @@ class TestMockCAM:
         assert "tool_diameter" in result
         assert "has_toolpath" in result
 
+    @pytest.mark.parametrize(
+        "field", ["stock_offset_sides", "stock_offset_top", "stock_offset_bottom"]
+    )
+    def test_cam_create_setup_refuses_a_non_finite_stock_offset(self, field):
+        """The add-in calls ``require_finite`` on all three before any object exists.
+
+        Mock mode accepting ``inf`` reported a setup Fusion would never create —
+        and mock mode is where an agent develops the sequence it will replay.
+        """
+        result = mock_command(
+            "cam_create_setup", {"body_name": "Part1", field: float("inf")}
+        )
+        assert result["ok"] is False
+        assert result["error_kind"] == "INVALID_INPUT"
+        assert result["hints"], "a refusal without a next step is a dead end"
+
+    @pytest.mark.parametrize(
+        "field",
+        ["tool_number", "stepdown", "stepover", "feed_rate", "spindle_speed"],
+    )
+    def test_cam_create_operation_refuses_a_non_finite_number(self, field):
+        params = {"strategy": "2d_contour", field: float("inf")}
+        result = mock_command("cam_create_operation", params)
+        assert result["ok"] is False
+        assert result["error_kind"] == "INVALID_INPUT"
+
+    def test_cam_create_operation_refuses_tool_diameter(self):
+        """The add-in refuses ``tool_diameter`` outright: tool geometry is library-side.
+
+        That refusal used to classify as ``UNKNOWN`` with no hints — a new failure
+        mode without a rule, which is what ``hints.py`` exists to prevent.
+        """
+        params = {"strategy": "2d_contour", "tool_diameter": 0.6}
+        result = mock_command("cam_create_operation", params)
+        assert result["ok"] is False
+        assert result["error_kind"] == "INVALID_INPUT"
+        assert any("tool_number" in hint for hint in result["hints"])
+
+    def test_cam_create_setup_refuses_an_unknown_operation_type(self):
+        """The handler refuses any type outside milling/turning/cutting.
+
+        Mock mode echoed the string back, so a setup that cannot exist read as
+        created — and the real refusal matched no hints rule.
+        """
+        result = mock_command(
+            "cam_create_setup", {"body_name": "Part1", "operation_type": "laser"}
+        )
+        assert result["ok"] is False
+        assert result["error_kind"] == "INVALID_INPUT"
+        assert any("milling" in hint for hint in result["hints"])
+
+    @pytest.mark.parametrize("operation_type", ["milling", "turning", "cutting"])
+    def test_cam_create_setup_accepts_the_three_types(self, operation_type):
+        result = mock_command(
+            "cam_create_setup", {"body_name": "Part1", "operation_type": operation_type}
+        )
+        assert result["ok"] is True
+        assert result["operation_type"] == operation_type
+
 
 class TestMockDesignTypeSafety:
     def test_get_design_type(self):

@@ -57,6 +57,51 @@ class TestHintClassification:
         assert kind == expected_kind, f"'{msg}' classified as {kind}"
         assert hints, f"'{expected_kind}' should ship with at least one hint"
 
+    def test_tool_diameter_refusal_points_at_the_tool_library(self):
+        """The add-in refuses ``tool_diameter`` on an operation, and had no rule.
+
+        Without one it classified as ``UNKNOWN`` with no hints, so the caller was
+        told nothing about where tool geometry actually comes from — the failure
+        mode ``hints.py`` exists to stop shipping.
+        """
+        msg = (
+            "tool_diameter cannot be set on an operation — tool geometry comes "
+            "from a tool in the CAM tool library. Select the tool via "
+            "tool_number instead."
+        )
+        kind, hints = classify(msg)
+        assert kind == "INVALID_INPUT"
+        assert any("tool_number" in hint for hint in hints)
+
+    @pytest.mark.parametrize(
+        ("msg", "expected_kind"),
+        [
+            # The CAM entry points raise these themselves, before any object
+            # exists. Both were UNKNOWN with no hints — the caller was told
+            # nothing about the three accepted operation types, and nothing
+            # about which call lists the setups that do exist.
+            (
+                "Unknown operation_type 'laser' — use milling/turning/cutting",
+                "INVALID_INPUT",
+            ),
+            ("Setup 'Nope' not found", "INVALID_INPUT"),
+            ("Operation 'Rough1' not found in setup 'Setup1'", "INVALID_INPUT"),
+        ],
+    )
+    def test_cam_lookup_and_enum_refusals_are_classified(self, msg, expected_kind):
+        kind, hints = classify(msg)
+        assert kind == expected_kind, f"'{msg}' classified as {kind}"
+        assert hints, f"'{msg}' must ship with a next step"
+
+    def test_the_cam_rules_do_not_swallow_the_body_and_sketch_rules(self):
+        """A body named after a sketch must still be BODY_NOT_FOUND.
+
+        The new rule anchors on a quoted name after ``setup``/``operation``, so
+        adding it must not re-order the long-standing precedence below it.
+        """
+        assert classify("Body 'Sketch1' not found")[0] == "BODY_NOT_FOUND"
+        assert classify("Sketch 'Body1' not found")[0] == "SKETCH_NOT_FOUND"
+
     @pytest.mark.parametrize(
         "msg",
         [
