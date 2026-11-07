@@ -41,7 +41,8 @@ interpreter, which `requires-python` does not govern, so a rewrite that is legal
 this package is not safe to apply there. The directory's sole remaining drift is
 exactly that: ruff turns `except (TypeError, ValueError):` into
 `except TypeError, ValueError:`, PEP 758 syntax, because the target it infers is
-3.14.
+3.14. `tests/test_addon_sources.py` reads the add-in's tokens and fails the suite if
+that form appears, so a formatter you did not ask for cannot reach `main`.
 
 `uv run` **rebuilds the package** when `pyproject.toml` changes, and Windows will not let
 it replace `.venv/Scripts/fusion360-mcp-server.exe` while a running MCP server holds it
