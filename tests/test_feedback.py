@@ -57,6 +57,29 @@ class TestHintClassification:
         assert kind == expected_kind, f"'{msg}' classified as {kind}"
         assert hints, f"'{expected_kind}' should ship with at least one hint"
 
+    @pytest.mark.parametrize(
+        "message",
+        [
+            # Every feature tool raises this itself for a mistyped ``operation``.
+            # Without a rule it was UNKNOWN with no hints, so a caller that wrote
+            # ``union`` was told nothing at all — the failure mode this table
+            # exists to stop shipping. ``Unknown operation_type`` belongs to the
+            # CAM rule above and must keep its own wording.
+            "Unknown operation 'union' — use new_body/join/cut/intersect",
+            "Unknown boolean op 'union' — use join/cut/intersect",
+        ],
+    )
+    def test_a_mistyped_operation_names_the_ones_that_exist(self, message):
+        kind, hints = classify(message)
+        assert kind == "INVALID_INPUT"
+        assert any("join" in hint for hint in hints)
+
+    def test_the_operation_rule_does_not_swallow_the_cam_operation_type_rule(self):
+        """``operation_type`` is a CAM command parameter, not a mistyped enum."""
+        kind, hints = classify("Unknown operation_type 'laser' — use milling")
+        assert kind == "INVALID_INPUT"
+        assert any("milling" in hint for hint in hints)
+
     def test_tool_diameter_refusal_points_at_the_tool_library(self):
         """The add-in refuses ``tool_diameter`` on an operation, and had no rule.
 

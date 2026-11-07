@@ -55,14 +55,26 @@ The same applies to the profile side of the features: `extrude`, `revolve` and `
 `sketch_name` for the sketch that holds the profile, so a part whose profiles live in two
 sketches need not be built in creation order. `sweep` also names its path sketch, separately.
 
+### Choosing which body a cut touches
+
+A `revolve` or `loft` with `operation` of `cut`, `join` or `intersect` applies to **every
+body the profile reaches** unless `target_body` names one. A loft across the seam between
+two touching blocks cuts both; on a part with several bodies that is rarely what was meant.
+`target_body` sets Fusion's own `participantBodies`, so nothing is copied or recreated.
+Left out, the choice stays Fusion's, which is the behaviour without the parameter.
+Naming a body the profile never reaches is not an error: Fusion builds the feature and
+changes nothing, so the call reports `ok: true` with `mass_g_delta: 0`. Read the delta,
+not the status, when a cut looks like it did nothing.
+`extrude` and `sweep` do not take it yet.
+
 ## Features
 
 | Tool                  | Description                           |
 | --------------------- | ------------------------------------- |
 | `extrude`             | Extrude a sketch profile              |
-| `revolve`             | Revolve about a model-space axis (must be coplanar with the profile) |
+| `revolve`             | Revolve about a model-space axis (must be coplanar with the profile); `target_body` limits a cut/join/intersect |
 | `sweep`               | Sweep a profile along a path          |
-| `loft`                | Loft between two or more profiles     |
+| `loft`                | Loft between two or more profiles; `target_body` limits a cut/join/intersect |
 | `fillet`              | Round edges: all/top/bottom/vertical, or `edge_indices` / `edge_points` |
 | `chamfer`             | Chamfer edges: same three selectors as `fillet` |
 | `shell`               | Hollow out a body                     |
