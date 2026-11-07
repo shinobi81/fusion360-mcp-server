@@ -43,16 +43,29 @@ class FakeEdgeEvaluator:
     def __init__(self, edge: FakeEdge):
         self._edge = edge
 
-    def getPointAtParameter(self, t: float):
-        """Straight-line interpolation between the vertices.
+    #: Fusion's edge parameters are the edge's own, not 0..1 — measured on a
+    #: straight edge in Fusion 2706, which reported exactly this range.
+    ranges = (-1.0, 0.0)
 
-        Fusion returns a Point3D for a curve that has one; a fake edge is always
-        straight, and the handler only samples a handful of parameters.
+    def getParameterExtents(self):
+        """``(found, low, high)`` — Fusion's three-part answer."""
+        return True, self.ranges[0], self.ranges[1]
+
+    def getPointAtParameter(self, parameter):
+        """``(found, point)`` for a parameter inside the edge's own range.
+
+        Fusion refuses a parameter outside that range with ``3 : invalid
+        argument parameter``, and returns a two-part answer rather than a point;
+        the fake does both, so a handler that samples 0..1 or unpacks wrongly
+        fails here.  It did not, once: a live run found this, not the suite.
         """
+        low, high = self.ranges
+        if not low - 1e-9 <= parameter <= high + 1e-9:
+            raise RuntimeError("3 : invalid argument parameter")
+        t = 0.0 if high == low else (parameter - low) / (high - low)
         start = self._edge.startVertex.geometry
         end = self._edge.endVertex.geometry
-        t = max(0.0, min(1.0, float(t)))
-        return FakePoint3D(
+        return True, FakePoint3D(
             start.x + (end.x - start.x) * t,
             start.y + (end.y - start.y) * t,
             start.z + (end.z - start.z) * t,
@@ -79,7 +92,8 @@ class FakeEdge:
         self.index = index
         self.evaluator = FakeEdgeEvaluator(self)
         self.geometry = type(curve_type, (), {"__module__": "adsk.core"})()
-        self.pointOnEdge = self.evaluator.getPointAtParameter(0.5)
+        middle = sum(self.evaluator.ranges) / 2
+        self.pointOnEdge = self.evaluator.getPointAtParameter(middle)[1]
 
     @property
     def length(self) -> float:
