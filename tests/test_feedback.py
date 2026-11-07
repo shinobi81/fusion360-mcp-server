@@ -90,7 +90,7 @@ class TestHintClassification:
         kind, hints = classify(msg)
         assert kind == "INVALID_INPUT"
         assert any("reaches no body" in hint for hint in hints)
-        assert any("target_body" in hint for hint in hints)
+        assert any("overlaps a body" in hint for hint in hints)
 
     def test_tool_diameter_refusal_points_at_the_tool_library(self):
         """The add-in refuses ``tool_diameter`` on an operation, and had no rule.

@@ -216,7 +216,7 @@ _RULES: list[tuple[str, str, list[str]]] = [
         "INVALID_INPUT",
         [
             "The feature reaches no body, so there is nothing to cut.",
-            "Move the profile onto the body, or name target_body explicitly.",
+            "Move the profile until it overlaps a body, then retry.",
         ],
     ),
     (

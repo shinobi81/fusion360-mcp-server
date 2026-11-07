@@ -62,12 +62,14 @@ applies to **every body the profile reaches** unless `target_body` names one. A 
 the seam between two touching blocks cuts both; on a part with several bodies that is rarely
 what was meant. `target_body` sets Fusion's own `participantBodies`, so nothing is copied
 or recreated. Left out, the choice stays Fusion's, which is the behaviour without the
-parameter.
+parameter. With `join` that is more than a shape change: measured on 2706, a `join` whose
+new material crossed the seam merged the *second* body into the target — two bodies became
+one — while naming `target_body` left the other body intact.
 Naming a body the profile never reaches is not an error: Fusion builds the feature and
 changes nothing, so the call reports `ok: true` with `mass_g_delta: 0`. Read the delta,
 not the status, when a cut looks like it did nothing. A profile that reaches **no** body
-at all is refused instead (`NO_TARGET_SWEEP_BODY`), because Fusion then has no target to
-infer.
+at all is refused instead — `INVALID_INPUT`, where Fusion's own message is
+`NO_TARGET_SWEEP_BODY` — because Fusion then has no target to infer.
 
 ## Features
 

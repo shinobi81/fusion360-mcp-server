@@ -445,11 +445,11 @@ class CommandHandler:
     def _resolve_target_body(self, target_body: str | None, operation: str):
         """The body an operation is restricted to, or None to let Fusion choose.
 
-        Both revolve and loft inputs carry ``participantBodies``, and leaving it
-        empty means "every body the profile reaches".  Measured on Fusion 2706:
-        a loft whose sections spanned the seam between two touching blocks cut
-        *both* of them, and a caller had no way to cut one.  Resolution happens
-        before any geometry is created, so a refusal leaves nothing behind.
+        The extrude, revolve, sweep and loft inputs all carry ``participantBodies``,
+        and leaving it empty means "every body the profile reaches".  Measured on
+        Fusion 2706: a loft whose sections spanned the seam between two touching
+        blocks cut *both* of them, and a caller had no way to cut one.  Resolution
+        happens before any geometry is created, so a refusal leaves nothing behind.
         """
         if target_body is None:
             return None

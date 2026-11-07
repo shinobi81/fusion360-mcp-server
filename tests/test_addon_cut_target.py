@@ -80,6 +80,7 @@ def test_extrude_refuses_a_target_body_that_does_not_exist(two_bodies):
 
     assert classify(raised.value)[0] == "BODY_NOT_FOUND"
     assert two_bodies._root().features.extrudeFeatures.added == []
+    assert two_bodies._root().features.extrudeFeatures.inputs == []
 
 
 def test_extrude_refuses_a_target_body_on_a_new_body(two_bodies):
@@ -90,6 +91,7 @@ def test_extrude_refuses_a_target_body_on_a_new_body(two_bodies):
     assert kind == "INVALID_INPUT"
     assert any("nothing to target" in hint for hint in hints)
     assert two_bodies._root().features.extrudeFeatures.added == []
+    assert two_bodies._root().features.extrudeFeatures.inputs == []
 
 
 # ── sweep ────────────────────────────────────────────────────────────
@@ -148,6 +150,7 @@ def test_sweep_refuses_a_target_body_that_does_not_exist(sweep_design):
 
     assert classify(raised.value)[0] == "BODY_NOT_FOUND"
     assert sweep_design._root().features.sweepFeatures.added == []
+    assert sweep_design._root().features.sweepFeatures.inputs == []
 
 
 def test_sweep_refuses_a_target_body_on_a_new_body(sweep_design):
@@ -164,6 +167,7 @@ def test_sweep_refuses_a_target_body_on_a_new_body(sweep_design):
     assert kind == "INVALID_INPUT"
     assert any("nothing to target" in hint for hint in hints)
     assert sweep_design._root().features.sweepFeatures.added == []
+    assert sweep_design._root().features.sweepFeatures.inputs == []
 
 
 # ── revolve ───────────────────────────────────────────────────────────
