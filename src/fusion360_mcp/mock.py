@@ -287,14 +287,35 @@ def _revolve(p: dict) -> dict:
     }
 
 
+def _selected_edge_count(p: dict) -> int:
+    """How many edges the call named, so the echo matches the real response.
+
+    Mock mode cannot search a body, but it must not report "all edges" for a
+    call that named three: ``edges_count`` is what a caller checks its own
+    sequence against.
+    """
+    indices = p.get("edge_indices")
+    if indices is not None:
+        return len(dict.fromkeys(int(i) for i in indices))
+    points = p.get("edge_points")
+    if points is not None:
+        return len(points)
+    return 12  # a plausible whole-body count for edge_selection "all"
+
+
 def _fillet(p: dict) -> dict:
-    return {"body_name": p.get("body_name", "Body1"), "radius": p.get("radius", 0.1)}
+    return {
+        "body_name": p.get("body_name", "Body1"),
+        "radius": p.get("radius", 0.1),
+        "edges_count": _selected_edge_count(p),
+    }
 
 
 def _chamfer(p: dict) -> dict:
     return {
         "body_name": p.get("body_name", "Body1"),
         "distance": p.get("distance", 0.1),
+        "edges_count": _selected_edge_count(p),
     }
 
 

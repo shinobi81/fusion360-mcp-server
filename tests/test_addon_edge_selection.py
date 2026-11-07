@@ -22,12 +22,18 @@ from tests.fakes.design import FakeDesign
 
 @pytest.fixture
 def select(bound_handler):
-    """``select(edge_pairs, selection)`` -> the collection the handler built."""
+    """``select(edge_pairs, selection, indices=...)`` -> the built collection."""
 
-    def factory(edge_pairs, selection):
+    def factory(edge_pairs, selection, indices=None, points=None, tolerance=0.1):
         body = body_with_edges("Plate", edge_pairs)
         handler = bound_handler(FakeDesign(bodies=[body]))
-        return handler._select_edges(body, selection)
+        return handler._select_edges(
+            body,
+            selection,
+            indices=indices,
+            points=points,
+            tolerance=tolerance,
+        )
 
     return factory
 
@@ -189,3 +195,163 @@ def test_mock_list_edges_returns_the_same_shape():
         "length",
         "curve_type",
     }
+
+
+# ── edge_indices ──────────────────────────────────────────────────────
+
+
+def test_edge_indices_selects_exactly_the_named_edges(select):
+    """What a person means by 'round edges 0 and 2' — nothing else."""
+    coll = select(
+        [
+            ((0, 0, 0), (1, 0, 0)),
+            ((0, 0, 1), (1, 0, 1)),
+            ((0, 0, 2), (1, 0, 2)),
+        ],
+        "all",
+        indices=[0, 2],
+    )
+    assert [edge.index for edge in coll] == [0, 2]
+
+
+def test_edge_indices_collapses_duplicates(select):
+    coll = select(
+        [((0, 0, 0), (1, 0, 0)), ((0, 0, 1), (1, 0, 1))], "all", indices=[1, 1]
+    )
+    assert [edge.index for edge in coll] == [1]
+
+
+def test_an_out_of_range_index_names_the_body_the_index_and_the_count(select):
+    """Guessing here would round a neighbouring edge and report success."""
+    with pytest.raises(RuntimeError) as raised:
+        select([((0, 0, 0), (1, 0, 0))], "all", indices=[4])
+    message = str(raised.value)
+    assert "4" in message and "1" in message
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_indices_with_an_explicit_edge_selection_is_refused(select):
+    """`all` is the default and means 'unset'; `top` alongside indices is not."""
+    with pytest.raises(RuntimeError) as raised:
+        select([((0, 0, 0), (1, 0, 0))], "top", indices=[0])
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_fillet_rounds_the_edges_the_index_named(bound_handler):
+    body = body_with_edges(
+        "Plate",
+        [((0, 0, 0), (1, 0, 0)), ((0, 0, 1), (1, 0, 1))],
+    )
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    result = handler.fillet(radius=0.3, body_name="Plate", edge_indices=[1])
+
+    assert result["edges_count"] == 1
+    recorded = handler._root().features.filletFeatures.last_edge_indices
+    assert recorded == [1]
+
+
+def test_chamfer_bevels_the_edges_the_index_named(bound_handler):
+    body = body_with_edges(
+        "Plate",
+        [((0, 0, 0), (1, 0, 0)), ((0, 0, 1), (1, 0, 1))],
+    )
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    result = handler.chamfer(distance=0.2, body_name="Plate", edge_indices=[0])
+
+    assert result["edges_count"] == 1
+    assert handler._root().features.chamferFeatures.last_edge_indices == [0]
+
+
+# ── edge_points ───────────────────────────────────────────────────────
+
+
+def test_a_point_on_an_edge_selects_that_edge(select):
+    coll = select(
+        [((0, 0, 0), (4, 0, 0)), ((0, 0, 5), (4, 0, 5))],
+        "all",
+        points=[[2.0, 0.0, 5.0]],
+    )
+    assert [edge.index for edge in coll] == [1]
+
+
+def test_a_point_near_the_end_of_a_long_edge_still_selects_it(select):
+    """Midpoint distance would send this to the neighbouring edge."""
+    coll = select(
+        [((0, 0, 0), (10, 0, 0)), ((0, 0, 1), (1, 0, 1))],
+        "all",
+        points=[[9.5, 0.0, 0.0]],
+    )
+    assert [edge.index for edge in coll] == [0]
+
+
+def test_a_point_far_from_every_edge_names_the_distance_and_the_nearest(select):
+    with pytest.raises(RuntimeError) as raised:
+        select([((0, 0, 0), (4, 0, 0))], "all", points=[[2.0, 0.0, 9.0]])
+    message = str(raised.value)
+    assert "0.1" in message  # the tolerance
+    assert "cm" in message
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_a_wider_tolerance_accepts_a_further_point(select):
+    coll = select(
+        [((0, 0, 0), (4, 0, 0))],
+        "all",
+        points=[[2.0, 0.0, 0.5]],
+        tolerance=1.0,
+    )
+    assert coll.count == 1
+
+
+def test_two_equidistant_edges_are_refused_rather_than_guessed(select):
+    """Two edges mirror-imaged about the point: Fusion cannot know which one."""
+    with pytest.raises(RuntimeError) as raised:
+        select(
+            [((0, 0, 0), (4, 0, 0)), ((0, 0, 1), (4, 0, 1))],
+            "all",
+            points=[[2.0, 0.0, 0.5]],
+        )
+    assert "equally close" in str(raised.value)
+
+
+def test_a_non_finite_point_coordinate_is_refused(select):
+    with pytest.raises(ValueError) as raised:
+        select([((0, 0, 0), (4, 0, 0))], "all", points=[[float("inf"), 0.0, 0.0]])
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_two_points_on_the_same_edge_select_it_once(select):
+    coll = select(
+        [((0, 0, 0), (4, 0, 0)), ((0, 0, 5), (4, 0, 5))],
+        "all",
+        points=[[1.0, 0.0, 0.0], [3.0, 0.0, 0.0]],
+    )
+    assert coll.count == 1
+
+
+def test_a_point_on_a_body_with_no_edges_says_so(list_body):
+    handler, _ = list_body([])
+    with pytest.raises(RuntimeError) as raised:
+        handler._select_edges(
+            handler._root().bRepBodies.item(0), "all", points=[[0.0, 0.0, 0.0]]
+        )
+    assert "no edges" in str(raised.value)
+
+
+# ── mock parity for the selectors ─────────────────────────────────────
+
+
+def test_mock_fillet_reports_the_edges_the_indices_named():
+    result = mock_command("fillet", {"radius": 0.3, "edge_indices": [1, 2, 2]})
+    assert result["edges_count"] == 2
+
+
+def test_mock_chamfer_counts_points_as_edges():
+    result = mock_command("chamfer", {"distance": 0.2, "edge_points": [[0, 0, 0]]})
+    assert result["edges_count"] == 1
+
+
+def test_mock_without_a_selector_reports_a_whole_body():
+    assert mock_command("fillet", {"radius": 0.3})["edges_count"] > 1

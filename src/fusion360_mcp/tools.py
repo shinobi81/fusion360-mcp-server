@@ -247,7 +247,10 @@ TOOLS: list[dict] = [
     {
         "name": "fillet",
         "title": "Fillet Edges",
-        "description": "Round edges of a body",
+        "description": (
+            "Round edges of a body: all/top/bottom/vertical, or exact edges by "
+            "edge_indices (from list_edges) or by edge_points near them"
+        ),
         "inputSchema": {
             "type": "object",
             "required": ["radius"],
@@ -260,13 +263,43 @@ TOOLS: list[dict] = [
                     "enum": ["all", "top", "bottom", "vertical"],
                     "default": "all",
                 },
+                "edge_indices": {
+                    "type": "array",
+                    "items": {"type": "integer", "minimum": 0},
+                    "description": (
+                        "Exact edges to affect, indexed as list_edges reports them. "
+                        "Indices are positional, so re-run list_edges after a change."
+                    ),
+                },
+                "edge_points": {
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 3,
+                        "maxItems": 3,
+                    },
+                    "description": (
+                        "Points near the edges to affect; each snaps to the nearest "
+                        "edge within edge_tolerance. Ambiguous points are refused."
+                    ),
+                },
+                "edge_tolerance": {
+                    "type": "number",
+                    "default": 0.1,
+                    "minimum": 0.0001,
+                    "description": "How near a point must be to an edge (cm)",
+                },
             },
         },
     },
     {
         "name": "chamfer",
         "title": "Chamfer Edges",
-        "description": "Chamfer edges of a body",
+        "description": (
+            "Chamfer edges of a body: all/top/bottom/vertical, or exact edges by "
+            "edge_indices (from list_edges) or by edge_points near them"
+        ),
         "inputSchema": {
             "type": "object",
             "required": ["distance"],
@@ -278,6 +311,33 @@ TOOLS: list[dict] = [
                     "type": "string",
                     "enum": ["all", "top", "bottom", "vertical"],
                     "default": "all",
+                },
+                "edge_indices": {
+                    "type": "array",
+                    "items": {"type": "integer", "minimum": 0},
+                    "description": (
+                        "Exact edges to affect, indexed as list_edges reports them. "
+                        "Indices are positional, so re-run list_edges after a change."
+                    ),
+                },
+                "edge_points": {
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 3,
+                        "maxItems": 3,
+                    },
+                    "description": (
+                        "Points near the edges to affect; each snaps to the nearest "
+                        "edge within edge_tolerance. Ambiguous points are refused."
+                    ),
+                },
+                "edge_tolerance": {
+                    "type": "number",
+                    "default": 0.1,
+                    "minimum": 0.0001,
+                    "description": "How near a point must be to an edge (cm)",
                 },
             },
         },

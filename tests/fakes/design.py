@@ -211,6 +211,65 @@ class FakeRevolveFeatures:
         return FakeFeature("Revolve1")
 
 
+class FakeFilletInput:
+    """``filletFeatures.createInput()``: records each edge set it is given."""
+
+    def __init__(self):
+        self.edge_sets: list[list] = []
+        self.radius = None
+
+    def addConstantRadiusEdgeSet(self, edges, radius, is_chain) -> None:
+        self.edge_sets.append(list(edges))
+        self.radius = radius
+
+
+class FakeFilletFeatures:
+    """``features.filletFeatures``: what the fillet was actually built from."""
+
+    def __init__(self):
+        self.inputs: list[FakeFilletInput] = []
+        self.last_edge_indices: list[int] = []
+
+    def createInput(self) -> FakeFilletInput:
+        inp = FakeFilletInput()
+        self.inputs.append(inp)
+        return inp
+
+    def add(self, inp):
+        self.last_edge_indices = [edge.index for edge in inp.edge_sets[-1]]
+        name = f"Fillet{len(self.inputs)}"
+        return type("FakeFeature", (), {"name": name, "radius": inp.radius})()
+
+
+class FakeChamferInput:
+    """``chamferFeatures.createInput(edges, is_chain)``: takes edges up front."""
+
+    def __init__(self, edges):
+        self.edges = list(edges)
+        self.distance = None
+
+    def setToEqualDistance(self, distance) -> None:
+        self.distance = distance
+
+
+class FakeChamferFeatures:
+    """``features.chamferFeatures``: same idea, one edge list per input."""
+
+    def __init__(self):
+        self.inputs: list[FakeChamferInput] = []
+        self.last_edge_indices: list[int] = []
+
+    def createInput(self, edges, is_chain) -> FakeChamferInput:
+        inp = FakeChamferInput(edges)
+        self.inputs.append(inp)
+        return inp
+
+    def add(self, inp):
+        self.last_edge_indices = [edge.index for edge in inp.edges]
+        name = f"Chamfer{len(self.inputs)}"
+        return type("FakeFeature", (), {"name": name, "distance": inp.distance})()
+
+
 class FakeFeatures:
     """``root.features``: a count, the revolve collection and the draft one."""
 
@@ -218,6 +277,8 @@ class FakeFeatures:
         self._design = design
         self.revolveFeatures = FakeRevolveFeatures()
         self.draftFeatures = FakeDraftFeatures()
+        self.filletFeatures = FakeFilletFeatures()
+        self.chamferFeatures = FakeChamferFeatures()
 
     @property
     def count(self) -> int:

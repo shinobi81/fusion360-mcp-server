@@ -144,6 +144,37 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # A caller who passes two selectors has not decided which edges to round;
+        # picking one silently would round whatever the other happened to match.
+        r"only one of edge_indices|cannot be combined with edge_indices",
+        "INVALID_INPUT",
+        [
+            "Only one edge selector applies at a time; nothing was written.",
+            "Pass edge_indices, or edge_points, or edge_selection — not two.",
+        ],
+    ),
+    (
+        # Indices are positional: a stale one and an empty list are both caller
+        # mistakes that Fusion cannot detect, so the refusal has to explain them.
+        r"edge index \d+ is out of range|edge_indices was empty",
+        "INVALID_INPUT",
+        [
+            "Edge indices are positional and come from list_edges.",
+            "Re-run list_edges after the body changes — an index can move.",
+        ],
+    ),
+    (
+        # Point selection can fail three ways, and every one of them names the
+        # measurement the caller needs to fix it rather than "no edges matched".
+        r"no edge within .* cm of|equally close to edges|has no edges, so no point"
+        r"|edge point needs three coordinates",
+        "INVALID_INPUT",
+        [
+            "No single edge matched that point; nothing was written.",
+            "Call list_edges and select by edge_indices, or raise edge_tolerance.",
+        ],
+    ),
+    (
         r"invalid (argument|input|parameter)|bad (argument|input|value)",
         "INVALID_INPUT",
         [
