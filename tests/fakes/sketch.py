@@ -180,6 +180,20 @@ class FakeSketchCurves:
         other_curves = sum(1 for kind, _ in self._sketch.curve_calls if kind != "line")
         return len(self._sketch.lines) + other_curves
 
+    def __iter__(self):
+        """Fusion's ``SketchCurves`` is iterable; each recorded call is one curve.
+
+        ``sweep`` takes a path by index from ``list(path_sketch.sketchCurves)``,
+        so the collection has to yield something per curve.  Nothing here reads
+        the curve's geometry afterwards — it is handed to ``features.createPath``.
+        """
+        return iter(
+            [
+                type("FakeCurve", (), {"kind": kind, "payload": payload})()
+                for kind, payload in self._sketch.curve_calls
+            ]
+        )
+
 
 class FakeProfile:
     """A profile proxy: tied to the sketch state it was read from."""

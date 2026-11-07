@@ -177,6 +177,12 @@ TOOLS: list[dict] = [
                     "enum": ["positive", "negative", "symmetric"],
                     "default": "positive",
                 },
+                "sketch_name": {
+                    "type": "string",
+                    "description": (
+                        "Sketch holding the profile (default: the most recent sketch)"
+                    ),
+                },
             },
         },
     },
@@ -200,7 +206,16 @@ TOOLS: list[dict] = [
                 "profile_index": {
                     "type": "integer",
                     "default": 0,
-                    "description": "Index of the profile in the most recent sketch",
+                    "description": (
+                        "Index of the profile in the chosen sketch "
+                        "(sketch_name, default the most recent one)"
+                    ),
+                },
+                "sketch_name": {
+                    "type": "string",
+                    "description": (
+                        "Sketch holding the profile (default: the most recent sketch)"
+                    ),
                 },
                 "axis_origin_x": {
                     "type": "number",
@@ -504,6 +519,12 @@ TOOLS: list[dict] = [
                     "description": "Name of the sketch containing the sweep path",
                 },
                 "path_curve_index": {"type": "integer", "default": 0, "minimum": 0},
+                "sketch_name": {
+                    "type": "string",
+                    "description": (
+                        "Sketch holding the profile (default: the most recent sketch)"
+                    ),
+                },
                 "operation": {
                     "type": "string",
                     "enum": ["new_body", "join", "cut", "intersect"],

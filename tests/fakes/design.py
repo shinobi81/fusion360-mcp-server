@@ -211,6 +211,61 @@ class FakeRevolveFeatures:
         return FakeFeature("Revolve1")
 
 
+class FakeExtrudeInput:
+    """``extrudeFeatures.createInput(profile, operation)`` and its two extents."""
+
+    def __init__(self, profile, operation):
+        self.profile = profile
+        self.operation = operation
+        self.symmetric = None
+        self.distance = None
+
+    def setSymmetricExtent(self, distance, is_full_width) -> None:
+        self.symmetric = (distance, is_full_width)
+
+    def setDistanceExtent(self, is_symmetric, distance) -> None:
+        self.distance = (is_symmetric, distance)
+
+
+class FakeExtrudeFeatures:
+    """``features.extrudeFeatures``: records which profile each extrude used."""
+
+    def __init__(self):
+        self.inputs: list[FakeExtrudeInput] = []
+        self.added: list[FakeExtrudeInput] = []
+
+    def createInput(self, profile, operation) -> FakeExtrudeInput:
+        inp = FakeExtrudeInput(profile, operation)
+        self.inputs.append(inp)
+        return inp
+
+    def add(self, inp):
+        self.added.append(inp)
+        return FakeFeature("Extrude1")
+
+
+class FakeSweepInput:
+    def __init__(self, profile, path, operation):
+        self.profile = profile
+        self.path = path
+        self.operation = operation
+
+
+class FakeSweepFeatures:
+    def __init__(self):
+        self.inputs: list[FakeSweepInput] = []
+        self.added: list[FakeSweepInput] = []
+
+    def createInput(self, profile, path, operation) -> FakeSweepInput:
+        inp = FakeSweepInput(profile, path, operation)
+        self.inputs.append(inp)
+        return inp
+
+    def add(self, inp):
+        self.added.append(inp)
+        return FakeFeature("Sweep1")
+
+
 class FakeFilletInput:
     """``filletFeatures.createInput()``: records each edge set it is given."""
 
@@ -279,6 +334,12 @@ class FakeFeatures:
         self.draftFeatures = FakeDraftFeatures()
         self.filletFeatures = FakeFilletFeatures()
         self.chamferFeatures = FakeChamferFeatures()
+        self.extrudeFeatures = FakeExtrudeFeatures()
+        self.sweepFeatures = FakeSweepFeatures()
+
+    def createPath(self, curve):
+        """``features.createPath``: a sweep needs a Path around the curve."""
+        return type("FakePath", (), {"curve": curve})()
 
     @property
     def count(self) -> int:
