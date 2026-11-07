@@ -30,9 +30,16 @@ uv run pytest -q               # suite runs without Fusion
 uv run pytest -q --no-cov tests/test_tools.py   # subset: the coverage floor
                                                 # applies to the whole suite
 uv run ruff check src/ tests/ fuzz/ addon/  # lint (this is what CI runs)
-uv run ruff format src/ tests/ fuzz/ addon/server/command_handler.py
+uv run ruff format --check src/ tests/ fuzz/    # format gate (what CI runs)
+uv run ruff format src/ tests/ fuzz/            # apply it; addon/ is exempt
 npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"
 ```
+
+`addon/` is linted but not format-gated, and this file used to say to format
+`addon/server/command_handler.py` — don't. The add-in runs on Fusion's embedded
+interpreter, which `requires-python` does not govern, and at the 3.14 target ruff
+rewrites `except (TypeError, ValueError):` as `except TypeError, ValueError:`,
+which is PEP 758 syntax that interpreter may not parse.
 
 `uv run` **rebuilds the package** when `pyproject.toml` changes, and Windows will not let
 it replace `.venv/Scripts/fusion360-mcp-server.exe` while a running MCP server holds it

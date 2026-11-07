@@ -17,6 +17,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
+CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 
 
 def _pyproject() -> dict:
@@ -119,6 +120,52 @@ def test_documents_quoting_the_ruff_selection_match_the_config():
             stated = sorted(re.findall(r'"([^"]+)"', found.group(1)))
             if stated != configured:
                 offenders.append(f"{doc.name}:{number} quotes {stated}")
-    assert offenders == [], (
-        f"{'; '.join(offenders)}; pyproject configures {configured}"
+    assert offenders == [], f"{'; '.join(offenders)}; pyproject configures {configured}"
+
+
+def _ci_ruff_commands() -> list[str]:
+    """The `uv run ruff …` shell lines CI actually executes.
+
+    Deliberately a line scan, not a YAML parse: PyYAML is not a dependency, and
+    each command is a single line inside the `run:` block.  Comment lines fail
+    the `startswith`, so a commented-out command cannot satisfy the guard.
+    """
+    return [
+        stripped
+        for line in CI_WORKFLOW.read_text(encoding="utf-8").splitlines()
+        if (stripped := line.strip()).startswith("uv run ruff")
+    ]
+
+
+def test_ci_gates_the_formatter_as_well_as_the_linter():
+    """`ruff check` alone left four unformatted files on `main` for two changes.
+
+    Nothing ran the formatter, so the drift only surfaced when someone typed
+    `ruff format` by hand — and the notes that said the gate was clean were
+    notes, not a gate.  A claim no gate backs is the failure mode this whole
+    module exists to prevent, so the gate itself is asserted here.
+
+    `addon/` must stay out of the formatter line: it runs on Fusion's embedded
+    interpreter, and finishing its one remaining reformat would move the add-in
+    to 3.14-only syntax.  If that exclusion is ever lifted, lift it here too.
+    """
+    commands = _ci_ruff_commands()
+    assert "uv run ruff check src/ tests/ fuzz/ addon/" in commands, (
+        f"ci.yml no longer lints src/ tests/ fuzz/ addon/ in one gate: {commands}"
+    )
+    format_commands = [cmd for cmd in commands if "ruff format --check" in cmd]
+    assert len(format_commands) == 1, (
+        f"ci.yml must run `ruff format --check` exactly once, found {format_commands}"
+    )
+    # Strip the fixed prefix rather than slicing by index: an index into a
+    # command someone reorders is a guard that fails for the wrong reason.
+    prefix = "uv run ruff format --check "
+    command = format_commands[0]
+    assert command.startswith(prefix), (
+        f"the formatter gate is not shaped like `{prefix}…`: {command}"
+    )
+    assert command.removeprefix(prefix).split() == ["src/", "tests/", "fuzz/"], (
+        "the formatter gate must cover src/ tests/ fuzz/ and exclude addon/ "
+        "(Fusion's interpreter is not governed by requires-python): "
+        f"{command}"
     )

@@ -206,6 +206,7 @@ call is safe.
 uv sync --dev                    # deps
 uv run pytest -q                 # full suite, no Fusion needed
 uv run ruff check src/ tests/ fuzz/ addon/    # lint (what CI runs)
+uv run ruff format --check src/ tests/ fuzz/  # format gate (what CI runs)
 npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"
 ```
 

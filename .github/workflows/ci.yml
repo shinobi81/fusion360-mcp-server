@@ -46,8 +46,21 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev --frozen --python ${{ matrix.python-version }}
 
+      # Both halves of the lint gate belong here.  `ruff check` alone left four
+      # test files unformatted on `main` for two changes: nothing ran the
+      # formatter, so the drift was invisible until someone typed `ruff format`
+      # by hand.  A warm cache cannot mask this the way it masks `check` — a
+      # clean CI runner has no cache.
+      #
+      # `addon/` is deliberately missing from the formatter line (it is still
+      # linted).  The add-in runs on Fusion's embedded interpreter, which
+      # `requires-python` does not govern, and the one piece of drift ruff
+      # reports in there is the 3.14-only unparenthesised `except` tuple —
+      # adopting it would move the add-in's syntax requirement with it.
       - name: Lint
-        run: uv run ruff check src/ tests/ fuzz/ addon/
+        run: |
+          uv run ruff check src/ tests/ fuzz/ addon/
+          uv run ruff format --check src/ tests/ fuzz/
 
       - name: Test
         run: uv run pytest -v
