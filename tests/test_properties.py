@@ -109,7 +109,7 @@ class TestSocketFramingProperties:
             line, buffer = buffer.split(b"\n", 1)
             try:
                 json.loads(line.decode("utf-8"))
-            except (ValueError, UnicodeDecodeError):
+            except ValueError, UnicodeDecodeError:
                 # A malformed complete line is a protocol error the caller
                 # handles by closing the connection — never an exception here.
                 continue

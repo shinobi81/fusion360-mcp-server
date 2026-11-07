@@ -5,8 +5,9 @@ Python :: 3.x`` classifiers, and in ``[tool.pyright]`` (a type checker cannot
 infer it).  Once, these disagreed for four years while nobody looked — the floor
 said 3.10 and 3.10 was already EOL.  These tests read the floor and fail the
 suite when any surface falls out of step with it, when a tool grows a second copy
-of the floor that can drift independently, or when a document quotes a lint rule
-set the configuration no longer has.
+of the floor that can drift independently, when a document quotes a lint rule set
+the configuration no longer has, or when CI stops running a gate those
+configurations describe.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
+CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 
 
 def _pyproject() -> dict:
@@ -119,6 +121,134 @@ def test_documents_quoting_the_ruff_selection_match_the_config():
             stated = sorted(re.findall(r'"([^"]+)"', found.group(1)))
             if stated != configured:
                 offenders.append(f"{doc.name}:{number} quotes {stated}")
-    assert offenders == [], (
-        f"{'; '.join(offenders)}; pyproject configures {configured}"
+    assert offenders == [], f"{'; '.join(offenders)}; pyproject configures {configured}"
+
+
+def _ci_lines() -> list[str]:
+    return CI_WORKFLOW.read_text(encoding="utf-8").splitlines()
+
+
+def _ci_lint_step_start(lines: list[str]) -> int | None:
+    return next(
+        (i for i, line in enumerate(lines) if line.strip() == "- name: Lint"),
+        None,
+    )
+
+
+def _ci_lint_step_lines() -> list[str]:
+    """The lines of ci.yml's ``- name: Lint`` step, header to the next step.
+
+    Scoped to the step rather than to the file: a command that exists somewhere in
+    the workflow gates nothing when the job around it never runs.  Returns ``[]``
+    when the step is gone, which the test reports.
+    """
+    lines = _ci_lines()
+    start = _ci_lint_step_start(lines)
+    if start is None:
+        return []
+    indent = len(lines[start]) - len(lines[start].lstrip())
+    rest = lines[start + 1 :]
+    end = next(
+        (
+            offset
+            for offset, line in enumerate(rest)
+            if line.strip().startswith("- name:")
+            and len(line) - len(line.lstrip()) == indent
+        ),
+        len(rest),
+    )
+    return [lines[start], *rest[:end]]
+
+
+def _ci_lint_job_preamble() -> list[str]:
+    """The `Lint` step's job header plus every key between it and the step.
+
+    A step that only runs on `push`, or whose job is conditional, is not a gate
+    on a pull request.  The keys are returned rather than parsed so the caller can
+    name the job and reject a conditional one in the same breath.
+    """
+    lines = _ci_lines()
+    start = _ci_lint_step_start(lines)
+    if start is None:
+        return []
+    job = next(
+        (
+            i
+            for i in range(start - 1, -1, -1)
+            if re.fullmatch(r"  [\w-]+:\s*", lines[i])
+        ),
+        None,
+    )
+    if job is None:
+        return []
+    return lines[job:start]
+
+
+def _ci_ruff_commands() -> list[str]:
+    """The `uv run ruff …` shell lines the `Lint` step executes.
+
+    Deliberately a line scan, not a YAML parse: PyYAML is not a dependency, and
+    each command is a single line inside the `run:` block.  Comment lines fail
+    the `startswith`, so a commented-out command cannot satisfy the guard.
+    """
+    return [
+        stripped
+        for line in _ci_lint_step_lines()
+        if (stripped := line.strip()).startswith("uv run ruff")
+    ]
+
+
+def test_ci_gates_the_formatter_as_well_as_the_linter():
+    """`ruff check` alone left four unformatted files on `main` across two changes.
+
+    Nothing ran the formatter, so the drift only surfaced when someone typed
+    `ruff format` by hand — and the notes that said the gate was clean were
+    notes, not a gate.  A claim no gate backs is the failure mode this whole
+    module exists to prevent, so the gate itself is asserted here.
+
+    `addon/` must stay out of the formatter line: it runs on Fusion's own
+    interpreter, which `requires-python` does not govern, and finishing its one
+    remaining reformat would move the add-in to 3.14-only syntax.  If that
+    exclusion is ever lifted, lift it here too.
+
+    The shape is pinned on purpose — one `Lint` step, one formatter command, the
+    three directories spelled out — because every looser form of this test was a
+    form that passed with the gate disarmed.
+    """
+    block = _ci_lint_step_lines()
+    assert block, "ci.yml has no `- name: Lint` step"
+    preamble = _ci_lint_job_preamble()
+    assert preamble and preamble[0].strip() == "test:", (
+        "the Lint step must live in the `test` job: the ruleset's required checks "
+        f"are `test (3.14)` and `test (3.15)`, so a gate in any other job is not "
+        f"required; found {preamble[:1]}"
+    )
+    disarmed = [
+        line.strip()
+        for line in preamble + block
+        if line.strip().startswith(("if:", "continue-on-error:"))
+    ]
+    assert disarmed == [], (
+        f"the `test` job and its Lint step must not be conditional: {disarmed}"
+    )
+    commands = _ci_ruff_commands()
+    assert "uv run ruff check src/ tests/ fuzz/ addon/" in commands, (
+        f"the Lint step no longer lints all four directories in one gate: {commands}"
+    )
+    format_commands = [cmd for cmd in commands if "ruff format --check" in cmd]
+    assert len(format_commands) == 1, (
+        "the Lint step must run `ruff format --check` exactly once, "
+        f"found {format_commands}"
+    )
+    # Strip the fixed prefix rather than slicing by index: an index into a
+    # command someone reorders is a guard that fails for the wrong reason.
+    prefix = "uv run ruff format --check "
+    command = format_commands[0]
+    assert command.startswith(prefix), (
+        f"the formatter gate is not shaped like `{prefix}…`: {command}"
+    )
+    assert command.removeprefix(prefix).split() == ["src/", "tests/", "fuzz/"], (
+        "the formatter gate must cover src/ tests/ fuzz/ and exclude addon/ "
+        "(Fusion's interpreter is not governed by requires-python): "
+        f"{command}"
     )

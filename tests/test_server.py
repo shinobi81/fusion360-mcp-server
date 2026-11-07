@@ -44,7 +44,7 @@ class TestSendRouting:
             result = _send("socket", "ping", None)
             # If we got here, Fusion is actually running — verify not mock
             assert result.get("mode") != "mock"
-        except (ConnectionError, OSError):
+        except ConnectionError, OSError:
             pass  # Expected when no Fusion add-in is running
         finally:
             conn_mod._connection = saved
