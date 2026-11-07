@@ -947,8 +947,7 @@ class CommandHandler:
     ):
         """Add *count* evenly spaced circles to one sketch in a single solve.
 
-The default is the last sketch; *sketch_name* targets an older one.
-
+        The default is the last sketch; *sketch_name* targets an older one.
         Fusion re-solves the sketch after every entity insert, so adding N
         circles one command at a time is superlinear in N. Deferring the solve
         across the inserts and restoring the previous value afterwards removes

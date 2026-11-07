@@ -65,6 +65,11 @@ def test_a_named_sketch_receives_the_geometry(
     assert result["sketch"] == "Sketch_plate"
     assert older.curve_calls, f"{method} drew nothing into the sketch it named"
     assert newer.curve_calls == [], f"{method} also drew into the most recent sketch"
+    # ``draw_circles`` and ``create_polygon`` defer the sketch solve while they
+    # insert; resolving the wrong sketch would leave the other one deferred and
+    # silently unsolved — a state this assertion is the only guard against.
+    assert older.isComputeDeferred is False
+    assert newer.isComputeDeferred is False
 
 
 @pytest.mark.parametrize(("method", "kwargs"), DRAW_CALLS)

@@ -144,9 +144,9 @@ record why not — in the thread — before merging.
 | Tool               | Description                                                                      |
 | ------------------ | -------------------------------------------------------------------------------- |
 | `create_sketch`    | New sketch on xy/yz/xz, optional offset                                          |
-| `draw_rectangle`   | Rectangle in most recent sketch                                                  |
-| `draw_circle`      | Circle in most recent sketch                                                     |
-| `draw_line`        | Line in most recent sketch                                                       |
+| `draw_rectangle`   | Rectangle in most recent sketch, or in `sketch_name`                             |
+| `draw_circle`      | Circle in most recent sketch, or in `sketch_name`                                |
+| `draw_line`        | Line in most recent sketch, or in `sketch_name`                                  |
 | `draw_arc`         | Arc (center + start + sweep angle)                                               |
 | `draw_spline`      | Fit-point or control-point spline                                                |
 | `create_polygon`   | Regular polygon (3–64 sides)                                                     |
