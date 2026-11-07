@@ -31,9 +31,9 @@ verified on **Fusion 2706.1.17**.
 | Tool               | Description                                                                                                              |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------ |
 | `create_sketch`    | New sketch on xy/yz/xz plane, optional offset                                                                            |
-| `draw_rectangle`   | Rectangle in most recent sketch                                                                                          |
-| `draw_circle`      | Circle in most recent sketch                                                                                             |
-| `draw_line`        | Line in most recent sketch                                                                                               |
+| `draw_rectangle`   | Rectangle in most recent sketch, or in `sketch_name`                                                                     |
+| `draw_circle`      | Circle in most recent sketch, or in `sketch_name`                                                                        |
+| `draw_line`        | Line in most recent sketch, or in `sketch_name`                                                                          |
 | `draw_arc`         | Arc (center + start + sweep angle)                                                                                       |
 | `draw_spline`      | Fit-point or control-point spline                                                                                        |
 | `create_polygon`   | Regular polygon (3–64 sides)                                                                                             |
@@ -45,6 +45,10 @@ verified on **Fusion 2706.1.17**.
 | `trim_curve`       | Trim at intersections                                                                                                    |
 | `extend_curve`     | Extend to nearest intersection                                                                                           |
 | `project_geometry` | Project edges/bodies onto sketch plane                                                                                   |
+
+The `draw_*` tools and `create_polygon` take an optional `sketch_name`; without it
+the geometry goes into the most recent sketch. Naming it lets you add to an older
+sketch without relying on creation order.
 
 ## Features
 
