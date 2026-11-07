@@ -51,6 +51,10 @@ The `draw_*` tools and `create_polygon` take an optional `sketch_name`; without 
 the geometry goes into the most recent sketch. Naming it lets you add to an older
 sketch without relying on creation order.
 
+The same applies to the profile side of the features: `extrude`, `revolve` and `sweep` take
+`sketch_name` for the sketch that holds the profile, so a part whose profiles live in two
+sketches need not be built in creation order. `sweep` also names its path sketch, separately.
+
 ## Features
 
 | Tool                  | Description                           |
