@@ -111,3 +111,30 @@ def test_the_checker_ignores_the_phrase_inside_a_docstring():
     """Prose must not block every pull request."""
     source = '"""Turns `except A, B:` into something else."""\n'
     assert unparenthesised_except_tuples(source) == []
+
+
+def test_the_checker_trips_on_the_starred_form_too():
+    """``except*`` is PEP 654's grouping syntax and takes the same header."""
+    source = "try:\n    pass\nexcept* TypeError, ValueError:\n    pass\n"
+    assert unparenthesised_except_tuples(source) == [3]
+
+
+def test_the_checker_accepts_a_bracketed_starred_form():
+    source = "try:\n    pass\nexcept* (TypeError, ValueError):\n    pass\n"
+    assert unparenthesised_except_tuples(source) == []
+
+
+def test_the_checker_accepts_a_tuple_wrapped_across_lines():
+    source = "try:\n    pass\nexcept (\n    TypeError,\n    ValueError,\n):\n    pass\n"
+    assert unparenthesised_except_tuples(source) == []
+
+
+def test_the_checker_ignores_the_phrase_in_a_comment():
+    """The docstring case is tested above; this pins the same claim for comments."""
+    source = "x = 1  # turns except A, B: into except (A, B):\n"
+    assert unparenthesised_except_tuples(source) == []
+
+
+def test_the_checker_accepts_a_single_exception_with_an_alias():
+    source = "try:\n    pass\nexcept OSError as exc:\n    pass\n"
+    assert unparenthesised_except_tuples(source) == []
