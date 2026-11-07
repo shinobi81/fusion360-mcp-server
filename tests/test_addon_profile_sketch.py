@@ -112,3 +112,14 @@ def test_mock_mode_echoes_the_profile_sketch(mock_name, params):
     """Mock mode reports which sketch held the profile, as the handler does."""
     result = mock_command(mock_name, {**params, "sketch_name": "Sketch_plate"})
     assert result["sketch"] == "Sketch_plate"
+
+
+def test_the_fake_curve_collection_counts_what_it_iterates():
+    """`count` and iteration must agree, or an index taken from one misses."""
+    sketch = FakeSketch(name="Sketch_rect")
+    sketch.sketchCurves.sketchLines.addTwoPointRectangle(
+        type("P", (), {"x": 0.0, "y": 0.0})(),
+        type("P", (), {"x": 2.0, "y": 1.0})(),
+    )
+    sketch.sketchCurves.sketchCircles.addByCenterRadius((1.0, 1.0), 0.5)
+    assert len(list(sketch.sketchCurves)) == sketch.sketchCurves.count == 5

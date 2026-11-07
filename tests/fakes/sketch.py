@@ -181,18 +181,21 @@ class FakeSketchCurves:
         return len(self._sketch.lines) + other_curves
 
     def __iter__(self):
-        """Fusion's ``SketchCurves`` is iterable; each recorded call is one curve.
+        """One entry per curve, matching ``count``.
 
-        ``sweep`` takes a path by index from ``list(path_sketch.sketchCurves)``,
-        so the collection has to yield something per curve.  Nothing here reads
-        the curve's geometry afterwards — it is handed to ``features.createPath``.
+        Lines are the objects ``sketchLines`` builds — a rectangle is *four*
+        lines from one call, and ``add_constraint`` indexes this collection by
+        curve — and the other types are proxies standing for their recorded
+        calls.  Keeping ``len(list(...)) == count`` matters: a caller that takes
+        ``curves[index]`` must not see a different number than the one it read.
         """
-        return iter(
-            [
-                type("FakeCurve", (), {"kind": kind, "payload": payload})()
-                for kind, payload in self._sketch.curve_calls
-            ]
+        curves: list = list(self._sketch.lines)
+        curves.extend(
+            type("FakeCurve", (), {"kind": kind, "payload": payload})()
+            for kind, payload in self._sketch.curve_calls
+            if kind != "line"
         )
+        return iter(curves)
 
 
 class FakeProfile:
