@@ -167,6 +167,17 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # A body whose edges all reported a dead parameter range cannot be probed
+        # by point.  Without a rule this classified as UNKNOWN with no hints — the
+        # failure mode AGENTS.md says must never ship.
+        r"no usable parameter range",
+        "INVALID_INPUT",
+        [
+            "No edge on that body could be measured; nothing was written.",
+            "Call list_edges and choose with edge_indices instead.",
+        ],
+    ),
+    (
         # Point selection can fail three ways, and every one of them names the
         # measurement the caller needs to fix it rather than "no edges matched".
         r"no edge within .* cm of|equally close to edges|has no edges, so no point"

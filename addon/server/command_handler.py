@@ -626,7 +626,6 @@ class CommandHandler:
             target = adsk.core.Point3D.create(x, y, z)
             best = None
             ties = []
-            measured = 0
             for index in range(body.edges.count):
                 edge = body.edges.item(index)
                 # An edge's parameters are its own, not 0..1: Fusion reported
@@ -644,7 +643,6 @@ class CommandHandler:
                         samples.append(position)
                 if len(samples) < 2:
                     continue
-                measured += 1
                 distance = segment_distance(samples, target)
                 if best is None or distance < best[0] - 1e-6:
                     best = (distance, edge, index)

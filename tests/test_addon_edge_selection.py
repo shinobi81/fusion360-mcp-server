@@ -433,3 +433,20 @@ def test_a_body_whose_edges_have_no_usable_range_says_that_not_no_edges(bound_ha
     message = str(raised.value)
     assert "no usable parameter range" in message
     assert "has no edges" not in message
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_an_edge_that_reports_a_failed_extent_is_skipped(bound_handler):
+    """Fusion's first answer is a flag; False means "could not measure"."""
+    from tests.fakes.bodies import FakeBody, FakeEdge, FakeEdges
+    from tests.fakes.design import FakeDesign
+
+    edge = FakeEdge((0, 0, 0), (1, 0, 0))
+    edge.evaluator.found = False
+    body = FakeBody("Blind", edges=FakeEdges([edge]))
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    with pytest.raises(RuntimeError) as raised:
+        handler._select_edges(body, "all", points=[[0.0, 0.0, 0.0]])
+
+    assert "no usable parameter range" in str(raised.value)

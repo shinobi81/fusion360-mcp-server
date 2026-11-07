@@ -47,9 +47,12 @@ class FakeEdgeEvaluator:
     #: straight edge in Fusion 2706, which reported exactly this range.
     ranges = (-1.0, 0.0)
 
+    #: Fusion's first answer is a flag: False means "could not measure".
+    found = True
+
     def getParameterExtents(self):
         """``(found, low, high)`` — Fusion's three-part answer."""
-        return True, self.ranges[0], self.ranges[1]
+        return self.found, self.ranges[0], self.ranges[1]
 
     def getPointAtParameter(self, parameter):
         """``(found, point)`` for a parameter inside the edge's own range.
