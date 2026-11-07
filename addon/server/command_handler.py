@@ -1938,10 +1938,14 @@ class CommandHandler:
             "diameter": diameter,
             "depth": depth,
             "actual_diameter": feat.holeDiameter.value,
-            "cut_bodies": [b.name for b in feat.bodies],
             # Where the request resolved to, not a measurement of the feature.
             "resolved_center": [center_x, center_y, center_z],
         }
+        # No "cut_bodies": Feature.bodies reports the participants this call set
+        # one line above, not what was actually cut (measured on 2706 - a cut
+        # naming a body it never reaches still reports that body), so the field
+        # echoed the input dressed as a result. The measured answer to "did it
+        # cut?" is the envelope's own deltas.
 
     def rectangular_pattern(
         self,

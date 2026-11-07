@@ -176,8 +176,8 @@ class TestMockFeatures:
         assert "new_body_name" in result
 
     def test_create_hole_reports_the_keys_agents_verify_against(self):
-        # actual_diameter / cut_bodies / resolved_center let a caller check
-        # what was made against what it asked for; mock mode must carry them.
+        # actual_diameter / resolved_center let a caller check what was made
+        # against what it asked for; mock mode must carry them.
         result = mock_command(
             "create_hole",
             {
@@ -189,13 +189,17 @@ class TestMockFeatures:
             },
         )
         assert result["actual_diameter"] == 0.52
-        assert result["cut_bodies"] == ["Plate"]
         assert result["resolved_center"][:2] == [22, 1.5]
+        assert result["body_name"] == "Plate"
+        # No cut_bodies: Feature.bodies reports the participant the handler set,
+        # not what was cut, so the field would echo its own input. The measured
+        # answer to "did it cut?" is the envelope's deltas.
+        assert "cut_bodies" not in result
 
     def test_create_hole_falls_back_to_body_index(self):
         result = mock_command("create_hole", {"diameter": 0.5, "body_index": 1})
         assert result["body_name"] == "Body2"
-        assert result["cut_bodies"] == ["Body2"]
+        assert "cut_bodies" not in result
 
 
 class TestMockBodyOps:
