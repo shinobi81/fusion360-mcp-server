@@ -7,6 +7,71 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.6.0] - 2026-11-07
+
+The release that lets a caller say **which body a feature touches**, and stops the API
+reporting a result it had only echoed back.
+
+### Added
+
+- **`target_body` on `extrude`, `revolve`, `sweep` and `loft`.** Without it Fusion
+  applies a `cut`/`join`/`intersect` to *every* body the profile reaches. It sets
+  Fusion's own `participantBodies`; nothing is copied or recreated. Measured on 2706: a
+  loft across the seam between two touching blocks cut both, a `join` with no target
+  merged the second body into the first (two bodies became one), and naming the target
+  prevented both. (#41, #42)
+- **`keep_tool` on `boolean_operation`**, so a boolean can leave the tool body alone
+  instead of consuming it. (#39)
+- **`list_edges`**, and `edge_indices` / `edge_points` / `edge_tolerance` on `fillet`
+  and `chamfer`, replacing the coarse `all`/`top`/`bottom`/`vertical` selector as the
+  only option. Points snap to the nearest edge; a point too far away, or equally close
+  to two edges, is refused with the measurement. (#36)
+- **`sketch_name` on the seven `draw_*` tools and `create_polygon`**, so geometry can be
+  added to an older sketch without relying on creation order, and on `extrude`,
+  `revolve` and `sweep` for the profile side of a feature. (#35, #38)
+
+### Changed
+
+- **A mistyped `operation` is reported first**, before a bad body or sketch. It
+  invalidates the whole call, so any other error was sending the caller to fix the
+  wrong thing. It also no longer leaves a construction line behind on a non-zero
+  revolve axis. (#41, #42)
+- **The add-in's refusal messages are classified, not `UNKNOWN`**: the profile that
+  reaches no body (`NO_TARGET_SWEEP_BODY`), a loft with fewer than two profiles, and a
+  mistyped `operation` on every feature tool now return `INVALID_INPUT` with a next
+  step. (#41, #42)
+- **The add-in's CAM refusals are mirrored in mock mode**, including non-finite stock
+  offsets and `tool_diameter`, so the development surface refuses what Fusion refuses.
+  (#34)
+- **`ruff format --check` is a CI gate** over `src/`, `tests/` and `fuzz/`; `addon/`
+  stays linted but not format-gated, because it runs on Fusion's own interpreter.
+  (#33)
+- **`pyright` is one surface**: `pyrightconfig.json` is gone, `[tool.pyright]` in
+  `pyproject.toml` is the only copy, and `uvx pyright` now reports **0 errors**
+  repo-wide. (#32, #43)
+
+### Fixed
+
+- **`fillet` / `chamfer` edge selection** samples each edge over its own parameter
+  range and checks tolerance before ambiguity; both were wrong against real geometry
+  and right only against the fake. (#40)
+- **`build_value_input`'s unitless path** handed a huge int to `createByReal`, which
+  raised `OverflowError` and surfaced as `UNKNOWN` with no hints. (#34)
+
+### Removed
+
+- **`create_hole` no longer reports `cut_bodies`.** `Feature.bodies` reports the
+  participants the call set, not what was cut — measured: a cut naming a body it never
+  reaches still reports that body — so the field echoed its own input dressed as a
+  result, and a caller could read it as proof the hole landed. The envelope's `deltas`
+  are the measured answer. **This is a response-shape break**, which is why it is a
+  minor release. (#44)
+
+### Tests and CI
+
+- The suite fails if the add-in gains PEP 758 syntax, which a formatter would otherwise
+  write into code that runs on Fusion's interpreter. (#37)
+
 ## [0.5.0] - 2026-11-05
 
 ### Added
@@ -205,6 +270,7 @@ and published; they are the fork history.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.6.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.3.1...v0.4.0
