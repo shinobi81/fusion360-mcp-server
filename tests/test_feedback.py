@@ -80,6 +80,18 @@ class TestHintClassification:
         assert kind == "INVALID_INPUT"
         assert any("milling" in hint for hint in hints)
 
+    def test_a_cut_that_reaches_no_body_says_so(self):
+        """Found live on a sweep whose profile sat outside every block.
+
+        Fusion's own wording, and it classified as UNKNOWN with no hints — the
+        caller was told nothing about why nothing was cut.
+        """
+        msg = "3 : NO_TARGET_SWEEP_BODY - No intersecting target body was found."
+        kind, hints = classify(msg)
+        assert kind == "INVALID_INPUT"
+        assert any("reaches no body" in hint for hint in hints)
+        assert any("overlaps a body" in hint for hint in hints)
+
     def test_tool_diameter_refusal_points_at_the_tool_library(self):
         """The add-in refuses ``tool_diameter`` on an operation, and had no rule.
 

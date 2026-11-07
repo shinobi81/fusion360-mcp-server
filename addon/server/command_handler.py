@@ -445,11 +445,11 @@ class CommandHandler:
     def _resolve_target_body(self, target_body: str | None, operation: str):
         """The body an operation is restricted to, or None to let Fusion choose.
 
-        Both revolve and loft inputs carry ``participantBodies``, and leaving it
-        empty means "every body the profile reaches".  Measured on Fusion 2706:
-        a loft whose sections spanned the seam between two touching blocks cut
-        *both* of them, and a caller had no way to cut one.  Resolution happens
-        before any geometry is created, so a refusal leaves nothing behind.
+        The extrude, revolve, sweep and loft inputs all carry ``participantBodies``,
+        and leaving it empty means "every body the profile reaches".  Measured on
+        Fusion 2706: a loft whose sections spanned the seam between two touching
+        blocks cut *both* of them, and a caller had no way to cut one.  Resolution
+        happens before any geometry is created, so a refusal leaves nothing behind.
         """
         if target_body is None:
             return None
@@ -1467,22 +1467,35 @@ class CommandHandler:
         operation: str = "new_body",
         direction: str = "positive",
         sketch_name: str | None = None,
+        target_body: str | None = None,
     ):
+        """Extrude a sketch profile.
+
+        ``target_body`` names the body a cut/join/intersect applies to; without
+        it Fusion applies the operation to every body the profile reaches.
+        """
         root = self._root()
+        # The operation first: a mistyped one invalidates everything after it,
+        # and a caller sent looking for a body or a sketch would fix that and be
+        # refused again.
+        feature_operation = self._operation_type(operation)
         sketch = (
             self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
         )
         if sketch.profiles.count == 0:
             raise RuntimeError("No profiles in sketch")
         profile = sketch.profiles.item(profile_index)
+        target = self._resolve_target_body(target_body, operation)
 
         ext_feats = root.features.extrudeFeatures
-        ext_input = ext_feats.createInput(profile, self._operation_type(operation))
+        ext_input = ext_feats.createInput(profile, feature_operation)
         dist = adsk.core.ValueInput.createByReal(height)
         if direction == "symmetric":
             ext_input.setSymmetricExtent(dist, True)
         else:
             ext_input.setDistanceExtent(direction == "negative", dist)
+        if target is not None:
+            ext_input.participantBodies = [target]
 
         feat = ext_feats.add(ext_input)
         return {
@@ -1491,6 +1504,7 @@ class CommandHandler:
             "height": height,
             "operation": operation,
             "direction": direction,
+            "target_body": target_body,
         }
 
     def revolve(
@@ -1519,6 +1533,8 @@ class CommandHandler:
         it Fusion applies the operation to every body the profile reaches.
         """
         root = self._root()
+        # The operation first: a mistyped one invalidates everything after it.
+        feature_operation = self._operation_type(operation)
         sketch = (
             self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
         )
@@ -1527,9 +1543,6 @@ class CommandHandler:
         # Read the frame before anything is created, so a failure here cannot
         # report an error for geometry that was already built.
         frame = self._sketch_frame(sketch)
-        # The operation first: a mistyped one invalidates any target, and a
-        # caller sent looking for a body would fix it and be refused again.
-        feature_operation = self._operation_type(operation)
         # Before the axis line exists: a refused target must leave no geometry.
         target = self._resolve_target_body(target_body, operation)
 
@@ -1658,8 +1671,16 @@ class CommandHandler:
         path_curve_index: int = 0,
         operation: str = "new_body",
         sketch_name: str | None = None,
+        target_body: str | None = None,
     ):
+        """Sweep a profile along a path curve.
+
+        ``target_body`` names the body a cut/join/intersect applies to; without
+        it Fusion applies the operation to every body the sweep reaches.
+        """
         root = self._root()
+        # The operation first: a mistyped one invalidates everything after it.
+        feature_operation = self._operation_type(operation)
         sketch = (
             self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
         )
@@ -1668,6 +1689,7 @@ class CommandHandler:
         if sketch.profiles.count == 0:
             raise RuntimeError("No profiles in sketch")
         profile = sketch.profiles.item(profile_index)
+        target = self._resolve_target_body(target_body, operation)
 
         path_curves = list(path_sketch.sketchCurves)
         path_curve = path_curves[path_curve_index]
@@ -1675,14 +1697,15 @@ class CommandHandler:
         path = root.features.createPath(path_curve)
 
         sweep_feats = root.features.sweepFeatures
-        sweep_input = sweep_feats.createInput(
-            profile, path, self._operation_type(operation)
-        )
+        sweep_input = sweep_feats.createInput(profile, path, feature_operation)
+        if target is not None:
+            sweep_input.participantBodies = [target]
         feat = sweep_feats.add(sweep_input)
         return {
             "feature_name": feat.name,
             "sketch": sketch.name,
             "operation": operation,
+            "target_body": target_body,
         }
 
     def loft(

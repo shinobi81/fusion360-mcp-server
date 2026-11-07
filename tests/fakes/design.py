@@ -282,6 +282,8 @@ class FakeExtrudeInput:
         self.operation = operation
         self.symmetric = None
         self.distance = None
+        # Empty means "let Fusion pick the bodies this operation touches".
+        self.participantBodies: list = []
 
     def setSymmetricExtent(self, distance, is_full_width) -> None:
         self.symmetric = (distance, is_full_width)
@@ -312,6 +314,8 @@ class FakeSweepInput:
         self.profile = profile
         self.path = path
         self.operation = operation
+        # Empty means "let Fusion pick the bodies this operation touches".
+        self.participantBodies: list = []
 
 
 class FakeSweepFeatures:

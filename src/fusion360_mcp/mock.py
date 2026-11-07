@@ -290,11 +290,15 @@ def _target_body_error(p: dict) -> dict | None:
 
 
 def _extrude(p: dict) -> dict:
+    refused = _target_body_error(p)
+    if refused is not None:
+        return refused
     return {
         "body_name": "Body_mock",
         "sketch": p.get("sketch_name") or "Sketch_mock_xy",
         "height": p.get("height", 1),
         "operation": p.get("operation", "new_body"),
+        "target_body": p.get("target_body"),
     }
 
 
@@ -429,11 +433,15 @@ def _set_design_type(p: dict) -> dict:
 
 
 def _sweep(p: dict) -> dict:
+    refused = _target_body_error(p)
+    if refused is not None:
+        return refused
     return {
         "body_name": "Body_mock_sweep",
         "sketch": p.get("sketch_name") or "Sketch_mock_xy",
         "path_sketch_name": p.get("path_sketch_name", "PathSketch"),
         "operation": p.get("operation", "new_body"),
+        "target_body": p.get("target_body"),
     }
 
 
