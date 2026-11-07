@@ -14,6 +14,9 @@ _SKETCH_PLANE_Z = (
     "create_sketch(z_offset=...) to move the plane itself."
 )
 
+# Naming the sketch is what keeps geometry out of "whatever was created last".
+_SKETCH_NAME_TARGET = "Sketch to draw into (default: the most recent sketch)."
+
 TOOLS: list[dict] = [
     # ── scene / query ────────────────────────────────────────────────
     {
@@ -80,7 +83,7 @@ TOOLS: list[dict] = [
     {
         "name": "draw_rectangle",
         "title": "Draw Rectangle",
-        "description": "Draw a rectangle in the most recent sketch",
+        "description": "Draw a rectangle in the most recent sketch, or in sketch_name",
         "inputSchema": {
             "type": "object",
             "required": ["width", "height"],
@@ -94,13 +97,17 @@ TOOLS: list[dict] = [
                     "default": 0,
                     "description": _SKETCH_PLANE_Z,
                 },
+                "sketch_name": {
+                    "type": "string",
+                    "description": _SKETCH_NAME_TARGET,
+                },
             },
         },
     },
     {
         "name": "draw_circle",
         "title": "Draw Circle",
-        "description": "Draw a circle in the most recent sketch",
+        "description": "Draw a circle in the most recent sketch, or in sketch_name",
         "inputSchema": {
             "type": "object",
             "required": ["radius"],
@@ -113,13 +120,17 @@ TOOLS: list[dict] = [
                     "default": 0,
                     "description": _SKETCH_PLANE_Z,
                 },
+                "sketch_name": {
+                    "type": "string",
+                    "description": _SKETCH_NAME_TARGET,
+                },
             },
         },
     },
     {
         "name": "draw_line",
         "title": "Draw Line",
-        "description": "Draw a line in the most recent sketch",
+        "description": "Draw a line in the most recent sketch, or in sketch_name",
         "inputSchema": {
             "type": "object",
             "required": ["start_x", "start_y", "end_x", "end_y"],
@@ -137,6 +148,10 @@ TOOLS: list[dict] = [
                     "type": "number",
                     "default": 0,
                     "description": _SKETCH_PLANE_Z,
+                },
+                "sketch_name": {
+                    "type": "string",
+                    "description": _SKETCH_NAME_TARGET,
                 },
             },
         },
@@ -465,7 +480,9 @@ TOOLS: list[dict] = [
     {
         "name": "create_polygon",
         "title": "Create Polygon",
-        "description": "Draw a regular polygon in the most recent sketch",
+        "description": (
+            "Draw a regular polygon in the most recent sketch, or in sketch_name"
+        ),
         "inputSchema": {
             "type": "object",
             "required": ["sides", "radius"],
@@ -482,6 +499,10 @@ TOOLS: list[dict] = [
                     "type": "number",
                     "default": 0,
                     "description": _SKETCH_PLANE_Z,
+                },
+                "sketch_name": {
+                    "type": "string",
+                    "description": _SKETCH_NAME_TARGET,
                 },
             },
         },
@@ -515,6 +536,10 @@ TOOLS: list[dict] = [
                     "description": "Sweep angle in degrees (positive = CCW)",
                     "minimum": -360,
                     "maximum": 360,
+                },
+                "sketch_name": {
+                    "type": "string",
+                    "description": _SKETCH_NAME_TARGET,
                 },
             },
         },
@@ -1073,6 +1098,10 @@ TOOLS: list[dict] = [
                 },
                 "center_x": {"type": "number", "default": 0},
                 "center_y": {"type": "number", "default": 0},
+                "sketch_name": {
+                    "type": "string",
+                    "description": _SKETCH_NAME_TARGET,
+                },
             },
         },
     },
@@ -1396,6 +1425,10 @@ TOOLS: list[dict] = [
                     "enum": [3, 5],
                     "default": 3,
                     "description": ("Spline degree (only for control_points, 3 or 5)"),
+                },
+                "sketch_name": {
+                    "type": "string",
+                    "description": _SKETCH_NAME_TARGET,
                 },
             },
         },

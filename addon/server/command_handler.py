@@ -761,8 +761,11 @@ class CommandHandler:
         origin_x: float = 0,
         origin_y: float = 0,
         origin_z: float = 0,
+        sketch_name: str | None = None,
     ):
-        sketch = self._last_sketch()
+        sketch = (
+            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
+        )
         frame = self._sketch_frame(sketch)
         p1 = self._plane_point(origin_x, origin_y)
         p2 = self._plane_point(origin_x + width, origin_y + height)
@@ -783,8 +786,11 @@ class CommandHandler:
         center_x: float = 0,
         center_y: float = 0,
         center_z: float = 0,
+        sketch_name: str | None = None,
     ):
-        sketch = self._last_sketch()
+        sketch = (
+            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
+        )
         frame = self._sketch_frame(sketch)
         c = self._plane_point(center_x, center_y)
         sketch.sketchCurves.sketchCircles.addByCenterRadius(c, radius)
@@ -806,8 +812,11 @@ class CommandHandler:
         end_y: float,
         start_z: float = 0,
         end_z: float = 0,
+        sketch_name: str | None = None,
     ):
-        sketch = self._last_sketch()
+        sketch = (
+            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
+        )
         frame = self._sketch_frame(sketch)
         sp = self._plane_point(start_x, start_y)
         ep = self._plane_point(end_x, end_y)
@@ -833,8 +842,11 @@ class CommandHandler:
         sweep_angle: float,
         center_z: float = 0,
         start_z: float = 0,
+        sketch_name: str | None = None,
     ):
-        sketch = self._last_sketch()
+        sketch = (
+            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
+        )
         frame = self._sketch_frame(sketch)
         center = self._plane_point(center_x, center_y)
         start = self._plane_point(start_x, start_y)
@@ -850,8 +862,16 @@ class CommandHandler:
             start_z,
         )
 
-    def draw_spline(self, spline_type: str, points: list, degree: int = 3):
-        sketch = self._last_sketch()
+    def draw_spline(
+        self,
+        spline_type: str,
+        points: list,
+        degree: int = 3,
+        sketch_name: str | None = None,
+    ):
+        sketch = (
+            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
+        )
         frame = self._sketch_frame(sketch)
         pts = adsk.core.ObjectCollection.create()
         for p in points:
@@ -879,8 +899,11 @@ class CommandHandler:
         center_x: float = 0,
         center_y: float = 0,
         center_z: float = 0,
+        sketch_name: str | None = None,
     ):
-        sketch = self._last_sketch()
+        sketch = (
+            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
+        )
         frame = self._sketch_frame(sketch)
         # Draw inscribed polygon. Deferring the solve matters here because Fusion
         # re-solves the whole sketch after every entity insert.
@@ -920,8 +943,11 @@ class CommandHandler:
         axis: str = "x",
         center_x: float = 0,
         center_y: float = 0,
+        sketch_name: str | None = None,
     ):
-        """Add *count* evenly spaced circles to the last sketch in one solve.
+        """Add *count* evenly spaced circles to one sketch in a single solve.
+
+The default is the last sketch; *sketch_name* targets an older one.
 
         Fusion re-solves the sketch after every entity insert, so adding N
         circles one command at a time is superlinear in N. Deferring the solve
@@ -934,7 +960,9 @@ class CommandHandler:
         if axis not in ("x", "y"):
             raise RuntimeError(f"Unknown axis: {axis} - use x or y")
 
-        sketch = self._last_sketch()
+        sketch = (
+            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
+        )
         previous_deferred = sketch.isComputeDeferred
         sketch.isComputeDeferred = True
         try:

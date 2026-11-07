@@ -206,7 +206,7 @@ def _sketch_plane_fields(z_values: list) -> dict:
 def _draw_rectangle(p: dict) -> dict:
     x, y = p.get("origin_x", 0), p.get("origin_y", 0)
     return {
-        "sketch_name": "Sketch_mock_xy",
+        "sketch_name": p.get("sketch_name") or "Sketch_mock_xy",
         "width": p.get("width", 1),
         "height": p.get("height", 1),
         "model_origin": [x, y, 0.0],
@@ -217,7 +217,7 @@ def _draw_rectangle(p: dict) -> dict:
 def _draw_circle(p: dict) -> dict:
     x, y = p.get("center_x", 0), p.get("center_y", 0)
     return {
-        "sketch_name": "Sketch_mock_xy",
+        "sketch_name": p.get("sketch_name") or "Sketch_mock_xy",
         "radius": p.get("radius", 1),
         "model_center": [x, y, 0.0],
         **_sketch_plane_fields([p.get("center_z", 0)]),
@@ -228,7 +228,7 @@ def _draw_line(p: dict) -> dict:
     start = [p.get("start_x", 0), p.get("start_y", 0)]
     end = [p.get("end_x", 1), p.get("end_y", 1)]
     return {
-        "sketch_name": "Sketch_mock_xy",
+        "sketch_name": p.get("sketch_name") or "Sketch_mock_xy",
         "start": start,
         "end": end,
         "model_start": [*start, 0.0],
@@ -365,7 +365,7 @@ def _loft(p: dict) -> dict:
 def _create_polygon(p: dict) -> dict:
     x, y = p.get("center_x", 0), p.get("center_y", 0)
     return {
-        "sketch_name": "Sketch_mock_xy",
+        "sketch_name": p.get("sketch_name") or "Sketch_mock_xy",
         "sides": p.get("sides", 6),
         "radius": p.get("radius", 1),
         "model_center": [x, y, 0.0],
@@ -376,7 +376,7 @@ def _create_polygon(p: dict) -> dict:
 def _draw_circles(p: dict) -> dict:
     count = p.get("count", 1)
     return {
-        "sketch": "Sketch_mock_xy",
+        "sketch": p.get("sketch_name") or "Sketch_mock_xy",
         "added": count,
         "total_curves": count,
         "radius": p.get("radius", 1),
@@ -387,7 +387,7 @@ def _draw_circles(p: dict) -> dict:
 
 def _draw_arc(p: dict) -> dict:
     return {
-        "sketch_name": "Sketch_mock_xy",
+        "sketch_name": p.get("sketch_name") or "Sketch_mock_xy",
         "center": [p.get("center_x", 0), p.get("center_y", 0)],
         "sweep_angle": p.get("sweep_angle", 90),
         "model_center": [p.get("center_x", 0), p.get("center_y", 0), 0.0],
@@ -681,7 +681,7 @@ def _create_construction_axis(p: dict) -> dict:
 def _draw_spline(p: dict) -> dict:
     points = p.get("points", [])
     return {
-        "sketch_name": "Sketch_mock_xy",
+        "sketch_name": p.get("sketch_name") or "Sketch_mock_xy",
         "spline_type": p.get("spline_type", "fit_points"),
         "point_count": len(points),
         "points_count": len(points),

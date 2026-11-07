@@ -46,6 +46,10 @@ verified on **Fusion 2706.1.17**.
 | `extend_curve`     | Extend to nearest intersection                                                                                           |
 | `project_geometry` | Project edges/bodies onto sketch plane                                                                                   |
 
+The `draw_*` tools and `create_polygon` take an optional `sketch_name`; without it
+the geometry goes into the most recent sketch. Naming it lets you add to an older
+sketch without relying on creation order.
+
 ## Features
 
 | Tool                  | Description                           |

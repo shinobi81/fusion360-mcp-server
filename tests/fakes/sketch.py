@@ -162,11 +162,23 @@ class FakeSketchCurves:
     """Each collection offers only the constructors Fusion has on it."""
 
     def __init__(self, sketch: FakeSketch):
+        self._sketch = sketch
         self.sketchLines = FakeSketchLines(sketch)
         self.sketchCircles = _CircleRecorder(sketch, "circle")
         self.sketchArcs = _ArcRecorder(sketch, "arc")
         self.sketchFittedSplines = _PointRecorder(sketch, "fit_spline")
         self.sketchControlPointSplines = _PointDegreeRecorder(sketch, "control_spline")
+
+    @property
+    def count(self) -> int:
+        """Curves in the sketch, which ``draw_circles`` reports back.
+
+        Lines are counted from the objects ``sketchLines`` builds — a rectangle
+        is four lines from one call — and the other curve types from their
+        recorded calls, because nothing here models them as objects.
+        """
+        other_curves = sum(1 for kind, _ in self._sketch.curve_calls if kind != "line")
+        return len(self._sketch.lines) + other_curves
 
 
 class FakeProfile:
