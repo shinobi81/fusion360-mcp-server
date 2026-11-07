@@ -124,18 +124,26 @@ def test_documents_quoting_the_ruff_selection_match_the_config():
     assert offenders == [], f"{'; '.join(offenders)}; pyproject configures {configured}"
 
 
+def _ci_lines() -> list[str]:
+    return CI_WORKFLOW.read_text(encoding="utf-8").splitlines()
+
+
+def _ci_lint_step_start(lines: list[str]) -> int | None:
+    return next(
+        (i for i, line in enumerate(lines) if line.strip() == "- name: Lint"),
+        None,
+    )
+
+
 def _ci_lint_step_lines() -> list[str]:
     """The lines of ci.yml's ``- name: Lint`` step, header to the next step.
 
     Scoped to the step rather than to the file: a command that exists somewhere in
-    the workflow gates nothing when it sits in a job that does not run on a pull
-    request.  Returns ``[]`` when the step is gone, which the test reports.
+    the workflow gates nothing when the job around it never runs.  Returns ``[]``
+    when the step is gone, which the test reports.
     """
-    lines = CI_WORKFLOW.read_text(encoding="utf-8").splitlines()
-    start = next(
-        (i for i, line in enumerate(lines) if line.strip() == "- name: Lint"),
-        None,
-    )
+    lines = _ci_lines()
+    start = _ci_lint_step_start(lines)
     if start is None:
         return []
     indent = len(lines[start]) - len(lines[start].lstrip())
@@ -150,6 +158,30 @@ def _ci_lint_step_lines() -> list[str]:
         len(rest),
     )
     return [lines[start], *rest[:end]]
+
+
+def _ci_lint_job_preamble() -> list[str]:
+    """The `Lint` step's job header plus every key between it and the step.
+
+    A step that only runs on `push`, or whose job is conditional, is not a gate
+    on a pull request.  The keys are returned rather than parsed so the caller can
+    name the job and reject a conditional one in the same breath.
+    """
+    lines = _ci_lines()
+    start = _ci_lint_step_start(lines)
+    if start is None:
+        return []
+    job = next(
+        (
+            i
+            for i in range(start - 1, -1, -1)
+            if re.fullmatch(r"  [\w-]+:\s*", lines[i])
+        ),
+        None,
+    )
+    if job is None:
+        return []
+    return lines[job:start]
 
 
 def _ci_ruff_commands() -> list[str]:
@@ -167,7 +199,7 @@ def _ci_ruff_commands() -> list[str]:
 
 
 def test_ci_gates_the_formatter_as_well_as_the_linter():
-    """`ruff check` alone left four unformatted files on `main` for two changes.
+    """`ruff check` alone left four unformatted files on `main` across two changes.
 
     Nothing ran the formatter, so the drift only surfaced when someone typed
     `ruff format` by hand — and the notes that said the gate was clean were
@@ -185,13 +217,19 @@ def test_ci_gates_the_formatter_as_well_as_the_linter():
     """
     block = _ci_lint_step_lines()
     assert block, "ci.yml has no `- name: Lint` step"
+    preamble = _ci_lint_job_preamble()
+    assert preamble and preamble[0].strip() == "test:", (
+        "the Lint step must live in the `test` job: the ruleset's required checks "
+        f"are `test (3.14)` and `test (3.15)`, so a gate in any other job is not "
+        f"required; found {preamble[:1]}"
+    )
     disarmed = [
         line.strip()
-        for line in block
+        for line in preamble + block
         if line.strip().startswith(("if:", "continue-on-error:"))
     ]
     assert disarmed == [], (
-        f"the Lint step must not be conditional or allowed to fail: {disarmed}"
+        f"the `test` job and its Lint step must not be conditional: {disarmed}"
     )
     commands = _ci_ruff_commands()
     assert "uv run ruff check src/ tests/ fuzz/ addon/" in commands, (
