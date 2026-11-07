@@ -167,8 +167,8 @@ record why not — in the thread — before merging.
 | `revolve`             | Revolve a profile around an axis      |
 | `sweep`               | Sweep a profile along a path          |
 | `loft`                | Loft between two or more profiles     |
-| `fillet`              | Round edges (all/top/bottom/vertical) |
-| `chamfer`             | Chamfer edges                         |
+| `fillet`              | Round edges: all/top/bottom/vertical, or `edge_indices` / `edge_points` |
+| `chamfer`             | Chamfer edges: same three selectors as `fillet` |
 | `shell`               | Hollow out a body                     |
 | `mirror`              | Mirror a body across a plane          |
 | `create_hole`         | Hole feature on a body face           |
