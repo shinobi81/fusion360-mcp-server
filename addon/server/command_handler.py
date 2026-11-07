@@ -1933,12 +1933,16 @@ class CommandHandler:
         hole_input.participantBodies = [body]
 
         feat = holes.add(hole_input)
+        # No "cut_bodies" here: Feature.bodies reports the participants this call
+        # set above, not what was actually cut (measured on 2706 - a cut naming a
+        # body it never reaches still reports that body), so the field echoed the
+        # input dressed as a result. The measured answer to "did it cut?" is the
+        # envelope's own deltas.
         return {
             "feature_name": feat.name,
             "diameter": diameter,
             "depth": depth,
             "actual_diameter": feat.holeDiameter.value,
-            "cut_bodies": [b.name for b in feat.bodies],
             # Where the request resolved to, not a measurement of the feature.
             "resolved_center": [center_x, center_y, center_z],
         }
