@@ -159,7 +159,7 @@ _RULES: list[tuple[str, str, list[str]]] = [
     (
         # Indices are positional: a stale one and an empty list are both caller
         # mistakes that Fusion cannot detect, so the refusal has to explain them.
-        r"edge index \d+ is out of range|edge_indices was empty",
+        r"edge index \S+ is out of range|edge_indices was empty|edge_points was empty",
         "INVALID_INPUT",
         [
             "Edge indices are positional and come from list_edges.",

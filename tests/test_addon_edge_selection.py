@@ -277,7 +277,7 @@ def test_a_point_on_an_edge_selects_that_edge(select):
 
 
 def test_a_point_near_the_end_of_a_long_edge_still_selects_it(select):
-    """Midpoint distance would send this to the neighbouring edge."""
+    """A midpoint measure would refuse this: 4.5 cm from the midpoint, 0.0 on it."""
     coll = select(
         [((0, 0, 0), (10, 0, 0)), ((0, 0, 1), (1, 0, 1))],
         "all",
@@ -290,8 +290,9 @@ def test_a_point_far_from_every_edge_names_the_distance_and_the_nearest(select):
     with pytest.raises(RuntimeError) as raised:
         select([((0, 0, 0), (4, 0, 0))], "all", points=[[2.0, 0.0, 9.0]])
     message = str(raised.value)
-    assert "0.1" in message  # the tolerance
-    assert "cm" in message
+    assert "0.1" in message, "the refusal must name the tolerance it applied"
+    assert "9.000" in message, "and how far off the point actually was"
+    assert "nearest is edge 0" in message, "and which edge it almost hit"
     assert classify(raised.value)[0] == "INVALID_INPUT"
 
 
@@ -355,3 +356,37 @@ def test_mock_chamfer_counts_points_as_edges():
 
 def test_mock_without_a_selector_reports_a_whole_body():
     assert mock_command("fillet", {"radius": 0.3})["edges_count"] > 1
+
+
+# ── refusals the review asked for ─────────────────────────────────────
+
+
+def test_a_nan_tolerance_cannot_be_used_to_accept_a_far_point(select):
+    """`NaN > tolerance` is always False, so an unguarded NaN accepts anything."""
+    with pytest.raises(ValueError) as raised:
+        select(
+            [((0, 0, 0), (4, 0, 0))],
+            "all",
+            points=[[2.0, 0.0, 9.0]],
+            tolerance=float("nan"),
+        )
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_an_empty_points_list_is_refused_like_an_empty_indices_list(select):
+    with pytest.raises(RuntimeError) as raised:
+        select([((0, 0, 0), (4, 0, 0))], "all", points=[])
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_a_fractional_index_is_refused_rather_than_truncated(select):
+    """`int(1.9)` is 1: silently rounding a different edge than named."""
+    with pytest.raises(RuntimeError) as raised:
+        select([((0, 0, 0), (4, 0, 0)), ((0, 0, 1), (4, 0, 1))], "all", indices=[1.9])
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_an_index_on_a_body_with_no_edges_does_not_claim_index_zero_exists(select):
+    with pytest.raises(RuntimeError) as raised:
+        select([], "all", indices=[0])
+    assert "no edges" in str(raised.value)

@@ -1,7 +1,7 @@
 # Fusion360 MCP Server
 
 > MCP server that lets AI coding agents drive Autodesk Fusion 360: primitives,
-> sketching, features, assemblies, sheet metal, CAM, measurement and export — 96
+> sketching, features, assemblies, sheet metal, CAM, measurement and export — 97
 > tools over the Model Context Protocol, with errors returned as structured data.
 
 ## Start here
@@ -10,7 +10,7 @@
   install from a tag, behaviour worth knowing (centimetres, 30 s bridge timeout, undo
   semantics), and troubleshooting.
 - [docs/TOOLS.md](https://github.com/shinobi81/fusion360-mcp-server/blob/main/docs/TOOLS.md):
-  all 96 tools with descriptions, grouped by category.
+  all 97 tools with descriptions, grouped by category.
 - [AGENTS.md](https://github.com/shinobi81/fusion360-mcp-server/blob/main/AGENTS.md):
   instructions for AI coding agents — commands, architecture, conventions, and the
   boundaries that matter.

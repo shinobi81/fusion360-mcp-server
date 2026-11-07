@@ -542,11 +542,21 @@ class CommandHandler:
         count = body.edges.count
         wanted: list[int] = []
         for raw in indices:
-            index = int(raw)
+            if isinstance(raw, bool) or not isinstance(raw, int):
+                raise RuntimeError(
+                    f"Edge index {raw!r} is out of range — indices are whole "
+                    "numbers from list_edges"
+                )
+            index = raw
             if not 0 <= index < count:
+                valid = (
+                    f"the valid indices run 0..{count - 1}"
+                    if count
+                    else "it has no edges to index"
+                )
                 raise RuntimeError(
                     f"Edge index {index} is out of range — body '{body.name}' has "
-                    f"{count} edge(s), so the valid indices run 0..{max(count - 1, 0)}"
+                    f"{count} edge(s), so {valid}"
                 )
             if index not in wanted:
                 wanted.append(index)
@@ -560,13 +570,18 @@ class CommandHandler:
     def _edges_by_points(self, body, points, tolerance: float) -> list:
         """The edge nearest each point, in the order the points were given.
 
-        Distance is the minimum over five samples along the edge rather than the
+        Distance is the minimum over the sampled polyline rather than the
         distance to its midpoint: a point near the end of a long edge is still on
-        that edge, and a midpoint-only measure would send it to a neighbour.
+        that edge, and a midpoint-only measure would refuse it.
         Two edges equally close is ambiguous, and guessing there silently rounds
         the wrong one.
         """
+        # NaN is deliverable over the socket, and ``NaN > tolerance`` is False, so
+        # an unguarded tolerance would accept a point 9 cm from the body and round
+        # whatever edge happened to be nearest.  One rule, in one place.
+        tolerance = _param_units.require_finite(tolerance)
         chosen: list = []
+        chosen_ids: set[int] = set()
 
         def segment_distance(samples, target) -> float:
             """Shortest distance from *target* to the sampled polyline.
@@ -638,8 +653,14 @@ class CommandHandler:
                     f"No edge within {tolerance} cm of ({x}, {y}, {z}) — the "
                     f"nearest is edge {index} at {distance:.3f} cm"
                 )
-            if edge not in chosen:
+            if id(edge) not in chosen_ids:
+                chosen_ids.add(id(edge))
                 chosen.append(edge)
+        if not chosen:
+            raise RuntimeError(
+                "edge_points was empty — name at least one point, or omit it to "
+                "use edge_selection"
+            )
         return chosen
 
     def _select_faces(self, body, selection: str):

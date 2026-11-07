@@ -8,4 +8,4 @@ contact_links:
       since 2026-10-06 and the joint fixes are still waiting there as PR #35.
   - name: Installation and tool reference
     url: https://github.com/shinobi81/fusion360-mcp-server#readme
-    about: Install command, the 96 tools, units (cm) and error envelopes.
+    about: Install command, the 97 tools, units (cm) and error envelopes.
