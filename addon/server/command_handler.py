@@ -121,6 +121,7 @@ class CommandHandler:
                 "new_document": self.new_document,
                 "get_scene_info": self.get_scene_info,
                 "get_object_info": self.get_object_info,
+                "list_edges": self.list_edges,
                 "get_bounding_box": self.get_bounding_box,
                 "list_components": self.list_components,
                 # sketch
@@ -456,9 +457,48 @@ class CommandHandler:
             )
         return t
 
-    def _select_edges(self, body, selection: str):
-        """Return an ObjectCollection of edges based on *selection*."""
+    def _select_edges(
+        self,
+        body,
+        selection: str,
+        indices: list[int] | None = None,
+        points: list | None = None,
+        tolerance: float = 0.1,
+    ):
+        """Return an ObjectCollection of edges.
+
+        One selector at a time.  ``indices`` names edges exactly (the indices
+        ``list_edges`` reports), ``points`` chooses the nearest edge to each point,
+        and ``selection`` is the coarse geometric filter that predates both.
+
+        Explicitness is the point: a caller that passes two selectors has not
+        decided, and guessing would round whatever the other selector happened to
+        match.  Only "all" is compatible with a silence, because "all" is the
+        default and so means "unset".
+        """
+        if indices is not None and points is not None:
+            raise RuntimeError(
+                "Pass only one of edge_indices and edge_points — they name the "
+                "same edges two ways, so one would be ignored"
+            )
+        if (indices is not None or points is not None) and selection != "all":
+            raise RuntimeError(
+                f"edge_selection '{selection}' cannot be combined with "
+                "edge_indices or edge_points — pass one selector, not two"
+            )
+
         coll = adsk.core.ObjectCollection.create()
+
+        if indices is not None:
+            for edge in self._edges_by_index(body, indices):
+                coll.add(edge)
+            return coll
+
+        if points is not None:
+            for edge in self._edges_by_points(body, points, tolerance):
+                coll.add(edge)
+            return coll
+
         bbox = body.boundingBox
 
         if selection == "all":
@@ -490,6 +530,138 @@ class CommandHandler:
         if coll.count == 0:
             raise RuntimeError(f"No edges matched selection '{selection}'")
         return coll
+
+    def _edges_by_index(self, body, indices) -> list:
+        """The edges at *indices*, de-duplicated and range-checked.
+
+        Fusion's edge indices are positional, so one goes stale as soon as the
+        body changes.  A stale index that is merely in range would round the wrong
+        edge and report success, which is why only the out-of-range case can be
+        caught here — and why ``list_edges`` is the intended way to get them.
+        """
+        count = body.edges.count
+        wanted: list[int] = []
+        for raw in indices:
+            if isinstance(raw, bool) or not isinstance(raw, int):
+                raise RuntimeError(
+                    f"Edge index {raw!r} is out of range — indices are whole "
+                    "numbers from list_edges"
+                )
+            index = raw
+            if not 0 <= index < count:
+                valid = (
+                    f"the valid indices run 0..{count - 1}"
+                    if count
+                    else "it has no edges to index"
+                )
+                raise RuntimeError(
+                    f"Edge index {index} is out of range — body '{body.name}' has "
+                    f"{count} edge(s), so {valid}"
+                )
+            if index not in wanted:
+                wanted.append(index)
+        if not wanted:
+            raise RuntimeError(
+                "edge_indices was empty — name at least one edge, or omit it to "
+                "use edge_selection"
+            )
+        return [body.edges.item(index) for index in wanted]
+
+    def _edges_by_points(self, body, points, tolerance: float) -> list:
+        """The edge nearest each point, in the order the points were given.
+
+        Distance is the minimum over the sampled polyline rather than the
+        distance to its midpoint: a point near the end of a long edge is still on
+        that edge, and a midpoint-only measure would refuse it.
+        Two edges equally close is ambiguous, and guessing there silently rounds
+        the wrong one.
+        """
+        # NaN is deliverable over the socket, and ``NaN > tolerance`` is False, so
+        # an unguarded tolerance would accept a point 9 cm from the body and round
+        # whatever edge happened to be nearest.  One rule, in one place.
+        tolerance = _param_units.require_finite(tolerance)
+        chosen: list = []
+        chosen_ids: set[int] = set()
+
+        def segment_distance(samples, target) -> float:
+            """Shortest distance from *target* to the sampled polyline.
+
+            Point-to-*sample* distance is not point-to-*edge* distance: on a 10 cm
+            edge sampled five times, a point lying exactly on the edge could sit
+            0.5 cm from the nearest sample and be refused.  Measuring each segment
+            instead is exact for a straight edge and chord-accurate for a curve.
+            """
+
+            def point_segment(a, b) -> float:
+                ax, ay, az = a.x, a.y, a.z
+                dx, dy, dz = b.x - ax, b.y - ay, b.z - az
+                length_sq = dx * dx + dy * dy + dz * dz
+                if length_sq == 0.0:
+                    t = 0.0
+                else:
+                    t = (
+                        (target.x - ax) * dx
+                        + (target.y - ay) * dy
+                        + (target.z - az) * dz
+                    ) / length_sq
+                    t = max(0.0, min(1.0, t))
+                cx, cy, cz = ax + dx * t, ay + dy * t, az + dz * t
+                return (
+                    (target.x - cx) ** 2
+                    + (target.y - cy) ** 2
+                    + (target.z - cz) ** 2
+                ) ** 0.5
+
+            return min(
+                point_segment(samples[i], samples[i + 1])
+                for i in range(len(samples) - 1)
+            )
+
+        for point in points:
+            if len(point) != 3:
+                raise RuntimeError(
+                    f"Each edge point needs three coordinates, got {len(point)}"
+                )
+            x, y, z = (_param_units.require_finite(c) for c in point)
+            target = adsk.core.Point3D.create(x, y, z)
+            best = None
+            ties = []
+            for index in range(body.edges.count):
+                edge = body.edges.item(index)
+                samples = [
+                    edge.evaluator.getPointAtParameter(i / 16.0) for i in range(17)
+                ]
+                distance = segment_distance(samples, target)
+                if best is None or distance < best[0] - 1e-6:
+                    best = (distance, edge, index)
+                    ties = [(distance, index)]
+                elif abs(distance - best[0]) <= 1e-6:
+                    ties.append((distance, index))
+            if best is None:
+                raise RuntimeError(
+                    f"Body '{body.name}' has no edges, so no point can select one"
+                )
+            distance, edge, index = best
+            if len(ties) > 1:
+                names = ", ".join(str(i) for _, i in ties)
+                raise RuntimeError(
+                    f"Point ({x}, {y}, {z}) is equally close to edges {names} — "
+                    "pick one with edge_indices from list_edges"
+                )
+            if distance > tolerance:
+                raise RuntimeError(
+                    f"No edge within {tolerance} cm of ({x}, {y}, {z}) — the "
+                    f"nearest is edge {index} at {distance:.3f} cm"
+                )
+            if id(edge) not in chosen_ids:
+                chosen_ids.add(id(edge))
+                chosen.append(edge)
+        if not chosen:
+            raise RuntimeError(
+                "edge_points was empty — name at least one point, or omit it to "
+                "use edge_selection"
+            )
+        return chosen
 
     def _select_faces(self, body, selection: str):
         """Return an ObjectCollection of faces based on *selection*."""
@@ -618,6 +790,53 @@ class CommandHandler:
                 }
 
         return {"found": False, "name": name}
+
+    def list_edges(
+        self,
+        body_name: str | None = None,
+        body_index: int = 0,
+        limit: int = 200,
+    ):
+        """Every edge of a body, with the geometry needed to choose one.
+
+        ``count`` is the body's real edge count and ``truncated`` says whether
+        ``limit`` clipped the list — a body with thousands of edges must not
+        flood a caller's context, but a caller that reads ``count`` as "how many
+        I got back" would plan against a shorter list than the body has.
+        """
+        root = self._root()
+        body = (
+            self._body_by_name(body_name)
+            if body_name
+            else root.bRepBodies.item(body_index)
+        )
+        count = body.edges.count
+        limit = max(1, int(limit))
+
+        def coords(point):
+            return [point.x, point.y, point.z]
+
+        edges = []
+        for index in range(min(count, limit)):
+            edge = body.edges.item(index)
+            edges.append(
+                {
+                    "index": index,
+                    "start": coords(edge.startVertex.geometry),
+                    "end": coords(edge.endVertex.geometry),
+                    "midpoint": coords(edge.pointOnEdge),
+                    "length": edge.length,
+                    # The class name (``Line3D``, ``Circle3D``) rather than an
+                    # enum number: an agent reads it without a lookup table.
+                    "curve_type": type(edge.geometry).__name__,
+                }
+            )
+        return {
+            "body_name": body.name,
+            "count": count,
+            "truncated": len(edges) < count,
+            "edges": edges,
+        }
 
     def list_components(self):
         root = self._root()
@@ -1421,6 +1640,9 @@ class CommandHandler:
         body_name: str | None = None,
         body_index: int = 0,
         edge_selection: str = "all",
+        edge_indices: list[int] | None = None,
+        edge_points: list | None = None,
+        edge_tolerance: float = 0.1,
     ):
         root = self._root()
         body = (
@@ -1428,7 +1650,13 @@ class CommandHandler:
             if body_name
             else root.bRepBodies.item(body_index)
         )
-        edges = self._select_edges(body, edge_selection)
+        edges = self._select_edges(
+            body,
+            edge_selection,
+            indices=edge_indices,
+            points=edge_points,
+            tolerance=edge_tolerance,
+        )
 
         fillets = root.features.filletFeatures
         inp = fillets.createInput()
@@ -1444,6 +1672,9 @@ class CommandHandler:
         body_name: str | None = None,
         body_index: int = 0,
         edge_selection: str = "all",
+        edge_indices: list[int] | None = None,
+        edge_points: list | None = None,
+        edge_tolerance: float = 0.1,
     ):
         root = self._root()
         body = (
@@ -1451,7 +1682,13 @@ class CommandHandler:
             if body_name
             else root.bRepBodies.item(body_index)
         )
-        edges = self._select_edges(body, edge_selection)
+        edges = self._select_edges(
+            body,
+            edge_selection,
+            indices=edge_indices,
+            points=edge_points,
+            tolerance=edge_tolerance,
+        )
 
         chamfers = root.features.chamferFeatures
         inp = chamfers.createInput(edges, True)

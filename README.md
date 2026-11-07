@@ -7,7 +7,7 @@
 
 An MCP server that lets AI coding agents drive **Autodesk Fusion 360**: create sketches
 and features, assemble components, run CAM setups, measure, export, and look at the
-result. 96 tools over the [Model Context Protocol](https://modelcontextprotocol.io), with
+result. 97 tools over the [Model Context Protocol](https://modelcontextprotocol.io), with
 failures returned as structured data instead of exceptions.
 
 > **Beta.** Pre-1.0: tool behaviour can change between tags. Install a tag, not PyPI — the
@@ -34,7 +34,7 @@ Autodesk Fusion 360, and any MCP client (Claude Code, Codex, Cursor, VS Code, �
 
 ## What it can do
 
-96 tools in 17 groups — the full catalogue with descriptions is in
+97 tools in 17 groups — the full catalogue with descriptions is in
 **[docs/TOOLS.md](docs/TOOLS.md)**.
 
 | Group | Examples |

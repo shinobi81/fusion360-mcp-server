@@ -247,7 +247,10 @@ TOOLS: list[dict] = [
     {
         "name": "fillet",
         "title": "Fillet Edges",
-        "description": "Round edges of a body",
+        "description": (
+            "Round edges of a body: all/top/bottom/vertical, or exact edges by "
+            "edge_indices (from list_edges) or by edge_points near them"
+        ),
         "inputSchema": {
             "type": "object",
             "required": ["radius"],
@@ -260,13 +263,43 @@ TOOLS: list[dict] = [
                     "enum": ["all", "top", "bottom", "vertical"],
                     "default": "all",
                 },
+                "edge_indices": {
+                    "type": "array",
+                    "items": {"type": "integer", "minimum": 0},
+                    "description": (
+                        "Exact edges to affect, indexed as list_edges reports them. "
+                        "Indices are positional, so re-run list_edges after a change."
+                    ),
+                },
+                "edge_points": {
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 3,
+                        "maxItems": 3,
+                    },
+                    "description": (
+                        "Points near the edges to affect; each snaps to the nearest "
+                        "edge within edge_tolerance. Ambiguous points are refused."
+                    ),
+                },
+                "edge_tolerance": {
+                    "type": "number",
+                    "default": 0.1,
+                    "minimum": 0.0001,
+                    "description": "How near a point must be to an edge (cm)",
+                },
             },
         },
     },
     {
         "name": "chamfer",
         "title": "Chamfer Edges",
-        "description": "Chamfer edges of a body",
+        "description": (
+            "Chamfer edges of a body: all/top/bottom/vertical, or exact edges by "
+            "edge_indices (from list_edges) or by edge_points near them"
+        ),
         "inputSchema": {
             "type": "object",
             "required": ["distance"],
@@ -278,6 +311,33 @@ TOOLS: list[dict] = [
                     "type": "string",
                     "enum": ["all", "top", "bottom", "vertical"],
                     "default": "all",
+                },
+                "edge_indices": {
+                    "type": "array",
+                    "items": {"type": "integer", "minimum": 0},
+                    "description": (
+                        "Exact edges to affect, indexed as list_edges reports them. "
+                        "Indices are positional, so re-run list_edges after a change."
+                    ),
+                },
+                "edge_points": {
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 3,
+                        "maxItems": 3,
+                    },
+                    "description": (
+                        "Points near the edges to affect; each snaps to the nearest "
+                        "edge within edge_tolerance. Ambiguous points are refused."
+                    ),
+                },
+                "edge_tolerance": {
+                    "type": "number",
+                    "default": 0.1,
+                    "minimum": 0.0001,
+                    "description": "How near a point must be to an edge (cm)",
                 },
             },
         },
@@ -830,6 +890,31 @@ TOOLS: list[dict] = [
                     "description": (
                         "Search as-built joints (True) or regular joints (False)."
                     ),
+                },
+            },
+        },
+    },
+    {
+        "name": "list_edges",
+        "title": "List Edges",
+        "description": (
+            "List a body's edges with index, endpoints, midpoint, length and curve "
+            "type; the indices are what fillet and chamfer take as edge_indices"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "body_name": {
+                    "type": "string",
+                    "description": "Body name (default: the body at body_index)",
+                },
+                "body_index": {"type": "integer", "default": 0},
+                "limit": {
+                    "type": "integer",
+                    "default": 200,
+                    "minimum": 1,
+                    "maximum": 5000,
+                    "description": "Maximum edges returned; count is the real total",
                 },
             },
         },
@@ -2808,6 +2893,7 @@ TOOLS: list[dict] = [
 _READ_ONLY = {
     "get_scene_info",
     "get_object_info",
+    "list_edges",
     "get_bounding_box",
     "list_components",
     "get_parameters",
@@ -2828,6 +2914,7 @@ _IDEMPOTENT = {
     "ping",
     "get_scene_info",
     "get_object_info",
+    "list_edges",
     "get_bounding_box",
     "list_components",
     "get_parameters",

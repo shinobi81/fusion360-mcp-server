@@ -1,0 +1,392 @@
+"""Which edges a fillet or chamfer is told to round.
+
+``_select_edges`` decides that, and it had never run under a test: ``FakeBody``
+carried faces but no ``edges`` collection at all.  These tests give the fake an
+edge model, and pin the behaviour of the four existing selections before the new
+selectors build on top of them.
+
+Fusion reads an edge's position with ``edge.pointOnEdge`` (a point at the
+parameter midpoint) and its direction from ``startVertex``/``endVertex``; the
+fake models exactly those, because that is what the handler reads.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from fusion360_mcp.hints import classify
+from fusion360_mcp.mock import mock_command
+from tests.fakes.bodies import body_with_edges
+from tests.fakes.design import FakeDesign
+
+
+@pytest.fixture
+def select(bound_handler):
+    """``select(edge_pairs, selection, indices=...)`` -> the built collection."""
+
+    def factory(edge_pairs, selection, indices=None, points=None, tolerance=0.1):
+        body = body_with_edges("Plate", edge_pairs)
+        handler = bound_handler(FakeDesign(bodies=[body]))
+        return handler._select_edges(
+            body,
+            selection,
+            indices=indices,
+            points=points,
+            tolerance=tolerance,
+        )
+
+    return factory
+
+
+def test_all_selects_every_edge(select):
+    coll = select([((0, 0, 0), (1, 0, 0)), ((0, 0, 0), (0, 1, 0))], "all")
+    assert coll.count == 2
+
+
+def test_top_selects_the_edge_whose_midpoint_is_highest(select):
+    """Three heights, so a wrong threshold changes which edges come back.
+
+    With edges at z = 0, 2.5 and 5, a threshold taken from the *top* of the box
+    returns one edge and a threshold taken from the bottom returns two, which is
+    how this test tells the two apart.
+    """
+    coll = select(
+        [
+            ((0, 0, 0), (1, 0, 0)),
+            ((0, 0, 2.5), (1, 0, 2.5)),
+            ((0, 0, 5), (1, 0, 5)),
+        ],
+        "top",
+    )
+    assert coll.count == 1
+    assert coll.item(0).pointOnEdge.z == pytest.approx(5.0)
+
+
+def test_bottom_selects_the_edge_whose_midpoint_is_lowest(select):
+    coll = select(
+        [
+            ((0, 0, 0), (1, 0, 0)),
+            ((0, 0, 2.5), (1, 0, 2.5)),
+            ((0, 0, 5), (1, 0, 5)),
+        ],
+        "bottom",
+    )
+    assert coll.count == 1
+    assert coll.item(0).pointOnEdge.z == pytest.approx(0.0)
+
+
+def test_vertical_selects_only_edges_whose_ends_share_x_and_y(select):
+    """The selected edge's own ends must differ in z — a count is not enough.
+
+    Both edges are at the same height, so an assertion on ``count`` alone passes
+    even when the predicate is inverted: the test has to name the geometry.
+    """
+    coll = select(
+        [((0, 0, 0), (0, 0, 2)), ((0, 0, 0), (3, 0, 0))],
+        "vertical",
+    )
+    assert coll.count == 1
+    chosen = coll.item(0)
+    assert chosen.startVertex.geometry.x == pytest.approx(0.0)
+    assert chosen.startVertex.geometry.y == pytest.approx(0.0)
+    assert chosen.endVertex.geometry.z == pytest.approx(2.0)
+
+
+def test_an_unknown_selection_names_the_four_it_accepts(select):
+    with pytest.raises(RuntimeError) as raised:
+        select([((0, 0, 0), (1, 0, 0))], "diagonal")
+    assert "all/top/bottom/vertical" in str(raised.value)
+
+
+def test_a_selection_that_matches_nothing_says_so(select):
+    """A body whose edges are all at mid-height has no 'top' edge.
+
+    The refusal is what stops a fillet from silently rounding nothing and
+    reporting ``edges_count: 0`` as success.
+    """
+    with pytest.raises(RuntimeError) as raised:
+        select([((0, 0, 0), (0, 0, 5))], "top")
+    assert "No edges matched" in str(raised.value)
+
+
+def test_a_body_with_no_edges_refuses_rather_than_selecting_nothing(select):
+    """``all`` on a body with no edges raises, and that is deliberate.
+
+    The refusal is what stops a fillet from rounding nothing and reporting
+    ``edges_count: 0`` as success.  A *listing* of a zero-edge body is a different
+    question, answered by ``list_edges``.
+    """
+    with pytest.raises(RuntimeError) as raised:
+        select([], "all")
+    assert "No edges matched" in str(raised.value)
+
+
+# ── list_edges ────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def list_body(bound_handler):
+    """``list_body(pairs)`` -> a handler bound to that body, and the body."""
+
+    def factory(pairs, curve_type="Line3D"):
+        body = body_with_edges("Plate", pairs, curve_type=curve_type)
+        return bound_handler(FakeDesign(bodies=[body])), body
+
+    return factory
+
+
+def test_list_edges_reports_every_edge_in_index_order(list_body):
+    handler, _ = list_body(
+        [((0, 0, 0), (4, 0, 0)), ((4, 0, 0), (4, 0, 2))],
+    )
+    result = handler.list_edges(body_name="Plate")
+    assert result["body_name"] == "Plate"
+    assert result["count"] == 2
+    assert result["truncated"] is False
+    assert [edge["index"] for edge in result["edges"]] == [0, 1]
+
+
+def test_list_edges_reports_the_geometry_of_each_edge(list_body):
+    """Midpoints are what an agent uses to pick an edge by eye."""
+    handler, _ = list_body([((0, 0, 2), (4, 0, 2))])
+    edge = handler.list_edges(body_name="Plate")["edges"][0]
+    assert edge["start"] == [0.0, 0.0, 2.0]
+    assert edge["end"] == [4.0, 0.0, 2.0]
+    assert edge["midpoint"] == [2.0, 0.0, 2.0]
+    assert edge["length"] == pytest.approx(4.0)
+    assert edge["curve_type"] == "Line3D"
+
+
+def test_list_edges_truncates_but_reports_the_real_count(list_body):
+    """``count`` is the body's count, not the length of the list handed back."""
+    handler, _ = list_body(
+        [((0, 0, 0), (1, 0, 0)), ((0, 0, 1), (1, 0, 1)), ((0, 0, 2), (1, 0, 2))],
+    )
+    result = handler.list_edges(body_name="Plate", limit=2)
+    assert result["count"] == 3
+    assert result["truncated"] is True
+    assert len(result["edges"]) == 2
+
+
+def test_list_edges_of_a_body_with_no_edges_is_empty_not_an_error(list_body):
+    handler, _ = list_body([])
+    result = handler.list_edges(body_name="Plate")
+    assert result["count"] == 0
+    assert result["edges"] == []
+    assert result["truncated"] is False
+
+
+def test_list_edges_names_an_unknown_body(list_body):
+    handler, _ = list_body([((0, 0, 0), (1, 0, 0))])
+    with pytest.raises(RuntimeError) as raised:
+        handler.list_edges(body_name="Nope")
+    assert classify(raised.value)[0] == "BODY_NOT_FOUND"
+
+
+def test_mock_list_edges_returns_the_same_shape():
+    result = mock_command("list_edges", {"body_name": "Plate"})
+    assert result["body_name"] == "Plate"
+    assert result["edges"]
+    assert set(result["edges"][0]) == {
+        "index",
+        "start",
+        "end",
+        "midpoint",
+        "length",
+        "curve_type",
+    }
+
+
+# ── edge_indices ──────────────────────────────────────────────────────
+
+
+def test_edge_indices_selects_exactly_the_named_edges(select):
+    """What a person means by 'round edges 0 and 2' — nothing else."""
+    coll = select(
+        [
+            ((0, 0, 0), (1, 0, 0)),
+            ((0, 0, 1), (1, 0, 1)),
+            ((0, 0, 2), (1, 0, 2)),
+        ],
+        "all",
+        indices=[0, 2],
+    )
+    assert [edge.index for edge in coll] == [0, 2]
+
+
+def test_edge_indices_collapses_duplicates(select):
+    coll = select(
+        [((0, 0, 0), (1, 0, 0)), ((0, 0, 1), (1, 0, 1))], "all", indices=[1, 1]
+    )
+    assert [edge.index for edge in coll] == [1]
+
+
+def test_an_out_of_range_index_names_the_body_the_index_and_the_count(select):
+    """Guessing here would round a neighbouring edge and report success."""
+    with pytest.raises(RuntimeError) as raised:
+        select([((0, 0, 0), (1, 0, 0))], "all", indices=[4])
+    message = str(raised.value)
+    assert "4" in message and "1" in message
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_indices_with_an_explicit_edge_selection_is_refused(select):
+    """`all` is the default and means 'unset'; `top` alongside indices is not."""
+    with pytest.raises(RuntimeError) as raised:
+        select([((0, 0, 0), (1, 0, 0))], "top", indices=[0])
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_fillet_rounds_the_edges_the_index_named(bound_handler):
+    body = body_with_edges(
+        "Plate",
+        [((0, 0, 0), (1, 0, 0)), ((0, 0, 1), (1, 0, 1))],
+    )
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    result = handler.fillet(radius=0.3, body_name="Plate", edge_indices=[1])
+
+    assert result["edges_count"] == 1
+    recorded = handler._root().features.filletFeatures.last_edge_indices
+    assert recorded == [1]
+
+
+def test_chamfer_bevels_the_edges_the_index_named(bound_handler):
+    body = body_with_edges(
+        "Plate",
+        [((0, 0, 0), (1, 0, 0)), ((0, 0, 1), (1, 0, 1))],
+    )
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    result = handler.chamfer(distance=0.2, body_name="Plate", edge_indices=[0])
+
+    assert result["edges_count"] == 1
+    assert handler._root().features.chamferFeatures.last_edge_indices == [0]
+
+
+# ── edge_points ───────────────────────────────────────────────────────
+
+
+def test_a_point_on_an_edge_selects_that_edge(select):
+    coll = select(
+        [((0, 0, 0), (4, 0, 0)), ((0, 0, 5), (4, 0, 5))],
+        "all",
+        points=[[2.0, 0.0, 5.0]],
+    )
+    assert [edge.index for edge in coll] == [1]
+
+
+def test_a_point_near_the_end_of_a_long_edge_still_selects_it(select):
+    """A midpoint measure would refuse this: 4.5 cm from the midpoint, 0.0 on it."""
+    coll = select(
+        [((0, 0, 0), (10, 0, 0)), ((0, 0, 1), (1, 0, 1))],
+        "all",
+        points=[[9.5, 0.0, 0.0]],
+    )
+    assert [edge.index for edge in coll] == [0]
+
+
+def test_a_point_far_from_every_edge_names_the_distance_and_the_nearest(select):
+    with pytest.raises(RuntimeError) as raised:
+        select([((0, 0, 0), (4, 0, 0))], "all", points=[[2.0, 0.0, 9.0]])
+    message = str(raised.value)
+    assert "0.1" in message, "the refusal must name the tolerance it applied"
+    assert "9.000" in message, "and how far off the point actually was"
+    assert "nearest is edge 0" in message, "and which edge it almost hit"
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_a_wider_tolerance_accepts_a_further_point(select):
+    coll = select(
+        [((0, 0, 0), (4, 0, 0))],
+        "all",
+        points=[[2.0, 0.0, 0.5]],
+        tolerance=1.0,
+    )
+    assert coll.count == 1
+
+
+def test_two_equidistant_edges_are_refused_rather_than_guessed(select):
+    """Two edges mirror-imaged about the point: Fusion cannot know which one."""
+    with pytest.raises(RuntimeError) as raised:
+        select(
+            [((0, 0, 0), (4, 0, 0)), ((0, 0, 1), (4, 0, 1))],
+            "all",
+            points=[[2.0, 0.0, 0.5]],
+        )
+    assert "equally close" in str(raised.value)
+
+
+def test_a_non_finite_point_coordinate_is_refused(select):
+    with pytest.raises(ValueError) as raised:
+        select([((0, 0, 0), (4, 0, 0))], "all", points=[[float("inf"), 0.0, 0.0]])
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_two_points_on_the_same_edge_select_it_once(select):
+    coll = select(
+        [((0, 0, 0), (4, 0, 0)), ((0, 0, 5), (4, 0, 5))],
+        "all",
+        points=[[1.0, 0.0, 0.0], [3.0, 0.0, 0.0]],
+    )
+    assert coll.count == 1
+
+
+def test_a_point_on_a_body_with_no_edges_says_so(list_body):
+    handler, _ = list_body([])
+    with pytest.raises(RuntimeError) as raised:
+        handler._select_edges(
+            handler._root().bRepBodies.item(0), "all", points=[[0.0, 0.0, 0.0]]
+        )
+    assert "no edges" in str(raised.value)
+
+
+# ── mock parity for the selectors ─────────────────────────────────────
+
+
+def test_mock_fillet_reports_the_edges_the_indices_named():
+    result = mock_command("fillet", {"radius": 0.3, "edge_indices": [1, 2, 2]})
+    assert result["edges_count"] == 2
+
+
+def test_mock_chamfer_counts_points_as_edges():
+    result = mock_command("chamfer", {"distance": 0.2, "edge_points": [[0, 0, 0]]})
+    assert result["edges_count"] == 1
+
+
+def test_mock_without_a_selector_reports_a_whole_body():
+    assert mock_command("fillet", {"radius": 0.3})["edges_count"] > 1
+
+
+# ── refusals the review asked for ─────────────────────────────────────
+
+
+def test_a_nan_tolerance_cannot_be_used_to_accept_a_far_point(select):
+    """`NaN > tolerance` is always False, so an unguarded NaN accepts anything."""
+    with pytest.raises(ValueError) as raised:
+        select(
+            [((0, 0, 0), (4, 0, 0))],
+            "all",
+            points=[[2.0, 0.0, 9.0]],
+            tolerance=float("nan"),
+        )
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_an_empty_points_list_is_refused_like_an_empty_indices_list(select):
+    with pytest.raises(RuntimeError) as raised:
+        select([((0, 0, 0), (4, 0, 0))], "all", points=[])
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_a_fractional_index_is_refused_rather_than_truncated(select):
+    """`int(1.9)` is 1: silently rounding a different edge than named."""
+    with pytest.raises(RuntimeError) as raised:
+        select([((0, 0, 0), (4, 0, 0)), ((0, 0, 1), (4, 0, 1))], "all", indices=[1.9])
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_an_index_on_a_body_with_no_edges_does_not_claim_index_zero_exists(select):
+    with pytest.raises(RuntimeError) as raised:
+        select([], "all", indices=[0])
+    assert "no edges" in str(raised.value)

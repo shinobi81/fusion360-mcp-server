@@ -1,6 +1,6 @@
 # Tools
 
-All 96 tools this server exposes, grouped by what they do. Every tool returns the same
+All 97 tools this server exposes, grouped by what they do. Every tool returns the same
 envelope — `ok`, plus tool-specific fields, plus `deltas` for mutations — and failures come
 back as data (`error_kind`, `hints`, `traceback`) rather than exceptions.
 
@@ -15,6 +15,7 @@ verified on **Fusion 2706.1.17**.
 | `ping`             | Health check (instant, no Fusion API)                                                                       |
 | `get_scene_info`   | Design name, bodies, sketches, features, camera                                                             |
 | `get_object_info`  | Detailed info about a named body or sketch                                                                  |
+| `list_edges`      | A body's edges: index, endpoints, midpoint, length, curve type                      |
 | `get_bounding_box` | Axis-aligned bbox (min/max/size/center) for body or component; unions all bodies when called on a component |
 | `list_components`  | List all components in the design                                                                           |
 
@@ -58,8 +59,8 @@ sketch without relying on creation order.
 | `revolve`             | Revolve about a model-space axis (must be coplanar with the profile) |
 | `sweep`               | Sweep a profile along a path          |
 | `loft`                | Loft between two or more profiles     |
-| `fillet`              | Round edges (all/top/bottom/vertical) |
-| `chamfer`             | Chamfer edges                         |
+| `fillet`              | Round edges: all/top/bottom/vertical, or `edge_indices` / `edge_points` |
+| `chamfer`             | Chamfer edges: same three selectors as `fillet` |
 | `shell`               | Hollow out a body                     |
 | `mirror`              | Mirror a body across a plane          |
 | `create_hole`         | Hole feature on a body face           |
@@ -73,6 +74,17 @@ sketch without relying on creation order.
 | `scale_body`          | Scale uniformly or non-uniformly      |
 | `suppress_feature`    | Suppress a timeline feature           |
 | `unsuppress_feature`  | Re-enable a suppressed feature        |
+
+### Choosing edges
+
+`fillet` and `chamfer` accept exactly one selector:
+
+- `edge_selection` — the coarse filter (`all`, `top`, `bottom`, `vertical`);
+  `top` means the highest edges of the body's bounding box.
+- `edge_indices` — exact edges, numbered as `list_edges` reports them. Indices are positional
+  and move when the body changes, so re-list before relying on them.
+- `edge_points` + `edge_tolerance` (cm, default 0.1) — each point snaps to its nearest edge;
+  a point too far away, or one equally close to two edges, is refused with the measurement.
 
 ## Body Operations
 

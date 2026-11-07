@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is an MCP server (96 tools) that connects AI coding agents to Autodesk Fusion 360
+This is an MCP server (97 tools) that connects AI coding agents to Autodesk Fusion 360
 for CAD automation. It consists of two pieces:
 
 1. **MCP Server** (this repo) — speaks MCP protocol over stdio, forwards commands to
@@ -119,7 +119,7 @@ threads (six `implicit-string-concatenation-in-list` in a new `hints` rule, one
 `mixed-returns` in a test fixture) because the threads were never opened. Fix them or
 record why not — in the thread — before merging.
 
-## Available tools (96)
+## Available tools (97)
 
 ### Document
 
@@ -167,8 +167,8 @@ record why not — in the thread — before merging.
 | `revolve`             | Revolve a profile around an axis      |
 | `sweep`               | Sweep a profile along a path          |
 | `loft`                | Loft between two or more profiles     |
-| `fillet`              | Round edges (all/top/bottom/vertical) |
-| `chamfer`             | Chamfer edges                         |
+| `fillet`              | Round edges: all/top/bottom/vertical, or `edge_indices` / `edge_points` |
+| `chamfer`             | Chamfer edges: same three selectors as `fillet` |
 | `shell`               | Hollow out a body                     |
 | `mirror`              | Mirror a body across a plane          |
 | `create_hole`         | Hole feature on a body face           |
