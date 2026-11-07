@@ -307,12 +307,18 @@ def test_a_wider_tolerance_accepts_a_further_point(select):
 
 
 def test_two_equidistant_edges_are_refused_rather_than_guessed(select):
-    """Two edges mirror-imaged about the point: Fusion cannot know which one."""
+    """Two edges mirror-imaged about the point, both inside the tolerance.
+
+    Ambiguity only means something when both candidates are reachable: a far
+    point that happens to sit symmetrically between three edges is a miss, and
+    is reported as one (see the test below).
+    """
     with pytest.raises(RuntimeError) as raised:
         select(
             [((0, 0, 0), (4, 0, 0)), ((0, 0, 1), (4, 0, 1))],
             "all",
             points=[[2.0, 0.0, 0.5]],
+            tolerance=1.0,
         )
     assert "equally close" in str(raised.value)
 
@@ -390,3 +396,57 @@ def test_an_index_on_a_body_with_no_edges_does_not_claim_index_zero_exists(selec
     with pytest.raises(RuntimeError) as raised:
         select([], "all", indices=[0])
     assert "no edges" in str(raised.value)
+
+
+def test_a_far_point_that_ties_reports_the_distance_not_ambiguity(select):
+    """A miss is a miss, however symmetric the geometry around it.
+
+    The point is exactly equidistant from both edges (5.024938 cm each, checked
+    by hand) and far outside the tolerance, so the right answer is "no edge
+    within".  Live, a point at (9, 9, 9) tied across three edges and was reported
+    as *ambiguous* — sending the caller to pick an index instead of moving the
+    point.  Ambiguity requires both candidates within reach.
+    """
+    with pytest.raises(RuntimeError) as raised:
+        select(
+            [((0, 0, 0), (4, 0, 0)), ((0, 0, 1), (4, 0, 1))],
+            "all",
+            points=[[2.0, 5.0, 0.5]],
+        )
+    message = str(raised.value)
+    assert "No edge within" in message
+    assert "equally close" not in message
+
+
+def test_a_body_whose_edges_have_no_usable_range_says_that_not_no_edges(bound_handler):
+    """Two failures, two messages: the fake lets an edge report a dead range."""
+    from tests.fakes.bodies import FakeBody, FakeEdge, FakeEdges
+    from tests.fakes.design import FakeDesign
+
+    body = FakeBody("Odd", edges=FakeEdges([FakeEdge((0, 0, 0), (1, 0, 0))]))
+    body.edges.item(0).evaluator.ranges = (0.0, 0.0)  # high <= low
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    with pytest.raises(RuntimeError) as raised:
+        handler._select_edges(body, "all", points=[[0.0, 0.0, 0.0]])
+
+    message = str(raised.value)
+    assert "no usable parameter range" in message
+    assert "has no edges" not in message
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_an_edge_that_reports_a_failed_extent_is_skipped(bound_handler):
+    """Fusion's first answer is a flag; False means "could not measure"."""
+    from tests.fakes.bodies import FakeBody, FakeEdge, FakeEdges
+    from tests.fakes.design import FakeDesign
+
+    edge = FakeEdge((0, 0, 0), (1, 0, 0))
+    edge.evaluator.found = False
+    body = FakeBody("Blind", edges=FakeEdges([edge]))
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    with pytest.raises(RuntimeError) as raised:
+        handler._select_edges(body, "all", points=[[0.0, 0.0, 0.0]])
+
+    assert "no usable parameter range" in str(raised.value)

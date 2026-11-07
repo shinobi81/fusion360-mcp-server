@@ -628,9 +628,21 @@ class CommandHandler:
             ties = []
             for index in range(body.edges.count):
                 edge = body.edges.item(index)
-                samples = [
-                    edge.evaluator.getPointAtParameter(i / 16.0) for i in range(17)
-                ]
+                # An edge's parameters are its own, not 0..1: Fusion reported
+                # [-1.0, 0.0] for a straight edge, so sampling 0..1 asked for
+                # points off the curve and raised "invalid argument parameter".
+                # getPointAtParameter also answers (found, point), not a point.
+                extent_ok, low, high = edge.evaluator.getParameterExtents()
+                if not extent_ok or high <= low:
+                    continue
+                samples = []
+                for step in range(17):
+                    parameter = low + (high - low) * step / 16.0
+                    found, position = edge.evaluator.getPointAtParameter(parameter)
+                    if found:
+                        samples.append(position)
+                if len(samples) < 2:
+                    continue
                 distance = segment_distance(samples, target)
                 if best is None or distance < best[0] - 1e-6:
                     best = (distance, edge, index)
@@ -638,20 +650,33 @@ class CommandHandler:
                 elif abs(distance - best[0]) <= 1e-6:
                     ties.append((distance, index))
             if best is None:
+                # Two different failures, and they need different answers: a body
+                # with no edges at all cannot be helped, while a body whose edges
+                # reported no usable range is a Fusion surprise worth naming.
+                reason = (
+                    "has no edges"
+                    if body.edges.count == 0
+                    else f"reported no usable parameter range on any of its "
+                    f"{body.edges.count} edge(s)"
+                )
                 raise RuntimeError(
-                    f"Body '{body.name}' has no edges, so no point can select one"
+                    f"Body '{body.name}' {reason}, so no point can select an edge"
                 )
             distance, edge, index = best
+            # Tolerance before ambiguity: a point far from everything that happens
+            # to sit symmetrically between three edges is a *miss*, and telling
+            # the caller it is ambiguous sends them to pick from a list instead of
+            # moving the point.  Both within reach is what ambiguity means.
+            if distance > tolerance:
+                raise RuntimeError(
+                    f"No edge within {tolerance} cm of ({x}, {y}, {z}) — the "
+                    f"nearest is edge {index} at {distance:.3f} cm"
+                )
             if len(ties) > 1:
                 names = ", ".join(str(i) for _, i in ties)
                 raise RuntimeError(
                     f"Point ({x}, {y}, {z}) is equally close to edges {names} — "
                     "pick one with edge_indices from list_edges"
-                )
-            if distance > tolerance:
-                raise RuntimeError(
-                    f"No edge within {tolerance} cm of ({x}, {y}, {z}) — the "
-                    f"nearest is edge {index} at {distance:.3f} cm"
                 )
             if id(edge) not in chosen_ids:
                 chosen_ids.add(id(edge))
