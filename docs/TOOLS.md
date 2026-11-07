@@ -96,7 +96,7 @@ sketches need not be built in creation order. `sweep` also names its path sketch
 | ------------------- | --------------------------------------------------- |
 | `move_body`         | Translate a body by (x, y, z)                       |
 | `rename_body`       | Rename a body (searches root and all components)    |
-| `boolean_operation` | Join/cut/intersect two bodies                       |
+| `boolean_operation` | Join/cut/intersect two bodies; `keep_tool` keeps the tool body |
 | `delete_all`        | Clear the design                                    |
 | `undo`              | Step back one timeline feature (verified; see note) |
 

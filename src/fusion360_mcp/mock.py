@@ -362,6 +362,7 @@ def _boolean_operation(p: dict) -> dict:
         "target_body": p.get("target_body", "Body1"),
         "tool_body": p.get("tool_body", "Body2"),
         "operation": p.get("operation", "join"),
+        "keep_tool": bool(p.get("keep_tool", False)),
         "result_body": p.get("target_body", "Body1"),
     }
 

@@ -190,7 +190,7 @@ record why not — in the thread — before merging.
 | ------------------- | ------------------------------------------------ |
 | `move_body`         | Translate a body by (x, y, z)                    |
 | `rename_body`       | Rename a body (searches root and all components) |
-| `boolean_operation` | Join/cut/intersect two bodies                    |
+| `boolean_operation` | Join/cut/intersect two bodies; `keep_tool` keeps the tool  |
 | `delete_all`        | Clear the design                                 |
 | `undo`              | Step back one operation; see the note below      |
 

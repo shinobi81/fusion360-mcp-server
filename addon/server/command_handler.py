@@ -2514,7 +2514,11 @@ class CommandHandler:
         }
 
     def boolean_operation(
-        self, target_body: str, tool_body: str, operation: str = "join"
+        self,
+        target_body: str,
+        tool_body: str,
+        operation: str = "join",
+        keep_tool: bool = False,
     ):
         root = self._root()
         target = self._body_by_name(target_body)
@@ -2537,12 +2541,17 @@ class CommandHandler:
 
         inp = combine_feats.createInput(target, tool_coll)
         inp.operation = op
+        # Fusion consumes the tool body unless told otherwise.  The property is
+        # the whole implementation: nothing is copied or recreated here, so a
+        # caller that wants the cutter back gets Fusion's own behaviour.
+        inp.isKeepToolBodies = keep_tool
         feat = combine_feats.add(inp)
         return {
             "feature_name": feat.name,
             "operation": operation,
             "target": target_body,
             "tool": tool_body,
+            "keep_tool": keep_tool,
         }
 
     def delete_all(self):
