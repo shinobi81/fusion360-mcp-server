@@ -7,6 +7,40 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.6.3] - 2026-11-08
+
+The release where `shell` opens the face it was told to open, and a curve index past
+the end or below zero is refused with its range and hints — instead of an
+unclassified error or a silently wrapped index. Nothing was removed, so this is a
+patch.
+
+### Fixed
+
+- **`shell` now opens the face `face_selection` names.** 0.6.2 fixed *which* faces were
+  chosen; the feature still built a closed cavity around them. `ShellFeatureInput` has
+  no `facesToRemove` property — assigning one attaches a plain Python attribute to the
+  API wrapper. It reads back as stored (`inp.facesToRemove.count == 1`,
+  `inp.isValid == True`) and never reaches Fusion. The faces now travel in the collection
+  `createInput` documents for them. Measured on 2706: a 10x10x2 box shelled at
+  `thickness=0.2` with `face_selection="top"` goes from 200 cm³ to **34.112 cm³**,
+  with a 7.84 cm² rim where the top was and no inner ceiling, on both a history-less
+  and a parametric body. Closes the known issue in 0.6.2. (#58)
+- **A curve index that names no curve is refused.** `add_constraint`, `add_dimension`,
+  `offset_curve`, `trim_curve`, `extend_curve` and `sweep` indexed the sketch's curve
+  list with no guard, so an index past the end was `UNKNOWN` with no hints, a
+  **negative** index wrapped to the end of the list and returned `ok: true` having
+  touched a curve nobody named, and `True` indexed as 1. All nine sites now refuse with
+  the field, the index and the sketch — plus, for an out-of-range index, the valid
+  range — classify `INVALID_INPUT` with hints, and mock mode refuses the two checks
+  that need no geometry. (#59)
+
+### Changed
+
+- **The add-in's entry points are annotated**, so `mypy` checks their bodies instead of
+  skipping them. Annotating `drain_queue` immediately found a real error: `WorkItem.error`
+  was inferred as `None` from its initialiser while the handler assigned a formatted
+  traceback to it. That field is now `str | None`. (#57)
+
 ## [0.6.2] - 2026-11-08
 
 The release where the joint and face tools say what Fusion actually did. Nothing was
@@ -49,11 +83,13 @@ removed; one field was added to `list_edges`, so this is a patch.
 
 ### Known issue
 
-- **`shell` does not open a face.** With the selection now correct, the geometry can be
+- **`shell` did not open a face (fixed in 0.6.3).** With the selection now correct,
+  the geometry can be
   measured: `shell(top)` on a box still produces a closed hollow body, top face intact.
   Fusion is not honouring the removed-face list, so this release fixes *which* faces are
-  chosen, not what Fusion then does with them. Tracked separately; do not read
-  `faces_removed` as proof that a face was opened.
+  chosen, not what Fusion then does with them. **Fixed in 0.6.3** — the face list never
+  reached Fusion at all. On 0.6.2, do not read `faces_removed` as proof that a face opened;
+  the geometry is the evidence, and 0.6.2 has none.
 
 ## [0.6.1] - 2026-11-08
 
@@ -360,6 +396,9 @@ reporting a result it had only echoed back.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.6.3]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.6.2...v0.6.3
+[0.6.2]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.6.1...v0.6.2
+[0.6.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.4.0...v0.4.1
