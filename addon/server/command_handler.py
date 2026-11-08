@@ -2009,10 +2009,18 @@ class CommandHandler:
             raise RuntimeError(f"No faces matched '{face_selection}'")
 
         shells = root.features.shellFeatures
-        body_coll = adsk.core.ObjectCollection.create()
-        body_coll.add(body)
-        inp = shells.createInput(body_coll)
-        inp.facesToRemove = faces
+        # The faces to remove go IN the input collection, and the body does not:
+        # Fusion derives the body from the faces and refuses a face alongside the
+        # body that owns it ("Fails if any faces are input, and the owning bodies
+        # of the faces are also input").  There is no `facesToRemove` property on
+        # ShellFeatureInput - assigning one attaches a plain attribute to the SWIG
+        # wrapper, which reads back as if stored and never reaches Fusion, so the
+        # feature closed the cavity and this handler reported a face removed.
+        # Measured on 2706: a body plus that phantom attribute gave 200 -> 52.544
+        # cm3 with the top intact; the faces alone give 200 -> 34.112, top open.
+        # isTangentChain stays False because the selector has already chosen the
+        # faces, and tangent propagation would open more than `faces_removed` says.
+        inp = shells.createInput(faces, False)
         inp.insideThickness = adsk.core.ValueInput.createByReal(thickness)
         feat = shells.add(inp)
         return {

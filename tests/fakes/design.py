@@ -18,7 +18,7 @@ test fails.
 
 from __future__ import annotations
 
-from .bodies import FakeBody
+from .bodies import FakeBody, FakeFace
 from .collection import FakeCollection, FakeDeletable
 from .features import (
     FakeDraftFeatures,
@@ -404,11 +404,20 @@ class FakeChamferFeatures:
 
 
 class FakeShellInput:
-    """``shellFeatures.createInput``: keeps the faces the caller chose to remove."""
+    """``shellFeatures.createInput``: the faces to remove and the bodies to shell.
 
-    def __init__(self, bodies):
-        self.bodies = bodies
-        self.facesToRemove = None
+    Fusion takes the two in ONE collection and exposes no ``facesToRemove``
+    property at all - which is why a handler that assigned one built a closed
+    cavity for months: the assignment attaches a plain Python attribute to the
+    SWIG wrapper and Fusion never sees it.  Measured on Fusion 2706 by reading
+    ``dir()`` on the input and grepping the shipped ``adsk/fusion.py``, where the
+    name appears nowhere.
+    """
+
+    def __init__(self, input_entities, is_tangent_chain: bool = True):
+        self.inputEntities = input_entities
+        self.isTangentChain = is_tangent_chain
+        self.insideThickness = None
 
 
 class FakeShellFeatures(FakeCollection):
@@ -422,8 +431,24 @@ class FakeShellFeatures(FakeCollection):
     def last_input(self) -> FakeShellInput | None:
         return self.inputs[-1] if self.inputs else None
 
-    def createInput(self, bodies) -> FakeShellInput:
-        inp = FakeShellInput(bodies)
+    def createInput(self, input_entities, is_tangent_chain: bool = True):
+        """``createInput(inputEntities, isTangentChain=True)``, as Fusion declares it.
+
+        Fusion fails when a face and the body that owns it are both in the call
+        ("Fails if any faces are input, and the owning bodies of the faces are
+        also input"), so the fake refuses it too rather than letting a caller
+        believe both were honoured.
+        """
+        items = list(input_entities)
+        bodies = [item for item in items if isinstance(item, FakeBody)]
+        faces = [item for item in items if isinstance(item, FakeFace)]
+        if bodies and faces:
+            raise TypeError(
+                "shellFeatures.createInput takes the faces to remove OR the "
+                f"bodies to shell, not both (got {len(faces)} face(s) and "
+                f"{len(bodies)} body/bodies)"
+            )
+        inp = FakeShellInput(input_entities, is_tangent_chain)
         self.inputs.append(inp)
         return inp
 
