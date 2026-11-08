@@ -510,7 +510,7 @@ def _set_design_type(p: dict) -> dict:
 
 
 def _sweep(p: dict) -> dict:
-    refused = _target_body_error(p)
+    refused = _target_body_error(p) or _curve_index_error(p, ("path_curve_index",))
     if refused is not None:
         return refused
     return {
@@ -809,7 +809,40 @@ def _delete_parameter(p: dict) -> dict:
 # ── sketch constraints & dimensions ───────────────────────────────────
 
 
+def _curve_index_error(p: dict, fields: tuple[str, ...]) -> dict | None:
+    """The index checks the add-in makes before it reads a sketch, or None.
+
+    Mock mode has no sketch, so it cannot know whether an index is past the end -
+    but a negative index, a fractional one and a boolean are invalid in *every*
+    sketch, and the handler refuses them before it touches geometry.  Echoing one
+    would teach a sequence Fusion answers differently: Python wraps ``-1`` to the
+    last curve, so the real add-in used to dimension a curve nobody named and
+    report success (measured live).
+
+    Every mock handler that takes a curve index calls this - the six the add-in
+    guards - so mock mode cannot answer ``ok`` for an index real mode refuses.
+    """
+    for field in fields:
+        index = p.get(field)
+        if index is None:
+            continue
+        if isinstance(index, bool) or not isinstance(index, int):
+            return _mock_error(
+                f"{field} must be a whole-number curve index, got {index!r}"
+            )
+        if index < 0:
+            return _mock_error(
+                f"{field} {index} is outside sketch '{p.get('sketch_name', 'Sketch1')}'"
+                " - curve indices are 0-based, and a negative one is refused "
+                "rather than wrapped"
+            )
+    return None
+
+
 def _add_constraint(p: dict) -> dict:
+    refusal = _curve_index_error(p, ("entity_one", "entity_two", "symmetry_line"))
+    if refusal is not None:
+        return refusal
     return {
         "constraint_type": p.get("constraint_type", "coincident"),
         "entity_one": p.get("entity_one", 0),
@@ -830,6 +863,9 @@ def _auto_constrain(p: dict) -> dict:
 
 
 def _add_dimension(p: dict) -> dict:
+    refusal = _curve_index_error(p, ("entity_one", "entity_two"))
+    if refusal is not None:
+        return refusal
     return {
         "dimension_type": p.get("dimension_type", "distance"),
         "value": p.get("value", 1.0),
@@ -874,6 +910,9 @@ def _draw_spline(p: dict) -> dict:
 
 
 def _offset_curve(p: dict) -> dict:
+    refused = _curve_index_error(p, ("curve_index",))
+    if refused is not None:
+        return refused
     return {
         "sketch_name": p.get("sketch_name", "Sketch1"),
         "offset_distance": p.get("offset_distance", 0.5),
@@ -882,6 +921,9 @@ def _offset_curve(p: dict) -> dict:
 
 
 def _trim_curve(p: dict) -> dict:
+    refused = _curve_index_error(p, ("curve_index",))
+    if refused is not None:
+        return refused
     return {
         "sketch_name": p.get("sketch_name", "Sketch1"),
         "curve_index": p.get("curve_index", 0),
@@ -890,6 +932,9 @@ def _trim_curve(p: dict) -> dict:
 
 
 def _extend_curve(p: dict) -> dict:
+    refused = _curve_index_error(p, ("curve_index",))
+    if refused is not None:
+        return refused
     return {
         "sketch_name": p.get("sketch_name", "Sketch1"),
         "curve_index": p.get("curve_index", 0),

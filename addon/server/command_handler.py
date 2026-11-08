@@ -1399,6 +1399,34 @@ class CommandHandler:
             "axis": axis,
         }
 
+    def _curve_by_index(self, sketch, curves, index, field: str):
+        """The sketch curve *index* names, or a refusal that says which one missed.
+
+        Every curve-taking tool used ``curves[index]`` with no guard, and three
+        of Python's behaviours then decide what a caller sees - none of them an
+        answer to the question asked: an index past the end raises ``IndexError``
+        (``UNKNOWN``, no hints), a **negative** index silently wraps so
+        ``curves[-1]`` constrains a curve nobody named (measured live:
+        ``add_dimension(entity_one=-1, entity_two=-2)`` returned ``ok: true``),
+        and ``True`` is an ``int`` in Python, so ``curves[True]`` is ``curves[1]``.
+        """
+        if isinstance(index, bool) or not isinstance(index, int):
+            raise RuntimeError(
+                f"{field} must be a whole-number curve index, got {index!r} - "
+                f"sketch '{sketch.name}' has {len(curves)} curve(s)"
+            )
+        if not curves:
+            raise RuntimeError(
+                f"sketch '{sketch.name}' has no curves, so {field} {index} names "
+                "nothing - draw the geometry first"
+            )
+        if index < 0 or index >= len(curves):
+            raise RuntimeError(
+                f"{field} {index} is outside sketch '{sketch.name}': it has "
+                f"{len(curves)} curve(s), indexed 0..{len(curves) - 1}"
+            )
+        return curves[index]
+
     def add_constraint(
         self,
         constraint_type: str,
@@ -1413,14 +1441,24 @@ class CommandHandler:
         constraints = sketch.geometricConstraints
         curves = list(sketch.sketchCurves)
 
-        e1 = curves[entity_one] if entity_one is not None else None
-        e2 = curves[entity_two] if entity_two is not None else None
+        e1 = (
+            self._curve_by_index(sketch, curves, entity_one, "entity_one")
+            if entity_one is not None
+            else None
+        )
+        e2 = (
+            self._curve_by_index(sketch, curves, entity_two, "entity_two")
+            if entity_two is not None
+            else None
+        )
 
         # symmetry is the only constraint needing a third entity; resolve it here
         # so the map below just names it and a missing index is a clear refusal.
         mirror_line = None
         if symmetry_line is not None:
-            mirror_line = curves[symmetry_line]
+            mirror_line = self._curve_by_index(
+                sketch, curves, symmetry_line, "symmetry_line"
+            )
         elif constraint_type == "symmetry":
             raise RuntimeError(
                 "symmetry needs symmetry_line — the index of the sketch line the "
@@ -1512,8 +1550,16 @@ class CommandHandler:
         dims = sketch.sketchDimensions
         curves = list(sketch.sketchCurves)
 
-        e1 = curves[entity_one] if entity_one is not None else None
-        e2 = curves[entity_two] if entity_two is not None else None
+        e1 = (
+            self._curve_by_index(sketch, curves, entity_one, "entity_one")
+            if entity_one is not None
+            else None
+        )
+        e2 = (
+            self._curve_by_index(sketch, curves, entity_two, "entity_two")
+            if entity_two is not None
+            else None
+        )
         if e1 is None or e2 is None:
             raise RuntimeError(
                 f"entity_one/entity_two are invalid for sketch '{sketch.name}': it "
@@ -1567,7 +1613,7 @@ class CommandHandler:
             self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
         )
         curves = list(sketch.sketchCurves)
-        curve = curves[curve_index]
+        curve = self._curve_by_index(sketch, curves, curve_index, "curve_index")
         direction_pt = adsk.core.Point3D.create(direction_x, direction_y, 0)
 
         coll = adsk.core.ObjectCollection.create()
@@ -1586,7 +1632,7 @@ class CommandHandler:
             self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
         )
         curves = list(sketch.sketchCurves)
-        curve = curves[curve_index]
+        curve = self._curve_by_index(sketch, curves, curve_index, "curve_index")
         point = adsk.core.Point3D.create(point_x, point_y, 0)
         curve.trim(point)
         return {"sketch": sketch.name, "trimmed": True}
@@ -1602,7 +1648,7 @@ class CommandHandler:
             self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
         )
         curves = list(sketch.sketchCurves)
-        curve = curves[curve_index]
+        curve = self._curve_by_index(sketch, curves, curve_index, "curve_index")
         point = adsk.core.Point3D.create(point_x, point_y, 0)
         curve.extend(point)
         return {"sketch": sketch.name, "extended": True}
@@ -1862,7 +1908,9 @@ class CommandHandler:
         target = self._resolve_target_body(target_body, operation)
 
         path_curves = list(path_sketch.sketchCurves)
-        path_curve = path_curves[path_curve_index]
+        path_curve = self._curve_by_index(
+            path_sketch, path_curves, path_curve_index, "path_curve_index"
+        )
 
         path = root.features.createPath(path_curve)
 

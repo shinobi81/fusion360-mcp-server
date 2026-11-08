@@ -305,6 +305,20 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # A curve index past the end used to raise IndexError from `curves[i]`,
+        # which matched no rule and reached the caller as UNKNOWN with no hints.
+        # The three messages the handler now raises each carry one of these
+        # phrases: a non-integer index, an empty sketch, and an index out of
+        # range.  Placed above the generic INVALID_INPUT rule so it wins.
+        r"curve index|has no curves, so|is outside sketch",
+        "INVALID_INPUT",
+        [
+            "Curve indices are 0-based: a sketch with N curves offers 0 to N-1.",
+            "A negative index is refused, never wrapped: -1 is not the last curve.",
+            "Count the curves first: get_object_info reports the sketch's curve_count.",
+        ],
+    ),
+    (
         r"invalid (argument|input|parameter)|bad (argument|input|value)",
         "INVALID_INPUT",
         [

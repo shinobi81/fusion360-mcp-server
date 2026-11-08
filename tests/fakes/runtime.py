@@ -219,6 +219,20 @@ def _feature_operations() -> types.SimpleNamespace:
     )
 
 
+def _dimension_orientations() -> types.SimpleNamespace:
+    """``DimensionOrientations``: the three ``addDistanceDimension`` orientations.
+
+    Only the distance, horizontal and vertical branches of ``add_dimension``
+    read these; angular, radial and diameter never touch the enum.  It has to
+    exist for the handler to run at all, which is why it was missing.
+    """
+    return types.SimpleNamespace(
+        AlignedDimensionOrientation="aligned",
+        HorizontalDimensionOrientation="horizontal",
+        VerticalDimensionOrientation="vertical",
+    )
+
+
 _ADSK_MODULES = ("adsk", "adsk.core", "adsk.fusion", "adsk.cam")
 
 
@@ -244,6 +258,7 @@ def install() -> None:
         JointQuadrantAngleTypes=_joint_quadrants(),
         JointKeyPointTypes=_joint_key_points(),
         JointGeometry=FakeJointGeometry,
+        DimensionOrientations=_dimension_orientations(),
     )
     cam = module("adsk.cam")
     adsk = module(
