@@ -61,6 +61,42 @@ class FakeVector3D(FakePoint3D):
     pass
 
 
+class FakePlane:
+    """``adsk.core.Plane``: a point on the plane and its normal, plus ``cast``.
+
+    ``Face.geometry`` returns the face's *underlying surface*, so a plate's top
+    face hands back a Plane and its side wall a Cylinder — which is why
+    ``Plane.cast`` answering ``None`` is how ``create_hole`` skips a side wall.
+    A fake that cast anything, or that had no geometry at all, would let a hole
+    be drilled sideways and the test would still pass.
+    """
+
+    def __init__(
+        self,
+        origin: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        normal: tuple[float, float, float] = (0.0, 0.0, 1.0),
+    ):
+        self.origin = FakePoint3D(*origin)
+        self.normal = FakeVector3D(*normal)
+
+    @staticmethod
+    def cast(geometry: object) -> FakePlane | None:
+        """``Plane.cast``: a Plane for a plane, ``None`` for any other surface."""
+        return geometry if isinstance(geometry, FakePlane) else None
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"FakePlane(origin={self.origin}, normal={self.normal})"
+
+
+class FakeCylinderGeometry:
+    """A non-planar ``Face.geometry``: enough for ``Plane.cast`` to refuse it.
+
+    Nothing in the handler reads a cylinder's parameters — only that it is not a
+    plane — so this deliberately carries no geometry rather than a fabricated
+    one.
+    """
+
+
 class FakeObjectCollection:
     def __init__(self) -> None:
         self.items: list[object] = []
@@ -267,6 +303,7 @@ def install() -> None:
         "adsk.core",
         Point3D=FakePoint3D,
         Vector3D=FakeVector3D,
+        Plane=FakePlane,
         ObjectCollection=FakeObjectCollection,
         ValueInput=FakeValueInput,
     )

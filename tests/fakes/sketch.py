@@ -16,7 +16,10 @@ stubbed:
 
 from __future__ import annotations
 
-from .runtime import FakePoint3D, FakeVector3D
+import math
+
+from .collection import FakeCollection
+from .runtime import FakePlane, FakePoint3D, FakeVector3D
 
 
 def _dot(a: tuple[float, float, float], b: tuple[float, float, float]) -> float:
@@ -234,11 +237,11 @@ class FakeSketchPoint:
 
 
 class FakeSketchPoints:
-    """``sketch.sketchPoints``: ``count`` and a 0-based ``item``.
+    """``sketch.sketchPoints``: ``count``, a 0-based ``item``, and ``add``.
 
     ``midpoint`` resolves its first entity through this collection rather than
     through the curves, so it has to be indexable for the constraint handler to
-    run at all.
+    run at all.  ``add`` is where ``create_hole`` parks its centre.
     """
 
     def __init__(self, points: list | None = None):
@@ -250,6 +253,19 @@ class FakeSketchPoints:
 
     def item(self, index: int) -> FakeSketchPoint:
         return self._points[index]
+
+    def add(self, point: FakePoint3D) -> FakeSketchPoint:
+        """``add(point, isReference=False)``: the point, in SKETCH space.
+
+        Fusion takes sketch coordinates here and projects whatever it is given
+        onto the sketch plane, so a model-space point does not raise — it lands
+        somewhere else.  That is how the unconverted hole centre shipped, so the
+        fake stays permissive too and the tests assert the round trip through
+        ``sketchToModelSpace`` instead of expecting an error.
+        """
+        created = FakeSketchPoint(point)
+        self._points.append(created)
+        return created
 
 
 class FakeConstraint:
@@ -353,6 +369,8 @@ class FakeSketch:
         self.isVisible = True
         self.isComputeDeferred = False
         self.transform = transform if transform is not None else FakeTransform()
+        #: What the sketch was built on — Fusion's ``Sketch.supportingPlane``.
+        self.supportingPlane = None
         self.version = 0
         self.lines: list[FakeLine] = []
         self.curve_calls: list[tuple[str, dict]] = []
@@ -404,3 +422,62 @@ class FakeSketch:
             + point.y * t.y_axis[2]
             + point.z * t.z_axis[2],
         )
+
+
+def _cross(
+    a: tuple[float, float, float], b: tuple[float, float, float]
+) -> tuple[float, float, float]:
+    return (
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    )
+
+
+def transform_from_plane(plane: FakePlane) -> FakeTransform:
+    """The sketch frame Fusion puts on a planar face: the plane's own.
+
+    Right-handed, with sketch z along the face normal — so ``modelToSketchSpace``
+    gives a point in that frame and ``sketchToModelSpace`` undoes it exactly.
+    """
+    n = (plane.normal.x, plane.normal.y, plane.normal.z)
+    # Any vector the normal is not parallel to, to start the basis from.
+    helper = (1.0, 0.0, 0.0) if abs(n[0]) < 0.9 else (0.0, 1.0, 0.0)
+    raw_x = _cross(helper, n)
+    length = math.sqrt(sum(component * component for component in raw_x))
+    scaled = [component / length for component in raw_x]
+    x = (scaled[0], scaled[1], scaled[2])
+    y = _cross(n, x)
+    return FakeTransform(origin=plane.origin.coords(), x_axis=x, y_axis=y, z_axis=n)
+
+
+class FakeSketches(FakeCollection):
+    """``root.sketches``: ``add`` builds the sketch Fusion would build there.
+
+    A sketch on a face carries that face's own coordinate system, which is what
+    makes ``modelToSketchSpace`` a real conversion rather than a rename — and the
+    hole centre that skipped it landed somewhere else entirely.  An object that
+    is not a face (a construction plane) gets the world frame, and a
+    *non-planar* face is refused, because Fusion cannot sketch on one.
+    """
+
+    def add(self, geometry) -> FakeSketch:
+        if isinstance(geometry, FakeSketch):
+            super().add(geometry)
+            return geometry
+
+        surface = getattr(geometry, "geometry", None)
+        if isinstance(surface, FakePlane):
+            transform = transform_from_plane(surface)
+        elif surface is not None:
+            raise TypeError(
+                "cannot create a sketch on a non-planar face: "
+                f"{type(surface).__name__} is not a plane"
+            )
+        else:
+            transform = None  # a construction plane: the world frame
+
+        sketch = FakeSketch(transform=transform)
+        sketch.supportingPlane = geometry
+        super().add(sketch)
+        return sketch
