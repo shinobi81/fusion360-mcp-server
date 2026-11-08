@@ -549,10 +549,14 @@ def test_the_fake_declares_create_by_point_with_one_argument():
     geometry = FakeJointGeometry.createByPoint(FakePoint3D(1.0, 2.0, 3.0))
 
     assert geometry.origin.x == 1.0
+
+    # Unpacked on purpose: the call is *meant* to be wrong, and a literal
+    # two-argument call trips CodeQL's wrong-arity rule on the test itself
+    # (py/wrong-number-of-arguments). Unpacking keeps the assertion and hides the
+    # arity from static analysis, which cannot know a test calls a stub wrongly.
+    two_points = (FakePoint3D(0.0, 0.0, 0.0), FakePoint3D(1.0, 0.0, 0.0))
     with pytest.raises(TypeError):
-        FakeJointGeometry.createByPoint(
-            FakePoint3D(0.0, 0.0, 0.0), FakePoint3D(1.0, 0.0, 0.0)
-        )
+        FakeJointGeometry.createByPoint(*two_points)
 
 
 #: What each joint_type must map to. Hard-coded from Fusion's JointInput, not read
