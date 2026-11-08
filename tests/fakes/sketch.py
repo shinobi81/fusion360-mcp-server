@@ -226,10 +226,14 @@ class FakeProfiles:
 
 
 class FakeSketchPoint:
-    """A sketch point: ``geometry`` is the model point it sits on.
+    """A sketch point: ``geometry`` is the point in the SKETCH's own frame.
 
     Fusion keeps them apart (``SketchPoint.geometry``), and ``add_dimension``
-    hands these - not Point3Ds - to ``addDistanceDimension``.
+    hands these - not Point3Ds - to ``addDistanceDimension``.  Measured live on
+    2706: after ``create_hole`` put a centre at model (3, 4, 3) on a face at
+    z = 3, the sketch point read ``(3.0, 4.0, 0.0)`` and ``sketchToModelSpace``
+    was what turned it back into ``(3, 4, 3)``.  On an unoffset XY sketch the two
+    frames coincide, which is why "model point" read as true for so long.
     """
 
     def __init__(self, geometry: FakePoint3D | None = None):
@@ -241,7 +245,9 @@ class FakeSketchPoints:
 
     ``midpoint`` resolves its first entity through this collection rather than
     through the curves, so it has to be indexable for the constraint handler to
-    run at all.  ``add`` is where ``create_hole`` parks its centre.
+    run at all - hence the sketch's own origin point, which Fusion gives every
+    sketch and which ``add`` appends after.  ``add`` is where ``create_hole``
+    parks its centre.
     """
 
     def __init__(self, points: list | None = None):
@@ -457,8 +463,10 @@ class FakeSketches(FakeCollection):
     A sketch on a face carries that face's own coordinate system, which is what
     makes ``modelToSketchSpace`` a real conversion rather than a rename — and the
     hole centre that skipped it landed somewhere else entirely.  An object that
-    is not a face (a construction plane) gets the world frame, and a
-    *non-planar* face is refused, because Fusion cannot sketch on one.
+    is not a face (a construction plane) gets the world frame whatever plane it
+    is - ``create_sketch(plane="yz")`` is modelled wrongly by that - so a test
+    that needs a real frame builds ``FakeSketch(transform=yz_sketch())`` instead.
+    A *non-planar* face is refused, because Fusion cannot sketch on one.
     """
 
     def add(self, geometry) -> FakeSketch:

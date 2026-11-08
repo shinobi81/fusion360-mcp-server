@@ -21,7 +21,7 @@ from __future__ import annotations
 from typing import ClassVar
 
 from .bodies import FakeBody, FakeFace
-from .collection import FakeCollection, FakeDeletable
+from .collection import FakeCollection, FakeDeletable, FakeItemCollection
 from .features import (
     FakeDraftFeatures,
     FakeFeature,
@@ -520,20 +520,25 @@ class FakeHoleFeatureInput:
 class FakeHoleFeature(FakeDeletable):
     """The feature ``holeFeatures.add`` returns: name, diameter, and bodies.
 
-    ``bodies`` echoes the participants the input named, because that is what
-    Fusion reports: measured on 2706, a cut naming a body it never reaches still
-    lists that body.  It is therefore not evidence of what was cut — ``#44``
-    removed the response field built on it — and a handler that reports from it
-    is reporting its own input back.
+    ``bodies`` is a ``FakeItemCollection`` over the participants the *input*
+    named, because that is what Fusion reports: measured on 2706, a cut naming a
+    body it never reaches still lists that body.  It is not a ``FakeCollection``
+    on purpose - that would reparent bodies that already live in ``bRepBodies`` -
+    and it is not evidence of what was cut, which is why ``#44`` removed the
+    response field built on it.  A handler that reports from it is reporting its
+    own input back.
 
-    ``cut_body_names`` is the fake's own answer to the question ``bodies``
-    cannot answer, so a test can see which bodies the feature reached.
+    ``cut_body_names`` is the fake's own record of which bodies the feature was
+    left to reach.  With participants named it repeats them (there is nothing
+    else to model, and the test that reads it is asserting the participants);
+    with none named it is the whole root component, which is Fusion's rule and an
+    over-approximation of "every body the hole intersects".
     """
 
     def __init__(self, hole_input: FakeHoleFeatureInput, participants, cut):
         super().__init__("Hole1")
         self.holeDiameter = hole_input.diameter
-        self.bodies = list(participants)
+        self.bodies = FakeItemCollection(participants)
         self.cut_body_names = [body.name for body in cut]
 
 
@@ -577,7 +582,12 @@ class FakeHoleFeatures(FakeCollection):
         return feature
 
     def _every_body(self) -> list:
-        """No participant named: Fusion cuts every body it reaches."""
+        """No participant named: every body in the root is left to be cut.
+
+        Fusion's words are "all bodies that are intersected by the hole"; which
+        ones a hole reaches needs real geometry, so this over-approximates.  The
+        approximation can only fail a wrong handler, never pass one.
+        """
         root = None if self._design is None else self._design.rootComponent
         return [] if root is None else list(root.bRepBodies)
 
