@@ -241,7 +241,8 @@ class CommandHandler:
         cmd_type = command.get("type")
         params = command.get("params", {})
 
-        handler = self._COMMANDS.get(cmd_type)
+        commands = self._COMMANDS or {}
+        handler = commands.get(cmd_type or "")
         if handler is None:
             # Infrastructure-level failure (not an application error) —
             # keep the legacy error envelope so the client raises.
@@ -439,7 +440,21 @@ class CommandHandler:
                 return s
         raise RuntimeError(f"Sketch '{name}' not found")
 
-    def _body_by_name(self, name: str):
+    @staticmethod
+    def _point3d(values, label: str):
+        """``Point3D.create(*values)``, naming the parameter when it is unset.
+
+        The construction tools take optional point lists; unpacking None raised
+        TypeError from inside Fusion's binding, which said nothing a caller could
+        act on.
+        """
+        if not values or len(values) != 3:
+            raise RuntimeError(f"{label} must be [x, y, z] in centimetres")
+        return adsk.core.Point3D.create(*values)
+
+    def _body_by_name(self, name: str | None):
+        if not name:
+            raise RuntimeError("A body name is required")
         root = self._root()
         # Search root bodies first
         for i in range(root.bRepBodies.count):
@@ -464,16 +479,18 @@ class CommandHandler:
                 return occ.component
         raise RuntimeError(f"Component '{name}' not found")
 
-    def _construction_plane(self, plane: str):
+    def _construction_plane(self, plane: str | None):
         root = self._root()
         m = {
             "xy": root.xYConstructionPlane,
             "yz": root.yZConstructionPlane,
             "xz": root.xZConstructionPlane,
         }
-        p = m.get(plane)
+        # Still a refusal: an unset plane is a caller mistake, and defaulting to
+        # xy would build geometry nobody asked for.
+        p = m.get((plane or "").lower())
         if p is None:
-            raise RuntimeError(f"Unknown plane '{plane}' — use xy, yz, or xz")
+            raise RuntimeError(f"Unknown plane {plane!r} — use xy, yz, or xz")
         return p
 
     def _construction_axis(self, axis: str):
@@ -1373,6 +1390,17 @@ class CommandHandler:
         e1 = curves[entity_one] if entity_one is not None else None
         e2 = curves[entity_two] if entity_two is not None else None
 
+        # symmetry is the only constraint needing a third entity; resolve it here
+        # so the map below just names it and a missing index is a clear refusal.
+        mirror_line = None
+        if symmetry_line is not None:
+            mirror_line = curves[symmetry_line]
+        elif constraint_type == "symmetry":
+            raise RuntimeError(
+                "symmetry needs symmetry_line — the index of the sketch line the "
+                "two entities are mirrored about"
+            )
+
         constraint_map = {
             "coincident": lambda: constraints.addCoincident(e1, e2),
             "parallel": lambda: constraints.addParallel(e1, e2),
@@ -1388,7 +1416,7 @@ class CommandHandler:
             "midpoint": lambda: constraints.addMidPoint(
                 sketch.sketchPoints.item(entity_one), e2
             ),
-            "symmetry": lambda: constraints.addSymmetry(e1, e2, curves[symmetry_line]),
+            "symmetry": lambda: constraints.addSymmetry(e1, e2, mirror_line),
         }
 
         if constraint_type not in constraint_map:
@@ -1460,6 +1488,12 @@ class CommandHandler:
 
         e1 = curves[entity_one] if entity_one is not None else None
         e2 = curves[entity_two] if entity_two is not None else None
+        if e1 is None or e2 is None:
+            raise RuntimeError(
+                f"entity_one/entity_two are invalid for sketch '{sketch.name}': it "
+                f"has {len(curves)} curve(s), so indices {entity_one} and "
+                f"{entity_two} must both name one"
+            )
         text_pt = adsk.core.Point3D.create(0, 0, 0)
 
         if dimension_type == "distance":
@@ -2707,6 +2741,8 @@ class CommandHandler:
                 raise RuntimeError(f"No mesh bodies imported from {file_path}")
             mesh_body = mesh_list.item(0)
 
+        if mesh_body is None:
+            raise RuntimeError(f"No mesh body imported from {file_path}")
         bb = mesh_body.boundingBox
         return {
             "imported": True,
@@ -3309,9 +3345,9 @@ class CommandHandler:
                 self._construction_plane(plane_one), self._construction_plane(plane_two)
             )
         elif method == "three_points":
-            p1 = adsk.core.Point3D.create(*point_one)
-            p2 = adsk.core.Point3D.create(*point_two)
-            p3 = adsk.core.Point3D.create(*point_three)
+            p1 = self._point3d(point_one, "point_one")
+            p2 = self._point3d(point_two, "point_two")
+            p3 = self._point3d(point_three, "point_three")
             inp.setByThreePoints(p1, p2, p3)
         elif method == "tangent":
             raise RuntimeError("Tangent plane needs face selection—use execute_code")
@@ -3336,8 +3372,8 @@ class CommandHandler:
         inp = axes.createInput()
 
         if method == "two_points":
-            p1 = adsk.core.Point3D.create(*point_one)
-            p2 = adsk.core.Point3D.create(*point_two)
+            p1 = self._point3d(point_one, "point_one")
+            p2 = self._point3d(point_two, "point_two")
             inp.setByTwoPoints(p1, p2)
         elif method == "intersection":
             inp.setByTwoPlanes(
@@ -3348,7 +3384,7 @@ class CommandHandler:
             edge = body.edges.item(edge_index)
             inp.setByEdge(edge)
         elif method == "perpendicular_at_point":
-            p1 = adsk.core.Point3D.create(*point_one)
+            p1 = self._point3d(point_one, "point_one")
             inp.setByPerpendicularAtPoint(self._construction_plane(plane_one), p1)
         else:
             raise RuntimeError(f"Unknown method: {method}")
@@ -3431,7 +3467,7 @@ class CommandHandler:
                 return occ
         return None
 
-    def _joint_face(self, occ, body_name: str, face_index: int, label: str):
+    def _joint_face(self, occ, body_name: str | None, face_index: int, label: str):
         """Resolve one cylindrical face used as joint geometry."""
         component = occ.component
         bodies = [b for b in component.bRepBodies]
@@ -3599,7 +3635,7 @@ class CommandHandler:
         }
 
     def _apply_joint_motion(
-        self, inp, joint_type: str, axis: str, second_axis: str, frame=None
+        self, inp, joint_type: str, axis: str, second_axis: str | None, frame=None
     ):
         """Set the JointInput motion for *joint_type*.
 
@@ -4644,8 +4680,8 @@ class CommandHandler:
             "fixed_cylinder": "fixedcylinder",
             "from_solid": "solid",
         }
-        applied_stock = {}
-        failed_stock = {}
+        applied_stock: dict[str, Any] = {}
+        failed_stock: dict[str, Any] = {}
         if stock_mode:
             mode_id = stock_mode_map.get(stock_mode, stock_mode)
             if self._set_cam_parameter(setup, "job_stockMode", mode_id, by_string=True):
@@ -4972,8 +5008,13 @@ class CommandHandler:
             raise RuntimeError(f"SyntaxError: {exc}")
 
         last_expr_value = None
-        if tree.body and isinstance(tree.body[-1], ast.Expr):
-            last_node = tree.body.pop()
+        last_expr = (
+            tree.body[-1]
+            if tree.body and isinstance(tree.body[-1], ast.Expr)
+            else None
+        )
+        if last_expr is not None:
+            tree.body.pop()
             if tree.body:
                 with redirect_stdout(buf):
                     exec(
@@ -4982,7 +5023,7 @@ class CommandHandler:
                         ),
                         ns,
                     )
-            expr_code = compile(ast.Expression(body=last_node.value), "<mcp>", "eval")
+            expr_code = compile(ast.Expression(body=last_expr.value), "<mcp>", "eval")
             with redirect_stdout(buf):
                 last_expr_value = eval(expr_code, ns)
         else:
