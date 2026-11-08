@@ -521,7 +521,11 @@ class FakeJointMotion:
         "Slider": ("slideValue",),
         "Cylindrical": ("rotationValue", "slideValue"),
         "PinSlot": ("rotationValue", "slideValue"),
-        "Planar": ("primarySlideValue", "secondarySlideValue"),
+        # Fusion's PlanarJointMotion exposes rotationValue *and* both slides
+        # (read from the shipped adsk/fusion.py: rotationValue + rotationLimits
+        # alongside primary/secondarySlideValue). Omitting the rotation here would
+        # refuse a write Fusion accepts.
+        "Planar": ("rotationValue", "primarySlideValue", "secondarySlideValue"),
         "Ball": ("pitchValue", "yawValue", "rollValue"),
     }
 

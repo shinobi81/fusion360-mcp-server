@@ -175,3 +175,22 @@ def test_the_fake_refuses_a_value_that_motion_does_not_have(bound_handler):
         joint.jointMotion.rotationValue = 1.0
 
     assert joint.jointMotion.pitchValue == 0.0
+
+
+def test_a_planar_joint_can_be_driven(bound_handler):
+    """Planar has rotationValue *and* two slides — the stub says so explicitly.
+
+    Measured from Fusion's shipped ``fusion.py``: ``PlanarJointMotion`` exposes
+    ``rotationValue``/``rotationLimits`` alongside ``primarySlideValue`` and
+    ``secondarySlideValue``. A fake that omitted ``rotationValue`` would refuse a
+    write Fusion accepts, which is the opposite failure to the one the strictness
+    guard exists for.
+    """
+    handler, joint = _driven_joint(bound_handler, joint_type="planar")
+
+    result = handler.set_joint_value(
+        value=1.5, joint_name=joint.name, units="rad", as_built=False
+    )
+
+    assert result["attribute"] == "rotationValue"
+    assert joint.jointMotion.rotationValue == pytest.approx(1.5)

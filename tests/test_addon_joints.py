@@ -211,6 +211,21 @@ def test_joint_angle_attributes_hold_no_lengths():
     )
 
 
+def test_add_joint_schema_requires_the_face_pair():
+    """The face pair is mandatory geometry, so the schema must say so.
+
+    A caller should fail fast on a missing face instead of reaching Fusion and
+    getting a runtime error. This assertion lived inside the behavioural scan that
+    was retired; it is a pure schema read, which is exactly what this file keeps.
+    """
+    required = set(_schema()["required"])
+
+    assert {"face_one", "face_two"} <= required, (
+        "face_one/face_two are mandatory joint geometry and must be required in "
+        f"the schema, so a caller fails fast (required: {sorted(required)})"
+    )
+
+
 def test_as_built_joint_schema_mirrors_add_joint():
     """Both joint tools take the same geometry arguments."""
     schema = {t["name"]: t["inputSchema"] for t in TOOLS}

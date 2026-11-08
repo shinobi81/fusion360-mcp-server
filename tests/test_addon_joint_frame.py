@@ -24,6 +24,7 @@ from fusion360_mcp.hints import classify
 from tests.fakes.bodies import FakeBody, FakeFace
 from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
+from tests.fakes.runtime import FakeJointGeometry, FakePoint3D
 
 #: What Fusion 2706 reports for a cylinder whose axis is world Z, radius 2, z 0..5
 #: with quadrant="middle", key_point="end". The origin is on the SURFACE, never on
@@ -455,9 +456,15 @@ def test_add_joint_reports_what_the_snap_moved(joint):
     """A joint snaps components together; the result must say so.
 
     On a real assembly this surfaced as a 32.6 mm displacement between the halves
-    of a hinge — the joint "worked" and quietly rearranged the design. The scan
-    this replaces could see a key in a return dict; this observes the key in the
-    result the caller actually gets.
+    of a hinge — the joint "worked" and quietly rearranged the design.
+
+    **What this does and does not prove.** It observes the keys in the result the
+    caller actually gets, which the source scan could not: a key present in one
+    return dict but absent from the one that runs would have passed the scan. It
+    cannot prove the *values* are right, because the fake never moves an
+    occurrence — FakeJoints.createInput is given geometries, not the
+    occurrences a snap would move, so moved_components is always empty here.
+    Modelling that is a separate change; it is reported rather than papered over.
     """
     _, result, _ = joint(axis="x")
 
@@ -509,3 +516,73 @@ def test_a_failing_joint_add_is_not_swallowed(bound_handler):
     assert "blew up" in str(raised.value), (
         "add_joint reported success while the API call failed"
     )
+
+
+def test_a_failing_as_built_add_is_not_swallowed(bound_handler):
+    """Same claim as the regular joints, on the as-built path.
+
+    The retired scan read `add_joint` only, so as-built was never covered there
+    either — this closes the gap rather than preserving it.
+    """
+    design = _design(MEASURED)
+    handler = bound_handler(design)
+
+    def explode(item):
+        raise RuntimeError("asBuiltJoints.add blew up")
+
+    design.rootComponent.asBuiltJoints.add = explode
+
+    with pytest.raises(RuntimeError) as raised:
+        _as_built(handler, joint_type="rigid")
+
+    assert "blew up" in str(raised.value), (
+        "create_as_built_joint reported success while the API call failed"
+    )
+
+
+def test_the_fake_declares_create_by_point_with_one_argument():
+    """Fusion's ``createByPoint`` takes a point, not an occurrence and a point.
+
+    The stub is never called by a handler today, so the guard is Python's own
+    arity check — but it only bites if the stub is exercised here.
+    """
+    geometry = FakeJointGeometry.createByPoint(FakePoint3D(1.0, 2.0, 3.0))
+
+    assert geometry.origin.x == 1.0
+    with pytest.raises(TypeError):
+        FakeJointGeometry.createByPoint(
+            FakePoint3D(0.0, 0.0, 0.0), FakePoint3D(1.0, 0.0, 0.0)
+        )
+
+
+#: What each joint_type must map to. Hard-coded from Fusion's JointInput, not read
+#: from the handler's table: a test that reads the table cannot notice the table
+#: naming the wrong setter.
+AS_BUILT_SETTERS = [
+    ("rigid", "setAsRigidJointMotion"),
+    ("revolute", "setAsRevoluteJointMotion"),
+    ("slider", "setAsSliderJointMotion"),
+    ("cylindrical", "setAsCylindricalJointMotion"),
+    ("planar", "setAsPlanarJointMotion"),
+    ("pin_slot", "setAsPinSlotJointMotion"),
+    ("ball", "setAsBallJointMotion"),
+]
+
+
+@pytest.mark.parametrize(("joint_type", "setter"), AS_BUILT_SETTERS)
+def test_an_as_built_joint_uses_the_setter_its_type_maps_to(
+    bound_handler, joint_type, setter
+):
+    """All seven types, not just revolute and rigid.
+
+    A handler that hard-coded one setter would be caught by the pair of tests
+    above; a handler that hard-coded *one of the other five* would not.
+    """
+    design = _design(MEASURED)
+    handler = bound_handler(design)
+
+    _as_built(handler, joint_type=joint_type, axis="z")
+
+    inp = design.rootComponent.asBuiltJoints.last_input
+    assert inp is not None, "no as-built input was created"
+    assert inp.motion_setter == setter
