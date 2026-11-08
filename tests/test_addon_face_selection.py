@@ -45,15 +45,82 @@ def box_faces() -> list[FakeFace]:
 
 
 def _removed_faces(design: FakeDesign) -> list:
-    """The faces the last shell was told to open, narrowed for the type checker."""
+    """The faces the last shell was told to open, narrowed for the type checker.
+
+    Fusion carries them in the ``inputEntities`` collection handed to
+    ``createInput``; there is no ``facesToRemove`` property to read.
+    """
     inp = design.rootComponent.features.shellFeatures.last_input
     assert inp is not None, "no shell input was created"
-    return list(inp.facesToRemove or [])
+    return [item for item in inp.inputEntities if isinstance(item, FakeFace)]
 
 
 def _design(faces: list[FakeFace]) -> FakeDesign:
     body = FakeBody("Plate", faces=FakeCollection(faces))
     return FakeDesign(bodies=[body])
+
+
+def test_the_fake_refuses_a_face_and_the_body_that_owns_it(bound_handler):
+    """Pins the fake, not the handler: Fusion's ownership rule, modelled here.
+
+    Fusion fails "if any faces are input, and the owning bodies of the faces are
+    also input".  Without this the fake would accept the old shape's collection
+    and a reader could believe both were honoured.  The regression itself is
+    caught by `test_shell_hands_fusion_the_faces_and_never_the_body` below, which
+    reads `inputEntities`; this test only keeps the fake honest.
+    """
+    design = _design(box_faces())
+    body = design.rootComponent.bRepBodies.item(0)
+
+    with pytest.raises(TypeError) as raised:
+        design.rootComponent.features.shellFeatures.createInput(
+            [body, body.faces.item(0)]
+        )
+
+    assert "face(s)" in str(raised.value)
+
+
+def test_the_fake_allows_a_body_with_another_bodys_face(bound_handler):
+    """Ownership, not mere presence: Fusion accepts this call, so the fake must."""
+    design = _design(box_faces())
+    other = FakeBody("Other", faces=FakeCollection(box_faces()))
+    design.rootComponent.bRepBodies.add(other)
+    body = design.rootComponent.bRepBodies.item(0)
+
+    inp = design.rootComponent.features.shellFeatures.createInput(
+        [body, other.faces.item(0)]
+    )
+
+    assert list(inp.inputEntities) == [body, other.faces.item(0)]
+
+
+def test_shell_hands_fusion_the_faces_and_never_the_body(bound_handler):
+    """The measured defect: Fusion was given a body and no faces at all.
+
+    `ShellFeatureInput` has no `facesToRemove` property.  Assigning one attaches
+    an attribute to the SWIG wrapper, which reads back as if it were stored and
+    is invisible to Fusion - so the shell closed the cavity and reported
+    `faces_removed: 1`.  Live reading of the same input: `inputEntities` is the
+    only place the faces can travel, and Fusion refuses a face in the same call
+    as the body that owns it.  Asking for a body now fails here.
+    """
+    design = _design(box_faces())
+    handler = bound_handler(design)
+
+    handler.shell(thickness=0.2, body_name="Plate", face_selection="top")
+
+    inp = design.rootComponent.features.shellFeatures.last_input
+    assert inp is not None
+    body = design.rootComponent.bRepBodies.item(0)
+    assert list(inp.inputEntities) == [body.faces.item(0)], (
+        "the faces to remove travel in inputEntities, and only the chosen one"
+    )
+    assert not any(isinstance(item, FakeBody) for item in inp.inputEntities), (
+        "Fusion refuses a face whose own body is in the same collection"
+    )
+    assert inp.isTangentChain is False, (
+        "the selector already chose the faces; tangent propagation would open more"
+    )
 
 
 def test_shell_top_opens_one_face_on_a_box(bound_handler):

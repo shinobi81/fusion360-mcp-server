@@ -81,7 +81,7 @@ at all is refused instead — `INVALID_INPUT`, where Fusion's own message is
 | `loft`                | Loft between two or more profiles; `target_body` limits a cut/join/intersect |
 | `fillet`              | Round edges: all/top/bottom/vertical, or `edge_indices` / `edge_points` |
 | `chamfer`             | Chamfer edges: same three selectors as `fillet` |
-| `shell`               | Hollow out a body                     |
+| `shell`               | Hollow out a body; `face_selection` (top/bottom) is the face left **open** |
 | `mirror`              | Mirror a body across a plane          |
 | `create_hole`         | Hole feature on a body face           |
 | `rectangular_pattern` | Pattern in rows and columns           |

@@ -1,0 +1,181 @@
+diff --git a/addon/server/command_handler.py b/addon/server/command_handler.py
+index 24b8f3d..b3a9ad1 100644
+--- a/addon/server/command_handler.py
++++ b/addon/server/command_handler.py
+@@ -2009,10 +2009,18 @@ class CommandHandler:
+             raise RuntimeError(f"No faces matched '{face_selection}'")
+ 
+         shells = root.features.shellFeatures
+-        body_coll = adsk.core.ObjectCollection.create()
+-        body_coll.add(body)
+-        inp = shells.createInput(body_coll)
+-        inp.facesToRemove = faces
++        # The faces to remove go IN the input collection, and the body does not:
++        # Fusion derives the body from the faces and refuses a face alongside the
++        # body that owns it ("Fails if any faces are input, and the owning bodies
++        # of the faces are also input").  There is no `facesToRemove` property on
++        # ShellFeatureInput - assigning one attaches a plain attribute to the SWIG
++        # wrapper, which reads back as if stored and never reaches Fusion, so the
++        # feature closed the cavity and this handler reported a face removed.
++        # Measured on 2706: a body plus that phantom attribute gave 200 -> 52.544
++        # cm3 with the top intact; the faces alone give 200 -> 34.112, top open.
++        # isTangentChain stays False because the selector has already chosen the
++        # faces, and tangent propagation would open more than `faces_removed` says.
++        inp = shells.createInput(faces, False)
+         inp.insideThickness = adsk.core.ValueInput.createByReal(thickness)
+         feat = shells.add(inp)
+         return {
+diff --git a/docs/TOOLS.md b/docs/TOOLS.md
+index 7c53c41..535dc90 100644
+--- a/docs/TOOLS.md
++++ b/docs/TOOLS.md
+@@ -81,7 +81,7 @@ at all is refused instead — `INVALID_INPUT`, where Fusion's own message is
+ | `loft`                | Loft between two or more profiles; `target_body` limits a cut/join/intersect |
+ | `fillet`              | Round edges: all/top/bottom/vertical, or `edge_indices` / `edge_points` |
+ | `chamfer`             | Chamfer edges: same three selectors as `fillet` |
+-| `shell`               | Hollow out a body                     |
++| `shell`               | Hollow out a body; `face_selection` (top/bottom) is the face left **open** |
+ | `mirror`              | Mirror a body across a plane          |
+ | `create_hole`         | Hole feature on a body face           |
+ | `rectangular_pattern` | Pattern in rows and columns           |
+diff --git a/tests/fakes/design.py b/tests/fakes/design.py
+index a06ebe4..edb6e07 100644
+--- a/tests/fakes/design.py
++++ b/tests/fakes/design.py
+@@ -18,7 +18,7 @@ test fails.
+ 
+ from __future__ import annotations
+ 
+-from .bodies import FakeBody
++from .bodies import FakeBody, FakeFace
+ from .collection import FakeCollection, FakeDeletable
+ from .features import (
+     FakeDraftFeatures,
+@@ -404,11 +404,20 @@ class FakeChamferFeatures:
+ 
+ 
+ class FakeShellInput:
+-    """``shellFeatures.createInput``: keeps the faces the caller chose to remove."""
++    """``shellFeatures.createInput``: the faces to remove and the bodies to shell.
++
++    Fusion takes the two in ONE collection and exposes no ``facesToRemove``
++    property at all - which is why a handler that assigned one built a closed
++    cavity for months: the assignment attaches a plain Python attribute to the
++    SWIG wrapper and Fusion never sees it.  Measured on Fusion 2706 by reading
++    ``dir()`` on the input and grepping the shipped ``adsk/fusion.py``, where the
++    name appears nowhere.
++    """
+ 
+-    def __init__(self, bodies):
+-        self.bodies = bodies
+-        self.facesToRemove = None
++    def __init__(self, input_entities, is_tangent_chain: bool = True):
++        self.inputEntities = input_entities
++        self.isTangentChain = is_tangent_chain
++        self.insideThickness = None
+ 
+ 
+ class FakeShellFeatures(FakeCollection):
+@@ -422,8 +431,24 @@ class FakeShellFeatures(FakeCollection):
+     def last_input(self) -> FakeShellInput | None:
+         return self.inputs[-1] if self.inputs else None
+ 
+-    def createInput(self, bodies) -> FakeShellInput:
+-        inp = FakeShellInput(bodies)
++    def createInput(self, input_entities, is_tangent_chain: bool = True):
++        """``createInput(inputEntities, isTangentChain=True)``, as Fusion declares it.
++
++        Fusion fails when a face and the body that owns it are both in the call
++        ("Fails if any faces are input, and the owning bodies of the faces are
++        also input"), so the fake refuses it too rather than letting a caller
++        believe both were honoured.
++        """
++        items = list(input_entities)
++        bodies = [item for item in items if isinstance(item, FakeBody)]
++        faces = [item for item in items if isinstance(item, FakeFace)]
++        if bodies and faces:
++            raise TypeError(
++                "shellFeatures.createInput takes the faces to remove OR the "
++                f"bodies to shell, not both (got {len(faces)} face(s) and "
++                f"{len(bodies)} body/bodies)"
++            )
++        inp = FakeShellInput(input_entities, is_tangent_chain)
+         self.inputs.append(inp)
+         return inp
+ 
+diff --git a/tests/test_addon_face_selection.py b/tests/test_addon_face_selection.py
+index f751de9..c1df3d8 100644
+--- a/tests/test_addon_face_selection.py
++++ b/tests/test_addon_face_selection.py
+@@ -45,10 +45,14 @@ def box_faces() -> list[FakeFace]:
+ 
+ 
+ def _removed_faces(design: FakeDesign) -> list:
+-    """The faces the last shell was told to open, narrowed for the type checker."""
++    """The faces the last shell was told to open, narrowed for the type checker.
++
++    Fusion carries them in the ``inputEntities`` collection handed to
++    ``createInput``; there is no ``facesToRemove`` property to read.
++    """
+     inp = design.rootComponent.features.shellFeatures.last_input
+     assert inp is not None, "no shell input was created"
+-    return list(inp.facesToRemove or [])
++    return [item for item in inp.inputEntities if isinstance(item, FakeFace)]
+ 
+ 
+ def _design(faces: list[FakeFace]) -> FakeDesign:
+@@ -56,6 +60,54 @@ def _design(faces: list[FakeFace]) -> FakeDesign:
+     return FakeDesign(bodies=[body])
+ 
+ 
++def test_the_fake_refuses_a_face_and_the_body_that_owns_it(bound_handler):
++    """Fusion's own rule, so a regression cannot pass by asking for both.
++
++    `createInput` fails "if any faces are input, and the owning bodies of the
++    faces are also input".  The fake enforces it too, which is what makes the
++    old shape - body in the call, faces in a phantom attribute - impossible to
++    reintroduce without a red test.
++    """
++    design = _design(box_faces())
++    body = design.rootComponent.bRepBodies.item(0)
++
++    with pytest.raises(TypeError) as raised:
++        design.rootComponent.features.shellFeatures.createInput(
++            [body, body.faces.item(0)]
++        )
++
++    assert "not both" in str(raised.value)
++
++
++def test_shell_hands_fusion_the_faces_and_never_the_body(bound_handler):
++    """The measured defect: Fusion was given a body and no faces at all.
++
++    `ShellFeatureInput` has no `facesToRemove` property.  Assigning one attaches
++    an attribute to the SWIG wrapper, which reads back as if it were stored and
++    is invisible to Fusion - so the shell closed the cavity and reported
++    `faces_removed: 1`.  Live reading of the same input: `inputEntities` is the
++    only place the faces can travel, and Fusion refuses a face in the same call
++    as the body that owns it.  Asking for a body now fails here.
++    """
++    design = _design(box_faces())
++    handler = bound_handler(design)
++
++    handler.shell(thickness=0.2, body_name="Plate", face_selection="top")
++
++    inp = design.rootComponent.features.shellFeatures.last_input
++    assert inp is not None
++    body = design.rootComponent.bRepBodies.item(0)
++    assert list(inp.inputEntities) == [body.faces.item(0)], (
++        "the faces to remove travel in inputEntities, and only the chosen one"
++    )
++    assert not any(isinstance(item, FakeBody) for item in inp.inputEntities), (
++        "Fusion refuses a face whose own body is in the same collection"
++    )
++    assert inp.isTangentChain is False, (
++        "the selector already chose the faces; tangent propagation would open more"
++    )
++
++
+ def test_shell_top_opens_one_face_on_a_box(bound_handler):
+     """The measured defect: five faces removed where one is meant."""
+     design = _design(box_faces())
