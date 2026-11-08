@@ -152,8 +152,12 @@ class FakeFace:
 
     ``joint_geometry_for`` is what ``JointGeometry.createByCylinderOrConeFace``
     asks the face for.  The defaults are the live measurement for a cylinder
-    whose axis is world Z: origin on the SURFACE at radius 2, frame primary=+Z,
-    secondary=+X, third=+Y.  Pass a mapping to move it.
+    whose bore is world Z with ``quadrant="middle"``: origin on the SURFACE at
+    radius 2, frame primary=-X, secondary=-Y, third=+Z.  That frame matters —
+    under the measured mapping (joint X = secondary, Y = third, Z = primary) it
+    makes joint X world -Y, so a handler that passed the caller's axis straight
+    through is caught.  An identity frame would not: it would make the mapping
+    and the old passthrough indistinguishable.
     """
 
     def __init__(
@@ -167,9 +171,9 @@ class FakeFace:
         self.boundingBox = bounding_box or FakeBoundingBox()
         self.joint_frame = joint_frame or {
             "origin": (-2.0, 0.0, 5.0),
-            "primary": (0.0, 0.0, 1.0),
-            "secondary": (1.0, 0.0, 0.0),
-            "third": (0.0, 1.0, 0.0),
+            "primary": (-1.0, 0.0, 0.0),
+            "secondary": (0.0, -1.0, 0.0),
+            "third": (0.0, 0.0, 1.0),
         }
 
     def joint_geometry_for(self, quadrant, key_point):

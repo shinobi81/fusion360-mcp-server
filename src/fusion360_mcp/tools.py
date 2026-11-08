@@ -880,6 +880,10 @@ TOOLS: list[dict] = [
                     "enum": ["x", "y", "z"],
                     "default": "x",
                     "description": (
+                        "Rotation/slide axis in MODEL terms (x/y/z), resolved against "
+                        "the joint's own axes: Fusion's JointDirections enum selects a "
+                        "joint axis, so the nearest one is used and the result's "
+                        "axis_world / directions report the sign actually applied. "
                         "Rotation/slide axis for revolute, slider and cylindrical; "
                         "primary direction for pin_slot, planar and ball."
                     ),
@@ -2146,6 +2150,10 @@ TOOLS: list[dict] = [
                     "enum": ["x", "y", "z"],
                     "default": "x",
                     "description": (
+                        "Rotation/slide axis in MODEL terms (x/y/z), resolved against "
+                        "the joint's own axes: Fusion's JointDirections enum selects a "
+                        "joint axis, so the nearest one is used and the result's "
+                        "axis_world / directions report the sign actually applied. "
                         "Rotation/slide axis for revolute, slider and cylindrical; "
                         "primary direction for pin_slot, planar and ball."
                     ),

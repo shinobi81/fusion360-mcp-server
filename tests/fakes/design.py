@@ -453,13 +453,17 @@ class FakeJointGeometry:
 
 
 class FakeJointMotion:
-    """What Fusion reports back for a created joint.
+    """What Fusion reports back for a created joint, per motion type.
 
-    ``slideDirectionVector`` follows the measured mapping from a JointDirections
-    member to a world vector: X is minus the geometry's third axis, Y is its
-    primary axis, Z is minus its secondary axis.  That is the fact the handler
-    has to agree with, and it was measured rather than assumed — a slider on
-    cylinder-face geometry slid along -Y for XAxis, +Z for YAxis, -X for ZAxis.
+    Which attributes exist is a measurement, not a guess: on 2706 a slider
+    exposes ``slideDirectionVector``, revolute and cylindrical expose
+    ``rotationAxisVector`` only, planar exposes ``normalDirectionVector`` plus a
+    primary/secondary slide pair (planar DOES slide, which a single
+    ``slideDirectionVector`` probe would have got wrong), pin_slot exposes both,
+    and ball exposes pitch/yaw/roll.
+
+    Each vector follows the measured JointDirections -> world mapping: X is the
+    geometry's secondary axis, Y its third, Z its primary.
     """
 
     def __init__(self, setter: str, frame: dict, directions: tuple):
@@ -468,14 +472,38 @@ class FakeJointMotion:
         self._directions = directions
         name = setter.removeprefix("setAs").removesuffix("JointMotion")
         self.objectType = f"adsk::fusion::{name}JointMotion"
-        if name in ("Slider", "Cylindrical", "PinSlot"):
-            self.slideDirectionVector = frame.get(directions[0]) if directions else None
-        if name in ("Revolute", "Cylindrical", "PinSlot", "Planar"):
-            self.rotationAxisVector = frame.get(directions[-1]) if directions else None
+        first = frame.get(directions[0]) if directions else None
+        second = frame.get(directions[1]) if len(directions) > 1 else None
+        # Keyed by JointDirections member, so pick "the others" by key.
+        others = [frame[key] for key in frame if key not in directions[:2]]
+        if name == "Slider":
+            self.slideDirectionVector = first
+        elif name in ("Revolute", "Cylindrical"):
+            self.rotationAxisVector = first
+        elif name == "PinSlot":
+            self.slideDirectionVector = first
+            self.rotationAxisVector = second
+        elif name == "Planar":
+            self.normalDirectionVector = first
+            self.primarySlideDirectionVector = others[0]
+            self.secondarySlideDirectionVector = others[1]
+        elif name == "Ball":
+            self.pitchDirectionVector = first
+            self.yawDirectionVector = second
+            self.rollDirectionVector = others[0] if others else None
 
 
 class FakeJoint(FakeDeletable):
-    """A created joint: name, motion, and the geometry it was built from."""
+    """A created joint: name, motion, and the geometry it was built from.
+
+    The geometry is the same object the input was given. Fusion's own
+    ``geometryOrOriginOne`` was measured to report a *different* frame than the
+    geometry passed to ``createInput``, which is what made an early reading of
+    this look inconsistent — but no measurement pinned the permutation, so the
+    fake does not invent one. What it can still catch is a handler that stopped
+    reading the geometry it built: the reported vectors in these tests are the
+    input's.
+    """
 
     def __init__(self, name, geometry_one, geometry_two, motion, is_flipped):
         super().__init__(name)

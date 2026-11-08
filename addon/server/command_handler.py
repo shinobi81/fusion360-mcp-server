@@ -329,6 +329,24 @@ class CommandHandler:
         "z": "ZAxisJointDirection",
     }
 
+    #: The direction vectors a joint motion exposes, by Fusion's own names.
+    #: Measured on 2706 per motion type: slider -> slideDirectionVector; revolute
+    #: and cylindrical -> rotationAxisVector; planar -> normalDirectionVector plus a
+    #: primary/secondary slide pair (so it DOES slide, and a single
+    #: ``slideDirectionVector`` field would have reported null for it); pin_slot ->
+    #: both; ball -> pitch/yaw/roll. Reporting whichever exist is the only honest
+    #: shape across seven motion types.
+    _MOTION_DIRECTIONS: ClassVar[tuple[str, ...]] = (
+        "slideDirectionVector",
+        "rotationAxisVector",
+        "pitchDirectionVector",
+        "yawDirectionVector",
+        "rollDirectionVector",
+        "normalDirectionVector",
+        "primarySlideDirectionVector",
+        "secondarySlideDirectionVector",
+    )
+
     #: The model's axes, which is what the caller's ``axis`` means.
     _WORLD_AXES: ClassVar[dict[str, tuple[float, float, float]]] = {
         "x": (1.0, 0.0, 0.0),
@@ -3538,9 +3556,14 @@ class CommandHandler:
                 moved[occ.name] = delta
 
         motion = joint.jointMotion
-        slide = getattr(motion, "slideDirectionVector", None)
+        directions = {}
+        for attr in self._MOTION_DIRECTIONS:
+            vector = getattr(motion, attr, None)
+            if vector is not None:
+                key = attr.removesuffix("Vector")
+                directions[key] = [vector.x, vector.y, vector.z]
         origin = geometries[0].origin
-        bore = geometries[0].primaryAxisVector
+        primary = geometries[0].primaryAxisVector
         return {
             "created": True,
             "joint_name": joint.name,
@@ -3553,14 +3576,15 @@ class CommandHandler:
             # measured at the bore's radius — so a revolute joint rotates about a
             # line offset from the bore.  Reported rather than assumed.
             "joint_origin": [origin.x, origin.y, origin.z],
-            "primary_axis": [bore.x, bore.y, bore.z],
-            # The model-space vector the motion was given, and the direction
-            # Fusion reports for it.  A model axis can be unreachable exactly
-            # (see _joint_direction), so the sign here is the answer, not a guess.
+            "primary_axis": [primary.x, primary.y, primary.z],
+            # The model-space vector the motion was given, and every direction
+            # vector Fusion then reports for the joint.  A model axis can be
+            # unreachable exactly (see _joint_direction), so the sign in axis_world
+            # is the answer rather than a guess, and `directions` is Fusion's own
+            # account of the joint that came out - the two can differ when the two
+            # faces' frames disagree.
             "axis_world": axis_world,
-            "slide_direction": (
-                None if slide is None else [slide.x, slide.y, slide.z]
-            ),
+            "directions": directions,
         }
 
     def _apply_joint_motion(
@@ -3593,7 +3617,9 @@ class CommandHandler:
             return chosen_world
 
         secondary, _ = self._joint_direction(
-            second_axis or self._perpendicular(axis), frame
+            second_axis or self._perpendicular(axis),
+            frame,
+            avoid=primary if second_axis is None else None,
         )
         if joint_type in self._JOINT_REVERSED_DIRECTION_ARGUMENTS:
             setter(secondary, primary)
@@ -3630,7 +3656,7 @@ class CommandHandler:
     def _dot(a, b) -> float:
         return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
-    def _joint_direction(self, axis: str, frame=None):
+    def _joint_direction(self, axis: str, frame=None, avoid=None):
         """The ``JointDirections`` member whose joint axis best matches *axis*.
 
         Returns ``(member, world_vector)``. Without a *frame* the caller's axis is
@@ -3649,12 +3675,28 @@ class CommandHandler:
                 f"Unknown axis: {axis}. Use one of {sorted(self._JOINT_AXES)}"
             )
         if frame is None:
-            return getattr(adsk.fusion.JointDirections, attr), None
+            # Only reachable for a joint whose motion takes no direction at all
+            # (rigid), which returns before this is called; a frame is mandatory
+            # for anything else, so ask for one rather than guessing.
+            raise RuntimeError(
+                f"A joint frame is required to place axis '{axis}' — internal error"
+            )
 
         wanted = self._WORLD_AXES[key]
-        best = max(
-            ("x", "y", "z"), key=lambda name: abs(self._dot(frame[name], wanted))
+        ranked = sorted(
+            ("x", "y", "z"),
+            key=lambda name: abs(self._dot(frame[name], wanted)),
+            reverse=True,
         )
+        # Two different model axes can resolve to the same joint member when the
+        # bore is not aligned with a model axis (a 45 degree bore sends both X and
+        # Z to joint Y), and pin_slot/ball take two directions.  Repeating one
+        # makes Fusion refuse the joint ("Invalid parameter pitchDirection"), so
+        # the runner-up is used instead: one step less parallel, but perpendicular.
+        if avoid is not None and self._JOINT_AXES[ranked[0]] == avoid:
+            best = ranked[1]
+        else:
+            best = ranked[0]
         return getattr(adsk.fusion.JointDirections, self._JOINT_AXES[best]), frame[best]
 
     @staticmethod

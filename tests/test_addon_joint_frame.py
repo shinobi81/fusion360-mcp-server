@@ -1,21 +1,19 @@
 """Which joint axis `axis` picks, and what `add_joint` reports about it.
 
 `axis` used to be handed to Fusion as a literal ``JointDirections`` member, which
-selects the **joint's own** axis, not the model's.  Measured on Fusion 2706 with
-cylinder-face geometry whose bore is world Z:
+selects the **joint's own** axis, not the model's.  Measured on Fusion 2706 by reading
+``slideDirectionVector`` back for each member, the frame is
 
-    axis="x" -> slideDirectionVector [0, -1, 0]   (joint X is world -Y)
-    axis="y" -> slideDirectionVector [0,  0, 1]   (joint Y is the bore)
-    axis="z" -> slideDirectionVector [-1, 0, 0]   (joint Z is world -X)
+    XAxisJointDirection -> secondaryAxisVector
+    YAxisJointDirection -> thirdAxisVector
+    ZAxisJointDirection -> primaryAxisVector
 
-so the joint frame is X = -third, Y = primary, Z = -secondary, and asking for
-world +X has to pick Z.  These tests pin that mapping and the measurements
-`add_joint` now returns, and they are behavioural: the fake builds the joint and
-reports the motion Fusion would.
+verified across four quadrants of a cylinder-Z body, a cylinder whose bore is world
+X, and a cone.  For the fixture body (bore world Z, ``quadrant="middle"``) that frame is
+X = -Y, Y = +Z, Z = -X, so world +X is only reachable as joint Z, sliding along -X.
 
-The quadruples here are the live measurement above; `tests/fakes/design.py`
-derives its own `slideDirectionVector` from the same numbers, so a change to
-either that is not a change to Fusion shows up as a failure.
+The direction vectors asserted here are literals from those measurements, not values the
+fake derives from the handler's own mapping, so a one-sided change fails.
 """
 
 from __future__ import annotations
@@ -110,19 +108,59 @@ def test_axis_z_picks_the_bore(joint):
     assert result["axis_world"] == pytest.approx([0.0, 0.0, 1.0])
 
 
-def test_the_mapping_is_not_a_literal_enum_passthrough(joint):
-    """The old behaviour — X for "x", Y for "y", Z for "z" — is what was wrong."""
-    _, _, inp_x = joint(axis="x")
-    _, _, inp_y = joint(axis="y")
+def test_an_off_axis_bore_is_still_resolved_through_the_frame(joint):
+    """A 45 degree bore: no joint axis is a model axis, and passthrough would show.
 
-    assert inp_x.motion_directions != ("XAxisJointDirection",)
-    assert inp_y.motion_directions != ("YAxisJointDirection",)
+    Frame measured as 45 degrees in XZ: primary=(0.707,0,0.707), secondary=(0,1,0),
+    third=(-0.707,0,0.707), so joint X=+Y, joint Y=(-0.707,0,0.707), joint Z=+X-ish.
+    Asking for world X has no exact answer; asking for world Y has an exact one
+    (joint X) and passthrough would have answered joint Y instead.
+    """
+    off_axis = {
+        "origin": (0.0, 0.0, 0.0),
+        "primary": (0.7071, 0.0, 0.7071),
+        "secondary": (0.0, 1.0, 0.0),
+        "third": (-0.7071, 0.0, 0.7071),
+    }
+
+    _, result_y, inp_y = joint(axis="y", frame=off_axis)
+
+    assert inp_y.motion_directions == ("XAxisJointDirection",)
+    assert result_y["axis_world"] == pytest.approx([0.0, 1.0, 0.0])
+
+
+def test_a_two_direction_joint_never_gets_the_same_member_twice(joint):
+    """Same 45 degree frame: world X and world Z both resolve to joint Y.
+
+    pin_slot and ball take two directions, and Fusion refuses one that repeats
+    ("Invalid parameter pitchDirection"), so the runner-up is used for the second.
+    """
+    off_axis = {
+        "origin": (0.0, 0.0, 0.0),
+        "primary": (0.7071, 0.0, 0.7071),
+        "secondary": (0.0, 1.0, 0.0),
+        "third": (-0.7071, 0.0, 0.7071),
+    }
+
+    _, _, inp = joint(axis="x", joint_type="pin_slot", frame=off_axis)
+
+    slide, rotation = inp.motion_directions
+    assert slide != rotation, (
+        "pin_slot got the same JointDirections member twice, which Fusion refuses"
+    )
 
 
 def test_a_rigid_joint_still_takes_no_direction_argument(joint):
     _, _, inp = joint(joint_type="rigid")
 
     assert inp.motion_directions == ()
+
+
+def test_the_design_is_recomputed_once_after_the_joint_is_added(joint):
+    """Fusion needs the recompute after a joint moves components; it is counted."""
+    handler, _, _ = joint(axis="x")
+
+    assert handler._design().compute_all_calls == 1
 
 
 # ── what the result reports ───────────────────────────────────────────
@@ -142,24 +180,50 @@ def test_the_result_reports_where_the_joint_origin_landed(joint):
     assert result["primary_axis"] == pytest.approx([-1.0, 0.0, 0.0])
 
 
-def test_the_result_reports_the_world_slide_direction(joint):
-    _, result, _ = joint(axis="x")
+@pytest.mark.parametrize(
+    ("axis", "expected"),
+    [
+        # Literal, measured vectors — not what the fake derives from the handler's
+        # own mapping, so a one-sided change to either fails here.
+        ("x", [-1.0, 0.0, 0.0]),
+        ("y", [0.0, -1.0, 0.0]),
+        ("z", [0.0, 0.0, 1.0]),
+    ],
+)
+def test_the_result_reports_the_direction_fusion_gives(joint, axis, expected):
+    _, result, _ = joint(axis=axis)
 
-    assert result["slide_direction"] == pytest.approx([-1.0, 0.0, 0.0])
+    assert result["directions"]["slideDirection"] == pytest.approx(expected)
+    assert result["axis_world"] == pytest.approx(expected)
 
 
-def test_a_revolute_joint_reports_no_slide_direction(joint):
-    """Revolute has no slide axis; the field must not claim one."""
+def test_a_revolute_joint_reports_its_rotation_axis_and_no_slide(joint):
+    """Measured on 2706: revolute exposes ``rotationAxisVector`` and nothing else."""
     _, result, _ = joint(axis="z", joint_type="revolute")
 
-    assert result["slide_direction"] is None
+    assert "rotationAxis" in result["directions"]
+    assert "slideDirection" not in result["directions"]
 
 
-def test_the_origin_being_on_the_surface_is_visible_for_a_revolute_hinge(joint):
-    """The reported origin is what lets a caller notice the offset hinge (§7.1)."""
-    _, result, _ = joint(axis="z", joint_type="revolute")
+def test_a_planar_joint_reports_two_slide_directions(joint):
+    """Measured: planar exposes normal + primary/secondary slide — it DOES slide.
 
-    assert result["joint_origin"][0] == pytest.approx(-2.0)
+    A single ``slide_direction`` field would have reported null for it, which is
+    what the review caught before this shipped.
+    """
+    _, result, _ = joint(axis="z", joint_type="planar")
+
+    directions = result["directions"]
+    assert "normalDirection" in directions
+    assert "primarySlideDirection" in directions
+    assert "secondarySlideDirection" in directions
+
+
+def test_a_cylindrical_joint_reports_only_a_rotation_axis(joint):
+    """Measured: cylindrical's slide has no vector attribute on 2706."""
+    _, result, _ = joint(axis="z", joint_type="cylindrical")
+
+    assert set(result["directions"]) == {"rotationAxis"}
 
 
 # ── isFlipped is not the lever ────────────────────────────────────────
