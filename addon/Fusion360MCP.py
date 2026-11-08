@@ -26,7 +26,7 @@ _handler = None
 _log = None
 
 
-def run(context):
+def run(context) -> None:
     global _app, _ui, _bridge, _server, _handler, _log
 
     try:
@@ -66,7 +66,7 @@ def run(context):
         print(f"Fusion360MCP startup error:\n{msg}")
 
 
-def stop(context):
+def stop(context) -> None:
     global _app, _ui, _bridge, _server, _handler, _log
 
     try:
