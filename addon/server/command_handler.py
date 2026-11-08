@@ -344,6 +344,12 @@ class CommandHandler:
     # axis with "Invalid parameter pitchDirection".
     _JOINT_REVERSED_DIRECTION_ARGUMENTS = frozenset({"ball"})
 
+    # How close an edge's extent has to be to a plane to count as lying in it, and
+    # how close two ends have to be to count as vertical. 1e-3 cm is 10 µm — the
+    # tolerance the coarse selectors already used as their threshold, kept so that
+    # a near-coplanar top (four arcs meeting at z=1) still groups as one plane.
+    _EDGE_PLANE_EPSILON: ClassVar[float] = 1e-3
+
     def _root(self):
         return self._design().rootComponent
 
@@ -490,6 +496,9 @@ class CommandHandler:
         ``list_edges`` reports), ``points`` chooses the nearest edge to each point,
         and ``selection`` is the coarse geometric filter that predates both.
 
+        ``top`` and ``bottom`` take the edges lying in the highest / lowest plane
+        that holds any edge — see ``_edges_in_extreme_plane``.
+
         Explicitness is the point: a caller that passes two selectors has not
         decided, and guessing would round whatever the other selector happened to
         match.  Only "all" is compatible with a silence, because "all" is the
@@ -518,28 +527,21 @@ class CommandHandler:
                 coll.add(edge)
             return coll
 
-        bbox = body.boundingBox
-
         if selection == "all":
             for edge in body.edges:
                 coll.add(edge)
-        elif selection == "top":
-            threshold = bbox.maxPoint.z - 0.001
-            for edge in body.edges:
-                mid = edge.pointOnEdge
-                if mid.z > threshold:
-                    coll.add(edge)
-        elif selection == "bottom":
-            threshold = bbox.minPoint.z + 0.001
-            for edge in body.edges:
-                mid = edge.pointOnEdge
-                if mid.z < threshold:
-                    coll.add(edge)
+        elif selection in ("top", "bottom"):
+            for edge in self._edges_in_extreme_plane(body, selection):
+                coll.add(edge)
         elif selection == "vertical":
+            # The edge's own box, not its two ends: an end-to-end test calls any
+            # edge whose ends share x and y vertical, however it bulges between.
             for edge in body.edges:
-                sp = edge.startVertex.geometry
-                ep = edge.endVertex.geometry
-                if abs(sp.x - ep.x) < 0.001 and abs(sp.y - ep.y) < 0.001:
+                box = edge.boundingBox
+                if (
+                    abs(box.maxPoint.x - box.minPoint.x) < self._EDGE_PLANE_EPSILON
+                    and abs(box.maxPoint.y - box.minPoint.y) < self._EDGE_PLANE_EPSILON
+                ):
                     coll.add(edge)
         else:
             raise RuntimeError(
@@ -549,6 +551,37 @@ class CommandHandler:
         if coll.count == 0:
             raise RuntimeError(f"No edges matched selection '{selection}'")
         return coll
+
+    def _edges_in_extreme_plane(self, body, selection: str) -> list:
+        """The edges lying in the highest (``top``) or lowest (``bottom``) plane.
+
+        The plane is measured from the body's *edges*, not from the body's box.
+        Measured live on Fusion 2706: a plate (z 0..1) with a spheroid joined on
+        top spanned z -2..4, every one of its fourteen edges lay at z=0 or z=1,
+        and a body-extreme threshold therefore matched nothing — both selectors
+        refused a body whose top edges are perfectly ordinary.
+
+        An edge belongs to the plane only when its whole extent does.  An edge's
+        ``pointOnEdge`` is one point on it and a closed edge's two vertices are
+        the same point, so a sample cannot say where an edge *lies*: a vertical
+        edge that merely reaches the top would otherwise be rounded as "the top".
+        """
+        boxes = [(edge, edge.boundingBox) for edge in body.edges]
+        if not boxes:
+            return []
+        if selection == "top":
+            plane = max(box.maxPoint.z for _, box in boxes)
+            return [
+                edge
+                for edge, box in boxes
+                if box.minPoint.z >= plane - self._EDGE_PLANE_EPSILON
+            ]
+        plane = min(box.minPoint.z for _, box in boxes)
+        return [
+            edge
+            for edge, box in boxes
+            if box.maxPoint.z <= plane + self._EDGE_PLANE_EPSILON
+        ]
 
     def _edges_by_index(self, body, indices) -> list:
         """The edges at *indices*, de-duplicated and range-checked.

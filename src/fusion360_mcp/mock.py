@@ -315,12 +315,56 @@ def _revolve(p: dict) -> dict:
     }
 
 
+_EDGE_SELECTIONS = ("all", "top", "bottom", "vertical")
+
+
+def _edge_selector_error(p: dict) -> dict | None:
+    """The add-in's refusals of an edge-selector combination, or None.
+
+    Mock mode cannot search a body, so it cannot tell which edges a selection
+    matches — but the *combination* rules and the enum are pure parameter checks,
+    and the handler refuses all of them before it looks at a body.  Echoing an
+    accepted call here would teach a sequence Fusion refuses, which is the
+    fiction #34 removed from the CAM mocks.
+    """
+    indices = p.get("edge_indices")
+    points = p.get("edge_points")
+    selection = p.get("edge_selection", "all")
+
+    if indices is not None and points is not None:
+        return _mock_error(
+            "Pass only one of edge_indices and edge_points — they name the "
+            "same edges two ways, so one would be ignored"
+        )
+    if (indices is not None or points is not None) and selection != "all":
+        return _mock_error(
+            f"edge_selection '{selection}' cannot be combined with "
+            "edge_indices or edge_points — pass one selector, not two"
+        )
+    if indices is not None and not indices:
+        return _mock_error(
+            "edge_indices was empty — name at least one edge, or omit it to "
+            "use edge_selection"
+        )
+    if points is not None and not points:
+        return _mock_error(
+            "edge_points was empty — name at least one point, or omit it to "
+            "use edge_selection"
+        )
+    if selection not in _EDGE_SELECTIONS:
+        return _mock_error(
+            f"Unknown edge_selection '{selection}' — use all/top/bottom/vertical"
+        )
+    return None
+
+
 def _selected_edge_count(p: dict) -> int:
     """How many edges the call named, so the echo matches the real response.
 
     Mock mode cannot search a body, but it must not report "all edges" for a
     call that named three: ``edges_count`` is what a caller checks its own
-    sequence against.
+    sequence against.  A refused call never reaches here — see
+    ``_edge_selector_error``.
     """
     indices = p.get("edge_indices")
     if indices is not None:
@@ -332,6 +376,9 @@ def _selected_edge_count(p: dict) -> int:
 
 
 def _fillet(p: dict) -> dict:
+    refusal = _edge_selector_error(p)
+    if refusal is not None:
+        return refusal
     return {
         "body_name": p.get("body_name", "Body1"),
         "radius": p.get("radius", 0.1),
@@ -340,6 +387,9 @@ def _fillet(p: dict) -> dict:
 
 
 def _chamfer(p: dict) -> dict:
+    refusal = _edge_selector_error(p)
+    if refusal is not None:
+        return refusal
     return {
         "body_name": p.get("body_name", "Body1"),
         "distance": p.get("distance", 0.1),

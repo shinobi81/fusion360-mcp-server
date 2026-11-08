@@ -76,11 +76,14 @@ class FakeEdgeEvaluator:
 
 
 class FakeEdge:
-    """A straight edge with the four attributes ``_select_edges`` reads.
+    """A straight edge with the attributes ``_select_edges`` reads.
 
     ``pointOnEdge`` is Fusion's point at the *parameter* midpoint, so it differs
-    from the average of the vertices on a curved edge; here every edge is a
-    straight line and the two coincide, which is stated rather than hidden.
+    from the average of the vertices on a curved edge, and a closed edge's two
+    vertices coincide so its midpoint *is* its seam point (measured in Fusion
+    2706). ``boundingBox`` is Fusion's box for the edge itself, which is how the
+    planes the top/bottom selectors use are measured; on a straight edge it is
+    just the two endpoint extremes.
     """
 
     def __init__(
@@ -89,14 +92,34 @@ class FakeEdge:
         end: tuple[float, float, float],
         curve_type: str = "Line3D",
         index: int = 0,
+        bounding_box: FakeBoundingBox | None = None,
     ):
         self.startVertex = FakeVertex(start)
         self.endVertex = FakeVertex(end)
         self.index = index
         self.evaluator = FakeEdgeEvaluator(self)
         self.geometry = type(curve_type, (), {"__module__": "adsk.core"})()
+        self._bounding_box = bounding_box
         middle = sum(self.evaluator.ranges) / 2
         self.pointOnEdge = self.evaluator.getPointAtParameter(middle)[1]
+
+    @property
+    def boundingBox(self) -> FakeBoundingBox:
+        """The edge's own box — not the body's, which is what went wrong.
+
+        A closed edge can be given a box of its own: measured live on Fusion
+        2706, a ``Circle3D``'s two vertices are the *same point*, so a box
+        derived from them would hide exactly the case that made the old
+        end-to-end ``vertical`` test call every circle vertical.
+        """
+        if self._bounding_box is not None:
+            return self._bounding_box
+        start = self.startVertex.geometry
+        end = self.endVertex.geometry
+        return FakeBoundingBox(
+            (min(start.x, end.x), min(start.y, end.y), min(start.z, end.z)),
+            (max(start.x, end.x), max(start.y, end.y), max(start.z, end.z)),
+        )
 
     @property
     def length(self) -> float:
@@ -157,8 +180,14 @@ def body_with_edges(
     name: str,
     pairs: list[tuple[tuple[float, float, float], tuple[float, float, float]]],
     curve_type: str = "Line3D",
+    bounding_box: FakeBoundingBox | None = None,
 ) -> FakeBody:
-    """A body whose edges run between the given start/end pairs, in order."""
+    """A body whose edges run between the given start/end pairs, in order.
+
+    The body's box is derived from the edges unless one is passed: a body whose
+    top is a curved surface spans past every one of its edges, and the top/bottom
+    selectors must not read that span as "where the edges are".
+    """
     edges = FakeEdges(
         [
             FakeEdge(start, end, curve_type=curve_type, index=index)
@@ -174,6 +203,6 @@ def body_with_edges(
     return FakeBody(
         name,
         faces=FakeCollection([FakeFace()]),
-        bounding_box=box,
+        bounding_box=bounding_box or box,
         edges=edges,
     )

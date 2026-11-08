@@ -16,7 +16,13 @@ import pytest
 
 from fusion360_mcp.hints import classify
 from fusion360_mcp.mock import mock_command
-from tests.fakes.bodies import body_with_edges
+from tests.fakes.bodies import (
+    FakeBody,
+    FakeBoundingBox,
+    FakeEdge,
+    FakeEdges,
+    body_with_edges,
+)
 from tests.fakes.design import FakeDesign
 
 
@@ -43,12 +49,13 @@ def test_all_selects_every_edge(select):
     assert coll.count == 2
 
 
-def test_top_selects_the_edge_whose_midpoint_is_highest(select):
-    """Three heights, so a wrong threshold changes which edges come back.
+def test_top_selects_the_edge_in_the_highest_plane(select):
+    """Three heights, so a wrong plane changes which edges come back.
 
-    With edges at z = 0, 2.5 and 5, a threshold taken from the *top* of the box
-    returns one edge and a threshold taken from the bottom returns two, which is
-    how this test tells the two apart.
+    The plane is the highest one that holds *any* edge, which is z=5 here.  A
+    plane taken from the body's box would be the same number in this fixture,
+    so the difference between the two rules is pinned by the tests below, where
+    the body spans past every edge it owns.
     """
     coll = select(
         [
@@ -62,7 +69,7 @@ def test_top_selects_the_edge_whose_midpoint_is_highest(select):
     assert coll.item(0).pointOnEdge.z == pytest.approx(5.0)
 
 
-def test_bottom_selects_the_edge_whose_midpoint_is_lowest(select):
+def test_bottom_selects_the_edge_in_the_lowest_plane(select):
     coll = select(
         [
             ((0, 0, 0), (1, 0, 0)),
@@ -99,14 +106,125 @@ def test_an_unknown_selection_names_the_four_it_accepts(select):
 
 
 def test_a_selection_that_matches_nothing_says_so(select):
-    """A body whose edges are all at mid-height has no 'top' edge.
+    """One vertical edge reaches the top plane without lying in it.
 
     The refusal is what stops a fillet from silently rounding nothing and
-    reporting ``edges_count: 0`` as success.
+    reporting ``edges_count: 0`` as success — and rounding a vertical edge as
+    "the top" would be worse than the refusal.
     """
     with pytest.raises(RuntimeError) as raised:
         select([((0, 0, 0), (0, 0, 5))], "top")
     assert "No edges matched" in str(raised.value)
+
+
+# ── top/bottom: the plane is the edges', not the body's ───────────────
+
+
+def test_top_uses_the_highest_edge_plane_not_the_body_extreme(bound_handler):
+    """Measured live: a plate (z 0..1) with a spheroid joined on top spanned
+    z -2..4, and all 14 of its edges lay at z=0 or z=1.
+
+    A threshold taken from the body's own max Z then matched no edge at all and
+    both selectors refused, on a body whose top edges are perfectly ordinary.
+    The plane has to come from the edges.
+    """
+    body = body_with_edges(
+        "Domed",
+        [((0, 0, 0), (1, 0, 0)), ((0, 0, 1), (1, 0, 1))],
+        bounding_box=FakeBoundingBox((0.0, 0.0, -2.0), (1.0, 1.0, 4.0)),
+    )
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    coll = handler._select_edges(body, "top")
+
+    assert [edge.index for edge in coll] == [1]
+    assert coll.item(0).pointOnEdge.z == pytest.approx(1.0)
+
+
+def test_bottom_uses_the_lowest_edge_plane_not_the_body_extreme(bound_handler):
+    """The same body refused `bottom` too: its belly reached z=-2 with no edge."""
+    body = body_with_edges(
+        "Domed",
+        [((0, 0, 0), (1, 0, 0)), ((0, 0, 1), (1, 0, 1))],
+        bounding_box=FakeBoundingBox((0.0, 0.0, -2.0), (1.0, 1.0, 4.0)),
+    )
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    coll = handler._select_edges(body, "bottom")
+
+    assert [edge.index for edge in coll] == [0]
+    assert coll.item(0).pointOnEdge.z == pytest.approx(0.0)
+
+
+def test_an_edge_that_only_reaches_the_top_plane_is_not_a_top_edge(select):
+    """Whole-edge membership: the vertical edge spans 0..1, so it is not at z=1.
+
+    A single point on the edge is not enough to place it — the same reason
+    point-to-edge distance is not point-to-sample distance (#40).
+    """
+    coll = select(
+        [
+            ((0, 0, 1), (1, 0, 1)),
+            ((0, 0, 0), (0, 0, 1)),
+            ((0, 0, 0), (1, 0, 0)),
+        ],
+        "top",
+    )
+    assert [edge.index for edge in coll] == [0]
+
+
+def test_the_top_plane_holds_every_edge_that_lies_in_it(select):
+    """A plate's four top lines are one plane, so all four come back."""
+    coll = select(
+        [
+            ((0, 0, 1), (4, 0, 1)),
+            ((4, 0, 1), (4, 3, 1)),
+            ((4, 3, 1), (0, 3, 1)),
+            ((0, 3, 1), (0, 0, 1)),
+            ((0, 0, 0), (4, 0, 0)),
+            ((0, 0, 0), (0, 0, 1)),
+        ],
+        "top",
+    )
+    assert [edge.index for edge in coll] == [0, 1, 2, 3]
+
+
+def test_the_no_match_refusal_is_classified_and_names_the_next_step(select):
+    """Live, this refusal was UNKNOWN with no hints — the mode AGENTS.md forbids."""
+    with pytest.raises(RuntimeError) as raised:
+        select([((0, 0, 0), (0, 0, 5))], "top")
+    kind, hints = classify(raised.value)
+    assert kind == "INVALID_INPUT"
+    assert any("list_edges" in hint for hint in hints), hints
+
+
+def test_an_unknown_selection_is_classified_too(select):
+    with pytest.raises(RuntimeError) as raised:
+        select([((0, 0, 0), (1, 0, 0))], "diagonal")
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_a_closed_edge_whose_ends_coincide_is_not_vertical(bound_handler):
+    """Measured live on Fusion 2706: a Circle3D's two vertices are one point.
+
+    An end-to-end test therefore calls *every* circle edge vertical.  On the
+    plate-plus-spheroid body it selected two rings and missed nothing else; the
+    edge's own box says the ring spans 6 cm in x, which no vertical edge does.
+    """
+    ring = FakeEdge(
+        (0.0, 0.0, 1.0),
+        (0.0, 0.0, 1.0),
+        curve_type="Circle3D",
+        index=0,
+        bounding_box=FakeBoundingBox((-3.0, -3.0, 1.0), (3.0, 3.0, 1.0)),
+    )
+    post = FakeEdge((0.0, 0.0, 0.0), (0.0, 0.0, 1.0), index=1)
+    body = FakeBody("Domed", edges=FakeEdges([ring, post]))
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    coll = handler._select_edges(body, "vertical")
+
+    assert [edge.index for edge in coll] == [1]
 
 
 def test_a_body_with_no_edges_refuses_rather_than_selecting_nothing(select):
@@ -362,6 +480,41 @@ def test_mock_chamfer_counts_points_as_edges():
 
 def test_mock_without_a_selector_reports_a_whole_body():
     assert mock_command("fillet", {"radius": 0.3})["edges_count"] > 1
+
+
+@pytest.mark.parametrize(
+    ("command", "params", "expected_kind"),
+    [
+        # Two ways of naming the same edges: the handler refuses before it looks
+        # at a body, so mock mode must not accept a call Fusion would refuse.
+        (
+            "fillet",
+            {"radius": 0.3, "edge_indices": [0], "edge_points": [[0, 0, 0]]},
+            "INVALID_INPUT",
+        ),
+        (
+            "chamfer",
+            {"distance": 0.2, "edge_selection": "top", "edge_indices": [0]},
+            "INVALID_INPUT",
+        ),
+        ("fillet", {"radius": 0.3, "edge_indices": []}, "INVALID_INPUT"),
+        ("fillet", {"radius": 0.3, "edge_points": []}, "INVALID_INPUT"),
+        ("fillet", {"radius": 0.3, "edge_selection": "diagonal"}, "INVALID_INPUT"),
+    ],
+)
+def test_mock_refuses_what_the_handler_refuses(command, params, expected_kind):
+    """Every one of these is a pure parameter check — no geometry needed."""
+    result = mock_command(command, params)
+    assert result["ok"] is False
+    assert result["error_kind"] == expected_kind
+    assert result["hints"], "a refusal with no hints is the mode AGENTS.md forbids"
+
+
+def test_mock_still_accepts_one_selector_at_a_time():
+    """The refusals above must not have turned a valid call into a refusal."""
+    assert mock_command("fillet", {"radius": 0.3, "edge_selection": "top"})["ok"]
+    assert mock_command("fillet", {"radius": 0.3, "edge_indices": [0, 1]})["ok"]
+    assert mock_command("fillet", {"radius": 0.3, "edge_points": [[0, 0, 0]]})["ok"]
 
 
 # ── refusals the review asked for ─────────────────────────────────────
