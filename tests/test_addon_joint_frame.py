@@ -446,3 +446,66 @@ def test_the_guard_does_not_fire_on_a_healthy_frame(joint):
     _, result, _ = joint(axis="z")
 
     assert result["axis_world"] == pytest.approx([0.0, 0.0, 1.0])
+
+
+# ── behaviour the source scans used to stand in for ───────────────────
+
+
+def test_add_joint_reports_what_the_snap_moved(joint):
+    """A joint snaps components together; the result must say so.
+
+    On a real assembly this surfaced as a 32.6 mm displacement between the halves
+    of a hinge — the joint "worked" and quietly rearranged the design. The scan
+    this replaces could see a key in a return dict; this observes the key in the
+    result the caller actually gets.
+    """
+    _, result, _ = joint(axis="x")
+
+    assert "snapped" in result, f"no snap report in {sorted(result)}"
+    assert "moved_components" in result, f"no displacement report in {sorted(result)}"
+    # A mapping of component name -> [dx, dy, dz], listing only what moved.
+    assert isinstance(result["moved_components"], dict), result["moved_components"]
+
+
+def test_add_joint_refuses_without_face_geometry(bound_handler):
+    """No faces means no joint geometry, and Fusion refuses that outright."""
+    design = _design(MEASURED)
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError) as raised:
+        handler.add_joint(component_one="A", component_two="B")
+
+    assert "face_one/face_two" in str(raised.value)
+    assert design.rootComponent.joints.inputs == [], (
+        "no joint input may survive a refusal"
+    )
+
+
+def test_a_failing_joint_add_is_not_swallowed(bound_handler):
+    """A swallowed exception is how two joint bugs shipped reporting success.
+
+    The scan looked for `except Exception: pass`. This makes the call fail and
+    watches the failure come back, which also covers every other way of hiding it.
+    """
+    design = _design(MEASURED)
+    handler = bound_handler(design)
+
+    def explode(item):
+        raise RuntimeError("joints.add blew up")
+
+    design.rootComponent.joints.add = explode
+
+    with pytest.raises(RuntimeError) as raised:
+        handler.add_joint(
+            component_one="A",
+            component_two="B",
+            body_one="ABody",
+            face_one=0,
+            body_two="BBody",
+            face_two=0,
+            axis="x",
+        )
+
+    assert "blew up" in str(raised.value), (
+        "add_joint reported success while the API call failed"
+    )
