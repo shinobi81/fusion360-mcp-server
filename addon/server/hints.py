@@ -212,6 +212,28 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # The face selectors mean "the faces lying in the top/bottom PLANE", so a
+        # body whose top is a curved surface has none there. Measured live: before
+        # this rule the refusal was UNKNOWN with no hints.
+        r"no faces matched",
+        "INVALID_INPUT",
+        [
+            "No face of that body lies in the selected plane; nothing was written.",
+            "top and bottom take the faces in the highest or lowest flat plane a "
+            "body has. For anything else, name the faces from execute_code.",
+        ],
+    ),
+    (
+        # Mirrors the edge_selection rule: without it this classified as UNKNOWN
+        # and the caller got a traceback for a one-word typo.
+        r"unknown face_selection",
+        "INVALID_INPUT",
+        [
+            "face_selection is one of top / bottom.",
+            "Those mean the faces lying in the top or bottom plane of the body.",
+        ],
+    ),
+    (
         # Two causes, two messages, and the hint has to fit both: a body with no
         # edges has nothing to list, so pointing such a caller at list_edges would
         # send them to an empty answer.

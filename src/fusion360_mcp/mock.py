@@ -414,10 +414,19 @@ def _chamfer(p: dict) -> dict:
     }
 
 
+_SHELL_SELECTIONS = ("top", "bottom")
+
+
 def _shell(p: dict) -> dict:
+    # The handler refuses anything but top/bottom before it looks at a body, so
+    # mock mode must not accept a call Fusion rejects.
+    selection = p.get("face_selection", "top")
+    if selection not in _SHELL_SELECTIONS:
+        return _mock_error(f"Unknown face_selection '{selection}' — use top/bottom")
     return {
         "body_name": p.get("body_name", "Body1"),
         "thickness": p.get("thickness", 0.1),
+        "face_selection": selection,
     }
 
 
