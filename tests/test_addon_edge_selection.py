@@ -495,6 +495,29 @@ def test_fillet_rounds_the_edges_the_index_named(bound_handler):
     assert recorded == [1]
 
 
+def test_fillet_rounds_the_edges_edge_selection_top_chose(bound_handler):
+    """Closes the loop the direct ``_select_edges`` tests leave open.
+
+    They prove which edges the collection holds; this proves the feature is told
+    to round those and nothing else, which is the end of the path a caller sees.
+    """
+    body = body_with_edges(
+        "Plate",
+        [
+            ((0, 0, 1), (4, 0, 1)),
+            ((4, 0, 1), (4, 3, 1)),
+            ((0, 0, 0), (4, 0, 0)),
+            ((0, 0, 0), (0, 0, 1)),
+        ],
+    )
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    result = handler.fillet(radius=0.3, body_name="Plate", edge_selection="top")
+
+    assert result["edges_count"] == 2
+    assert handler._root().features.filletFeatures.last_edge_indices == [0, 1]
+
+
 def test_chamfer_bevels_the_edges_the_index_named(bound_handler):
     body = body_with_edges(
         "Plate",
