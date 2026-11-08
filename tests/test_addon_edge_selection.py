@@ -362,7 +362,11 @@ def test_a_body_with_no_edges_refuses_rather_than_selecting_nothing(select):
         select([], "all")
     assert "has no edges to select from" in str(raised.value)
     assert "No edges matched" not in str(raised.value)
-    assert classify(raised.value)[0] == "INVALID_INPUT"
+    kind, hints = classify(raised.value)
+    assert kind == "INVALID_INPUT"
+    # The kind alone cannot prove *this* rule fired — the generic INVALID_INPUT
+    # rule gives the same kind, so the hint text is the assertion (§14).
+    assert any("nothing a fillet can round" in hint for hint in hints), hints
 
 
 # ── list_edges ────────────────────────────────────────────────────────

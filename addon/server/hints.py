@@ -219,8 +219,8 @@ _RULES: list[tuple[str, str, list[str]]] = [
         "INVALID_INPUT",
         [
             "That body has nothing a fillet can round; nothing was written.",
-            "A degenerate edge (a cone's apex) has no geometry. Check the body and "
-            "its edges with list_edges before choosing a selector.",
+            "A degenerate edge (a cone's apex) has no geometry.",
+            "Check the body with list_edges before choosing a selector.",
         ],
     ),
     (
@@ -232,9 +232,8 @@ _RULES: list[tuple[str, str, list[str]]] = [
         "INVALID_INPUT",
         [
             "No edge of that body lies in the selected plane; nothing was written.",
-            "Call list_edges and pick with edge_indices or edge_points: top and "
-            "bottom take the highest/lowest edges, which is empty when the body's "
-            "extreme is a curved surface.",
+            "top and bottom take the highest/lowest edges a body has.",
+            "Call list_edges and pick with edge_indices or edge_points.",
         ],
     ),
     (
