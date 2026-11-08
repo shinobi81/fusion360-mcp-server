@@ -1021,6 +1021,11 @@ class CommandHandler:
                     # The class name (``Line3D``, ``Circle3D``) rather than an
                     # enum number: an agent reads it without a lookup table.
                     "curve_type": type(edge.geometry).__name__,
+                    # Fusion's own flag: a degenerate edge has no geometry, no
+                    # fillet can round it, and every selector skips it. Reported
+                    # so a caller comparing count against a selection can see why
+                    # they differ - and so naming one by index is diagnosable.
+                    "is_degenerate": bool(edge.isDegenerate),
                 }
             )
         return {

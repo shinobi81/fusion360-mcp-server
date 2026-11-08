@@ -181,6 +181,7 @@ def _list_edges(p: dict) -> dict:
             "midpoint": [2.0, 0.0, 0.0],
             "length": 4.0,
             "curve_type": "Line3D",
+            "is_degenerate": False,
         },
         {
             "index": 1,

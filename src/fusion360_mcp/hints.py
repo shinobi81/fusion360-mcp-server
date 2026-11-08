@@ -221,6 +221,19 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # Fusion's own refusal when it can find no edge it can round among those
+        # given - measured on a revolved cone, whose apex produces degenerate
+        # edges (isDegenerate true, no geometry). It classified UNKNOWN with no
+        # hints, so the caller learned nothing about why nothing was rounded.
+        r"fillet_no_edge_found|no fillet edge found",
+        "INVALID_INPUT",
+        [
+            "Fusion found no edge it can round among those given; nothing was written.",
+            "Check list_edges for is_degenerate, and use a smaller radius: an edge "
+            "shorter than the radius cannot take the fillet.",
+        ],
+    ),
+    (
         # Mirrors the edge_selection rule: without it this classified as UNKNOWN
         # and the caller got a traceback for a one-word typo.
         r"unknown face_selection",
