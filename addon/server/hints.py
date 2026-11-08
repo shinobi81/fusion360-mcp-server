@@ -219,8 +219,8 @@ _RULES: list[tuple[str, str, list[str]]] = [
         "INVALID_INPUT",
         [
             "No face of that body lies in the selected plane; nothing was written.",
-            "top and bottom take the faces in the highest or lowest flat plane a "
-            "body has. For anything else, name the faces from execute_code.",
+            "top and bottom take the faces in the highest or lowest flat plane.",
+            "For anything else, name the faces from execute_code.",
         ],
     ),
     (
@@ -232,8 +232,8 @@ _RULES: list[tuple[str, str, list[str]]] = [
         "INVALID_INPUT",
         [
             "Fusion found no edge it can round among those given; nothing was written.",
-            "Check list_edges for is_degenerate, and use a smaller radius: an edge "
-            "shorter than the radius cannot take the fillet.",
+            "Check list_edges for is_degenerate.",
+            "Use a smaller radius: an edge shorter than the radius cannot take it.",
         ],
     ),
     (
