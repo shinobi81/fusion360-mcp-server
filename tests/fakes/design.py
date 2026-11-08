@@ -564,6 +564,11 @@ class FakeJoints(FakeCollection):
             inp.isFlipped,
         )
         super().add(joint)
+        # Fusion invalidates both geometries once the joint exists (measured);
+        # anything the handler wants from them has to be read before this point.
+        for geometry in (inp.geometryOrOriginOne, inp.geometryOrOriginTwo):
+            if hasattr(geometry, "consumed"):
+                geometry.consumed = True
         return joint
 
 
