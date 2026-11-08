@@ -704,6 +704,16 @@ class FakeAsBuiltJoints(FakeCollection):
     def add(self, item) -> FakeJoint:
         if not isinstance(item, FakeAsBuiltJointInput):
             raise TypeError("asBuiltJoints.add takes the input createInput returned")
+        if item.geometry is None and item.motion_setter not in (
+            None,
+            "setAsRigidJointMotion",
+        ):
+            # Fusion's own refusal, and the reason create_as_built_joint requires a
+            # face pair for every motion but rigid.  Without it the fake would
+            # build the joint a handler's missing guard failed to prevent.
+            raise RuntimeError(
+                "Geometry should not be null if joint motion is not rigid"
+            )
         frame = _joint_frame(item.geometry) if item.geometry is not None else {}
         motion = FakeJointMotion(
             item.motion_setter or "setAsRigidJointMotion", frame, item.motion_directions

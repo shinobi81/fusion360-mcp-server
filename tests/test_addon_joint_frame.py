@@ -380,7 +380,11 @@ def test_a_zero_length_axis_is_refused_instead_of_reported(joint):
 
 
 def test_a_frame_with_no_axes_at_all_is_refused(joint):
-    """Every member degenerate: no ranking question is even askable."""
+    """Every member degenerate: no ranking question is even askable.
+
+    This is the only case the rule's ``.*`` has to carry (the message joins the
+    names as ``x/y/z``), so it asserts the classification too.
+    """
     empty = {
         "origin": (0.0, 0.0, 0.0),
         "primary": (0.0, 0.0, 0.0),
@@ -392,6 +396,30 @@ def test_a_frame_with_no_axes_at_all_is_refused(joint):
         joint(axis="z", frame=empty)
 
     assert "zero-length" in str(raised.value)
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_a_rigid_joint_does_not_need_a_usable_frame(bound_handler):
+    """Rigid resolves no axis, so a degenerate frame it never reads must not refuse.
+
+    ``rigid`` is the default ``joint_type``, and the frame is built from the same
+    geometry every joint takes — so a frame-wide guard would have turned a working
+    default call into a refusal about an axis nothing was asked for.
+    """
+    design = _design({**MEASURED, "secondary": (0.0, 0.0, 0.0)})
+    handler = bound_handler(design)
+
+    result = handler.add_joint(
+        component_one="A",
+        component_two="B",
+        joint_type="rigid",
+        body_one="ABody",
+        face_one=0,
+        body_two="BBody",
+        face_two=0,
+    )
+
+    assert result["created"] is True
 
 
 def test_the_revolve_zero_length_message_keeps_its_own_hints():
@@ -413,8 +441,8 @@ def test_the_revolve_zero_length_message_keeps_its_own_hints():
     )
 
 
-def test_the_joint_rule_does_not_match_a_healthy_frame(joint):
-    """Sanity: the guard fires on degenerate frames only, not on every joint."""
+def test_the_guard_does_not_fire_on_a_healthy_frame(joint):
+    """The refusal is for degenerate frames only, not for every joint."""
     _, result, _ = joint(axis="z")
 
     assert result["axis_world"] == pytest.approx([0.0, 0.0, 1.0])
