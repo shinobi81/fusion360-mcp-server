@@ -27,9 +27,13 @@ class FakeCollection:
     """``.count`` / ``.item(i)`` over a list, with removal for ``deleteMe()``."""
 
     def __init__(self, items: list | None = None):
-        self._items: list = []
-        for item in items or []:
-            self.add(item)
+        # Not ``self.add(item)``: a subclass that overrides ``add`` (``FakeJoints``
+        # does, because Fusion's ``joints.add`` returns the joint) would then be
+        # called from the base constructor - flagged by CodeQL as
+        # ``py/init-calls-subclass``, and a real footgun rather than a style point.
+        self._items: list = list(items or [])
+        for item in self._items:
+            setattr(item, "_collection", self)
 
     @property
     def count(self) -> int:
