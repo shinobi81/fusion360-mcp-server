@@ -68,12 +68,19 @@ def yz_sketch() -> FakeTransform:
 
 
 class FakeLine:
-    """A sketch line.  ``isConstruction`` is the only attribute the add-in sets."""
+    """A sketch line.  ``isConstruction`` is the only attribute the add-in sets.
+
+    ``startSketchPoint``/``endSketchPoint`` exist because ``add_dimension``
+    dimensions a *point* pair, not a curve pair: without them the handler could
+    not run against the fake at all, which is why it had no test.
+    """
 
     def __init__(self, start: FakePoint3D, end: FakePoint3D):
         self.start = start
         self.end = end
         self.isConstruction = False
+        self.startSketchPoint = FakeSketchPoint(start)
+        self.endSketchPoint = FakeSketchPoint(end)
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"FakeLine({self.start} -> {self.end})"
@@ -215,6 +222,124 @@ class FakeProfiles:
         return FakeProfile(self._sketch)
 
 
+class FakeSketchPoint:
+    """A sketch point: ``geometry`` is the model point it sits on.
+
+    Fusion keeps them apart (``SketchPoint.geometry``), and ``add_dimension``
+    hands these - not Point3Ds - to ``addDistanceDimension``.
+    """
+
+    def __init__(self, geometry: FakePoint3D | None = None):
+        self.geometry = geometry if geometry is not None else FakePoint3D()
+
+
+class FakeSketchPoints:
+    """``sketch.sketchPoints``: ``count`` and a 0-based ``item``.
+
+    ``midpoint`` resolves its first entity through this collection rather than
+    through the curves, so it has to be indexable for the constraint handler to
+    run at all.
+    """
+
+    def __init__(self, points: list | None = None):
+        self._points = list(points) if points is not None else [FakeSketchPoint()]
+
+    @property
+    def count(self) -> int:
+        return len(self._points)
+
+    def item(self, index: int) -> FakeSketchPoint:
+        return self._points[index]
+
+
+class FakeConstraint:
+    def __init__(self, method: str):
+        self.name = method
+        self.method = method
+
+
+class FakeGeometricConstraints:
+    """``sketch.geometricConstraints``: which constraint was added, with what.
+
+    Every ``add*`` Fusion exposes to this handler is present, so a misspelt one
+    raises ``AttributeError`` instead of being swallowed.
+    """
+
+    METHODS = (
+        "addCoincident",
+        "addParallel",
+        "addPerpendicular",
+        "addTangent",
+        "addEqual",
+        "addFix",
+        "addHorizontal",
+        "addVertical",
+        "addConcentric",
+        "addCollinear",
+        "addSmooth",
+        "addMidPoint",
+        "addSymmetry",
+    )
+
+    def __init__(self):
+        self.added: list[tuple[str, tuple]] = []
+
+    def _record(self, method: str, args: tuple) -> FakeConstraint:
+        self.added.append((method, args))
+        return FakeConstraint(method)
+
+
+def _constraint_method(method: str):
+    def add(self, *args):
+        return self._record(method, args)
+
+    return add
+
+
+for _name in FakeGeometricConstraints.METHODS:
+    setattr(FakeGeometricConstraints, _name, _constraint_method(_name))
+
+
+class FakeModelParameter:
+    """``dim.parameter``: the value ``add_dimension`` writes."""
+
+    def __init__(self):
+        self.value = 0.0
+
+
+class FakeDimension:
+    """A dimension: ``parameter.value`` is what ``add_dimension`` writes."""
+
+    def __init__(self, method: str):
+        self.method = method
+        self.parameter = FakeModelParameter()
+
+
+class FakeSketchDimensions:
+    """``sketch.sketchDimensions``: records which ``add*Dimension`` ran."""
+
+    def __init__(self):
+        self.calls: list[tuple[str, tuple]] = []
+        self.last_dimension: FakeDimension | None = None
+
+    def _record(self, method: str, args: tuple) -> FakeDimension:
+        self.calls.append((method, args))
+        self.last_dimension = FakeDimension(method)
+        return self.last_dimension
+
+    def addDistanceDimension(self, p1, p2, orientation, text_point) -> FakeDimension:
+        return self._record("addDistanceDimension", (p1, p2, orientation, text_point))
+
+    def addAngularDimension(self, e1, e2, text_point) -> FakeDimension:
+        return self._record("addAngularDimension", (e1, e2, text_point))
+
+    def addRadialDimension(self, e1, text_point) -> FakeDimension:
+        return self._record("addRadialDimension", (e1, text_point))
+
+    def addDiameterDimension(self, e1, text_point) -> FakeDimension:
+        return self._record("addDiameterDimension", (e1, text_point))
+
+
 class FakeSketch:
     """A sketch: transform, recorded curve calls, line objects, profiles."""
 
@@ -232,6 +357,9 @@ class FakeSketch:
         self.lines: list[FakeLine] = []
         self.curve_calls: list[tuple[str, dict]] = []
         self.sketchCurves = FakeSketchCurves(self)
+        self.sketchPoints = FakeSketchPoints()
+        self.geometricConstraints = FakeGeometricConstraints()
+        self.sketchDimensions = FakeSketchDimensions()
         self.profiles = FakeProfiles(self, profile_count)
 
     def bump(self) -> None:

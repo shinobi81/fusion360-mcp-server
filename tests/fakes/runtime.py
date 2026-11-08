@@ -219,6 +219,20 @@ def _feature_operations() -> types.SimpleNamespace:
     )
 
 
+def _dimension_orientations() -> types.SimpleNamespace:
+    """``DimensionOrientations``: the three ``addDistanceDimension`` orientations.
+
+    ``add_dimension`` picks one per dimension type, so this has to exist for the
+    handler to run at all - it had never been exercised before, which is why it
+    was missing.
+    """
+    return types.SimpleNamespace(
+        AlignedDimensionOrientation="aligned",
+        HorizontalDimensionOrientation="horizontal",
+        VerticalDimensionOrientation="vertical",
+    )
+
+
 _ADSK_MODULES = ("adsk", "adsk.core", "adsk.fusion", "adsk.cam")
 
 
@@ -244,6 +258,7 @@ def install() -> None:
         JointQuadrantAngleTypes=_joint_quadrants(),
         JointKeyPointTypes=_joint_key_points(),
         JointGeometry=FakeJointGeometry,
+        DimensionOrientations=_dimension_orientations(),
     )
     cam = module("adsk.cam")
     adsk = module(
