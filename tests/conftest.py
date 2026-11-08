@@ -27,12 +27,15 @@ def handler_module():
 def bound_handler(handler_module):
     """``bound_handler(design, app=None)`` -> a CommandHandler for that design."""
 
-    def factory(design, app=None):
+    def factory(design, app=None, ui=None):
         handler = handler_module.CommandHandler.__new__(handler_module.CommandHandler)
         handler._design = lambda: design
         handler._root = lambda: design.rootComponent
-        if app is not None:
-            handler.app = app
+        # ``execute_code`` hands both to the script's namespace, so a handler
+        # without them fails on the attributes rather than on the behaviour the
+        # test is about.
+        handler.app = app if app is not None else object()
+        handler.ui = ui if ui is not None else object()
         return handler
 
     return factory
