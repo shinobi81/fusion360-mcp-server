@@ -190,6 +190,14 @@ def test_add_joint_does_not_swallow_failures():
             )
 
 
+def test_the_world_axis_table_covers_the_joint_axes():
+    """``_joint_direction`` indexes ``_WORLD_AXES`` with a key it checked against
+    ``_JOINT_AXES``, so a fourth axis added to one and not the other would raise a
+    bare ``KeyError`` instead of the "Use one of ..." refusal.
+    """
+    assert set(_class_assign("_WORLD_AXES")) == set(_class_assign("_JOINT_AXES"))
+
+
 def test_direction_and_quadrant_enums_match_the_schema():
     """Schema enums must mirror the add-in's lookup tables."""
     props = _schema()["properties"]

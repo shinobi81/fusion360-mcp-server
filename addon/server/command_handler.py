@@ -29,6 +29,11 @@ from . import parameter_units as _param_units
 log = get_logger("handler")
 
 
+def _vector(v) -> list:
+    """A Fusion vector as ``[x, y, z]``, which is what a response carries."""
+    return [v.x, v.y, v.z]
+
+
 class CommandHandler:
     """Runs Fusion API operations.  Instantiated once; reused across requests."""
 
@@ -322,6 +327,31 @@ class CommandHandler:
         "x": "XAxisJointDirection",
         "y": "YAxisJointDirection",
         "z": "ZAxisJointDirection",
+    }
+
+    #: The direction vectors a joint motion exposes, by Fusion's own names.
+    #: Measured on 2706 per motion type: slider -> slideDirectionVector; revolute
+    #: and cylindrical -> rotationAxisVector; planar -> normalDirectionVector plus a
+    #: primary/secondary slide pair (so it DOES slide, and a single
+    #: ``slideDirectionVector`` field would have reported null for it); pin_slot ->
+    #: both; ball -> pitch/yaw/roll. Reporting whichever exist is the only honest
+    #: shape across seven motion types.
+    _MOTION_DIRECTIONS: ClassVar[tuple[str, ...]] = (
+        "slideDirectionVector",
+        "rotationAxisVector",
+        "pitchDirectionVector",
+        "yawDirectionVector",
+        "rollDirectionVector",
+        "normalDirectionVector",
+        "primarySlideDirectionVector",
+        "secondarySlideDirectionVector",
+    )
+
+    #: The model's axes, which is what the caller's ``axis`` means.
+    _WORLD_AXES: ClassVar[dict[str, tuple[float, float, float]]] = {
+        "x": (1.0, 0.0, 0.0),
+        "y": (0.0, 1.0, 0.0),
+        "z": (0.0, 0.0, 1.0),
     }
 
     _JOINT_QUADRANTS: ClassVar[dict[str, Any]] = {
@@ -3502,8 +3532,12 @@ class CommandHandler:
 
         # Set the requested motion explicitly. Previously only "rigid" was
         # handled, so every other type silently produced an inferred (usually
-        # rigid) joint while reporting success.
-        self._apply_joint_motion(inp, joint_type, axis, second_axis)
+        # rigid) joint while reporting success.  The frame matters here: `axis`
+        # names a MODEL axis, and Fusion's enum names a JOINT one.
+        frame = self._joint_frame(geometries[0])
+        axis_world = self._apply_joint_motion(
+            inp, joint_type, axis, second_axis, frame
+        )
 
         joint = joints.add(inp)
         self._design().computeAll()
@@ -3521,16 +3555,41 @@ class CommandHandler:
             if any(abs(v) > 1e-6 for v in delta):
                 moved[occ.name] = delta
 
+        motion = joint.jointMotion
+        directions = {}
+        for attr in self._MOTION_DIRECTIONS:
+            vector = getattr(motion, attr, None)
+            if vector is not None:
+                key = attr.removesuffix("Vector")
+                directions[key] = [vector.x, vector.y, vector.z]
+        origin = geometries[0].origin
+        primary = geometries[0].primaryAxisVector
         return {
             "created": True,
             "joint_name": joint.name,
             "joint_type": joint_type,
-            "motion": joint.jointMotion.objectType.split("::")[-1],
+            "motion": motion.objectType.split("::")[-1],
             "snapped": bool(moved),
             "moved_components": moved,
+            # Where the joint origin actually landed.  Fusion puts it on the FACE
+            # for cylinder geometry — every valid quadrant/height combination was
+            # measured at the bore's radius — so a revolute joint rotates about a
+            # line offset from the bore.  Reported rather than assumed.
+            "joint_origin": [origin.x, origin.y, origin.z],
+            "primary_axis": [primary.x, primary.y, primary.z],
+            # The model-space vector the motion was given, and every direction
+            # vector Fusion then reports for the joint.  A model axis can be
+            # unreachable exactly (see _joint_direction), so the sign in axis_world
+            # is the answer rather than a guess, and `directions` is Fusion's own
+            # account of the joint that came out - the two can differ when the two
+            # faces' frames disagree.
+            "axis_world": axis_world,
+            "directions": directions,
         }
 
-    def _apply_joint_motion(self, inp, joint_type: str, axis: str, second_axis: str):
+    def _apply_joint_motion(
+        self, inp, joint_type: str, axis: str, second_axis: str, frame=None
+    ):
         """Set the JointInput motion for *joint_type*.
 
         Arity and argument order were verified against Fusion 2705:
@@ -3543,31 +3602,102 @@ class CommandHandler:
           (`Invalid parameter pitchDirection`), so the perpendicular axis is
           passed first regardless of which one the caller named as `axis`.
         """
+        # `frame` is the joint's own axes in world terms; without it the caller's
+        # axis is passed through literally (see _joint_direction).
         setter_name, direction_count = self._JOINT_MOTION_SETTERS[joint_type]
         setter = getattr(inp, setter_name)
 
         if not direction_count:
             setter()
-            return
+            return None
 
-        primary = self._joint_direction(axis)
+        primary, chosen_world = self._joint_direction(axis, frame)
         if direction_count == 1:
             setter(primary)
-            return
+            return chosen_world
 
-        secondary = self._joint_direction(second_axis or self._perpendicular(axis))
+        secondary, _ = self._joint_direction(
+            second_axis or self._perpendicular(axis),
+            frame,
+            avoid=primary if second_axis is None else None,
+        )
         if joint_type in self._JOINT_REVERSED_DIRECTION_ARGUMENTS:
             setter(secondary, primary)
         else:
             setter(primary, secondary)
+        return chosen_world
 
-    def _joint_direction(self, axis: str):
-        attr = self._JOINT_AXES.get((axis or "").lower())
+    def _joint_frame(self, geometry) -> dict[str, list[float]]:
+        """The joint's own axes, in world terms, from the geometry's frame.
+
+        ``JointDirections`` selects a **joint** axis, not a model one. Measured on
+        Fusion 2706 by reading ``slideDirectionVector`` back for each member:
+
+            XAxisJointDirection == secondaryAxisVector
+            YAxisJointDirection == thirdAxisVector
+            ZAxisJointDirection == primaryAxisVector
+
+        Across four quadrants (the slide rotated with the quadrant, and matched
+        ``secondary`` in all four), a cylinder whose bore is world X, and a cone.
+        The frame that matters is the one on the geometry passed to
+        ``createInput``: a joint's own ``geometryOrOriginOne`` carries a permuted
+        frame, which is what made an earlier reading look inconsistent.
+
+        Every direction the caller can ask for is therefore resolved against these
+        three vectors.
+        """
+        return {
+            "x": _vector(geometry.secondaryAxisVector),
+            "y": _vector(geometry.thirdAxisVector),
+            "z": _vector(geometry.primaryAxisVector),
+        }
+
+    @staticmethod
+    def _dot(a, b) -> float:
+        return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+    def _joint_direction(self, axis: str, frame=None, avoid=None):
+        """The ``JointDirections`` member whose joint axis best matches *axis*.
+
+        Returns ``(member, world_vector)``. Without a *frame* the caller's axis is
+        passed through literally, which is the old behaviour and only correct when
+        the joint's frame happens to equal the model's.
+
+        No member can point along a world axis the frame does not contain, so the
+        closest one is chosen and the sign it actually gives is reported: on the
+        measured cylinder geometry world +X is only reachable as joint Z, which
+        slides along -X.
+        """
+        key = (axis or "").lower()
+        attr = self._JOINT_AXES.get(key)
         if attr is None:
             raise RuntimeError(
                 f"Unknown axis: {axis}. Use one of {sorted(self._JOINT_AXES)}"
             )
-        return getattr(adsk.fusion.JointDirections, attr)
+        if frame is None:
+            # Only reachable for a joint whose motion takes no direction at all
+            # (rigid), which returns before this is called; a frame is mandatory
+            # for anything else, so ask for one rather than guessing.
+            raise RuntimeError(
+                f"A joint frame is required to place axis '{axis}' — internal error"
+            )
+
+        wanted = self._WORLD_AXES[key]
+        ranked = sorted(
+            ("x", "y", "z"),
+            key=lambda name: abs(self._dot(frame[name], wanted)),
+            reverse=True,
+        )
+        # Two different model axes can resolve to the same joint member when the
+        # bore is not aligned with a model axis (a 45 degree bore sends both X and
+        # Z to joint Y), and pin_slot/ball take two directions.  Repeating one
+        # makes Fusion refuse the joint ("Invalid parameter pitchDirection"), so
+        # the runner-up is used instead: one step less parallel, but perpendicular.
+        if avoid is not None and self._JOINT_AXES[ranked[0]] == avoid:
+            best = ranked[1]
+        else:
+            best = ranked[0]
+        return getattr(adsk.fusion.JointDirections, self._JOINT_AXES[best]), frame[best]
 
     @staticmethod
     def _perpendicular(axis: str) -> str:
@@ -3643,8 +3773,10 @@ class CommandHandler:
         inp = as_built.createInput(occ1, occ2, geometry)
 
         # Honour joint_type; previously every request produced a rigid joint
-        # because no motion was ever set.
-        self._apply_joint_motion(inp, joint_type, axis, second_axis)
+        # because no motion was ever set.  The frame comes from the geometry, and
+        # a rigid as-built joint has none, which is why it is optional.
+        frame = self._joint_frame(geometry) if geometry is not None else None
+        self._apply_joint_motion(inp, joint_type, axis, second_axis, frame)
 
         joint = as_built.add(inp)
         return {

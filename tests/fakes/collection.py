@@ -38,9 +38,15 @@ class FakeCollection:
     def item(self, index: int):
         return self._items[index]
 
-    def add(self, item) -> None:
+    def add(self, item) -> object:
+        """Append and hand the item back.
+
+        Fusion's ``joints.add`` returns the joint it created, so a collection that
+        returns nothing cannot model it.  Every other caller ignores the result.
+        """
         self._items.append(item)
         setattr(item, "_collection", self)
+        return item
 
     def remove(self, item) -> None:
         if item in self._items:

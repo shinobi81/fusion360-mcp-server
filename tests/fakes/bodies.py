@@ -8,7 +8,7 @@ and its ``deleteMe()`` really removes it from the root's collection.
 from __future__ import annotations
 
 from .collection import FakeCollection, FakeDeletable
-from .runtime import FakePoint3D, FakeVector3D
+from .runtime import FakeJointGeometry, FakePoint3D, FakeVector3D
 
 
 class FakeBoundingBox:
@@ -148,16 +148,43 @@ class FakeEdges(FakeCollection):
 
 
 class FakeFace:
-    """A planar face: a normal, a bounding box and a point on it."""
+    """A face: a normal, a bounding box, a point on it, and joint geometry.
+
+    ``joint_geometry_for`` is what ``JointGeometry.createByCylinderOrConeFace``
+    asks the face for.  The defaults are the live measurement for a cylinder
+    whose bore is world Z with ``quadrant="middle"``: origin on the SURFACE at
+    radius 2, frame primary=-X, secondary=-Y, third=+Z.  That frame matters —
+    under the measured mapping (joint X = secondary, Y = third, Z = primary) it
+    makes joint X world -Y, so a handler that passed the caller's axis straight
+    through is caught.  An identity frame would not: it would make the mapping
+    and the old passthrough indistinguishable.
+    """
 
     def __init__(
         self,
         normal: tuple[float, float, float] = (0.0, 0.0, 1.0),
         bounding_box: FakeBoundingBox | None = None,
+        joint_frame: dict | None = None,
     ):
         self.pointOnFace = FakePoint3D()
         self.evaluator = FakeEvaluator(normal)
         self.boundingBox = bounding_box or FakeBoundingBox()
+        self.joint_frame = joint_frame or {
+            "origin": (-2.0, 0.0, 5.0),
+            "primary": (-1.0, 0.0, 0.0),
+            "secondary": (0.0, -1.0, 0.0),
+            "third": (0.0, 0.0, 1.0),
+        }
+
+    def joint_geometry_for(self, quadrant, key_point):
+        """The ``JointGeometry`` Fusion builds for this face and these enums.
+
+        Live, the quadrant picks the angle around the bore and the key point picks
+        the height along it; every combination lands on the surface.  The mapping
+        is not modelled here because the handler never reads it — it reads the
+        frame — so this returns the frame the test asked for.
+        """
+        return FakeJointGeometry(**self.joint_frame)
 
 
 class FakeBody(FakeDeletable):

@@ -175,6 +175,55 @@ what a selection returns.
 | `create_as_built_joint` | Joint from current positions    |
 | `create_rigid_group`    | Lock components together        |
 
+### What `add_joint` reports, and what `axis` means
+
+`axis` (and `second_axis`) name a **model** axis — `x`, `y`, `z` in world terms.
+Fusion's `JointDirections` enum names a **joint** axis, and the two frames are not the
+same: the joint's axes come from the face's parametric frame, so they move with
+`quadrant`. The handler resolves the request against the geometry's own axes and passes
+whichever is closest.
+
+For a cylinder whose bore is world Z with `quadrant="middle"` the joint frame is
+X = −Y, Y = +Z, Z = −X, so:
+
+| requested | slides along |
+| --------- | ------------ |
+| `x`       | −X           |
+| `y`       | −Y           |
+| `z`       | +Z (the bore)|
+
+When the bore lies along a model axis, the chosen member matches the request exactly in
+magnitude; the **sign** may not, because no member of that frame points along +X. When the
+bore is off-axis (a 45° bore, say) the nearest member is 0.707 off at best — the closest
+available, not an exact answer. Read `axis_world` rather than assuming either.
+
+Measured, so worth not retrying: setting `JointInput.isFlipped` does **not** reverse a
+slider, and a created joint's motion cannot be edited ("Cannot be edited before rolling
+back"), so there is no flip and no probe-then-pick.
+
+Every `add_joint` result carries the measurements behind that:
+
+- `joint_origin` — where the origin landed. For cylinder/cone geometry Fusion puts it on
+  the **surface** at the bore's radius (every valid quadrant/height combination was
+  measured to), never on the axis, so a revolute joint rotates about a line offset from
+  the bore by that radius. A hinge that must lock two halves together wants a joint built
+  from the bore axis instead.
+- `primary_axis` — the geometry's `primaryAxisVector`, as Fusion reports it. It is not
+  always the bore: for the cylinder above the bore is `thirdAxisVector`, and `primary` is
+  one of the two perpendicular directions.
+- `axis_world` — the model-space vector the motion was given, i.e. what the resolution
+  above chose.
+- `directions` — every direction vector Fusion reports for the resulting joint,
+  keyed by its own attribute names minus `Vector`:
+  - `slideDirection` — slider, pin_slot
+  - `rotationAxis` — revolute, cylindrical, pin_slot
+  - `normalDirection`, `primarySlideDirection`, `secondarySlideDirection` — planar,
+    which *does* slide: do not read a missing `slideDirection` as "no slide"
+  - `pitchDirection`, `yawDirection`, `rollDirection` — ball
+
+  This is Fusion's own account of the joint that came out. If the two faces' frames
+  disagree it is the truth and `axis_world` is the inference.
+
 ## Inspection & Analysis
 
 | Tool                      | Description                                                                                                             |

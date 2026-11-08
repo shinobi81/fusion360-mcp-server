@@ -122,6 +122,65 @@ def _design_types() -> types.SimpleNamespace:
     )
 
 
+class FakeJointGeometry:
+    """``JointGeometry``: an origin and a right-handed axis frame.
+
+    ``createByCylinderOrConeFace`` is pinned to the live measurement. The origin
+    lands on the FACE, never on the bore axis — all sixteen valid quadrant/height
+    combinations were measured on Fusion 2706, and ``CenterKeyPoint`` is refused
+    outright with "Invalid parameter height" — and the frame that comes back for
+    a cylinder whose axis is world Z is primary=+Z, secondary=+X, third=+Y.
+
+    The face supplies the numbers, so a test can move the frame without touching
+    the handler: ``face.joint_geometry_for`` returns this object.
+    """
+
+    geometryType = 7  # Fusion's CylinderOrConeGeometryType
+
+    def __init__(self, origin, primary, secondary, third):
+        self.origin = FakePoint3D(*origin)
+        self.primaryAxisVector = FakeVector3D(*primary)
+        self.secondaryAxisVector = FakeVector3D(*secondary)
+        self.thirdAxisVector = FakeVector3D(*third)
+
+    @staticmethod
+    def createByCylinderOrConeFace(face, quadrant, key_point):
+        return face.joint_geometry_for(quadrant, key_point)
+
+
+def _joint_directions() -> types.SimpleNamespace:
+    """The three members of ``JointDirections`` a joint motion can be given.
+
+    Their *values* are the attribute names, so a test can assert which one the
+    handler passed without a lookup table.  They are joint-frame axes, not world
+    ones — measured on Fusion 2706, ``XAxisJointDirection`` on a cylinder-face
+    joint slid along world -Y.
+    """
+    return types.SimpleNamespace(
+        XAxisJointDirection="XAxisJointDirection",
+        YAxisJointDirection="YAxisJointDirection",
+        ZAxisJointDirection="ZAxisJointDirection",
+    )
+
+
+def _joint_quadrants() -> types.SimpleNamespace:
+    return types.SimpleNamespace(
+        StartJointQuadrantAngleType="StartJointQuadrantAngleType",
+        QuarterJointQuadrantAngleType="QuarterJointQuadrantAngleType",
+        MiddleJointQuadrantAngleType="MiddleJointQuadrantAngleType",
+        ThirdQuarterJointQuadrantAngleType="ThirdQuarterJointQuadrantAngleType",
+    )
+
+
+def _joint_key_points() -> types.SimpleNamespace:
+    return types.SimpleNamespace(
+        StartKeyPoint="StartKeyPoint",
+        MiddleKeyPoint="MiddleKeyPoint",
+        CenterKeyPoint="CenterKeyPoint",
+        EndKeyPoint="EndKeyPoint",
+    )
+
+
 def _feature_operations() -> types.SimpleNamespace:
     return types.SimpleNamespace(
         NewBodyFeatureOperation="new_body",
@@ -152,6 +211,10 @@ def install() -> None:
         "adsk.fusion",
         DesignTypes=_design_types(),
         FeatureOperations=_feature_operations(),
+        JointDirections=_joint_directions(),
+        JointQuadrantAngleTypes=_joint_quadrants(),
+        JointKeyPointTypes=_joint_key_points(),
+        JointGeometry=FakeJointGeometry,
     )
     cam = module("adsk.cam")
     adsk = module(
