@@ -34,6 +34,18 @@ def _vector(v) -> list:
     return [v.x, v.y, v.z]
 
 
+#: A direction this close to the origin has no axis to normalise. Squared, so the
+#: comparison needs no ``sqrt``; 1e-12 is a magnitude of 1e-6, far below any real
+#: joint frame and far above floating-point noise on a unit vector.
+_DEGENERATE_AXIS_SQUARED = 1e-12
+
+
+def _is_zero(vector) -> bool:
+    """Whether *vector* is too short to define a direction."""
+    squared = sum(component * component for component in vector)
+    return squared <= _DEGENERATE_AXIS_SQUARED
+
+
 class CommandHandler:
     """Runs Fusion API operations.  Instantiated once; reused across requests."""
 
@@ -3764,12 +3776,29 @@ class CommandHandler:
 
         Every direction the caller can ask for is therefore resolved against these
         three vectors.
+
+        A zero-length axis is refused here rather than resolved: ``_joint_direction``
+        ranks the members by ``|dot|`` with the wanted world axis, so a degenerate
+        vector ties with everything, wins the ranking arbitrarily, and is then both
+        reported as ``axis_world`` and handed to Fusion as a direction — where there
+        is nothing to normalise.  Measured shape of the failure before this guard: a
+        frame whose secondary axis was ``[0, 0, 0]`` answered ``axis_world``
+        ``[0, 0, 0]`` for ``axis="y"`` and built a joint about no axis at all.
         """
-        return {
+        frame = {
             "x": _vector(geometry.secondaryAxisVector),
             "y": _vector(geometry.thirdAxisVector),
             "z": _vector(geometry.primaryAxisVector),
         }
+        degenerate = [name for name, vector in frame.items() if _is_zero(vector)]
+        if degenerate:
+            raise RuntimeError(
+                f"The joint geometry's {'/'.join(sorted(degenerate))} axis is "
+                f"zero-length, so no direction can be resolved against it "
+                f"(frame: {frame}). The geometry is unusable for axis selection — "
+                "build the joint from another face."
+            )
+        return frame
 
     @staticmethod
     def _dot(a, b) -> float:

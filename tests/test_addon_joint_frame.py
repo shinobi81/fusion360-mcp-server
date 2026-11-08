@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import pytest
 
+from fusion360_mcp.hints import classify
 from tests.fakes.bodies import FakeBody, FakeFace
 from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
@@ -257,3 +258,163 @@ def test_the_handler_never_flips_the_joint_to_fix_a_sign(joint):
     _, _, inp = joint(axis="x")
 
     assert inp.isFlipped is False
+
+
+# ── as-built joints: the same frame plumbing, behaviourally ───────────
+
+
+def _as_built(handler, **kwargs):
+    """``create_as_built_joint`` with the fixture design's bodies filled in."""
+    params = {
+        "component_one": "A",
+        "component_two": "B",
+        "body_one": "ABody",
+        "face_one": 0,
+        "body_two": "BBody",
+        "face_two": 0,
+    }
+    params.update(kwargs)
+    return handler.create_as_built_joint(**params)
+
+
+def test_an_as_built_joint_honours_its_joint_type(bound_handler):
+    """It used to be rigid whatever was asked, and the AST guard could not see it.
+
+    ``asBuiltJoints`` had no fake, so the only check on this was a source scan for
+    ``_JOINT_MOTION_SETTERS``. Now the input records the motion that was set, which
+    is the thing that was silently wrong.
+    """
+    design = _design(MEASURED)
+    handler = bound_handler(design)
+
+    result = _as_built(handler, joint_type="revolute", axis="z")
+
+    inp = design.rootComponent.asBuiltJoints.last_input
+    assert inp is not None, "no as-built input was created"
+    assert inp.motion_setter == "setAsRevoluteJointMotion"
+    assert result["motion"] == "RevoluteJointMotion"
+
+
+def test_a_rigid_as_built_joint_needs_no_geometry(bound_handler):
+    """Rigid is the one motion Fusion accepts without geometry."""
+    design = _design(MEASURED)
+    handler = bound_handler(design)
+
+    _as_built(handler, joint_type="rigid")
+
+    inp = design.rootComponent.asBuiltJoints.last_input
+    assert inp is not None
+    assert inp.motion_setter == "setAsRigidJointMotion"
+    assert inp.geometry is None, "a rigid as-built joint must not need a face"
+
+
+def test_a_non_rigid_as_built_joint_without_faces_is_refused(bound_handler):
+    """Fusion: "Geometry should not be null if joint motion is not rigid"."""
+    design = _design(MEASURED)
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError) as raised:
+        handler.create_as_built_joint(
+            component_one="A", component_two="B", joint_type="revolute"
+        )
+
+    assert "geometry" in str(raised.value).lower()
+    assert design.rootComponent.asBuiltJoints.inputs == []
+
+
+def test_an_unusable_face_two_is_reported_not_ignored(bound_handler):
+    """``createInput`` takes one geometry, so face_two can be silently dropped.
+
+    That is the failure the source scan was guarding: it asserted ``_joint_face``
+    was called twice. Here the call is made and its refusal observed.
+    """
+    design = _design(MEASURED)
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError):
+        _as_built(handler, joint_type="revolute", face_two=9)
+
+    assert design.rootComponent.asBuiltJoints.inputs == []
+
+
+def test_an_as_built_joint_resolves_its_axis_through_the_frame(bound_handler):
+    """The frame plumbing the AST guard could not reach at all.
+
+    Same measured frame as ``add_joint``: world Z is joint Y here, so a passthrough
+    would report ``ZAxisJointDirection`` and rotate about the wrong axis.
+    """
+    design = _design(MEASURED)
+    handler = bound_handler(design)
+
+    _as_built(handler, joint_type="revolute", axis="z")
+
+    inp = design.rootComponent.asBuiltJoints.last_input
+    assert inp is not None
+    assert inp.motion_directions == ("YAxisJointDirection",)
+
+
+# ── a degenerate frame has nothing to resolve against ─────────────────
+
+
+def test_a_zero_length_axis_is_refused_instead_of_reported(joint):
+    """``_joint_direction`` ranks by |dot|, so a zero vector wins every tie.
+
+    With a degenerate frame the ranking is arbitrary and the chosen member carries
+    [0, 0, 0] — which then reached the caller as ``axis_world`` and Fusion as a
+    direction. There is no direction there to normalise.
+    """
+    degenerate = {
+        "origin": (0.0, 0.0, 0.0),
+        "primary": (1.0, 0.0, 0.0),
+        "secondary": (0.0, 0.0, 0.0),
+        "third": (0.0, 0.0, 1.0),
+    }
+
+    with pytest.raises(RuntimeError) as raised:
+        joint(axis="y", frame=degenerate)
+
+    kind, hints = classify(raised.value)
+    assert kind == "INVALID_INPUT"
+    assert hints
+    assert "zero-length" in str(raised.value)
+
+
+def test_a_frame_with_no_axes_at_all_is_refused(joint):
+    """Every member degenerate: no ranking question is even askable."""
+    empty = {
+        "origin": (0.0, 0.0, 0.0),
+        "primary": (0.0, 0.0, 0.0),
+        "secondary": (0.0, 0.0, 0.0),
+        "third": (0.0, 0.0, 0.0),
+    }
+
+    with pytest.raises(RuntimeError) as raised:
+        joint(axis="z", frame=empty)
+
+    assert "zero-length" in str(raised.value)
+
+
+def test_the_revolve_zero_length_message_keeps_its_own_hints():
+    """The new rule is anchored so it does not capture a different refusal.
+
+    ``revolve`` already refused a zero-length axis direction, and that message
+    contains the same words. The joint rule matches "geometry's ... axis is
+    zero-length", not the bare phrase, so the revolve refusal must still classify
+    through the generic INVALID_INPUT rule — otherwise a caller building a revolve
+    would be told to pick another joint face.
+    """
+    kind, hints = classify(
+        "Invalid input: revolve axis direction is zero-length — pass a direction"
+    )
+
+    assert kind == "INVALID_INPUT"
+    assert not any("joint" in hint.lower() for hint in hints), (
+        f"the revolve refusal picked up the joint-frame hints: {hints}"
+    )
+
+
+def test_the_joint_rule_does_not_match_a_healthy_frame(joint):
+    """Sanity: the guard fires on degenerate frames only, not on every joint."""
+    _, result, _ = joint(axis="z")
+
+    assert result["axis_world"] == pytest.approx([0.0, 0.0, 1.0])
