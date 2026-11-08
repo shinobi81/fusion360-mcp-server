@@ -1,6 +1,6 @@
 [project]
 name = "fusion360-mcp-server"
-version = "0.6.1"
+version = "0.6.2"
 description = "MCP server for Autodesk Fusion 360 — bridges AI coding agents to the add-in"
 readme = "README.md"
 requires-python = ">=3.14"

@@ -7,6 +7,54 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.6.2] - 2026-11-08
+
+The release where the joint and face tools say what Fusion actually did. Nothing was
+removed; one field was added to `list_edges`, so this is a patch.
+
+### Added
+
+- **`list_edges` reports `is_degenerate`.** A degenerate edge has no geometry at all (a
+  revolved cone's apex produces two), and no fillet can round it. Every selector skips
+  them, so a selection can legitimately return fewer edges than `count` — the flag is
+  what makes that difference visible, and it is the field `fillet`'s new refusal tells a
+  caller to look for. (#55)
+
+### Fixed
+
+- **`pin_slot` joints took their directions in the wrong order.** `axis` is documented as
+  the primary direction — the slot — but Fusion reads the first argument as the
+  *rotation*, so the slot stayed on the perpendicular default and never slid where it was
+  told. Measured on 2706; `pin_slot` joins `ball` in the reversed set. Found because
+  `add_joint` now reports the directions Fusion returns. (#51)
+- **`shell`, `draft_faces` and `offset_faces` with `face_selection="top"` matched the body's
+  side walls.** The threshold came from the body's bounding box, so any face that merely
+  *reached* the top matched: `shell` on a plain 10x10x2 box reported five faces removed.
+  "Top" and "bottom" now mean the faces lying in that plane, the rule
+  `edge_selection` got in 0.6.1, and `shell` shares it instead of duplicating the
+  threshold. (#54)
+- **`FILLET_NO_EDGE_FOUND` classified as `UNKNOWN` with no hints.** Fusion's refusal
+  is now `INVALID_INPUT`, naming the two ways an edge is unroundable: degenerate, or
+  shorter than the radius. (#55)
+- **`execute_code` reported a failure when the script had closed its own document.** The
+  close succeeded and the post-execute design-type check raised
+  `4 : An API Object refers to a deleted Object`, so the envelope said the call failed.
+  It now returns `document_closed: true`. (#52)
+
+### Changed
+
+- **The add-in type-checks clean.** Its 32 standing `mypy` errors are fixed with real
+  guards and corrected signatures rather than ignores, and several now name the parameter
+  that is missing instead of raising `'NoneType' object has no attribute ...`. (#53)
+
+### Known issue
+
+- **`shell` does not open a face.** With the selection now correct, the geometry can be
+  measured: `shell(top)` on a box still produces a closed hollow body, top face intact.
+  Fusion is not honouring the removed-face list, so this release fixes *which* faces are
+  chosen, not what Fusion then does with them. Tracked separately; do not read
+  `faces_removed` as proof that a face was opened.
+
 ## [0.6.1] - 2026-11-08
 
 The release that makes `edge_selection` mean what it says on bodies that are not
