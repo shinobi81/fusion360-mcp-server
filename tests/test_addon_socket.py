@@ -21,6 +21,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from addon.server.socket_server import Fusion360MCPServer  # noqa: E402
+from tests.fakes.design import FakeDesign  # noqa: E402
 
 
 class _RecordingBridge:
@@ -97,3 +98,29 @@ def test_unterminated_buffer_waits_instead_of_failing():
 
     assert bridge.commands == []
     assert not any(r.get("message") == "Invalid JSON" for r in replies)
+
+
+def test_execute_code_survives_a_script_that_closes_its_document(bound_handler):
+    """The envelope used to say "failed" after the script had already succeeded.
+
+    Fusion's design raises "4 : An API Object refers to a deleted Object" once its
+    document is gone, and the handler read ``design.designType`` *after* the script
+    ran - so closing a document from the REPL reported a failure that did not
+    happen. Measured while cleaning up this session's scratch documents.
+    """
+    handler = bound_handler(FakeDesign())
+
+    result = handler.execute_code("design.isValid = False\n'the script ran'")
+
+    assert result["executed"] is True
+    assert result["result"] == "the script ran"
+    assert result["document_closed"] is True
+
+
+def test_execute_code_does_not_claim_a_closed_document_when_it_is_alive(bound_handler):
+    handler = bound_handler(FakeDesign())
+
+    result = handler.execute_code("1 + 1")
+
+    assert result["result"] == 2
+    assert "document_closed" not in result

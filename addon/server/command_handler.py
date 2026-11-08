@@ -4992,8 +4992,13 @@ class CommandHandler:
         output = buf.getvalue()
         result = last_expr_value if last_expr_value is not None else output
 
-        # Warn if design type changed during execution
-        type_after = design.designType
+        # Warn if design type changed during execution. The script may have closed
+        # the document this design belongs to - a legitimate thing to do from a
+        # REPL - and reading a closed design raises "4 : An API Object refers to a
+        # deleted Object" AFTER the script has already run.  The caller was told
+        # the call failed when it had succeeded.
+        document_closed = not design.isValid
+        type_after = type_before if document_closed else design.designType
         design_type_warning = None
         if type_before != type_after:
             parametric = adsk.fusion.DesignTypes.ParametricDesignType
@@ -5015,6 +5020,10 @@ class CommandHandler:
         response = {"executed": True, "result": result, "output": output}
         if design_type_warning:
             response["design_type_warning"] = design_type_warning
+        if document_closed:
+            # Say it rather than failing: the design-type question does not apply
+            # to a document that no longer exists.
+            response["document_closed"] = True
         return response
 
     # ------------------------------------------------------------------

@@ -666,6 +666,9 @@ class FakeDesign:
         self._timeline = FakeTimeline(self)
         self.rootComponent = FakeRoot(self, sketches, bodies)
         self.undo_commands_executed = 0
+        #: Fusion's design goes invalid when its document is closed, and its
+        #: properties then raise "4 : An API Object refers to a deleted Object".
+        self.isValid = True
         self.compute_all_calls = 0
         self.marker_writes: list[int] = []
         self.parentDocument = type("FakeDocument", (), {"name": "fake-design"})()
