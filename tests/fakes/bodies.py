@@ -8,7 +8,7 @@ and its ``deleteMe()`` really removes it from the root's collection.
 from __future__ import annotations
 
 from .collection import FakeCollection, FakeDeletable
-from .runtime import FakePoint3D, FakeVector3D
+from .runtime import FakeJointGeometry, FakePoint3D, FakeVector3D
 
 
 class FakeBoundingBox:
@@ -184,8 +184,6 @@ class FakeFace:
         is not modelled here because the handler never reads it — it reads the
         frame — so this returns the frame the test asked for.
         """
-        from .design import FakeJointGeometry
-
         return FakeJointGeometry(**self.joint_frame)
 
 

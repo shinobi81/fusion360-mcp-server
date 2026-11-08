@@ -25,7 +25,7 @@ from .features import (
     FakeFeature,
     FakeInterference,
 )
-from .runtime import DIRECT, PARAMETRIC, FakePoint3D, FakeVector3D
+from .runtime import DIRECT, PARAMETRIC, FakePoint3D
 
 
 class FakeTimelineEntity:
@@ -424,32 +424,6 @@ class FakeFeatures:
     @property
     def count(self) -> int:
         return 0 if self._design is None else self._design.features
-
-
-class FakeJointGeometry:
-    """``JointGeometry``: an origin and a right-handed axis frame.
-
-    ``createByCylinderOrConeFace`` is pinned to the live measurement. The origin
-    lands on the FACE, never on the bore axis — all sixteen valid quadrant/height
-    combinations were measured on Fusion 2706, and ``CenterKeyPoint`` is refused
-    outright with "Invalid parameter height" — and the frame that comes back for
-    a cylinder whose axis is world Z is primary=+Z, secondary=+X, third=+Y.
-
-    The face supplies the numbers, so a test can move the frame without touching
-    the handler: ``face.joint_geometry_for`` returns this object.
-    """
-
-    geometryType = 7  # Fusion's CylinderOrConeGeometryType
-
-    def __init__(self, origin, primary, secondary, third):
-        self.origin = FakePoint3D(*origin)
-        self.primaryAxisVector = FakeVector3D(*primary)
-        self.secondaryAxisVector = FakeVector3D(*secondary)
-        self.thirdAxisVector = FakeVector3D(*third)
-
-    @staticmethod
-    def createByCylinderOrConeFace(face, quadrant, key_point):
-        return face.joint_geometry_for(quadrant, key_point)
 
 
 class FakeJointMotion:
