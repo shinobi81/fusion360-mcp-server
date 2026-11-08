@@ -622,6 +622,35 @@ class CommandHandler:
             raise RuntimeError(f"No edges matched selection '{selection}'")
         return coll
 
+    def _faces_in_extreme_plane(self, body, selection: str) -> list:
+        """The faces lying in the highest (``top``) or lowest (``bottom``) plane.
+
+        The same rule as ``_edges_in_extreme_plane``, and it exists for the same
+        measured reason: on Fusion 2706, `shell(face_selection="top")` on a plain
+        10 x 10 x 2 box removed **five** faces - the top plus all four side walls,
+        whose boxes reach z=2 - because the threshold came from the body's box and
+        any face that merely *reaches* it matched. "Top" now means the faces lying
+        in the top plane, which is the one face of a box.
+
+        Only a face that already lies in a plane can name one, so a body whose top
+        is a curved surface (a dome on a plate) still resolves to its flat top
+        ring rather than refusing.
+        """
+        eps = self._EDGE_PLANE_EPSILON
+        boxes = [(face, face.boundingBox) for face in body.faces]
+        flat = [box for _, box in boxes if box.maxPoint.z - box.minPoint.z <= eps]
+        if not flat:
+            return []
+        if selection == "top":
+            plane = max(box.maxPoint.z for box in flat)
+        else:
+            plane = min(box.minPoint.z for box in flat)
+        return [
+            face
+            for face, box in boxes
+            if box.minPoint.z >= plane - eps and box.maxPoint.z <= plane + eps
+        ]
+
     def _roundable_edges(self, body) -> list:
         """The body's edges minus the degenerate ones, which cannot be rounded.
 
@@ -837,21 +866,13 @@ class CommandHandler:
     def _select_faces(self, body, selection: str):
         """Return an ObjectCollection of faces based on *selection*."""
         coll = adsk.core.ObjectCollection.create()
-        bbox = body.boundingBox
 
         if selection == "all":
             for face in body.faces:
                 coll.add(face)
-        elif selection == "top":
-            threshold = bbox.maxPoint.z - 0.001
-            for face in body.faces:
-                if face.boundingBox.maxPoint.z > threshold:
-                    coll.add(face)
-        elif selection == "bottom":
-            threshold = bbox.minPoint.z + 0.001
-            for face in body.faces:
-                if face.boundingBox.minPoint.z < threshold:
-                    coll.add(face)
+        elif selection in ("top", "bottom"):
+            for face in self._faces_in_extreme_plane(body, selection):
+                coll.add(face)
         elif selection == "vertical":
             for face in body.faces:
                 # Check if face normal is roughly horizontal (vertical face)
@@ -1971,23 +1992,13 @@ class CommandHandler:
             else root.bRepBodies.item(body_index)
         )
 
-        faces = adsk.core.ObjectCollection.create()
-        bbox = body.boundingBox
-
-        if face_selection == "top":
-            threshold = bbox.maxPoint.z - 0.001
-            for face in body.faces:
-                if face.boundingBox.maxPoint.z > threshold:
-                    faces.add(face)
-        elif face_selection == "bottom":
-            threshold = bbox.minPoint.z + 0.001
-            for face in body.faces:
-                if face.boundingBox.minPoint.z < threshold:
-                    faces.add(face)
-        else:
+        if face_selection not in ("top", "bottom"):
             raise RuntimeError(
                 f"Unknown face_selection '{face_selection}' — use top/bottom"
             )
+        faces = adsk.core.ObjectCollection.create()
+        for face in self._faces_in_extreme_plane(body, face_selection):
+            faces.add(face)
 
         if faces.count == 0:
             raise RuntimeError(f"No faces matched '{face_selection}'")

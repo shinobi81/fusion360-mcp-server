@@ -403,6 +403,38 @@ class FakeChamferFeatures:
         return type("FakeFeature", (), {"name": name, "distance": inp.distance})()
 
 
+class FakeShellInput:
+    """``shellFeatures.createInput``: keeps the faces the caller chose to remove."""
+
+    def __init__(self, bodies):
+        self.bodies = bodies
+        self.facesToRemove = None
+
+
+class FakeShellFeatures(FakeCollection):
+    """``root.features.shellFeatures``: records what a shell was told to open."""
+
+    def __init__(self):
+        super().__init__()
+        self.inputs: list[FakeShellInput] = []
+
+    @property
+    def last_input(self) -> FakeShellInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(self, bodies) -> FakeShellInput:
+        inp = FakeShellInput(bodies)
+        self.inputs.append(inp)
+        return inp
+
+    def add(self, item) -> FakeDeletable:
+        if not isinstance(item, FakeShellInput):
+            raise TypeError("shellFeatures.add takes the input createInput returned")
+        joint = FakeDeletable("Shell1")
+        super().add(joint)
+        return joint
+
+
 class FakeFeatures:
     """``root.features``: a count, the revolve collection and the draft one."""
 
@@ -416,6 +448,7 @@ class FakeFeatures:
         self.sweepFeatures = FakeSweepFeatures()
         self.loftFeatures = FakeLoftFeatures()
         self.combineFeatures = FakeCombineFeatures()
+        self.shellFeatures = FakeShellFeatures()
 
     def createPath(self, curve):
         """``features.createPath``: a sweep needs a Path around the curve."""
