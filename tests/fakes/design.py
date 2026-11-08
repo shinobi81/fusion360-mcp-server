@@ -655,6 +655,76 @@ def _joint_frame(geometry) -> dict:
     }
 
 
+class FakeAsBuiltJointInput(FakeJointInput):
+    """``AsBuiltJoints.createInput``: two occurrences and one optional geometry.
+
+    Fusion's signature is ``createInput(occurrenceOne, occurrenceTwo, geometry)``
+    — a **single** geometry, which is why ``create_as_built_joint`` cannot build
+    from ``face_two`` and only validates it.  Motion setters are inherited: an
+    as-built input takes the same seven ``setAs*JointMotion`` calls.
+
+    ``geometry`` is ``None`` for a rigid joint, which Fusion accepts without it.
+    """
+
+    def __init__(self, occurrence_one, occurrence_two, geometry=None):
+        super().__init__(geometry, None)
+        self.occurrenceOne = occurrence_one
+        self.occurrenceTwo = occurrence_two
+        self.geometry = geometry
+
+
+class FakeAsBuiltJoints(FakeCollection):
+    """``root.asBuiltJoints``: the sibling of ``FakeJoints`` for kept poses.
+
+    It was a bare ``FakeCollection``, so ``create_as_built_joint`` could not run
+    under a test at all and its two claims — that ``joint_type`` is honoured, and
+    that ``face_two`` is validated even though it cannot be built from — were
+    guarded by source scans instead.
+
+    One thing is deliberately *not* modelled: ``Joints.add`` was measured to
+    invalidate the geometry it was given, but nothing pinned whether
+    ``asBuiltJoints.add`` does the same, so the fake does not invent it.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.inputs: list[FakeAsBuiltJointInput] = []
+
+    @property
+    def last_input(self) -> FakeAsBuiltJointInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(
+        self, occurrence_one, occurrence_two, geometry=None
+    ) -> FakeAsBuiltJointInput:
+        inp = FakeAsBuiltJointInput(occurrence_one, occurrence_two, geometry)
+        self.inputs.append(inp)
+        return inp
+
+    def add(self, item) -> FakeJoint:
+        if not isinstance(item, FakeAsBuiltJointInput):
+            raise TypeError("asBuiltJoints.add takes the input createInput returned")
+        if item.geometry is None and item.motion_setter not in (
+            None,
+            "setAsRigidJointMotion",
+        ):
+            # Fusion's own refusal, and the reason create_as_built_joint requires a
+            # face pair for every motion but rigid.  Without it the fake would
+            # build the joint a handler's missing guard failed to prevent.
+            raise RuntimeError(
+                "Geometry should not be null if joint motion is not rigid"
+            )
+        frame = _joint_frame(item.geometry) if item.geometry is not None else {}
+        motion = FakeJointMotion(
+            item.motion_setter or "setAsRigidJointMotion", frame, item.motion_directions
+        )
+        joint = FakeJoint(
+            f"AsBuiltJoint{self.count + 1}", item.geometry, None, motion, False
+        )
+        super().add(joint)
+        return joint
+
+
 class FakeRoot:
     """``design.rootComponent``: everything ``delete_all`` sweeps, plus planes."""
 
@@ -670,7 +740,7 @@ class FakeRoot:
         self.sketches = FakeCollection(list(sketches))
         self.features = FakeFeatures(design)
         self.joints = FakeJoints()
-        self.asBuiltJoints = FakeCollection()
+        self.asBuiltJoints = FakeAsBuiltJoints()
         self.rigidGroups = FakeCollection()
         self.occurrences = FakeCollection()
         self.constructionPlanes = FakeCollection()

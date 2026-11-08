@@ -34,6 +34,18 @@ def _vector(v) -> list:
     return [v.x, v.y, v.z]
 
 
+#: A direction this close to the origin has no axis to normalise. Squared, so the
+#: comparison needs no ``sqrt``; 1e-12 is a magnitude of 1e-6, far below any real
+#: joint frame and far above floating-point noise on a unit vector.
+_DEGENERATE_AXIS_SQUARED = 1e-12
+
+
+def _is_zero(vector) -> bool:
+    """Whether *vector* is too short to define a direction."""
+    squared = sum(component * component for component in vector)
+    return squared <= _DEGENERATE_AXIS_SQUARED
+
+
 class CommandHandler:
     """Runs Fusion API operations.  Instantiated once; reused across requests."""
 
@@ -3650,7 +3662,12 @@ class CommandHandler:
         # handled, so every other type silently produced an inferred (usually
         # rigid) joint while reporting success.  The frame matters here: `axis`
         # names a MODEL axis, and Fusion's enum names a JOINT one.
-        frame = self._joint_frame(geometries[0])
+        #
+        # Only a motion that takes a direction needs the frame: a rigid joint
+        # resolves no axis, so a degenerate frame it never reads must not refuse
+        # it (rigid is the default joint_type).
+        needs_frame = self._JOINT_MOTION_SETTERS[joint_type][1] > 0
+        frame = self._joint_frame(geometries[0]) if needs_frame else None
         # Read the geometry's own measurements now: adding the joint invalidates
         # the JointGeometry object, and reading it afterwards fails live with
         # "2 : InternalValidationError : face".
@@ -3764,12 +3781,31 @@ class CommandHandler:
 
         Every direction the caller can ask for is therefore resolved against these
         three vectors.
+
+        A zero-length axis is refused here rather than resolved: ``_joint_direction``
+        ranks the members by ``|dot|`` with the wanted world axis, so a degenerate
+        vector ties with everything and wins the ranking arbitrarily — the caller
+        is then told ``axis_world`` is ``[0, 0, 0]`` and the joint is built around
+        whichever ``JointDirections`` member the tie happened to produce.  Only the
+        member reaches Fusion; the vector is what the response reports.
+        Measured shape of the failure before this guard: a frame whose secondary
+        axis was ``[0, 0, 0]`` answered ``axis_world`` ``[0, 0, 0]`` for
+        ``axis="y"`` and picked an axis the geometry never had.
         """
-        return {
+        frame = {
             "x": _vector(geometry.secondaryAxisVector),
             "y": _vector(geometry.thirdAxisVector),
             "z": _vector(geometry.primaryAxisVector),
         }
+        degenerate = [name for name, vector in frame.items() if _is_zero(vector)]
+        if degenerate:
+            raise RuntimeError(
+                f"The joint geometry's {'/'.join(sorted(degenerate))} axis is "
+                f"zero-length, so no direction can be resolved against it "
+                f"(frame: {frame}). The geometry is unusable for axis selection — "
+                "build the joint from another face."
+            )
+        return frame
 
     @staticmethod
     def _dot(a, b) -> float:

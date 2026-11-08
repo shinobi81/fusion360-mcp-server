@@ -319,6 +319,21 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # The joint frame's axes are what `axis` is resolved against. A zero-length
+        # one has no direction to report, and before this rule it reached the
+        # caller as `axis_world: [0, 0, 0]` and picked an arbitrary JointDirections
+        # member. Anchored on "geometry's ... axis is zero-length" so it does NOT
+        # capture the revolve message ("revolve axis direction is zero-length"),
+        # which is a caller error with its own generic hints.
+        r"geometry's .* axis is zero-length",
+        "INVALID_INPUT",
+        [
+            "The face reports no usable axis, so no direction can be resolved.",
+            "Build the joint from a different face: the geometry is the problem.",
+            "Use get_object_info on the body to find another cylindrical face.",
+        ],
+    ),
+    (
         r"invalid (argument|input|parameter)|bad (argument|input|value)",
         "INVALID_INPUT",
         [
