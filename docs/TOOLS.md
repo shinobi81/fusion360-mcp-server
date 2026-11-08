@@ -175,6 +175,37 @@ what a selection returns.
 | `create_as_built_joint` | Joint from current positions    |
 | `create_rigid_group`    | Lock components together        |
 
+### What `add_joint` reports, and what `axis` means
+
+`axis` (and `second_axis`) name a **model** axis — `x`, `y`, `z` in world terms.
+Fusion's `JointDirections` enum names a **joint** axis, and the two frames differ, so the
+handler resolves the request against the joint geometry's own axes and passes the nearest
+one. On a cylinder whose bore is world Z that mapping is:
+
+| requested | slides along |
+| --------- | ------------ |
+| `x`       | −Y           |
+| `y`       | +Z (the bore)|
+| `z`       | −X           |
+
+No member of that frame points along +X, so `axis="x"` gives −X: the closest available
+direction, not the exact one. Read the result rather than assuming the sign.
+
+Every `add_joint` result carries the measurements behind that:
+
+- `joint_origin` — where the origin landed. For cylinder/cone geometry Fusion puts it on
+  the **surface** at the bore's radius (every valid quadrant/height combination was
+  measured to), never on the axis, so a revolute joint rotates about a line offset from
+  the bore by that radius. A hinge that must lock two halves together wants a joint built
+  from the bore axis instead.
+- `primary_axis` — the bore direction the geometry reports.
+- `axis_world` — the model-space vector the motion was actually given.
+- `slide_direction` — the direction Fusion reports for it, or `null` for a joint with no
+  slide (revolute, rigid).
+
+Setting `JointInput.isFlipped` does **not** reverse a slider: measured, a flipped input
+still slid along −Y. The sign is a property of the frame, so it is reported, not chased.
+
 ## Inspection & Analysis
 
 | Tool                      | Description                                                                                                             |

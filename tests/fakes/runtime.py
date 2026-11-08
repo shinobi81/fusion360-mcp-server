@@ -122,6 +122,39 @@ def _design_types() -> types.SimpleNamespace:
     )
 
 
+def _joint_directions() -> types.SimpleNamespace:
+    """The three members of ``JointDirections`` a joint motion can be given.
+
+    Their *values* are the attribute names, so a test can assert which one the
+    handler passed without a lookup table.  They are joint-frame axes, not world
+    ones — measured on Fusion 2706, ``XAxisJointDirection`` on a cylinder-face
+    joint slid along world -Y.
+    """
+    return types.SimpleNamespace(
+        XAxisJointDirection="XAxisJointDirection",
+        YAxisJointDirection="YAxisJointDirection",
+        ZAxisJointDirection="ZAxisJointDirection",
+    )
+
+
+def _joint_quadrants() -> types.SimpleNamespace:
+    return types.SimpleNamespace(
+        StartJointQuadrantAngleType="StartJointQuadrantAngleType",
+        QuarterJointQuadrantAngleType="QuarterJointQuadrantAngleType",
+        MiddleJointQuadrantAngleType="MiddleJointQuadrantAngleType",
+        ThirdQuarterJointQuadrantAngleType="ThirdQuarterJointQuadrantAngleType",
+    )
+
+
+def _joint_key_points() -> types.SimpleNamespace:
+    return types.SimpleNamespace(
+        StartKeyPoint="StartKeyPoint",
+        MiddleKeyPoint="MiddleKeyPoint",
+        CenterKeyPoint="CenterKeyPoint",
+        EndKeyPoint="EndKeyPoint",
+    )
+
+
 def _feature_operations() -> types.SimpleNamespace:
     return types.SimpleNamespace(
         NewBodyFeatureOperation="new_body",
@@ -129,6 +162,14 @@ def _feature_operations() -> types.SimpleNamespace:
         CutFeatureOperation="cut",
         IntersectFeatureOperation="intersect",
     )
+
+
+def _joint_geometry_class():
+    """``JointGeometry`` without a circular import:
+    ``design`` imports ``runtime``, so the class is fetched on demand."""
+    from .design import FakeJointGeometry
+
+    return FakeJointGeometry
 
 
 _ADSK_MODULES = ("adsk", "adsk.core", "adsk.fusion", "adsk.cam")
@@ -152,6 +193,10 @@ def install() -> None:
         "adsk.fusion",
         DesignTypes=_design_types(),
         FeatureOperations=_feature_operations(),
+        JointDirections=_joint_directions(),
+        JointQuadrantAngleTypes=_joint_quadrants(),
+        JointKeyPointTypes=_joint_key_points(),
+        JointGeometry=_joint_geometry_class(),
     )
     cam = module("adsk.cam")
     adsk = module(

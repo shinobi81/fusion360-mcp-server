@@ -25,7 +25,7 @@ from .features import (
     FakeFeature,
     FakeInterference,
 )
-from .runtime import DIRECT, PARAMETRIC
+from .runtime import DIRECT, PARAMETRIC, FakePoint3D, FakeVector3D
 
 
 class FakeTimelineEntity:
@@ -144,9 +144,20 @@ class FakeComponent:
         self.bRepBodies = FakeCollection(list(bodies))
 
 
+class FakeTransform:
+    """An occurrence's placement: ``joint`` reads ``transform.translation``."""
+
+    def __init__(self, x: float = 0.0, y: float = 0.0, z: float = 0.0):
+        self.translation = FakePoint3D(x, y, z)
+
+
 class FakeOccurrence:
-    def __init__(self, component: FakeComponent):
+    def __init__(self, component: FakeComponent, x: float = 0.0):
         self.component = component
+        #: Fusion names an occurrence after its component; ``add_joint`` keys its
+        #: before/after displacement map on this.
+        self.name = component.name
+        self.transform = FakeTransform(x)
 
     @property
     def bRepBodies(self) -> FakeCollection:
@@ -415,6 +426,158 @@ class FakeFeatures:
         return 0 if self._design is None else self._design.features
 
 
+class FakeJointGeometry:
+    """``JointGeometry``: an origin and a right-handed axis frame.
+
+    ``createByCylinderOrConeFace`` is pinned to the live measurement. The origin
+    lands on the FACE, never on the bore axis — all sixteen valid quadrant/height
+    combinations were measured on Fusion 2706, and ``CenterKeyPoint`` is refused
+    outright with "Invalid parameter height" — and the frame that comes back for
+    a cylinder whose axis is world Z is primary=+Z, secondary=+X, third=+Y.
+
+    The face supplies the numbers, so a test can move the frame without touching
+    the handler: ``face.joint_geometry_for`` returns this object.
+    """
+
+    geometryType = 7  # Fusion's CylinderOrConeGeometryType
+
+    def __init__(self, origin, primary, secondary, third):
+        self.origin = FakePoint3D(*origin)
+        self.primaryAxisVector = FakeVector3D(*primary)
+        self.secondaryAxisVector = FakeVector3D(*secondary)
+        self.thirdAxisVector = FakeVector3D(*third)
+
+    @staticmethod
+    def createByCylinderOrConeFace(face, quadrant, key_point):
+        return face.joint_geometry_for(quadrant, key_point)
+
+
+class FakeJointMotion:
+    """What Fusion reports back for a created joint.
+
+    ``slideDirectionVector`` follows the measured mapping from a JointDirections
+    member to a world vector: X is minus the geometry's third axis, Y is its
+    primary axis, Z is minus its secondary axis.  That is the fact the handler
+    has to agree with, and it was measured rather than assumed — a slider on
+    cylinder-face geometry slid along -Y for XAxis, +Z for YAxis, -X for ZAxis.
+    """
+
+    def __init__(self, setter: str, frame: dict, directions: tuple):
+        self.jointType = setter
+        self._frame = frame
+        self._directions = directions
+        name = setter.removeprefix("setAs").removesuffix("JointMotion")
+        self.objectType = f"adsk::fusion::{name}JointMotion"
+        if name in ("Slider", "Cylindrical", "PinSlot"):
+            self.slideDirectionVector = frame.get(directions[0]) if directions else None
+        if name in ("Revolute", "Cylindrical", "PinSlot", "Planar"):
+            self.rotationAxisVector = frame.get(directions[-1]) if directions else None
+
+
+class FakeJoint(FakeDeletable):
+    """A created joint: name, motion, and the geometry it was built from."""
+
+    def __init__(self, name, geometry_one, geometry_two, motion, is_flipped):
+        super().__init__(name)
+        self.geometryOrOriginOne = geometry_one
+        self.geometryOrOriginTwo = geometry_two
+        self.jointMotion = motion
+        self.isFlipped = is_flipped
+
+
+class FakeJointInput:
+    """``Joints.createInput``: records which motion setter was called, with what.
+
+    ``isFlipped`` is accepted and stored because Fusion accepts it, but it is
+    recorded rather than honoured: measured on 2706, setting it did NOT reverse a
+    slider's ``slideDirectionVector``.  A test can therefore assert the handler
+    never relies on it.
+    """
+
+    def __init__(self, geometry_one, geometry_two):
+        self.geometryOrOriginOne = geometry_one
+        self.geometryOrOriginTwo = geometry_two
+        self.isFlipped = False
+        self.motion_setter = None
+        self.motion_directions = ()
+        self.motion_calls = 0
+
+    def _record(self, setter: str, directions: tuple) -> None:
+        self.motion_setter = setter
+        self.motion_directions = directions
+        self.motion_calls += 1
+
+    def setAsRigidJointMotion(self) -> None:
+        self._record("setAsRigidJointMotion", ())
+
+    def setAsRevoluteJointMotion(self, direction) -> None:
+        self._record("setAsRevoluteJointMotion", (direction,))
+
+    def setAsSliderJointMotion(self, direction) -> None:
+        self._record("setAsSliderJointMotion", (direction,))
+
+    def setAsCylindricalJointMotion(self, direction) -> None:
+        self._record("setAsCylindricalJointMotion", (direction,))
+
+    def setAsPlanarJointMotion(self, direction) -> None:
+        self._record("setAsPlanarJointMotion", (direction,))
+
+    def setAsPinSlotJointMotion(self, slide, rotation) -> None:
+        self._record("setAsPinSlotJointMotion", (slide, rotation))
+
+    def setAsBallJointMotion(self, pitch, yaw) -> None:
+        self._record("setAsBallJointMotion", (pitch, yaw))
+
+
+class FakeJoints(FakeCollection):
+    """``root.joints``: inputs to record against, and the joints that come out."""
+
+    def __init__(self):
+        super().__init__()
+        self.inputs: list[FakeJointInput] = []
+
+    @property
+    def last_input(self) -> FakeJointInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(self, geometry_one, geometry_two) -> FakeJointInput:
+        inp = FakeJointInput(geometry_one, geometry_two)
+        self.inputs.append(inp)
+        return inp
+
+    def add(self, item) -> FakeJoint:
+        """Create the joint an input describes, as Fusion's ``add`` does."""
+        if not isinstance(item, FakeJointInput):
+            raise TypeError("joints.add takes the input createInput returned")
+        inp = item
+        frame = _joint_frame(inp.geometryOrOriginOne)
+        motion = FakeJointMotion(
+            inp.motion_setter or "setAsRigidJointMotion", frame, inp.motion_directions
+        )
+        joint = FakeJoint(
+            f"Joint{self.count + 1}",
+            inp.geometryOrOriginOne,
+            inp.geometryOrOriginTwo,
+            motion,
+            inp.isFlipped,
+        )
+        super().add(joint)
+        return joint
+
+
+def _joint_frame(geometry) -> dict:
+    """``{JointDirections member: joint-frame vector}`` - the measured mapping."""
+    return {
+        "XAxisJointDirection": _negated(geometry.thirdAxisVector),
+        "YAxisJointDirection": geometry.primaryAxisVector,
+        "ZAxisJointDirection": _negated(geometry.secondaryAxisVector),
+    }
+
+
+def _negated(vector) -> FakeVector3D:
+    return FakeVector3D(-vector.x, -vector.y, -vector.z)
+
+
 class FakeRoot:
     """``design.rootComponent``: everything ``delete_all`` sweeps, plus planes."""
 
@@ -429,7 +592,7 @@ class FakeRoot:
         )
         self.sketches = FakeCollection(list(sketches))
         self.features = FakeFeatures(design)
-        self.joints = FakeCollection()
+        self.joints = FakeJoints()
         self.asBuiltJoints = FakeCollection()
         self.rigidGroups = FakeCollection()
         self.occurrences = FakeCollection()
@@ -492,6 +655,7 @@ class FakeDesign:
         self._timeline = FakeTimeline(self)
         self.rootComponent = FakeRoot(self, sketches, bodies)
         self.undo_commands_executed = 0
+        self.compute_all_calls = 0
         self.marker_writes: list[int] = []
         self.parentDocument = type("FakeDocument", (), {"name": "fake-design"})()
 
@@ -517,6 +681,14 @@ class FakeDesign:
         if self.timeline_raises:
             raise RuntimeError("3 : this is not a parametric design")
         return self._timeline
+
+    def computeAll(self) -> None:
+        """Counted rather than simulated: a re-compute is observable, its effect not.
+
+        ``add_joint`` must call it (Fusion needs it after a joint moves components)
+        and ``set_joint_value`` must not (it would reset the value being driven).
+        """
+        self.compute_all_calls += 1
 
     def set_marker(self, value: int) -> None:
         self.marker_writes.append(value)
