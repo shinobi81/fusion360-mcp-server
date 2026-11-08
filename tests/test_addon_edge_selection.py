@@ -198,6 +198,31 @@ def test_the_no_match_refusal_is_classified_and_names_the_next_step(select):
     assert any("list_edges" in hint for hint in hints), hints
 
 
+def test_planes_closer_than_the_epsilon_are_one_plane(bound_handler):
+    """A 5 µm foil has no top to tell from its bottom, and the old code agreed.
+
+    ``_EDGE_PLANE_EPSILON`` is 1e-3 cm, which was also the old threshold's slack:
+    measured, this body returned all three edges for ``top`` *and* ``bottom``
+    before the fix and returns all three now.  Pinned so the merge is a decision
+    rather than an accident of the constant, and so a future tightening of the
+    epsilon has to notice this case.
+    """
+    body = body_with_edges(
+        "Foil",
+        [
+            ((0, 0, 0), (1, 0, 0)),
+            ((0, 0, 0.0005), (1, 0, 0.0005)),
+            ((0, 0, 0), (0, 0, 0.0005)),
+        ],
+    )
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    assert [e.index for e in handler._select_edges(body, "top")] == [0, 1, 2]
+    assert [e.index for e in handler._select_edges(body, "bottom")] == [0, 1, 2]
+    # The vertical answer is unaffected by the merged planes.
+    assert [e.index for e in handler._select_edges(body, "vertical")] == [2]
+
+
 def test_an_unknown_selection_is_classified_too(select):
     with pytest.raises(RuntimeError) as raised:
         select([((0, 0, 0), (1, 0, 0))], "diagonal")

@@ -565,6 +565,11 @@ class CommandHandler:
         ``pointOnEdge`` is one point on it and a closed edge's two vertices are
         the same point, so a sample cannot say where an edge *lies*: a vertical
         edge that merely reaches the top would otherwise be rounded as "the top".
+
+        Two planes closer together than ``_EDGE_PLANE_EPSILON`` are one plane, so
+        a body thinner than 10 µm gets every edge from both ``top`` and
+        ``bottom``.  The old threshold was the same 1e-3, so that is unchanged —
+        a body that thin has no top to tell from its bottom.
         """
         boxes = [(edge, edge.boundingBox) for edge in body.edges]
         if not boxes:
