@@ -7,6 +7,38 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.6.3] - 2026-11-08
+
+The release where `shell` opens the face it was told to open, and a curve index that names
+nothing is refused instead of silently naming another curve. Nothing was removed, so this
+is a patch.
+
+### Fixed
+
+- **`shell` now opens the face `face_selection` names.** 0.6.2 fixed *which* faces were
+  chosen; the feature still built a closed cavity around them. `ShellFeatureInput` has
+  no `facesToRemove` property — assigning one attaches a plain Python attribute to the
+  API wrapper, which reads back as stored, reports `faces.count == 1`, leaves `isValid`
+  true and never reaches Fusion. The faces now travel in the collection `createInput`
+  documents for them. Measured on 2706: a 10x10x2 box with `face_selection="top"` goes
+  from 200 cm³ to **34.112 cm³**, with a 7.84 cm² rim where the top was and no inner
+  ceiling, on both a history-less and a parametric body. Closes the known issue in
+  0.6.2. (#58)
+- **A curve index that names no curve is refused.** `add_constraint`, `add_dimension`,
+  `offset_curve`, `trim_curve`, `extend_curve` and `sweep` indexed the sketch's curve
+  list with no guard, so an index past the end was `UNKNOWN` with no hints, a
+  **negative** index wrapped to the end of the list and returned `ok: true` having
+  touched a curve nobody named, and `True` indexed as 1. All nine sites now refuse with
+  the field, the index, the sketch and the valid range, classify `INVALID_INPUT` with
+  hints, and mock mode refuses the two checks that need no geometry. (#59)
+
+### Changed
+
+- **The add-in's entry points are annotated**, so `mypy` checks their bodies instead of
+  skipping them. Annotating `drain_queue` immediately found a real error: `WorkItem.error`
+  was inferred as `None` from its initialiser while the handler assigned a formatted
+  traceback to it. That field is now `str | None`. (#57)
+
 ## [0.6.2] - 2026-11-08
 
 The release where the joint and face tools say what Fusion actually did. Nothing was
@@ -52,8 +84,9 @@ removed; one field was added to `list_edges`, so this is a patch.
 - **`shell` does not open a face.** With the selection now correct, the geometry can be
   measured: `shell(top)` on a box still produces a closed hollow body, top face intact.
   Fusion is not honouring the removed-face list, so this release fixes *which* faces are
-  chosen, not what Fusion then does with them. Tracked separately; do not read
-  `faces_removed` as proof that a face was opened.
+  chosen, not what Fusion then does with them. **Fixed in 0.6.3** — the face list never
+  reached Fusion at all. On 0.6.2, do not read `faces_removed` as proof that a face opened;
+  the geometry is the evidence, and 0.6.2 has none.
 
 ## [0.6.1] - 2026-11-08
 
