@@ -18,6 +18,8 @@ test fails.
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from .bodies import FakeBody, FakeFace
 from .collection import FakeCollection, FakeDeletable
 from .features import (
@@ -502,9 +504,47 @@ class FakeJointMotion:
     ``slideDirectionVector`` probe would have got wrong), pin_slot exposes both,
     and ball exposes pitch/yaw/roll.
 
+    The **driveable values** are here too, and they are per-motion on purpose: a
+    handler that wrote ``rotationValue`` to a ball joint would be caught, because
+    Fusion's ball motion has pitch/yaw/roll and nothing else.  Unknown attributes
+    raise instead of being conjured by ``setattr`` — a fake that accepts any name
+    cannot tell a working ``set_joint_value`` from one writing a typo.
+
     Each vector follows the measured JointDirections -> world mapping: X is the
     geometry's secondary axis, Y its third, Z its primary.
     """
+
+    #: Driveable values per motion, in Fusion's units: angles in radians, slides
+    #: in centimetres. All start at zero, as a new joint's do.
+    _VALUES: ClassVar[dict[str, tuple[str, ...]]] = {
+        "Revolute": ("rotationValue",),
+        "Slider": ("slideValue",),
+        "Cylindrical": ("rotationValue", "slideValue"),
+        "PinSlot": ("rotationValue", "slideValue"),
+        # Fusion's PlanarJointMotion exposes rotationValue *and* both slides
+        # (read from the shipped adsk/fusion.py: rotationValue + rotationLimits
+        # alongside primary/secondarySlideValue). Omitting the rotation here would
+        # refuse a write Fusion accepts.
+        "Planar": ("rotationValue", "primarySlideValue", "secondarySlideValue"),
+        "Ball": ("pitchValue", "yawValue", "rollValue"),
+    }
+
+    #: The two descriptive strings and the direction vectors, i.e. everything
+    #: Fusion keeps on a motion object that is not a driveable value.
+    _FIXED: ClassVar[frozenset[str]] = frozenset(
+        {
+            "objectType",
+            "jointType",
+            "slideDirectionVector",
+            "rotationAxisVector",
+            "normalDirectionVector",
+            "primarySlideDirectionVector",
+            "secondarySlideDirectionVector",
+            "pitchDirectionVector",
+            "yawDirectionVector",
+            "rollDirectionVector",
+        }
+    )
 
     def __init__(self, setter: str, frame: dict, directions: tuple):
         self.jointType = setter
@@ -512,6 +552,8 @@ class FakeJointMotion:
         self._directions = directions
         name = setter.removeprefix("setAs").removesuffix("JointMotion")
         self.objectType = f"adsk::fusion::{name}JointMotion"
+        for attribute in self._VALUES.get(name, ()):
+            object.__setattr__(self, attribute, 0.0)
         first = frame.get(directions[0]) if directions else None
         second = frame.get(directions[1]) if len(directions) > 1 else None
         # Keyed by JointDirections member, so pick "the others" by key.
@@ -534,6 +576,27 @@ class FakeJointMotion:
             self.pitchDirectionVector = first
             self.yawDirectionVector = second
             self.rollDirectionVector = others[0] if others else None
+
+    def __setattr__(self, name, value):
+        """Accept only attributes the modelled motion really has.
+
+        Fusion's motion objects expose a fixed set, so a table entry naming an
+        attribute the motion does not have is a bug the read-back would otherwise
+        confirm: ``setattr`` creates any name, and ``getattr`` then returns it.
+        Raising here is what makes ``set_joint_value``'s table falsifiable.
+        """
+        if name.startswith("_") or name in self._FIXED:
+            object.__setattr__(self, name, value)
+            return
+        motion = getattr(self, "jointType", "")
+        kind = motion.removeprefix("setAs").removesuffix("JointMotion")
+        if name in self._VALUES.get(kind, ()):
+            object.__setattr__(self, name, value)
+            return
+        raise AttributeError(
+            f"{kind or 'this'}JointMotion has no attribute '{name}' - Fusion "
+            f"exposes {sorted(self._VALUES.get(kind, ()))}"
+        )
 
 
 class FakeJoint(FakeDeletable):

@@ -176,6 +176,26 @@ class FakeJointGeometry:
     def createByCylinderOrConeFace(face, quadrant, key_point):
         return face.joint_geometry_for(quadrant, key_point)
 
+    @staticmethod
+    def createByPoint(point):
+        """``JointGeometry.createByPoint(point)`` — Fusion's one-argument form.
+
+        The occurrence-plus-point form this API used to take raises ``TypeError``
+        on the current Fusion, which is why ``add_joint`` no longer calls it.  The
+        arity is declared here so that a regression reintroducing the two-argument
+        call fails the joint tests, instead of needing a source scan to notice.
+
+        The frame is the identity: nothing measured what Fusion reports for a
+        point geometry, and no handler reads it — a fabricated measurement would
+        be worse than an obviously arbitrary one.
+        """
+        return FakeJointGeometry(
+            origin=(point.x, point.y, point.z),
+            primary=(1.0, 0.0, 0.0),
+            secondary=(0.0, 1.0, 0.0),
+            third=(0.0, 0.0, 1.0),
+        )
+
 
 def _joint_directions() -> types.SimpleNamespace:
     """The three members of ``JointDirections`` a joint motion can be given.

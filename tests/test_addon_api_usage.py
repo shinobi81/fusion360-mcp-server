@@ -6,9 +6,13 @@ departs deliberately — no ``TimelineObject.deleteMe()``, no
 ``MeasureResults.pointOnEntityOne``, no ``Component.interfere()`` — so the call
 shapes these guards protect against fail here the way they failed in Fusion.
 
-``add_joint`` still has source guards in ``test_addon_joints.py``: modelling
-joint motions costs more fake than those guards are worth today, and that
-conversion is a follow-up rather than a silent omission.
+``add_joint`` and ``create_as_built_joint`` used to be the exception, guarded by
+source scans in ``test_addon_joints.py`` because modelling joint motions cost more
+fake than the scans were worth. That conversion is done: the fakes now carry the
+seven ``setAs*JointMotion`` calls, a driveable motion per type (with the value
+attributes Fusion actually exposes), ``asBuiltJoints``, and occurrence transforms.
+``test_addon_joints.py`` is left with table-and-schema checks only — the one place
+where comparing to ``tools.py`` is the only way to catch drift.
 """
 
 from __future__ import annotations

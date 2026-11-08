@@ -1,30 +1,27 @@
-"""Guards for ``add_joint``: geometry, motion types, and no silent fallbacks.
+"""Table-and-schema agreement for the joint tools — and nothing else.
 
-``add_joint`` shipped two defects that a return-value test could never catch,
-because both made the tool *look* like it worked:
+The add-in imports Fusion's ``adsk`` runtime, which exists only inside Fusion, so
+``command_handler`` cannot be imported in CI. Reading a class-level table
+therefore needs ``ast``, and that is the only reason ``ast`` is still here.
 
-* it called ``JointGeometry.createByPoint(occurrence, point)``. The current
-  Fusion API takes a single argument, so the call raised ``TypeError`` and no
-  joint was ever created.
-* it only set motion for ``"rigid"``. Every other ``joint_type`` was added with
-  no motion at all, so Fusion inferred one (usually rigid) while the tool
-  returned ``{"created": True}``.
+**Every claim about behaviour has moved out.** It used to be the other way round:
+this file parsed the source to check that ``add_joint`` returned certain keys, did
+not swallow exceptions, drove joint values without recomputing, converted degrees
+inside the right branch, and validated a face it cannot build from. A source scan
+can see the shape of a statement; it cannot see whether the code runs.
 
-Both defects are structural, so these tests read the add-in with ``ast`` (it
-imports Fusion's ``adsk`` runtime and cannot be imported in CI) and cross-check
-the schema, which lives in the importable package.
+* ``add_joint`` / ``create_as_built_joint`` → ``tests/test_addon_joint_frame.py``
+  (result shape, refusal without geometry, failure propagation, frame resolution);
+* driving a joint → ``tests/test_addon_joint_values.py`` (no recompute, viewport
+  refresh, degrees only for angles, read-back failure, rigid has no value);
+* "``createByPoint`` takes exactly one argument" → the fake declares Fusion's real
+  single-argument signature, so a two-argument call raises ``TypeError`` in any
+  test that reaches it, instead of needing a scan to notice.
 
-The old geometry source is also gone on purpose: component origin points are
-not valid joint geometry - ``joints.add`` rejects them with
-``Invalid parameter point`` because a bare point carries no component
-association. A joint therefore needs a face pair, and the schema says so.
-
-Why these are still source checks: ``test_addon_api_usage.py`` and
-``test_parameter_units.py`` no longer read the source, because the fake runtime
-in ``tests/fakes/`` can now carry their claims.  Joints are different —
-converting them needs a joint model with per-motion attribute tables
-(``_JOINT_VALUE_ATTRIBUTES``, the seven ``setAs*JointMotion`` signatures) and
-driveable motions, which is a follow-up PR rather than an omission.
+What remains below is table-against-schema and table-against-literal. That cannot
+be behavioural by nature: the schema is data, and a table asserting itself proves
+nothing. Each test fails when the add-in's table and the published tool schema
+drift apart, which is the one thing only a source read can catch.
 """
 
 from __future__ import annotations
@@ -71,44 +68,11 @@ def _class_assign(attr: str):
     raise AssertionError(f"CommandHandler.{attr} not found in {HANDLER}")
 
 
-def _method(name: str) -> ast.FunctionDef:
-    tree = ast.parse(HANDLER.read_text())
-    for cls in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
-        if cls.name != "CommandHandler":
-            continue
-        for node in cls.body:
-            if isinstance(node, ast.FunctionDef) and node.name == name:
-                return node
-    raise AssertionError(f"CommandHandler.{name} not found in {HANDLER}")
-
-
 def _schema() -> dict:
     for tool in TOOLS:
         if tool["name"] == "add_joint":
             return tool["inputSchema"]
     raise AssertionError("add_joint schema missing from TOOLS")
-
-
-def test_no_two_argument_create_by_point():
-    """``createByPoint`` takes one argument; passing an occurrence is a TypeError."""
-    tree = ast.parse(HANDLER.read_text())
-    offenders = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        func = node.func
-        if isinstance(func, ast.Attribute) and func.attr == "createByPoint":
-            if len(node.args) != 1:
-                offenders.append(len(node.args))
-        # also catch calls recorded on the class path: JointGeometry.createByPoint(...)
-        if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Attribute):
-            if func.attr == "createByPoint" and len(node.args) != 1:
-                offenders.append(len(node.args))
-    assert not offenders, (
-        "JointGeometry.createByPoint() accepts exactly one argument (a Point3D); "
-        f"found call(s) with argument counts {offenders}. The occurrence-plus-point "
-        "form raises TypeError on the current Fusion API."
-    )
 
 
 def test_joint_motion_setters_cover_every_schema_type():
@@ -132,10 +96,9 @@ def test_joint_motion_setters_cover_every_schema_type():
 def test_motion_setter_arities_are_pinned():
     """Pin the direction counts in _JOINT_MOTION_SETTERS against drift.
 
-    This is an ast check, so it cannot prove Fusion accepts these arities: a
-    wrong table would carry the same wrong numbers. All seven counts were
-    confirmed by creating every joint type in Fusion, which raises TypeError on
-    a wrong argument count.
+    A table read cannot prove Fusion accepts these arities: a wrong table would
+    carry the same wrong numbers. All seven counts were confirmed by creating
+    every joint type in Fusion, which raises TypeError on a wrong argument count.
     """
     setters = _class_assign("_JOINT_MOTION_SETTERS")
 
@@ -146,48 +109,6 @@ def test_motion_setter_arities_are_pinned():
         assert setters[joint_type][1] == 1, (
             f"{joint_type} takes exactly one JointDirections argument"
         )
-
-
-def test_add_joint_requires_face_geometry():
-    """The handler must demand faces and the schema must mark them required."""
-    schema = _schema()
-    required = set(schema["required"])
-    assert {"face_one", "face_two"} <= required, (
-        "face_one/face_two are mandatory joint geometry and must be required in "
-        "the schema, so a caller fails fast instead of getting a runtime error"
-    )
-
-    node = _method("add_joint")
-    args = {a.arg for a in node.args.args} | {a.arg for a in node.args.kwonlyargs}
-    assert {"face_one", "face_two"} <= args, "add_joint must accept face_one/face_two"
-
-    raises = [
-        n for n in ast.walk(node) if isinstance(n, ast.Raise) and n.exc is not None
-    ]
-    assert raises, "add_joint must raise when no joint geometry is supplied"
-
-
-def test_add_joint_does_not_swallow_failures():
-    """No bare ``except`` in the joint path.
-
-    The sibling bugs in this file all shared one root cause: a failing call
-    inside ``except Exception: pass``, so the tool reported success while doing
-    nothing. Joint motion is exactly that shape of failure, so guard it.
-    """
-    node = _method("add_joint")
-    for handler in (n for n in ast.walk(node) if isinstance(n, ast.ExceptHandler)):
-        if handler.type is None:
-            raise AssertionError("bare `except:` in add_joint")
-        if (
-            isinstance(handler.type, ast.Name)
-            and handler.type.id == "Exception"
-            and len(handler.body) == 1
-            and isinstance(handler.body[0], ast.Pass)
-        ):
-            raise AssertionError(
-                "add_joint swallows Exception with `pass`; a failed motion set "
-                "would report success"
-            )
 
 
 def test_the_world_axis_table_covers_the_joint_axes():
@@ -213,80 +134,6 @@ def test_direction_and_quadrant_enums_match_the_schema():
     assert set(props["key_point"]["enum"]) == key_points
 
 
-# ---------------------------------------------------------------------------
-# create_as_built_joint: the non-snapping variant
-# ---------------------------------------------------------------------------
-
-
-def test_as_built_joint_honours_joint_type():
-    """An as-built joint used to ignore joint_type and always be rigid.
-
-    Fusion keeps the components where they are for as-built joints, which makes
-    this the right tool when a design is already positioned - so a silent
-    downgrade to rigid is exactly the wrong failure. Guard that the method uses
-    the shared motion table rather than hard-coding ``setAsRigidJointMotion``.
-    """
-    node = _method("create_as_built_joint")
-
-    used_table = any(
-        (isinstance(n, ast.Name) and n.id == "_JOINT_MOTION_SETTERS")
-        or (isinstance(n, ast.Attribute) and n.attr == "_JOINT_MOTION_SETTERS")
-        for n in ast.walk(node)
-    )
-    assert used_table, (
-        "create_as_built_joint must resolve motion through _JOINT_MOTION_SETTERS; "
-        "hard-coding a setter means joint_type is ignored"
-    )
-
-    raises = [
-        n for n in ast.walk(node) if isinstance(n, ast.Raise) and n.exc is not None
-    ]
-    assert raises, (
-        "create_as_built_joint must raise when a non-rigid joint is requested "
-        "without joint geometry (Fusion: 'Geometry should not be null if joint "
-        "motion is not rigid')"
-    )
-
-
-def test_as_built_joint_schema_mirrors_add_joint():
-    """Both joint tools take the same geometry arguments."""
-    schema = {t["name"]: t["inputSchema"] for t in TOOLS}
-    add = set(schema["add_joint"]["properties"])
-    built = set(schema["create_as_built_joint"]["properties"])
-
-    assert add == built, (
-        "add_joint and create_as_built_joint accept different arguments, which "
-        f"makes the snapping/non-snapping pair confusing.\n"
-        f"  only in add_joint: {sorted(add - built)}\n"
-        f"  only in create_as_built_joint: {sorted(built - add)}"
-    )
-
-
-def test_add_joint_reports_whether_it_moved_the_components():
-    """A joint snaps components together; that must be reported, not hidden.
-
-    On a real assembly this surfaced as a 32.6 mm displacement between the two
-    halves of a hinge - the joint "worked" and quietly rearranged the design.
-    """
-    node = _method("add_joint")
-    returned = [
-        n.value
-        for n in ast.walk(node)
-        if isinstance(n, ast.Return) and isinstance(n.value, ast.Dict)
-    ]
-    assert returned, "add_joint must return a result dict"
-    keys = {
-        k.value
-        for d in returned
-        for k in d.keys
-        if isinstance(k, ast.Constant) and isinstance(k.value, str)
-    }
-    assert {"snapped", "moved_components"} <= keys, (
-        "add_joint must report the component displacement a snap causes "
-        f"(returned keys: {sorted(keys)})"
-    )
-
-
 def test_the_reversed_direction_arguments_are_the_two_measured_types():
     """Two joint types take their directions in the opposite order to `axis`.
 
@@ -297,55 +144,13 @@ def test_the_reversed_direction_arguments_are_the_two_measured_types():
     pin_slot - Fusion takes (rotationDirection, slideDirection), measured on 2706:
     passing the caller's axis first made it the ROTATION axis and left the slide on
     the perpendicular default, so `axis` never controlled the slide. The
-    behavioural half of this guard is
+    behavioural half is
     tests/test_addon_joint_frame.py::test_pin_slot_slides_along_the_axis_asked_for.
     """
     reversed_types = _class_assign("_JOINT_REVERSED_DIRECTION_ARGUMENTS")
     assert set(reversed_types) == {"ball", "pin_slot"}, (
         "exactly these two are measured to need reversed direction arguments, got "
         f"{reversed_types}"
-    )
-
-    for method_name in ("add_joint", "create_as_built_joint"):
-        node = _method(method_name)
-        uses_helper = any(
-            isinstance(n, ast.Attribute) and n.attr == "_apply_joint_motion"
-            for n in ast.walk(node)
-        )
-        assert uses_helper, (
-            f"{method_name} must set motion through _apply_joint_motion so the "
-            "ball direction order (and future quirks) stay in one place"
-        )
-
-
-def test_set_joint_value_never_recomputes_the_design():
-    """A joint value must not be followed by design.computeAll().
-
-    Fusion keeps the value set on a JointMotion until a recompute, which then
-    resets it to zero - the naive "set then recompute" sequence looks exactly
-    like the API silently ignoring the assignment. This command must therefore
-    avoid computeAll and verify the read-back instead.
-    """
-    node = _method("set_joint_value")
-
-    recomputes = [
-        n
-        for n in ast.walk(node)
-        if isinstance(n, ast.Attribute) and n.attr == "computeAll"
-    ]
-    assert not recomputes, (
-        "set_joint_value must not call computeAll: it resets the joint value to "
-        "zero, which is why driving a joint appeared to do nothing"
-    )
-
-    called = {
-        n.func.attr
-        for n in ast.walk(node)
-        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
-    }
-    assert "refresh" in called, "set_joint_value should refresh the viewport"
-    assert any(isinstance(n, ast.Raise) and n.exc for n in ast.walk(node)), (
-        "set_joint_value must raise when Fusion does not keep the requested value"
     )
 
 
@@ -406,59 +211,30 @@ def test_joint_angle_attributes_hold_no_lengths():
     )
 
 
-def test_set_joint_value_converts_degrees_only_inside_the_angle_branch():
-    """The radians conversion must be reachable only for angle attributes."""
-    node = _method("set_joint_value")
+def test_add_joint_schema_requires_the_face_pair():
+    """The face pair is mandatory geometry, so the schema must say so.
 
-    def references_angle_set(tree):
-        return any(
-            isinstance(sub, ast.Attribute) and sub.attr == "_JOINT_ANGLE_ATTRIBUTES"
-            for sub in ast.walk(tree)
-        )
-
-    angle_ifs = [
-        sub
-        for sub in ast.walk(node)
-        if isinstance(sub, ast.If) and references_angle_set(sub.test)
-    ]
-    assert angle_ifs, "set_joint_value must branch on _JOINT_ANGLE_ATTRIBUTES"
-
-    def radians_calls(tree):
-        return [
-            sub
-            for sub in ast.walk(tree)
-            if isinstance(sub, ast.Call)
-            and isinstance(sub.func, ast.Attribute)
-            and sub.func.attr == "radians"
-        ]
-
-    assert len(radians_calls(node)) == 1, (
-        "more than one degrees->radians conversion suggests a length is being "
-        "converted too"
-    )
-    assert radians_calls(angle_ifs[0]), (
-        "the degrees->radians conversion must sit inside the angle branch"
-    )
-
-
-def test_as_built_joint_validates_the_face_it_cannot_use():
-    """``asBuiltJoints.createInput`` takes one geometry, so face_two is unused.
-
-    It is still required by the schema, so both faces must resolve.
+    A caller should fail fast on a missing face instead of reaching Fusion and
+    getting a runtime error. This assertion lived inside the behavioural scan that
+    was retired; it is a pure schema read, which is exactly what this file keeps.
     """
-    node = _method("create_as_built_joint")
-    calls = [
-        sub
-        for sub in ast.walk(node)
-        if isinstance(sub, ast.Call)
-        and isinstance(sub.func, ast.Attribute)
-        and sub.func.attr == "_joint_face"
-    ]
-    labels = [
-        call.args[3].value
-        for call in calls
-        if len(call.args) > 3 and isinstance(call.args[3], ast.Constant)
-    ]
-    assert labels == ["body_one", "body_two"], (
-        f"both faces must be resolved, got {labels}"
+    required = set(_schema()["required"])
+
+    assert {"face_one", "face_two"} <= required, (
+        "face_one/face_two are mandatory joint geometry and must be required in "
+        f"the schema, so a caller fails fast (required: {sorted(required)})"
+    )
+
+
+def test_as_built_joint_schema_mirrors_add_joint():
+    """Both joint tools take the same geometry arguments."""
+    schema = {t["name"]: t["inputSchema"] for t in TOOLS}
+    add = set(schema["add_joint"]["properties"])
+    built = set(schema["create_as_built_joint"]["properties"])
+
+    assert add == built, (
+        "add_joint and create_as_built_joint accept different arguments, which "
+        f"makes the snapping/non-snapping pair confusing.\n"
+        f"  only in add_joint: {sorted(add - built)}\n"
+        f"  only in create_as_built_joint: {sorted(built - add)}"
     )
