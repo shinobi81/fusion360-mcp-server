@@ -7,6 +7,34 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.6.4] - 2026-11-08
+
+The release where a joint frame with no usable axis is refused instead of answered with
+zeros. Nothing was removed, so this is a patch.
+
+### Fixed
+
+- **`add_joint` and `create_as_built_joint` refuse a degenerate joint frame.** The frame's
+  three axes are ranked by `|dot|` against the requested world axis, so a zero-length
+  vector ties with everything and wins arbitrarily: the caller was told `axis_world` was
+  `[0, 0, 0]`, and the joint was built around whichever `JointDirections` member the tie
+  happened to produce. The refusal names the offending axis, carries the whole frame, and
+  classifies `INVALID_INPUT` with hints. Measured on 2706: a cylinder's joint frame reports
+  exactly 1.0 for the squared length of all three axes, so the 1e-12 threshold cannot
+  refuse real geometry. (#61)
+- **`add_joint` no longer builds the frame for a rigid joint.** `rigid` is the default
+  `joint_type` and resolves no direction, so a frame-wide guard would have refused a
+  working default call because of an axis nothing asked for. (#61)
+
+### Changed
+
+- **The joints test suite no longer reads the add-in's source to check behaviour.** Fifteen
+  of its sixteen tests parsed `command_handler.py` with `ast`; the eight behavioural ones
+  now run the handler against the fakes, which model the seven motion setters, a driveable
+  motion per joint type with the value attributes Fusion actually exposes, and
+  `asBuiltJoints`. What remains is table-against-schema checking, which a test cannot
+  observe any other way. No user-facing behaviour changes. (#63)
+
 ## [0.6.3] - 2026-11-08
 
 The release where `shell` opens the face it was told to open, and a curve index past
