@@ -222,9 +222,9 @@ def _feature_operations() -> types.SimpleNamespace:
 def _dimension_orientations() -> types.SimpleNamespace:
     """``DimensionOrientations``: the three ``addDistanceDimension`` orientations.
 
-    ``add_dimension`` picks one per dimension type, so this has to exist for the
-    handler to run at all - it had never been exercised before, which is why it
-    was missing.
+    Only the distance, horizontal and vertical branches of ``add_dimension``
+    read these; angular, radial and diameter never touch the enum.  It has to
+    exist for the handler to run at all, which is why it was missing.
     """
     return types.SimpleNamespace(
         AlignedDimensionOrientation="aligned",

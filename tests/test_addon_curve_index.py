@@ -16,9 +16,11 @@ Measured live on Fusion 2706 against a four-curve sketch: index 99 gave
 ``entity_one=-1, entity_two=-2`` gave ``ok: true``.  So this file pins identity —
 *which* curve was chosen — not merely that something was.
 
-None of these handlers had ever run under a test: the fake sketch had no
-``geometricConstraints``, ``sketchDimensions`` or ``sketchPoints`` at all, so the
-guards below had to be preceded by a fake that can express the call.
+None of the five sketch handlers had ever run under a test: the fake sketch had
+no ``geometricConstraints``, ``sketchDimensions`` or ``sketchPoints`` at all, so
+the guards below had to be preceded by a fake that can express the call.
+``sweep`` is the exception — it already ran, but only ever with the default path
+curve index, so its non-default index is what is new here.
 """
 
 from __future__ import annotations
@@ -164,11 +166,23 @@ def test_sweep_refuses_a_path_curve_index_past_the_end(bound_handler):
     handler = bound_handler(FakeDesign(sketches=[profile, path]))
 
     with pytest.raises(RuntimeError) as raised:
+        # The profile has to be named: without it the handler takes the *last*
+        # sketch, which is the path one, and the call would pass for the wrong
+        # reason.
         handler.sweep(
-            profile_index=0, path_sketch_name="Sketch_path", path_curve_index=7
+            profile_index=0,
+            path_sketch_name="Sketch_path",
+            path_curve_index=7,
+            sketch_name="Sketch_profile",
         )
 
     assert classify(raised.value)[0] == "INVALID_INPUT"
+    assert "path_curve_index" in str(raised.value), (
+        "the refusal names the field, not just the sketch"
+    )
+    assert "has 2 curve(s)" in str(raised.value), (
+        "and the path sketch's count, not the profile's four"
+    )
 
 
 # ── the ordinary case still works ─────────────────────────────────────
@@ -235,3 +249,23 @@ def test_mock_dimension_refuses_a_negative_index(index):
 
     assert result["ok"] is False
     assert result["error_kind"] == "INVALID_INPUT"
+
+
+# Every tool the add-in guards takes an index; mock mode must not answer `ok` for
+# one it can refuse without a sketch (negative, fractional, boolean).
+MOCK_CURVE_INDEX_CALLS = [
+    ("offset_curve", {"curve_index": -1, "offset_distance": 0.5}),
+    ("trim_curve", {"curve_index": -1, "point_x": 0.5, "point_y": 0.0}),
+    ("extend_curve", {"curve_index": 1.5, "point_x": 0.5, "point_y": 0.0}),
+    ("sweep", {"profile_index": 0, "path_sketch_name": "P", "path_curve_index": -1}),
+    ("sweep", {"profile_index": 0, "path_sketch_name": "P", "path_curve_index": True}),
+]
+
+
+@pytest.mark.parametrize(("method", "payload"), MOCK_CURVE_INDEX_CALLS)
+def test_mock_refuses_a_bad_index_in_every_guarded_tool(method, payload):
+    result = mock_command(method, payload)
+
+    assert result["ok"] is False, f"mock mode accepted {method} with {payload}"
+    assert result["error_kind"] == "INVALID_INPUT"
+    assert result["hints"]

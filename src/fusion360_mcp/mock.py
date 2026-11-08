@@ -510,7 +510,7 @@ def _set_design_type(p: dict) -> dict:
 
 
 def _sweep(p: dict) -> dict:
-    refused = _target_body_error(p)
+    refused = _target_body_error(p) or _curve_index_error(p, ("path_curve_index",))
     if refused is not None:
         return refused
     return {
@@ -818,6 +818,9 @@ def _curve_index_error(p: dict, fields: tuple[str, ...]) -> dict | None:
     would teach a sequence Fusion answers differently: Python wraps ``-1`` to the
     last curve, so the real add-in used to dimension a curve nobody named and
     report success (measured live).
+
+    Every mock handler that takes a curve index calls this - the six the add-in
+    guards - so mock mode cannot answer ``ok`` for an index real mode refuses.
     """
     for field in fields:
         index = p.get(field)
@@ -907,6 +910,9 @@ def _draw_spline(p: dict) -> dict:
 
 
 def _offset_curve(p: dict) -> dict:
+    refused = _curve_index_error(p, ("curve_index",))
+    if refused is not None:
+        return refused
     return {
         "sketch_name": p.get("sketch_name", "Sketch1"),
         "offset_distance": p.get("offset_distance", 0.5),
@@ -915,6 +921,9 @@ def _offset_curve(p: dict) -> dict:
 
 
 def _trim_curve(p: dict) -> dict:
+    refused = _curve_index_error(p, ("curve_index",))
+    if refused is not None:
+        return refused
     return {
         "sketch_name": p.get("sketch_name", "Sketch1"),
         "curve_index": p.get("curve_index", 0),
@@ -923,6 +932,9 @@ def _trim_curve(p: dict) -> dict:
 
 
 def _extend_curve(p: dict) -> dict:
+    refused = _curve_index_error(p, ("curve_index",))
+    if refused is not None:
+        return refused
     return {
         "sketch_name": p.get("sketch_name", "Sketch1"),
         "curve_index": p.get("curve_index", 0),

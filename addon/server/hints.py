@@ -315,7 +315,7 @@ _RULES: list[tuple[str, str, list[str]]] = [
         [
             "Curve indices are 0-based: a sketch with N curves offers 0 to N-1.",
             "A negative index is refused, never wrapped: -1 is not the last curve.",
-            "Count the curves first — get_object_info on the sketch lists them.",
+            "Count the curves first: get_object_info reports the sketch's curve_count.",
         ],
     ),
     (
