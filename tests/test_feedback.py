@@ -345,3 +345,19 @@ class TestFormatResult:
 
         text = _text_of(out)
         assert "get_scene_info" in text
+
+
+def test_a_fillet_with_nothing_to_round_is_classified():
+    """Fusion's own refusal, measured on a revolved cone's degenerate edges.
+
+    It used to classify as UNKNOWN with no hints, so a caller learned nothing
+    about why nothing was rounded.
+    """
+    message = (
+        "3 : Fillet2 / Compute Failed // FILLET_NO_EDGE_FOUND - No fillet edge found."
+    )
+
+    kind, hints = classify(message)
+
+    assert kind == "INVALID_INPUT"
+    assert any("is_degenerate" in hint for hint in hints), hints

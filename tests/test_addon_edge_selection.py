@@ -442,6 +442,7 @@ def test_mock_list_edges_returns_the_same_shape():
         "midpoint",
         "length",
         "curve_type",
+        "is_degenerate",
     }
 
 

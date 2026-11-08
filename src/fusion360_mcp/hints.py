@@ -216,8 +216,21 @@ _RULES: list[tuple[str, str, list[str]]] = [
         "INVALID_INPUT",
         [
             "No face of that body lies in the selected plane; nothing was written.",
-            "top and bottom take the faces in the highest or lowest flat plane a "
-            "body has. For anything else, name the faces from execute_code.",
+            "top and bottom take the faces in the highest or lowest flat plane.",
+            "For anything else, name the faces from execute_code.",
+        ],
+    ),
+    (
+        # Fusion's own refusal when it can find no edge it can round among those
+        # given - measured on a revolved cone, whose apex produces degenerate
+        # edges (isDegenerate true, no geometry). It classified UNKNOWN with no
+        # hints, so the caller learned nothing about why nothing was rounded.
+        r"fillet_no_edge_found|no fillet edge found",
+        "INVALID_INPUT",
+        [
+            "Fusion found no edge it can round among those given; nothing was written.",
+            "Check list_edges for is_degenerate.",
+            "Use a smaller radius: an edge shorter than the radius cannot take it.",
         ],
     ),
     (
