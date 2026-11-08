@@ -138,10 +138,39 @@ class FakeJointGeometry:
     geometryType = 7  # Fusion's CylinderOrConeGeometryType
 
     def __init__(self, origin, primary, secondary, third):
-        self.origin = FakePoint3D(*origin)
-        self.primaryAxisVector = FakeVector3D(*primary)
-        self.secondaryAxisVector = FakeVector3D(*secondary)
-        self.thirdAxisVector = FakeVector3D(*third)
+        self._origin = FakePoint3D(*origin)
+        self._primary = FakeVector3D(*primary)
+        self._secondary = FakeVector3D(*secondary)
+        self._third = FakeVector3D(*third)
+        #: Set by ``Joints.add``. Fusion invalidates a JointGeometry once a joint
+        #: is built from it: reading it afterwards fails live with
+        #: "2 : InternalValidationError : face", which is how a handler that
+        #: reported the origin after adding the joint would ship broken.
+        self.consumed = False
+
+    def _check(self) -> None:
+        if self.consumed:
+            raise RuntimeError("2 : InternalValidationError : face")
+
+    @property
+    def origin(self):
+        self._check()
+        return self._origin
+
+    @property
+    def primaryAxisVector(self):
+        self._check()
+        return self._primary
+
+    @property
+    def secondaryAxisVector(self):
+        self._check()
+        return self._secondary
+
+    @property
+    def thirdAxisVector(self):
+        self._check()
+        return self._third
 
     @staticmethod
     def createByCylinderOrConeFace(face, quadrant, key_point):

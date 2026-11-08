@@ -3535,6 +3535,11 @@ class CommandHandler:
         # rigid) joint while reporting success.  The frame matters here: `axis`
         # names a MODEL axis, and Fusion's enum names a JOINT one.
         frame = self._joint_frame(geometries[0])
+        # Read the geometry's own measurements now: adding the joint invalidates
+        # the JointGeometry object, and reading it afterwards fails live with
+        # "2 : InternalValidationError : face".
+        origin = geometries[0].origin
+        primary = geometries[0].primaryAxisVector
         axis_world = self._apply_joint_motion(
             inp, joint_type, axis, second_axis, frame
         )
@@ -3562,8 +3567,6 @@ class CommandHandler:
             if vector is not None:
                 key = attr.removesuffix("Vector")
                 directions[key] = [vector.x, vector.y, vector.z]
-        origin = geometries[0].origin
-        primary = geometries[0].primaryAxisVector
         return {
             "created": True,
             "joint_name": joint.name,
