@@ -27,13 +27,16 @@ from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
 
 #: What Fusion 2706 reports for a cylinder whose axis is world Z, radius 2, z 0..5
-#: with quadrant="middle", key_point="end": the origin is on the SURFACE, never on
-#: the bore, and all sixteen valid combinations were measured to be on it.
+#: with quadrant="middle", key_point="end". The origin is on the SURFACE, never on
+#: the bore, and all sixteen valid combinations were measured to be on it. The
+#: frame is the one `createInput` was handed: X_joint = secondary = -Y,
+#: Y_joint = third = +Z, Z_joint = primary = -X — measured by reading
+#: ``slideDirectionVector`` back for each JointDirections member.
 MEASURED = {
     "origin": (-2.0, 0.0, 5.0),
-    "primary": (0.0, 0.0, 1.0),
-    "secondary": (1.0, 0.0, 0.0),
-    "third": (0.0, 1.0, 0.0),
+    "primary": (-1.0, 0.0, 0.0),
+    "secondary": (0.0, -1.0, 0.0),
+    "third": (0.0, 0.0, 1.0),
 }
 
 
@@ -134,7 +137,9 @@ def test_the_result_reports_where_the_joint_origin_landed(joint):
     _, result, _ = joint(axis="z")
 
     assert result["joint_origin"] == pytest.approx([-2.0, 0.0, 5.0])
-    assert result["primary_axis"] == pytest.approx([0.0, 0.0, 1.0])
+    # primary is the geometry's own frame vector, -X for this body: the field
+    # reports what Fusion said, not what a reader might assume the bore to be.
+    assert result["primary_axis"] == pytest.approx([-1.0, 0.0, 0.0])
 
 
 def test_the_result_reports_the_world_slide_direction(joint):

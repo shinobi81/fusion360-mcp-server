@@ -34,11 +34,6 @@ def _vector(v) -> list:
     return [v.x, v.y, v.z]
 
 
-def _negated(v) -> list:
-    """The same vector reversed — the joint frame needs two of these."""
-    return [-v.x, -v.y, -v.z]
-
-
 class CommandHandler:
     """Runs Fusion API operations.  Instantiated once; reused across requests."""
 
@@ -3609,21 +3604,26 @@ class CommandHandler:
     def _joint_frame(self, geometry) -> dict[str, list[float]]:
         """The joint's own axes, in world terms, from the geometry's frame.
 
-        ``JointDirections`` selects a **joint** axis, not a model one, and the
-        joint's frame is not the model's. Measured on Fusion 2706 with
-        cylinder-face geometry whose bore is world Z: a slider came out along
-        -Y for ``XAxisJointDirection``, +Z for ``YAxisJointDirection`` and -X for
-        ``ZAxisJointDirection``, which is exactly
+        ``JointDirections`` selects a **joint** axis, not a model one. Measured on
+        Fusion 2706 by reading ``slideDirectionVector`` back for each member:
 
-            X = -third,   Y = primary,   Z = -secondary
+            XAxisJointDirection == secondaryAxisVector
+            YAxisJointDirection == thirdAxisVector
+            ZAxisJointDirection == primaryAxisVector
 
-        of the frame the geometry reports. Every direction the caller can ask for
-        is therefore resolved against these three vectors.
+        Across four quadrants (the slide rotated with the quadrant, and matched
+        ``secondary`` in all four), a cylinder whose bore is world X, and a cone.
+        The frame that matters is the one on the geometry passed to
+        ``createInput``: a joint's own ``geometryOrOriginOne`` carries a permuted
+        frame, which is what made an earlier reading look inconsistent.
+
+        Every direction the caller can ask for is therefore resolved against these
+        three vectors.
         """
         return {
-            "x": _negated(geometry.thirdAxisVector),
-            "y": _vector(geometry.primaryAxisVector),
-            "z": _negated(geometry.secondaryAxisVector),
+            "x": _vector(geometry.secondaryAxisVector),
+            "y": _vector(geometry.thirdAxisVector),
+            "z": _vector(geometry.primaryAxisVector),
         }
 
     @staticmethod

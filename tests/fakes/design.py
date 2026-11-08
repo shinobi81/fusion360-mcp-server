@@ -566,16 +566,17 @@ class FakeJoints(FakeCollection):
 
 
 def _joint_frame(geometry) -> dict:
-    """``{JointDirections member: joint-frame vector}`` - the measured mapping."""
+    """``{JointDirections member: joint-frame vector}`` - the measured mapping.
+
+    X is the geometry's secondary axis, Y its third and Z its primary: read back
+    from ``slideDirectionVector`` on Fusion 2706 across four quadrants, a
+    cylinder-X body and a cone.
+    """
     return {
-        "XAxisJointDirection": _negated(geometry.thirdAxisVector),
-        "YAxisJointDirection": geometry.primaryAxisVector,
-        "ZAxisJointDirection": _negated(geometry.secondaryAxisVector),
+        "XAxisJointDirection": geometry.secondaryAxisVector,
+        "YAxisJointDirection": geometry.thirdAxisVector,
+        "ZAxisJointDirection": geometry.primaryAxisVector,
     }
-
-
-def _negated(vector) -> FakeVector3D:
-    return FakeVector3D(-vector.x, -vector.y, -vector.z)
 
 
 class FakeRoot:
