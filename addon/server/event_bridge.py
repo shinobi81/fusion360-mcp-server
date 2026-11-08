@@ -31,7 +31,10 @@ class WorkItem:
     def __init__(self, command: dict):
         self.command = command
         self.result: dict | None = None
-        self.error = None
+        #: A string when execution raised, None when it did not. Annotated because
+        #: ``drain_queue`` assigns a formatted traceback to it, and an untyped
+        #: body let mypy infer ``None`` and skip the check entirely.
+        self.error: str | None = None
         self.done = threading.Event()
         # Set when the waiting socket thread gave up (timeout).  A
         # cancelled item is skipped by drain_queue so a timed-out command
@@ -131,7 +134,7 @@ class EventBridge:
     # Called on Fusion's main thread (from CustomEventHandler.notify)
     # ------------------------------------------------------------------
 
-    def drain_queue(self):
+    def drain_queue(self) -> None:
         """Execute every queued work item (main thread only)."""
         while True:
             try:
