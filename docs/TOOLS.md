@@ -178,18 +178,26 @@ what a selection returns.
 ### What `add_joint` reports, and what `axis` means
 
 `axis` (and `second_axis`) name a **model** axis — `x`, `y`, `z` in world terms.
-Fusion's `JointDirections` enum names a **joint** axis, and the two frames differ, so the
-handler resolves the request against the joint geometry's own axes and passes the nearest
-one. On a cylinder whose bore is world Z that mapping is:
+Fusion's `JointDirections` enum names a **joint** axis, and the two frames are not the
+same: the joint's axes come from the face's parametric frame, so they move with
+`quadrant`. The handler resolves the request against the geometry's own axes and passes
+whichever is closest.
+
+For a cylinder whose bore is world Z with `quadrant="middle"` the joint frame is
+X = −Y, Y = +Z, Z = −X, so:
 
 | requested | slides along |
 | --------- | ------------ |
-| `x`       | −Y           |
-| `y`       | +Z (the bore)|
-| `z`       | −X           |
+| `x`       | −X           |
+| `y`       | −Y           |
+| `z`       | +Z (the bore)|
 
-No member of that frame points along +X, so `axis="x"` gives −X: the closest available
-direction, not the exact one. Read the result rather than assuming the sign.
+The magnitude always matches the request; the **sign** may not, because no member of that
+frame points along +X. Read `axis_world` rather than assuming it.
+
+Measured, so worth not retrying: setting `JointInput.isFlipped` does **not** reverse a
+slider, and a created joint's motion cannot be edited ("Cannot be edited before rolling
+back"), so there is no flip and no probe-then-pick.
 
 Every `add_joint` result carries the measurements behind that:
 
@@ -202,9 +210,6 @@ Every `add_joint` result carries the measurements behind that:
 - `axis_world` — the model-space vector the motion was actually given.
 - `slide_direction` — the direction Fusion reports for it, or `null` for a joint with no
   slide (revolute, rigid).
-
-Setting `JointInput.isFlipped` does **not** reverse a slider: measured, a flipped input
-still slid along −Y. The sign is a property of the frame, so it is reported, not chased.
 
 ## Inspection & Analysis
 
