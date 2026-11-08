@@ -18,6 +18,8 @@ fake derives from the handler's own mapping, so a one-sided change fails.
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 from fusion360_mcp.hints import classify
@@ -550,13 +552,13 @@ def test_the_fake_declares_create_by_point_with_one_argument():
 
     assert geometry.origin.x == 1.0
 
-    # Unpacked on purpose: the call is *meant* to be wrong, and a literal
-    # two-argument call trips CodeQL's wrong-arity rule on the test itself
-    # (py/wrong-number-of-arguments). Unpacking keeps the assertion and hides the
-    # arity from static analysis, which cannot know a test calls a stub wrongly.
-    two_points = (FakePoint3D(0.0, 0.0, 0.0), FakePoint3D(1.0, 0.0, 0.0))
-    with pytest.raises(TypeError):
-        FakeJointGeometry.createByPoint(*two_points)
+    # The arity is asserted declaratively rather than by calling wrongly: a
+    # deliberate two-argument call is exactly what CodeQL's
+    # py/wrong-number-of-arguments flags, and silencing that rule for a test would
+    # be the wrong trade. One parameter beside self is Fusion's signature.
+    assert list(inspect.signature(FakeJointGeometry.createByPoint).parameters) == [
+        "point"
+    ]
 
 
 #: What each joint_type must map to. Hard-coded from Fusion's JointInput, not read
