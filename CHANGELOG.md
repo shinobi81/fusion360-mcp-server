@@ -7,6 +7,48 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.6.1] - 2026-11-08
+
+The release that makes `edge_selection` mean what it says on bodies that are not
+boxes. No API was removed: every parameter and response field is unchanged, which is
+why this is a patch.
+
+### Fixed
+
+- **`fillet` / `chamfer` with `edge_selection="top"` or `"bottom"` refused on bodies
+  whose top is a curved surface.** The threshold came from `body.boundingBox`, so a
+  dome apex or sphere belly — a surface with no edge on it — put the plane where
+  nothing can match. Measured live on 2706 with a plate and a spheroid joined on top
+  (body spans z −2…4, all fourteen edges at z=0 or z=1): both selectors returned
+  `No edges matched` and refused. They now return 5 edges each, and the plane comes
+  from the edges: the highest / lowest one that *holds* an edge. A raking or curved
+  edge can no longer invent a plane that holds nothing. (#46)
+- **`edge_selection="vertical"` selected every closed edge.** The test compared an
+  edge's two vertices, and a `Circle3D`'s vertices are the same point (measured), so
+  the four corner lines came back with two rings on the body above. It reads the
+  edge's own bounding box now. (#46)
+- **Degenerate edges are no longer offered to a fillet.** A revolved cone has two
+  edges flagged `isDegenerate` with no geometry at all, and `fillet` given one fails
+  inside Fusion with `FILLET_NO_EDGE_FOUND`. Every selector skips them; `all` on that
+  cone now rounds 3 of its 5 edges and succeeds instead of failing on all five.
+  `list_edges` still reports them. (#46)
+- **"No edges matched" and "Unknown edge_selection" classified as `UNKNOWN` with no
+  hints.** Both now return `INVALID_INPUT` with a next step, and a body with no edges
+  at all (a `create_sphere` body has none) says so instead of reporting that nothing
+  matched — its hint would otherwise have sent the caller to `list_edges` on a body
+  with nothing to list. (#46)
+
+### Changed
+
+- **`top` and `bottom` are defined by the edges, not by the body.** On a plain box the
+  result is unchanged (four edges each). On a body where the two disagree — a flat top
+  ring below a slanted edge, a domed top — the flat ring is what comes back, and a
+  caller who wants an edge that merely reaches the top names it by index or point.
+- **Mock mode refuses an edge-selector combination real mode refuses**: two selectors
+  at once, a selector combined with an index list, an empty list, a non-integer index,
+  a two-coordinate point, and an unknown `edge_selection`. Mock mode is where a
+  sequence gets developed; it should not accept a call Fusion rejects. (#46)
+
 ## [0.6.0] - 2026-11-07
 
 The release that lets a caller say **which body a feature touches**, and stops the API
