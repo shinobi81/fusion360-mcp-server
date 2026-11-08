@@ -113,6 +113,11 @@ at all is refused instead — `INVALID_INPUT`, where Fusion's own message is
 - `edge_points` + `edge_tolerance` (cm, default 0.1) — each point snaps to its nearest edge;
   a point too far away, or one equally close to two edges, is refused with the measurement.
 
+Every selector skips **degenerate** edges — the ones Fusion flags with
+`isDegenerate`, which have no geometry at all (a cone's apex produces them) and
+which no fillet can round. `list_edges` still reports them, so a `count` can exceed
+what a selection returns.
+
 ## Body Operations
 
 | Tool                | Description                                         |

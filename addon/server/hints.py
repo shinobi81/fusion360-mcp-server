@@ -212,6 +212,18 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # Two causes, two messages, and the hint has to fit both: a body with no
+        # edges has nothing to list, so pointing such a caller at list_edges would
+        # send them to an empty answer.
+        r"has no edges to select from|has no edges that can be rounded",
+        "INVALID_INPUT",
+        [
+            "That body has nothing a fillet can round; nothing was written.",
+            "A degenerate edge (a cone's apex) has no geometry. Check the body and "
+            "its edges with list_edges before choosing a selector.",
+        ],
+    ),
+    (
         # The coarse selectors take the highest / lowest plane that holds an
         # *edge*.  Nothing matching is a real answer — a body whose top is a
         # curved surface has no edge in a top plane — and live it classified as

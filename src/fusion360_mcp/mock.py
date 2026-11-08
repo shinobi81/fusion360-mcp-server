@@ -315,6 +315,9 @@ def _revolve(p: dict) -> dict:
     }
 
 
+# The same four the handler accepts and tools.py advertises.  A fifth value added
+# in one place and not the others would make mock mode refuse a valid call, so
+# tests/test_addon_edge_selection.py asserts the three agree.
 _EDGE_SELECTIONS = ("all", "top", "bottom", "vertical")
 
 
@@ -322,10 +325,15 @@ def _edge_selector_error(p: dict) -> dict | None:
     """The add-in's refusals of an edge-selector combination, or None.
 
     Mock mode cannot search a body, so it cannot tell which edges a selection
-    matches — but the *combination* rules and the enum are pure parameter checks,
-    and the handler refuses all of them before it looks at a body.  Echoing an
-    accepted call here would teach a sequence Fusion refuses, which is the
-    fiction #34 removed from the CAM mocks.
+    matches — but the *combination* rules, the element types and the enum are pure
+    parameter checks that ``_select_edges`` makes before it examines an edge.
+    Echoing an accepted call here would teach a sequence Fusion refuses, which is
+    the fiction #34 removed from the CAM mocks.
+
+    These fire inside ``_select_edges``, not before the body lookup: ``fillet``
+    resolves ``body_name`` first, so a call with both a bad body and a bad selector
+    answers ``BODY_NOT_FOUND`` in real mode and ``INVALID_INPUT`` here.  Mock mode
+    has no bodies to look up, so that difference cannot be removed.
     """
     indices = p.get("edge_indices")
     points = p.get("edge_points")
@@ -351,6 +359,15 @@ def _edge_selector_error(p: dict) -> dict | None:
             "edge_points was empty — name at least one point, or omit it to "
             "use edge_selection"
         )
+    for index in indices or []:
+        if isinstance(index, bool) or not isinstance(index, int):
+            return _mock_error(
+                f"Edge index {index!r} is out of range — indices are whole "
+                "numbers from list_edges"
+            )
+    for point in points or []:
+        if not isinstance(point, (list, tuple)) or len(point) != 3:
+            return _mock_error("edge point needs three coordinates")
     if selection not in _EDGE_SELECTIONS:
         return _mock_error(
             f"Unknown edge_selection '{selection}' — use all/top/bottom/vertical"
