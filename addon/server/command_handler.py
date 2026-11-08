@@ -369,10 +369,18 @@ class CommandHandler:
     }
 
     # Joint types whose two direction arguments are (something, primary) rather
-    # than (primary, something). Fusion's ball joint takes
-    # (pitchDirection, yawDirection) and rejects a pitch parallel to the joint
-    # axis with "Invalid parameter pitchDirection".
-    _JOINT_REVERSED_DIRECTION_ARGUMENTS = frozenset({"ball"})
+    # than (primary, something), so the caller's `axis` is passed second.
+    #
+    # ball: takes (pitchDirection, yawDirection) and rejects a pitch parallel to
+    # the joint axis with "Invalid parameter pitchDirection", so the perpendicular
+    # one goes first (verified on 2705).
+    #
+    # pin_slot: measured on 2706, `setAsPinSlotJointMotion(a, b)` makes `a` the
+    # ROTATION axis and `b` the slide. Passing the caller's axis first - which is
+    # what this did - made `axis` the rotation and left the slide on the
+    # perpendicular default. The result's `directions` field is what exposed it:
+    # `axis_world` said -X while Fusion reported slideDirection [0,0,1].
+    _JOINT_REVERSED_DIRECTION_ARGUMENTS = frozenset({"ball", "pin_slot"})
 
     # How far an edge's extent may sit from a plane and still count as lying in
     # it, and how much x/y extent still counts as no extent at all. 1e-3 cm is
@@ -3599,7 +3607,7 @@ class CommandHandler:
 
         * rigid                    -> no direction arguments
         * revolute/slider/cylindrical/planar -> one JointDirections
-        * pin_slot                 -> (slideDirection, rotationDirection)
+        * pin_slot                 -> (rotationDirection, slideDirection) — measured
         * ball                     -> (pitchDirection, yawDirection); Fusion
           rejects a pitch that is parallel to the joint axis
           (`Invalid parameter pitchDirection`), so the perpendicular axis is

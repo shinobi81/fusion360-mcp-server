@@ -163,6 +163,25 @@ def test_the_design_is_recomputed_once_after_the_joint_is_added(joint):
     assert handler._design().compute_all_calls == 1
 
 
+def test_pin_slot_slides_along_the_axis_asked_for(joint):
+    """Measured on 2706: `setAsPinSlotJointMotion(a, b)` makes `a` the ROTATION.
+
+    Before pin_slot joined the reversed set, `axis` landed on the rotation and the
+    slide stayed on the perpendicular default, so a pin slot never slid where it
+    was told. The fake now reports the same order Fusion does, so this test fails
+    on the old call order.
+    """
+    _, result, inp = joint(axis="x", joint_type="pin_slot")
+
+    assert result["directions"]["slideDirection"] == pytest.approx(
+        result["axis_world"]
+    ), "the slide must follow the axis the caller asked for, not the default"
+    assert inp.motion_directions[1] == "ZAxisJointDirection", (
+        "the caller's axis must be passed SECOND, because Fusion reads the first "
+        "argument as the rotation"
+    )
+
+
 # ── what the result reports ───────────────────────────────────────────
 
 

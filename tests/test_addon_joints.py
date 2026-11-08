@@ -287,16 +287,23 @@ def test_add_joint_reports_whether_it_moved_the_components():
     )
 
 
-def test_ball_joint_reverses_its_direction_arguments():
-    """Fusion's ball joint takes (pitchDirection, yawDirection).
+def test_the_reversed_direction_arguments_are_the_two_measured_types():
+    """Two joint types take their directions in the opposite order to `axis`.
 
-    Passing the caller's axis first raises ``Invalid parameter pitchDirection``
-    whenever that axis is parallel to the joint axis - verified on 2705:
-    (X, Z) failed, (Z, X) produced a BallJointMotion.
+    ball - Fusion takes (pitchDirection, yawDirection) and rejects a pitch
+    parallel to the joint axis: verified on 2705, (X, Z) failed and (Z, X)
+    produced a BallJointMotion.
+
+    pin_slot - Fusion takes (rotationDirection, slideDirection), measured on 2706:
+    passing the caller's axis first made it the ROTATION axis and left the slide on
+    the perpendicular default, so `axis` never controlled the slide. The
+    behavioural half of this guard is
+    tests/test_addon_joint_frame.py::test_pin_slot_slides_along_the_axis_asked_for.
     """
     reversed_types = _class_assign("_JOINT_REVERSED_DIRECTION_ARGUMENTS")
-    assert set(reversed_types) == {"ball"}, (
-        f"only ball is known to need reversed direction arguments, got {reversed_types}"
+    assert set(reversed_types) == {"ball", "pin_slot"}, (
+        "exactly these two are measured to need reversed direction arguments, got "
+        f"{reversed_types}"
     )
 
     for method_name in ("add_joint", "create_as_built_joint"):

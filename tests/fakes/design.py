@@ -455,8 +455,11 @@ class FakeJointMotion:
         elif name in ("Revolute", "Cylindrical"):
             self.rotationAxisVector = first
         elif name == "PinSlot":
-            self.slideDirectionVector = first
-            self.rotationAxisVector = second
+            # Measured on 2706: the FIRST argument becomes the rotation axis and
+            # the second the slide - the opposite of what the add-in's own
+            # docstring claimed for years.
+            self.rotationAxisVector = first
+            self.slideDirectionVector = second
         elif name == "Planar":
             self.normalDirectionVector = first
             self.primarySlideDirectionVector = others[0]
