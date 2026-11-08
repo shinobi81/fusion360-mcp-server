@@ -16,7 +16,13 @@ import pytest
 
 from fusion360_mcp.hints import classify
 from fusion360_mcp.mock import mock_command
-from tests.fakes.bodies import body_with_edges
+from tests.fakes.bodies import (
+    FakeBody,
+    FakeBoundingBox,
+    FakeEdge,
+    FakeEdges,
+    body_with_edges,
+)
 from tests.fakes.design import FakeDesign
 
 
@@ -43,12 +49,13 @@ def test_all_selects_every_edge(select):
     assert coll.count == 2
 
 
-def test_top_selects_the_edge_whose_midpoint_is_highest(select):
-    """Three heights, so a wrong threshold changes which edges come back.
+def test_top_selects_the_edge_in_the_highest_plane(select):
+    """Three heights, so a wrong plane changes which edges come back.
 
-    With edges at z = 0, 2.5 and 5, a threshold taken from the *top* of the box
-    returns one edge and a threshold taken from the bottom returns two, which is
-    how this test tells the two apart.
+    The plane is the highest one that holds *any* edge, which is z=5 here.  A
+    plane taken from the body's box would be the same number in this fixture,
+    so the difference between the two rules is pinned by the tests below, where
+    the body spans past every edge it owns.
     """
     coll = select(
         [
@@ -62,7 +69,7 @@ def test_top_selects_the_edge_whose_midpoint_is_highest(select):
     assert coll.item(0).pointOnEdge.z == pytest.approx(5.0)
 
 
-def test_bottom_selects_the_edge_whose_midpoint_is_lowest(select):
+def test_bottom_selects_the_edge_in_the_lowest_plane(select):
     coll = select(
         [
             ((0, 0, 0), (1, 0, 0)),
@@ -75,11 +82,12 @@ def test_bottom_selects_the_edge_whose_midpoint_is_lowest(select):
     assert coll.item(0).pointOnEdge.z == pytest.approx(0.0)
 
 
-def test_vertical_selects_only_edges_whose_ends_share_x_and_y(select):
-    """The selected edge's own ends must differ in z — a count is not enough.
+def test_vertical_selects_only_edges_with_no_x_or_y_extent(select):
+    """The predicate reads the edge's box, not its two ends (renamed for that).
 
-    Both edges are at the same height, so an assertion on ``count`` alone passes
-    even when the predicate is inverted: the test has to name the geometry.
+    The selected edge's own ends must differ in z — a count is not enough, since
+    both edges are at the same height and an inverted predicate passes a count.
+    The closed-edge case this rename came with is the test below.
     """
     coll = select(
         [((0, 0, 0), (0, 0, 2)), ((0, 0, 0), (3, 0, 0))],
@@ -99,26 +107,266 @@ def test_an_unknown_selection_names_the_four_it_accepts(select):
 
 
 def test_a_selection_that_matches_nothing_says_so(select):
-    """A body whose edges are all at mid-height has no 'top' edge.
+    """One vertical edge reaches the top plane without lying in it.
 
     The refusal is what stops a fillet from silently rounding nothing and
-    reporting ``edges_count: 0`` as success.
+    reporting ``edges_count: 0`` as success — and rounding a vertical edge as
+    "the top" would be worse than the refusal.
     """
     with pytest.raises(RuntimeError) as raised:
         select([((0, 0, 0), (0, 0, 5))], "top")
     assert "No edges matched" in str(raised.value)
 
 
+# ── top/bottom: the plane is the edges', not the body's ───────────────
+
+
+def test_top_uses_the_highest_edge_plane_not_the_body_extreme(bound_handler):
+    """Measured live: a plate (z 0..1) with a spheroid joined on top spanned
+    z -2..4, and all 14 of its edges lay at z=0 or z=1.
+
+    A threshold taken from the body's own max Z then matched no edge at all and
+    both selectors refused, on a body whose top edges are perfectly ordinary.
+    The plane has to come from the edges.
+    """
+    body = body_with_edges(
+        "Domed",
+        [((0, 0, 0), (1, 0, 0)), ((0, 0, 1), (1, 0, 1))],
+        bounding_box=FakeBoundingBox((0.0, 0.0, -2.0), (1.0, 1.0, 4.0)),
+    )
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    coll = handler._select_edges(body, "top")
+
+    assert [edge.index for edge in coll] == [1]
+    assert coll.item(0).pointOnEdge.z == pytest.approx(1.0)
+
+
+def test_bottom_uses_the_lowest_edge_plane_not_the_body_extreme(bound_handler):
+    """The same body refused `bottom` too: its belly reached z=-2 with no edge."""
+    body = body_with_edges(
+        "Domed",
+        [((0, 0, 0), (1, 0, 0)), ((0, 0, 1), (1, 0, 1))],
+        bounding_box=FakeBoundingBox((0.0, 0.0, -2.0), (1.0, 1.0, 4.0)),
+    )
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    coll = handler._select_edges(body, "bottom")
+
+    assert [edge.index for edge in coll] == [0]
+    assert coll.item(0).pointOnEdge.z == pytest.approx(0.0)
+
+
+def test_an_edge_that_only_reaches_the_top_plane_is_not_a_top_edge(select):
+    """Whole-edge membership: the vertical edge spans 0..1, so it is not at z=1.
+
+    A single point on the edge is not enough to place it — the same reason
+    point-to-edge distance is not point-to-sample distance (#40).
+    """
+    coll = select(
+        [
+            ((0, 0, 1), (1, 0, 1)),
+            ((0, 0, 0), (0, 0, 1)),
+            ((0, 0, 0), (1, 0, 0)),
+        ],
+        "top",
+    )
+    assert [edge.index for edge in coll] == [0]
+
+
+def test_the_top_plane_holds_every_edge_that_lies_in_it(select):
+    """A plate's four top lines are one plane, so all four come back."""
+    coll = select(
+        [
+            ((0, 0, 1), (4, 0, 1)),
+            ((4, 0, 1), (4, 3, 1)),
+            ((4, 3, 1), (0, 3, 1)),
+            ((0, 3, 1), (0, 0, 1)),
+            ((0, 0, 0), (4, 0, 0)),
+            ((0, 0, 0), (0, 0, 1)),
+        ],
+        "top",
+    )
+    assert [edge.index for edge in coll] == [0, 1, 2, 3]
+
+
+def test_the_no_match_refusal_is_classified_and_names_the_next_step(select):
+    """Live, this refusal was UNKNOWN with no hints — the mode AGENTS.md forbids."""
+    with pytest.raises(RuntimeError) as raised:
+        select([((0, 0, 0), (0, 0, 5))], "top")
+    kind, hints = classify(raised.value)
+    assert kind == "INVALID_INPUT"
+    assert any("list_edges" in hint for hint in hints), hints
+
+
+def test_planes_closer_than_the_epsilon_are_one_plane(bound_handler):
+    """A 5 µm foil has no top to tell from its bottom, and the old code agreed.
+
+    ``_EDGE_PLANE_EPSILON`` is 1e-3 cm, which was also the old threshold's slack:
+    measured, this body returned all three edges for ``top`` *and* ``bottom``
+    before the fix and returns all three now.  Pinned so the merge is a decision
+    rather than an accident of the constant, and so a future tightening of the
+    epsilon has to notice this case.
+    """
+    body = body_with_edges(
+        "Foil",
+        [
+            ((0, 0, 0), (1, 0, 0)),
+            ((0, 0, 0.0005), (1, 0, 0.0005)),
+            ((0, 0, 0), (0, 0, 0.0005)),
+        ],
+    )
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    assert [e.index for e in handler._select_edges(body, "top")] == [0, 1, 2]
+    assert [e.index for e in handler._select_edges(body, "bottom")] == [0, 1, 2]
+    # The vertical answer is unaffected by the merged planes.
+    assert [e.index for e in handler._select_edges(body, "vertical")] == [2]
+
+
+def test_an_unknown_selection_is_classified_too(select):
+    """The kind alone does not prove *which* rule fired — the hint text does."""
+    with pytest.raises(RuntimeError) as raised:
+        select([((0, 0, 0), (1, 0, 0))], "diagonal")
+    kind, hints = classify(raised.value)
+    assert kind == "INVALID_INPUT"
+    assert any("edge_selection is one of" in hint for hint in hints), hints
+
+
+def test_an_edge_whose_sample_is_at_the_top_but_sags_is_not_top(bound_handler):
+    """The case a single sample cannot see, modelled the way Fusion behaves.
+
+    A curved edge's ``pointOnEdge`` is its parameter midpoint, which can sit in
+    the top plane while the edge reaches below it — a ``Circle3D`` seam is
+    exactly that shape (measured: its two vertices are one point and its box
+    spans the circle).  The old sample rule selected this edge; the whole-extent
+    rule excludes it, and with no other flat edge the answer is a refusal rather
+    than a wrong edge.
+    """
+    sagging = FakeEdge(
+        (0.0, 0.0, 1.0),
+        (2.0, 0.0, 1.0),
+        index=0,
+        curve_type="Arc3D",
+        bounding_box=FakeBoundingBox((0.0, 0.0, 0.2), (2.0, 0.0, 1.0)),
+    )
+    assert sagging.pointOnEdge.z == pytest.approx(1.0), "the sample really is top"
+
+    only = FakeBody("Dome", edges=FakeEdges([sagging]))
+    alone = bound_handler(FakeDesign(bodies=[only]))
+    with pytest.raises(RuntimeError) as raised:
+        alone._select_edges(only, "top")
+    assert "No edges matched" in str(raised.value)
+
+    floor = FakeEdge((0.0, 0.0, 0.0), (2.0, 0.0, 0.0), index=1)
+    body = FakeBody("Domed", edges=FakeEdges([sagging, floor]))
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    # The floor is the only plane that holds an edge, so it is what comes back.
+    assert [e.index for e in handler._select_edges(body, "top")] == [1]
+
+
+def test_a_raking_edge_does_not_invent_a_top_plane(bound_handler):
+    """Docs promise the highest plane that *holds* an edge, so one is not enough.
+
+    A tilted or curved edge's box peaks at a single point, in no plane at all.
+    Taking that peak as the plane would refuse a body whose flat top ring is
+    perfectly ordinary — the same shape of defect the body-bbox threshold had.
+    """
+    flat = FakeEdge((0.0, 0.0, 1.0), (2.0, 0.0, 1.0), index=0)
+    raking = FakeEdge((0.0, 0.0, 1.0), (1.0, 0.0, 2.0), index=1)
+    body = FakeBody("Drafted", edges=FakeEdges([flat, raking]))
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    assert [e.index for e in handler._select_edges(body, "top")] == [0]
+
+
+def test_a_curved_edge_without_an_explicit_box_refuses_to_guess(bound_handler):
+    """The fake must not invent a box for a curve — an endpoint box is a lie.
+
+    Fusion's ``Circle3D`` has one vertex, so an endpoint-derived box is a point,
+    and a test that trusted it would pass on the exact falsehood the ``vertical``
+    fix removed.  ``ARCHITECTURE.md`` says the fakes model Fusion's awkwardness on
+    purpose; this is that policy enforced.
+    """
+    ring = FakeEdge((0.0, 0.0, 1.0), (0.0, 0.0, 1.0), curve_type="Circle3D")
+    with pytest.raises(RuntimeError) as raised:
+        ring.boundingBox
+    assert "needs an explicit bounding_box" in str(raised.value)
+
+
+def test_degenerate_edges_are_never_selected(bound_handler):
+    """A cone apex: measured on 2706, ``isDegenerate`` true and geometry ``None``.
+
+    Handing one to ``fillet`` fails inside Fusion with ``FILLET_NO_EDGE_FOUND``,
+    so a selector that returns them is offering work that cannot be done.  Their
+    zero-extent box would also satisfy ``vertical`` for no good reason.
+    """
+    apex = FakeEdge((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), index=0)
+    apex.isDegenerate = True
+    post = FakeEdge((0.0, 0.0, 0.0), (0.0, 0.0, 2.0), index=1)
+    rim = FakeEdge((1.0, 0.0, 2.0), (2.0, 0.0, 2.0), index=2)
+    body = FakeBody("Cone", edges=FakeEdges([apex, post, rim]))
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    assert [e.index for e in handler._select_edges(body, "all")] == [1, 2]
+    assert [e.index for e in handler._select_edges(body, "vertical")] == [1]
+    assert [e.index for e in handler._select_edges(body, "top")] == [2]
+
+
+def test_a_body_whose_every_edge_is_degenerate_says_so(bound_handler):
+    apex = FakeEdge((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), index=0)
+    apex.isDegenerate = True
+    body = FakeBody("Cone", edges=FakeEdges([apex]))
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    with pytest.raises(RuntimeError) as raised:
+        handler._select_edges(body, "all")
+    assert "no edges that can be rounded" in str(raised.value)
+    assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_a_closed_edge_whose_ends_coincide_is_not_vertical(bound_handler):
+    """Measured live on Fusion 2706: a Circle3D's two vertices are one point.
+
+    An end-to-end test therefore calls *every* circle edge vertical.  On the
+    plate-plus-spheroid body it selected two rings and missed nothing else; the
+    edge's own box says the ring spans 6 cm in x, which no vertical edge does.
+    """
+    ring = FakeEdge(
+        (0.0, 0.0, 1.0),
+        (0.0, 0.0, 1.0),
+        curve_type="Circle3D",
+        index=0,
+        bounding_box=FakeBoundingBox((-3.0, -3.0, 1.0), (3.0, 3.0, 1.0)),
+    )
+    post = FakeEdge((0.0, 0.0, 0.0), (0.0, 0.0, 1.0), index=1)
+    body = FakeBody("Domed", edges=FakeEdges([ring, post]))
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    coll = handler._select_edges(body, "vertical")
+
+    assert [edge.index for edge in coll] == [1]
+
+
 def test_a_body_with_no_edges_refuses_rather_than_selecting_nothing(select):
     """``all`` on a body with no edges raises, and that is deliberate.
 
     The refusal is what stops a fillet from rounding nothing and reporting
-    ``edges_count: 0`` as success.  A *listing* of a zero-edge body is a different
-    question, answered by ``list_edges``.
+    ``edges_count: 0`` as success.  It says *no edges*, not *nothing matched*:
+    the hint for a match failure sends the caller to ``list_edges``, which is
+    useless on a body with nothing to list.  A *listing* of a zero-edge body is a
+    different question, answered by ``list_edges``.
     """
     with pytest.raises(RuntimeError) as raised:
         select([], "all")
-    assert "No edges matched" in str(raised.value)
+    assert "has no edges to select from" in str(raised.value)
+    assert "No edges matched" not in str(raised.value)
+    kind, hints = classify(raised.value)
+    assert kind == "INVALID_INPUT"
+    # The kind alone cannot prove *this* rule fired — the generic INVALID_INPUT
+    # rule gives the same kind, so the hint text is the assertion (§14).
+    assert any("nothing a fillet can round" in hint for hint in hints), hints
 
 
 # ── list_edges ────────────────────────────────────────────────────────
@@ -251,6 +499,29 @@ def test_fillet_rounds_the_edges_the_index_named(bound_handler):
     assert recorded == [1]
 
 
+def test_fillet_rounds_the_edges_edge_selection_top_chose(bound_handler):
+    """Closes the loop the direct ``_select_edges`` tests leave open.
+
+    They prove which edges the collection holds; this proves the feature is told
+    to round those and nothing else, which is the end of the path a caller sees.
+    """
+    body = body_with_edges(
+        "Plate",
+        [
+            ((0, 0, 1), (4, 0, 1)),
+            ((4, 0, 1), (4, 3, 1)),
+            ((0, 0, 0), (4, 0, 0)),
+            ((0, 0, 0), (0, 0, 1)),
+        ],
+    )
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    result = handler.fillet(radius=0.3, body_name="Plate", edge_selection="top")
+
+    assert result["edges_count"] == 2
+    assert handler._root().features.filletFeatures.last_edge_indices == [0, 1]
+
+
 def test_chamfer_bevels_the_edges_the_index_named(bound_handler):
     body = body_with_edges(
         "Plate",
@@ -362,6 +633,65 @@ def test_mock_chamfer_counts_points_as_edges():
 
 def test_mock_without_a_selector_reports_a_whole_body():
     assert mock_command("fillet", {"radius": 0.3})["edges_count"] > 1
+
+
+@pytest.mark.parametrize(
+    ("command", "params", "expected_kind"),
+    [
+        # Two ways of naming the same edges: the handler refuses before it looks
+        # at a body, so mock mode must not accept a call Fusion would refuse.
+        (
+            "fillet",
+            {"radius": 0.3, "edge_indices": [0], "edge_points": [[0, 0, 0]]},
+            "INVALID_INPUT",
+        ),
+        (
+            "chamfer",
+            {"distance": 0.2, "edge_selection": "top", "edge_indices": [0]},
+            "INVALID_INPUT",
+        ),
+        ("fillet", {"radius": 0.3, "edge_indices": []}, "INVALID_INPUT"),
+        ("fillet", {"radius": 0.3, "edge_points": []}, "INVALID_INPUT"),
+        ("fillet", {"radius": 0.3, "edge_selection": "diagonal"}, "INVALID_INPUT"),
+        # Element types are the same kind of pure check: the handler refuses a
+        # fractional index and a two-coordinate point before it looks at a body.
+        ("fillet", {"radius": 0.3, "edge_indices": [1.9]}, "INVALID_INPUT"),
+        ("fillet", {"radius": 0.3, "edge_points": [[0, 0]]}, "INVALID_INPUT"),
+    ],
+)
+def test_mock_refuses_what_the_handler_refuses(command, params, expected_kind):
+    """Every one of these is a pure parameter check — no geometry needed."""
+    result = mock_command(command, params)
+    assert result["ok"] is False
+    assert result["error_kind"] == expected_kind
+    assert result["hints"], "a refusal with no hints is the mode AGENTS.md forbids"
+
+
+def test_mock_still_accepts_one_selector_at_a_time():
+    """The refusals above must not have turned a valid call into a refusal."""
+    assert mock_command("fillet", {"radius": 0.3, "edge_selection": "top"})["ok"]
+    assert mock_command("fillet", {"radius": 0.3, "edge_indices": [0, 1]})["ok"]
+    assert mock_command("fillet", {"radius": 0.3, "edge_points": [[0, 0, 0]]})["ok"]
+
+
+def test_the_edge_selection_enum_agrees_in_all_three_places():
+    """Mock mode refuses an unknown selection against its *own* copy of the enum.
+
+    Three copies exist — this one, the handler's message, and ``tools.py``'s
+    schema — so a fifth selection added to one of them would make mock mode
+    refuse a call real mode accepts.  Same idea as ``test_addon_sync.py``.
+    """
+    from fusion360_mcp import mock, tools
+
+    advertised = set()
+    for tool in tools.TOOLS:
+        enum = tool["inputSchema"]["properties"].get("edge_selection", {}).get("enum")
+        if enum:
+            advertised.add(tuple(enum))
+    assert advertised == {tuple(mock._EDGE_SELECTIONS)}, (
+        "tools.py and the mock disagree about the edge_selection enum: "
+        f"{advertised} vs {mock._EDGE_SELECTIONS}"
+    )
 
 
 # ── refusals the review asked for ─────────────────────────────────────

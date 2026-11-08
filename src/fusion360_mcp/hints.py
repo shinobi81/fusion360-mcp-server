@@ -209,6 +209,41 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # Two causes, two messages, and the hint has to fit both: a body with no
+        # edges has nothing to list, so pointing such a caller at list_edges would
+        # send them to an empty answer.
+        r"has no edges to select from|has no edges that can be rounded",
+        "INVALID_INPUT",
+        [
+            "That body has nothing a fillet can round; nothing was written.",
+            "A degenerate edge (a cone's apex) has no geometry.",
+            "Check the body with list_edges before choosing a selector.",
+        ],
+    ),
+    (
+        # The coarse selectors take the highest / lowest plane that holds an
+        # *edge*.  Nothing matching is a real answer — a body whose top is a
+        # curved surface has no edge in a top plane — and live it classified as
+        # UNKNOWN with no hints, which AGENTS.md says must never ship.
+        r"no edges matched selection",
+        "INVALID_INPUT",
+        [
+            "No edge of that body lies in the selected plane; nothing was written.",
+            "top and bottom take the highest/lowest edges a body has.",
+            "Call list_edges and pick with edge_indices or edge_points.",
+        ],
+    ),
+    (
+        # The message already lists the four it accepts; without a rule the
+        # caller got UNKNOWN and a traceback for a one-word typo.
+        r"unknown edge_selection",
+        "INVALID_INPUT",
+        [
+            "edge_selection is one of all / top / bottom / vertical.",
+            "Pass edge_indices or edge_points to name edges exactly.",
+        ],
+    ),
+    (
         # Fusion's own refusal when a cut reaches no body — found live on a sweep
         # whose profile sat outside every block. It classified as UNKNOWN with no
         # hints, so the caller learned nothing about why nothing was cut.

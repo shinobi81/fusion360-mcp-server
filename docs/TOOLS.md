@@ -99,12 +99,24 @@ at all is refused instead — `INVALID_INPUT`, where Fusion's own message is
 
 `fillet` and `chamfer` accept exactly one selector:
 
-- `edge_selection` — the coarse filter (`all`, `top`, `bottom`, `vertical`);
-  `top` means the highest edges of the body's bounding box.
+- `edge_selection` — the coarse filter (`all`, `top`, `bottom`, `vertical`). `top`
+  and `bottom` take the edges lying in the highest / lowest plane that holds *any*
+  edge, and the plane is measured from the edges, not from the body's bounding
+  box: on a body whose top is a curved surface (a dome joined onto a plate) the
+  extreme carries no edge, and the plate's own edges are what come back. An edge
+  counts only when its whole extent lies in that plane — one that merely reaches
+  the top does not — and `vertical` means an edge with no extent in x or y,
+  which a closed circular edge is not merely because its two vertices are the
+  same point.
 - `edge_indices` — exact edges, numbered as `list_edges` reports them. Indices are positional
   and move when the body changes, so re-list before relying on them.
 - `edge_points` + `edge_tolerance` (cm, default 0.1) — each point snaps to its nearest edge;
   a point too far away, or one equally close to two edges, is refused with the measurement.
+
+Every selector skips **degenerate** edges — the ones Fusion flags with
+`isDegenerate`, which have no geometry at all (a cone's apex produces them) and
+which no fillet can round. `list_edges` still reports them, so a `count` can exceed
+what a selection returns.
 
 ## Body Operations
 
