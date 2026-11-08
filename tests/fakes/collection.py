@@ -11,6 +11,30 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 
+class FakeItemCollection:
+    """Fusion's ``count`` / ``item(i)`` shape over items that live elsewhere.
+
+    A **derived** collection — ``Feature.bodies``, which names bodies that already
+    sit in ``bRepBodies`` — must not be a ``FakeCollection``: that one *adopts*
+    what it is given (``_collection`` is how ``deleteMe`` works and how the shell
+    ownership check finds the owning body), so wrapping bodies in it would quietly
+    reparent them.  This view iterates and counts without touching its items.
+    """
+
+    def __init__(self, items=()):
+        self._items = list(items)
+
+    @property
+    def count(self) -> int:
+        return len(self._items)
+
+    def item(self, index: int):
+        return self._items[index]
+
+    def __iter__(self) -> Iterator[object]:
+        return iter(self._items)
+
+
 class FakeDeletable:
     """Anything Fusion lets a caller delete: a body, a joint, a plane, a sketch."""
 

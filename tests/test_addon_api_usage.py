@@ -13,6 +13,12 @@ seven ``setAs*JointMotion`` calls, a driveable motion per type (with the value
 attributes Fusion actually exposes), ``asBuiltJoints``, and occurrence transforms.
 ``test_addon_joints.py`` is left with table-and-schema checks only — the one place
 where comparing to ``tools.py`` is the only way to catch drift.
+
+``create_hole`` was the other exception, with five source scans in
+``test_hole_geometry.py``.  Those are gone too: a face now carries its own surface
+(so ``Plane.cast`` can refuse a bore wall), a sketch on a face carries that face's
+frame, and ``sketchPoints.add`` plus ``holeFeatures`` model where a hole lands.
+``test_addon_hole.py`` runs the handler for the same five claims.
 """
 
 from __future__ import annotations

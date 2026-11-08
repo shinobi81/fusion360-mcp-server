@@ -21,13 +21,14 @@ from __future__ import annotations
 from typing import ClassVar
 
 from .bodies import FakeBody, FakeFace
-from .collection import FakeCollection, FakeDeletable
+from .collection import FakeCollection, FakeDeletable, FakeItemCollection
 from .features import (
     FakeDraftFeatures,
     FakeFeature,
     FakeInterference,
 )
-from .runtime import DIRECT, PARAMETRIC, FakePoint3D
+from .runtime import DIRECT, PARAMETRIC, FakePoint3D, FakeValueInput
+from .sketch import FakeSketches, FakeSketchPoint
 
 
 class FakeTimelineEntity:
@@ -470,6 +471,127 @@ class FakeShellFeatures(FakeCollection):
         return joint
 
 
+class FakeHoleFeatureInput:
+    """``holeFeatures.createSimpleInput``: a diameter, a position and an extent.
+
+    ``participantBodies`` starts **empty**, which is Fusion's default and means
+    "every body the hole reaches" — the reason ``create_hole`` sets it at all.
+    It takes a plain list: Fusion refuses an ``ObjectCollection`` here, while
+    other feature inputs demand one, so the fake refuses it too.  The diameter is
+    kept as the ``ValueInput`` Fusion was handed rather than a number, so a test
+    reads exactly what the call site passed.
+    """
+
+    def __init__(self, diameter):
+        self.diameter = diameter
+        self.position = None
+        self.distance = None
+        self.participantBodies = []
+
+    @property
+    def participantBodies(self) -> list:
+        return self._participant_bodies
+
+    @participantBodies.setter
+    def participantBodies(self, bodies) -> None:
+        if not isinstance(bodies, list):
+            raise TypeError(
+                "participantBodies takes a plain list of bodies, not "
+                f"{type(bodies).__name__}"
+            )
+        self._participant_bodies = bodies
+
+    def setPositionBySketchPoint(self, sketch_point) -> None:
+        if not isinstance(sketch_point, FakeSketchPoint):
+            raise TypeError(
+                "setPositionBySketchPoint takes a SketchPoint, not "
+                f"{type(sketch_point).__name__}"
+            )
+        self.position = sketch_point
+
+    def setDistanceExtent(self, distance) -> None:
+        if not isinstance(distance, FakeValueInput):
+            raise TypeError(
+                f"setDistanceExtent takes a ValueInput, not {type(distance).__name__}"
+            )
+        self.distance = distance
+
+
+class FakeHoleFeature(FakeDeletable):
+    """The feature ``holeFeatures.add`` returns: name, diameter, and bodies.
+
+    ``bodies`` is a ``FakeItemCollection`` over the participants the *input*
+    named, because that is what Fusion reports: measured on 2706, a cut naming a
+    body it never reaches still lists that body.  It is not a ``FakeCollection``
+    on purpose - that would reparent bodies that already live in ``bRepBodies`` -
+    and it is not evidence of what was cut, which is why ``#44`` removed the
+    response field built on it.  A handler that reports from it is reporting its
+    own input back.
+
+    ``cut_body_names`` is the fake's own record of which bodies the feature was
+    left to reach.  With participants named it repeats them (there is nothing
+    else to model, and the test that reads it is asserting the participants);
+    with none named it is the whole root component, which is Fusion's rule and an
+    over-approximation of "every body the hole intersects".
+    """
+
+    def __init__(self, hole_input: FakeHoleFeatureInput, participants, cut):
+        super().__init__("Hole1")
+        self.holeDiameter = hole_input.diameter
+        self.bodies = FakeItemCollection(participants)
+        self.cut_body_names = [body.name for body in cut]
+
+
+class FakeHoleFeatures(FakeCollection):
+    """``root.features.holeFeatures``: what each hole was built from.
+
+    ``add`` refuses an input that never got a position or an extent, the way
+    Fusion does, and settles the one thing the input leaves open: with
+    ``participantBodies`` empty the feature reaches *every* body in the design.
+    """
+
+    def __init__(self, design=None):
+        super().__init__()
+        self._design = design
+        self.inputs: list[FakeHoleFeatureInput] = []
+
+    @property
+    def last_input(self) -> FakeHoleFeatureInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createSimpleInput(self, diameter) -> FakeHoleFeatureInput:
+        if not isinstance(diameter, FakeValueInput):
+            raise TypeError(
+                f"createSimpleInput takes a ValueInput, not {type(diameter).__name__}"
+            )
+        created = FakeHoleFeatureInput(diameter)
+        self.inputs.append(created)
+        return created
+
+    def add(self, hole_input: FakeHoleFeatureInput) -> FakeHoleFeature:
+        if not isinstance(hole_input, FakeHoleFeatureInput):
+            raise TypeError("holeFeatures.add takes the input createSimpleInput made")
+        if hole_input.position is None:
+            raise RuntimeError("3 : a hole needs a position")
+        if hole_input.distance is None:
+            raise RuntimeError("3 : a hole needs an extent")
+        participants = list(hole_input.participantBodies)
+        cut = participants or self._every_body()
+        feature = FakeHoleFeature(hole_input, participants, cut)
+        super().add(feature)
+        return feature
+
+    def _every_body(self) -> list:
+        """No participant named: every body in the root is left to be cut.
+
+        Fusion's words are "all bodies that are intersected by the hole"; which
+        ones a hole reaches needs real geometry, so this over-approximates.  The
+        approximation can only fail a wrong handler, never pass one.
+        """
+        root = None if self._design is None else self._design.rootComponent
+        return [] if root is None else list(root.bRepBodies)
+
+
 class FakeFeatures:
     """``root.features``: a count, the revolve collection and the draft one."""
 
@@ -484,6 +606,7 @@ class FakeFeatures:
         self.loftFeatures = FakeLoftFeatures()
         self.combineFeatures = FakeCombineFeatures()
         self.shellFeatures = FakeShellFeatures()
+        self.holeFeatures = FakeHoleFeatures(design)
 
     def createPath(self, curve):
         """``features.createPath``: a sweep needs a Path around the curve."""
@@ -800,7 +923,7 @@ class FakeRoot:
         self.bRepBodies = FakeCollection(
             list(bodies) if bodies is not None else _default_bodies(design)
         )
-        self.sketches = FakeCollection(list(sketches))
+        self.sketches = FakeSketches(list(sketches))
         self.features = FakeFeatures(design)
         self.joints = FakeJoints()
         self.asBuiltJoints = FakeAsBuiltJoints()

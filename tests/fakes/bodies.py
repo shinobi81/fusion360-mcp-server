@@ -8,7 +8,13 @@ and its ``deleteMe()`` really removes it from the root's collection.
 from __future__ import annotations
 
 from .collection import FakeCollection, FakeDeletable
-from .runtime import FakeJointGeometry, FakePoint3D, FakeVector3D
+from .runtime import (
+    FakeCylinderGeometry,
+    FakeJointGeometry,
+    FakePlane,
+    FakePoint3D,
+    FakeVector3D,
+)
 
 
 class FakeBoundingBox:
@@ -148,7 +154,14 @@ class FakeEdges(FakeCollection):
 
 
 class FakeFace:
-    """A face: a normal, a bounding box, a point on it, and joint geometry.
+    """A face: a normal, a surface, a bounding box, a point on it, joint geometry.
+
+    ``geometry`` is the face's underlying *surface* as Fusion reports it, so
+    ``adsk.core.Plane.cast(face.geometry)`` is the same test the handler makes:
+    a Plate's top face is a plane, a bore wall is not.  ``pointOnFace`` is *some*
+    point on the face - Fusion does not promise the centroid - and the fake uses
+    the box centre, which is on the face.  It has to be: it also fixes the face's
+    own plane, and a point off the face would put that plane where it never is.
 
     ``joint_geometry_for`` is what ``JointGeometry.createByCylinderOrConeFace``
     asks the face for.  The defaults are the live measurement for a cylinder
@@ -165,10 +178,27 @@ class FakeFace:
         normal: tuple[float, float, float] = (0.0, 0.0, 1.0),
         bounding_box: FakeBoundingBox | None = None,
         joint_frame: dict | None = None,
+        area: float = 1.0,
+        point_on_face: tuple[float, float, float] | None = None,
+        planar: bool = True,
     ):
-        self.pointOnFace = FakePoint3D()
-        self.evaluator = FakeEvaluator(normal)
         self.boundingBox = bounding_box or FakeBoundingBox()
+        box = self.boundingBox
+        centre = (
+            (box.minPoint.x + box.maxPoint.x) / 2,
+            (box.minPoint.y + box.maxPoint.y) / 2,
+            (box.minPoint.z + box.maxPoint.z) / 2,
+        )
+        self.pointOnFace = FakePoint3D(
+            *(point_on_face if point_on_face is not None else centre)
+        )
+        self.evaluator = FakeEvaluator(normal)
+        self.area = area
+        self.geometry = (
+            FakePlane(self.pointOnFace.coords(), normal)
+            if planar
+            else FakeCylinderGeometry()
+        )
         self.joint_frame = joint_frame or {
             "origin": (-2.0, 0.0, 5.0),
             "primary": (-1.0, 0.0, 0.0),

@@ -24,18 +24,17 @@ evidence, and only `warnings_strict` below comes from that map.
 
 ## 2. The test refactor
 
-The add-in's tests still reach the Fusion API through `ast` guards in places, which assert
-on source text rather than on behaviour. Three parcels, in order, each one PR:
+The add-in's tests used to reach the Fusion API through `ast` guards, which assert on
+source text rather than on behaviour. Three parcels, in order, one PR each - two are done:
 
-1. **`tests/test_addon_joints.py`** - convert the behavioural guards (argument counts,
-   motion per `joint_type`, as-built joints, "never calls `computeAll`") and keep the data
-   tables static. Needs the fake runtime to gain `JointGeometry.createByPoint`,
-   `JointInput`'s per-motion methods, `root.joints.add`,
-   `createAsBuiltJointInput`, a driveable `joint.jointMotion`, and a `computeAll` counter.
-2. **The `create_hole` call-site guards** in `tests/test_hole_geometry.py`; the pure-module
-   tests there are already direct and stay as they are. Needs faces carrying
-   `maxPoint`/`minPoint`/`pointOnFace`, a sketch created on a face, `sketchPoints.add`,
-   `HoleFeatures.createSimpleInput` and `participantBodies`.
+1. **`tests/test_addon_joints.py`** - *done.* The behavioural guards (argument counts,
+   motion per `joint_type`, as-built joints, "never calls `computeAll`") now run the
+   handler. What is left is table-against-schema checking, which no test can observe.
+2. **The `create_hole` call-site guards** - *done.* The five guards in
+   `tests/test_hole_geometry.py` are replaced by `tests/test_addon_hole.py`, which drives
+   the handler against a hole-feature model: a planar face carrying its own surface, a
+   sketch created on that face, `sketchPoints.add`, `HoleFeatures.createSimpleInput` and
+   `participantBodies`. The pure-module tests there stay as they are.
 3. **Make the add-in importable.** One adapter (e.g. `addon/server/fusion_api.py`) so
    `command_handler` resolves `adsk` through a single import site, then add
    `addon/server` to `[tool.coverage.run] source` and re-base the coverage floor - the

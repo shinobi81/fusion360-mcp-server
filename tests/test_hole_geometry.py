@@ -4,18 +4,15 @@
 imports Fusion's ``adsk`` runtime, which isn't installable here, but this
 module deliberately has no such dependency.
 
-The AST guards at the bottom cover the two things that can only be seen at
-the call site into Fusion's API, in the same spirit as test_addon_sync.py.
-They stay static for now: converting them needs a hole-feature model in
-``tests/fakes/`` (faces with ``maxPoint``/``pointOnFace``, a sketch on a face,
-``sketchPoints`` and ``HoleFeatureInput``), which is a follow-up rather than
-something worth growing the shared fake for today.  ``create_hole`` has not
-regressed since they were written, so the cost of waiting is low.
+The rules here are the pure ones - whether a face counts as horizontal, how two
+candidates rank, and where a plane sits above an (x, y).  The call site that
+uses them is tested behaviourally in ``test_addon_hole.py`` now that the fake
+runtime can build a hole feature; the ``ast`` scans that used to guard it are
+gone.
 """
 
 from __future__ import annotations
 
-import ast
 import importlib.util
 import math
 from pathlib import Path
@@ -99,112 +96,3 @@ class TestPlaneZAt:
     def test_vertical_plane_is_rejected(self):
         with pytest.raises(ValueError):
             hole_geometry.plane_z_at((1, 0, 0), (0, 0, 0), 1.0, 1.0)
-
-
-def _create_hole_ast() -> ast.FunctionDef:
-    tree = ast.parse((ADDON_SERVER / "command_handler.py").read_text())
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == "create_hole":
-            return node
-    raise AssertionError("create_hole not found in command_handler.py")
-
-
-class TestCreateHoleCallSite:
-    """Guards for the Fusion API calls that unit tests can't reach."""
-
-    def test_faces_are_ranked_on_their_own_extreme_z(self):
-        # pointOnFace is an arbitrary sample point; within the tilt tolerance
-        # it is not the face's highest (or lowest) point.
-        ranked = [
-            node
-            for node in ast.walk(_create_hole_ast())
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "face_rank_key"
-        ]
-        assert len(ranked) == 1, "expected one face_rank_key() call in create_hole"
-        attrs = {
-            n.attr for n in ast.walk(_create_hole_ast()) if isinstance(n, ast.Attribute)
-        }
-        assert {"maxPoint", "minPoint"} <= attrs
-        assert "pointOnFace" not in ast.dump(ranked[0])
-
-    def test_diameter_is_not_scaled_before_createsimpleinput(self):
-        # createSimpleInput() takes the diameter, not the radius; halving it
-        # here silently produced holes at half the requested size.
-        for node in ast.walk(_create_hole_ast()):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "createSimpleInput"
-            ):
-                value = node.args[0]
-                assert (
-                    isinstance(value, ast.Call)
-                    and len(value.args) == 1
-                    and isinstance(value.args[0], ast.Name)
-                    and value.args[0].id == "diameter"
-                ), "createSimpleInput() must receive the diameter unmodified"
-                return
-        raise AssertionError("no createSimpleInput() call in create_hole")
-
-    def test_participant_bodies_is_the_target_body(self):
-        # Left unset, the hole cuts every body it happens to intersect; left
-        # empty it means the same thing.
-        values = [
-            node.value
-            for node in ast.walk(_create_hole_ast())
-            if isinstance(node, ast.Assign)
-            for target in node.targets
-            if isinstance(target, ast.Attribute) and target.attr == "participantBodies"
-        ]
-        assert values, "create_hole must set participantBodies"
-        assert [
-            [getattr(el, "id", None) for el in v.elts]
-            for v in values
-            if isinstance(v, ast.List)
-        ] == [["body"]], "participantBodies must be limited to the target body"
-
-    def test_the_response_does_not_read_feat_bodies(self):
-        # ``Feature.bodies`` reports the participants this function set, not what
-        # was cut — measured on 2706: a cut naming a body it never reaches still
-        # reports that body. Any response field derived from it echoes its own
-        # input, so ``cut_bodies`` was removed; this keeps it gone, whatever it
-        # is called next time.
-        read = [
-            node
-            for node in ast.walk(_create_hole_ast())
-            if isinstance(node, ast.Attribute) and node.attr == "bodies"
-        ]
-        assert read == [], "create_hole must not derive a result from Feature.bodies"
-
-    def test_hole_centre_is_converted_from_model_space(self):
-        # Feeding model XY straight into the face's sketch space put the hole
-        # somewhere else entirely; the point must go through the conversion.
-        converted = [
-            node
-            for node in ast.walk(_create_hole_ast())
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "modelToSketchSpace"
-        ]
-        assert len(converted) == 1, "hole centre must go through sketch conversion"
-        names = {n.id for n in ast.walk(converted[0]) if isinstance(n, ast.Name)}
-        assert {"center_x", "center_y", "center_z"} <= names
-
-        added = [
-            node
-            for node in ast.walk(_create_hole_ast())
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "add"
-            and isinstance(node.func.value, ast.Attribute)
-            and node.func.value.attr == "sketchPoints"
-        ]
-        assert len(added) == 1, "expected one sketchPoints.add() in create_hole"
-        assert any(
-            isinstance(sub, ast.Call)
-            and isinstance(sub.func, ast.Attribute)
-            and sub.func.attr == "modelToSketchSpace"
-            for sub in ast.walk(added[0])
-        ), "sketchPoints.add() must receive the converted point"
