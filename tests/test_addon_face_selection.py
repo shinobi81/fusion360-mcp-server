@@ -61,12 +61,13 @@ def _design(faces: list[FakeFace]) -> FakeDesign:
 
 
 def test_the_fake_refuses_a_face_and_the_body_that_owns_it(bound_handler):
-    """Fusion's own rule, so a regression cannot pass by asking for both.
+    """Pins the fake, not the handler: Fusion's ownership rule, modelled here.
 
-    `createInput` fails "if any faces are input, and the owning bodies of the
-    faces are also input".  The fake enforces it too, which is what makes the
-    old shape - body in the call, faces in a phantom attribute - impossible to
-    reintroduce without a red test.
+    Fusion fails "if any faces are input, and the owning bodies of the faces are
+    also input".  Without this the fake would accept the old shape's collection
+    and a reader could believe both were honoured.  The regression itself is
+    caught by `test_shell_hands_fusion_the_faces_and_never_the_body` below, which
+    reads `inputEntities`; this test only keeps the fake honest.
     """
     design = _design(box_faces())
     body = design.rootComponent.bRepBodies.item(0)
@@ -76,7 +77,21 @@ def test_the_fake_refuses_a_face_and_the_body_that_owns_it(bound_handler):
             [body, body.faces.item(0)]
         )
 
-    assert "not both" in str(raised.value)
+    assert "face(s)" in str(raised.value)
+
+
+def test_the_fake_allows_a_body_with_another_bodys_face(bound_handler):
+    """Ownership, not mere presence: Fusion accepts this call, so the fake must."""
+    design = _design(box_faces())
+    other = FakeBody("Other", faces=FakeCollection(box_faces()))
+    design.rootComponent.bRepBodies.add(other)
+    body = design.rootComponent.bRepBodies.item(0)
+
+    inp = design.rootComponent.features.shellFeatures.createInput(
+        [body, other.faces.item(0)]
+    )
+
+    assert list(inp.inputEntities) == [body, other.faces.item(0)]
 
 
 def test_shell_hands_fusion_the_faces_and_never_the_body(bound_handler):

@@ -437,16 +437,24 @@ class FakeShellFeatures(FakeCollection):
         Fusion fails when a face and the body that owns it are both in the call
         ("Fails if any faces are input, and the owning bodies of the faces are
         also input"), so the fake refuses it too rather than letting a caller
-        believe both were honoured.
+        believe both were honoured.  Ownership, not mere presence: a body and a
+        *different* body's face is a call Fusion accepts.
         """
         items = list(input_entities)
         bodies = [item for item in items if isinstance(item, FakeBody)]
         faces = [item for item in items if isinstance(item, FakeFace)]
-        if bodies and faces:
+        owning_bodies = [
+            body
+            for face in faces
+            for body in bodies
+            if getattr(face, "_collection", None) is body.faces
+        ]
+        if owning_bodies:
             raise TypeError(
-                "shellFeatures.createInput takes the faces to remove OR the "
-                f"bodies to shell, not both (got {len(faces)} face(s) and "
-                f"{len(bodies)} body/bodies)"
+                "shellFeatures.createInput refuses a face together with the body "
+                f"that owns it (got {len(faces)} face(s), one belonging to "
+                f"'{owning_bodies[0].name}') - pass the faces to remove OR the "
+                "bodies to shell"
             )
         inp = FakeShellInput(input_entities, is_tangent_chain)
         self.inputs.append(inp)
