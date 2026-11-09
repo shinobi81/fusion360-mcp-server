@@ -9,11 +9,19 @@ and published; they are the fork history.
 
 ## [0.7.1] - 2026-11-09
 
-The release where a dimension can name the curve it measures. Nothing was removed and no
-documented parameter changed meaning, so this is a patch: a schema-legal radial
-dimension now works, a `midpoint` constraint resolves the point it was given, and three
-refusals that used to arrive as `UNKNOWN` with no hints now carry their `error_kind` and
-hints.
+The release where a dimension can name the curve it measures. No tool, parameter or
+response field was removed and no documented parameter changed meaning, so this is a
+patch: a schema-legal radial dimension now works, a `midpoint` constraint resolves the
+point it was given, and refusals that used to arrive as `UNKNOWN` with no hints now
+carry their `error_kind` and hints - a missing entity field, an unknown dimension or
+constraint type, a point index that names no point, and Fusion's two opaque shell
+messages.
+
+**The behaviour lives in the add-in**, so pull and reload it (`reload_handler` over the
+socket, or Shift+S > Add-Ins > Run). The wire protocol is untouched, so this server
+still talks to an older add-in - but that add-in keeps classifying those refusals
+`UNKNOWN`, and the wheel carries only `src/`, so installing 0.7.1 on its own changes
+nothing in real mode.
 
 ### Fixed
 
@@ -44,8 +52,10 @@ hints.
 
 - **`add_dimension`'s and `add_constraint`'s descriptions say what their parameters
   mean.** `entity_one` is a sketch point for `midpoint` and a curve for every other
-  type; `entity_two` is needed by distance, horizontal, vertical and angular only. No
-  `required` entry changed, so every call that worked before still works. (#71)
+  type. `add_dimension`'s `entity_two` is needed by distance, horizontal, vertical and
+  angular only; `add_constraint`'s says it is not needed for fix, horizontal or
+  vertical. No `required` entry changed, so every call that worked before still works.
+  (#71)
 - **`docs/ROADMAP.md`'s test-refactor section is closed**, naming the three parcels that
   retired the source scans and the three source reads that stay. (#73)
 
@@ -54,8 +64,8 @@ hints.
 - **`docs/BADGE.md`, and the plan to earn the OpenSSF Best Practices badge.** The badge
   is not being pursued, so the passing-criteria map and ROADMAP's registration section
   are gone with it; the evidence it cited was already where a reader looks - coverage
-  floors in `docs/TESTING.md` and `pyproject.toml`, the threat model in `SECURITY.md`.
-  The roadmap now carries one item, a stricter lint selection. (#74)
+  floors in `docs/TESTING.md` and `pyproject.toml`, the local-trust design notes in
+  `SECURITY.md`. The roadmap now carries one open item, a stricter lint selection. (#74)
 
 ### Testing
 
