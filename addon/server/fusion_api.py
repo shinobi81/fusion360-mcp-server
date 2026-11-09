@@ -39,16 +39,32 @@ def __getattr__(name: str):
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     try:
         value = _resolve(name)
-    except ImportError as exc:  # no Fusion here at all
+    except ImportError as exc:  # the submodule or the package itself would not import
         # ``__getattr__`` that raises ImportError breaks ``getattr(x, n, default)``,
         # ``hasattr`` and ``monkeypatch.setattr``: all three catch AttributeError only.
+        # Blame ``adsk`` only when it is what is missing - a broken install has its own
+        # message, and saying "adsk is not importable" then would send the reader the
+        # wrong way.
+        cause = f"adsk is not importable: {exc}" if _adsk_missing(exc) else str(exc)
         raise AttributeError(
-            f"module {__name__!r} cannot resolve {name!r}: adsk is not importable"
+            f"module {__name__!r} cannot resolve {name!r}: {cause}"
         ) from exc
     # Cached as a real attribute: later lookups never reach this function, which is why
     # an injected fake and a resolved module behave identically.
     globals()[name] = value
     return value
+
+
+def _adsk_missing(exc: ImportError) -> bool:
+    """Whether *exc* is "there is no ``adsk`` here" rather than "``adsk`` is broken"."""
+    if not isinstance(exc, ModuleNotFoundError):
+        return False
+    return (exc.name or "").split(".")[0] == "adsk"
+
+
+def __dir__() -> list[str]:
+    """Include the lazy names, so ``dir(fusion_api)`` shows what it serves."""
+    return sorted(set(globals()) | set(_NAMES))
 
 
 def _resolve(name: str):

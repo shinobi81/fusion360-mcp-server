@@ -56,12 +56,14 @@ is low on purpose. The server keeps its own gate: CI runs
 an add-in regression cannot buy slack for `src/`. Run both before opening a PR that
 touches either.
 
-The add-in cannot be unit-imported (it needs Fusion's `adsk` runtime), so tests load
-`command_handler.py` against the fake runtime in `tests/fakes/` — `runtime.py` for the
-`adsk` surface and the loader, `sketch.py` and `design.py` for geometry and the document
-tree. The `handler_module` fixture in `tests/conftest.py` installs it for a whole test
-module and restores `sys.modules` afterwards. Neither pyright nor mypy can resolve `adsk`;
-`addon/` is therefore excluded from both in `pyproject.toml`.
+The add-in is importable under pytest: nothing under `addon/` imports `adsk` at module
+scope — it resolves Autodesk's API through the lazy adapter in
+`addon/server/fusion_api.py`. The `handler_module` fixture in `tests/conftest.py` injects
+the fake API into that adapter for a whole test module (`tests/fakes/runtime.py` for the
+surface, `sketch.py` and `design.py` for geometry and the document tree) and restores it
+afterwards, and `tests/test_addon_importable.py` asserts the import works in a subprocess
+where no `adsk` exists at all. Neither pyright nor mypy can resolve `adsk`; `addon/` is
+therefore still excluded from both in `pyproject.toml`.
 
 `fuzz/` is the other test surface: four atheris targets whose `check(data)` functions are
 also driven by `tests/test_fuzz_targets.py`, so their invariants run in the ordinary

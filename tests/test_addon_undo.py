@@ -19,8 +19,7 @@ So undo is now two paths:
   is issued and reported as ``undone: "issued"`` with ``verified: False`` rather
   than claiming success nobody checked.
 
-The add-in cannot be imported under pytest (it needs Fusion's ``adsk``), so
-these tests drive ``command_handler.py`` against the fake design in
+These tests drive ``command_handler.py`` against the fake design in
 ``tests.fakes.design``.
 """
 

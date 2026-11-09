@@ -17,20 +17,31 @@ from tests.fakes.app import FakeApplication, FakeCustomEventHandler
 
 
 @pytest.fixture(autouse=True)
-def _bridge_base(monkeypatch):
-    """Give the adapter a ``core`` with the base class the bridge subclasses.
+def _bridge_base():
+    """Give the adapter a ``core`` carrying the base class the bridge subclasses.
 
-    ``EventBridge.__init__`` resolves ``adsk.core.CustomEventHandler`` at construction,
-    so a test that builds a bridge outside Fusion supplies exactly that.
+    ``EventBridge.__init__`` resolves ``adsk.core.CustomEventHandler`` at
+    construction, so a test that builds a bridge outside Fusion supplies exactly that.
+    If a core is already installed (a module-scoped ``handler_module``), the base class
+    is added to it rather than replacing it: replacing would strip the rest of the
+    fake API mid-module.
     """
-    monkeypatch.setattr(
-        fusion_api,
-        "core",
-        types.SimpleNamespace(CustomEventHandler=FakeCustomEventHandler),
-        raising=False,
-    )
+    installed = fusion_api.__dict__.get("core")
+    added = installed is None or not hasattr(installed, "CustomEventHandler")
+
+    if installed is None:
+        fusion_api.core = types.SimpleNamespace(
+            CustomEventHandler=FakeCustomEventHandler
+        )
+    elif added:
+        setattr(installed, "CustomEventHandler", FakeCustomEventHandler)
+
     yield
-    # No manual reset: monkeypatch recorded the name as absent and removes it again.
+
+    if installed is None:
+        fusion_api.__dict__.pop("core", None)
+    elif added:
+        delattr(installed, "CustomEventHandler")
 
 
 class Handler:

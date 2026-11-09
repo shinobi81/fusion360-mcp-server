@@ -110,9 +110,11 @@ class EventBridge:
         self._handler = command_handler
         self._queue: queue.Queue = queue.Queue()
 
-        # Register a custom event on the main thread
-        self._event = app.registerCustomEvent(CUSTOM_EVENT_ID)
+        # Register a custom event on the main thread.  The base class is resolved first:
+        # a failure here would otherwise leave an event registered with no handler, and
+        # ``stop()`` would never run to unregister it.
         handler_class = _handler_class(adsk.core.CustomEventHandler)
+        self._event = app.registerCustomEvent(CUSTOM_EVENT_ID)
         self._event_handler = handler_class(self)
         self._event.add(self._event_handler)
 

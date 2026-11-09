@@ -21,6 +21,35 @@ import pytest
 from addon.server import fusion_api
 
 
+@pytest.fixture(autouse=True)
+def _clean_adapter():
+    """Leave the adapter unresolved after every test in this module.
+
+    ``test_reset_forgets_an_injected_name`` ends by *re-caching* a synthetic ``core``,
+    and a fake left installed would be handed to the next module instead of failing
+    loudly - the hazard ``fake_runtime``'s docstring exists to describe.
+    """
+    yield
+    fusion_api.reset()
+
+
+@pytest.fixture
+def _clean_logging():
+    """``configure()`` is deliberately global; restore what it changes.
+
+    Without this the handlers outlive the test: the file handler points at a finished
+    test's temp path, and the stream handler at a capture object nothing owns any more.
+    """
+    import addon.server as server
+
+    logger = logging.getLogger("fusion360mcp")
+    saved_handlers = logger.handlers[:]
+    saved_configured = server._configured
+    yield
+    logger.handlers[:] = saved_handlers
+    server._configured = saved_configured
+
+
 def _synthetic_adsk(monkeypatch):
     """A stand-in ``adsk`` with one submodule and one package-level function."""
     calls = []
@@ -116,7 +145,7 @@ def test_importing_the_package_creates_no_log_file(tmp_path):
     assert result.stdout.strip() == "[]", "importing the package must create no file"
 
 
-def test_configure_is_idempotent(tmp_path, monkeypatch):
+def test_configure_is_idempotent(tmp_path, monkeypatch, _clean_logging):
     """A second ``run()`` must not double every log line."""
     from addon.server import configure
 
@@ -126,13 +155,18 @@ def test_configure_is_idempotent(tmp_path, monkeypatch):
     configure()
     configure()
 
+    logger = logging.getLogger("fusion360mcp")
     file_handlers = [
         handler
-        for handler in logging.getLogger("fusion360mcp").handlers
+        for handler in logger.handlers
         if isinstance(handler, logging.handlers.RotatingFileHandler)
+    ]
+    stream_handlers = [
+        handler for handler in logger.handlers if type(handler) is logging.StreamHandler
     ]
     assert len(file_handlers) == 1
     assert file_handlers[0].baseFilename == str(log_path)
+    assert len(stream_handlers) == 1, "the guard protects both handlers, not just one"
 
 
 def test_command_handler_imports_without_adsk(tmp_path):
@@ -185,20 +219,42 @@ def test_a_reload_after_the_adapter_change_still_swaps_the_handler():
 
     It reloads the sibling modules and builds a fresh ``CommandHandler()`` — the one
     place a real construction happens outside Fusion, and the reason the fake core
-    needs ``Application``.
+    needs ``Application``.  ``FakeApplication.get()`` is memoised, so the reloaded
+    handler is wired to the same session the bridge was given.
     """
     from addon.server import event_bridge
     from tests.fakes.app import FakeApplication
     from tests.fakes.runtime import fake_runtime
-    from tests.test_addon_bridge import Handler
+
+    class Handler:
+        """A stand-in with no Fusion behind it; the reload replaces it anyway."""
+
+        def execute_command(self, command):
+            return {"ok": True}
 
     with fake_runtime():
-        bridge = event_bridge.EventBridge(FakeApplication(), Handler())
+        app = FakeApplication.get()
+        bridge = event_bridge.EventBridge(app, Handler())
         try:
             before = bridge._handler
             bridge.reload_handler()
 
             assert bridge._handler is not before
-            assert bridge._handler.app is not None, "a real CommandHandler()"
+            assert bridge._handler.app is app, "the reloaded handler shares the session"
         finally:
             bridge.stop()
+
+
+def test_a_resolved_name_survives_adsk_leaving_sys_modules(monkeypatch):
+    """The cache is a module attribute, not a lookup: resolution happens once.
+
+    This is the mechanism the design calls the reason an injected fake and a resolved
+    module are indistinguishable — both are ordinary attributes after the first access.
+    """
+    _, core, _ = _synthetic_adsk(monkeypatch)
+    fusion_api.reset()
+    assert fusion_api.core is core
+
+    monkeypatch.delitem(sys.modules, "adsk.core", raising=False)
+
+    assert fusion_api.core is core

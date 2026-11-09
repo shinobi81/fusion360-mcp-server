@@ -32,12 +32,16 @@ class FakeCustomEventHandler:
     lazily.
     """
 
-    def __init__(self):
-        self.notified = []
-
 
 class FakeApplication:
-    """``adsk.core.Application``: an event registry and a UI, no document."""
+    """``adsk.core.Application``: an event registry and a UI, no document.
+
+    ``get()`` is memoised because Fusion's is: ``CommandHandler.__init__`` and the
+    bridge share one session object, so a fake that minted a new one per call would
+    let a reloaded handler be wired to an application the bridge knows nothing about.
+    """
+
+    _instance: "FakeApplication | None" = None
 
     def __init__(self):
         self.userInterface = types.SimpleNamespace()
@@ -45,12 +49,18 @@ class FakeApplication:
         #: every existing handler test already sees.
         self.activeProduct = None
         self.events: list[FakeCustomEvent] = []
-        self.fired: list[str] = []
         self.unregistered: list[str] = []
 
     @staticmethod
     def get() -> "FakeApplication":
-        return FakeApplication()
+        if FakeApplication._instance is None:
+            FakeApplication._instance = FakeApplication()
+        return FakeApplication._instance
+
+    @classmethod
+    def reset(cls) -> None:
+        """Forget the session instance - ``install()`` calls this per fixture."""
+        cls._instance = None
 
     def registerCustomEvent(self, event_id: str) -> FakeCustomEvent:
         event = FakeCustomEvent()
@@ -58,7 +68,7 @@ class FakeApplication:
         return event
 
     def fireCustomEvent(self, event_id: str) -> None:
-        self.fired.append(event_id)
+        """Nothing to record: firing the event is a nudge, not the dispatch itself."""
 
     def unregisterCustomEvent(self, event_id: str) -> None:
         self.unregistered.append(event_id)

@@ -1,10 +1,10 @@
 """The fake ``adsk`` runtime the add-in is imported against.
 
-``command_handler.py`` imports ``adsk.cam``, ``adsk.core`` and ``adsk.fusion``
-at module level, so no test can import it without them.  This module supplies
-those three, injects them into the add-in's adapter, and resets the adapter when
-the test module finishes — a fake left behind would be handed to the next module
-that imports adsk-dependent code instead of failing loudly.
+Nothing under ``addon/`` imports ``adsk`` at module level any more: it resolves the
+API through ``addon/server/fusion_api.py``.  This module builds the fake surface and
+injects it into that adapter, and ``fake_runtime`` restores the adapter when the test
+module finishes - a fake left behind would be handed to the next module that imports
+adsk-dependent code instead of failing loudly.
 
 Two rules keep the fakes honest (design §7):
 
@@ -14,8 +14,8 @@ Two rules keep the fakes honest (design §7):
   ``AttributeError`` rather than returning ``None``, so a missing piece of the
   API fails loudly instead of being swallowed.
 
-Geometry lives in ``tests.fakes.sketch`` and the design tree in
-``tests.fakes.design``; this module also owns the loader that installs it.
+Geometry lives in ``tests.fakes.sketch``, the design tree in ``tests.fakes.design``, and
+the application in ``tests.fakes.app``.
 """
 
 from __future__ import annotations
@@ -26,6 +26,9 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 from .app import FakeApplication, FakeCustomEventHandler
+
+#: The names the adapter serves; ``fake_runtime`` restores exactly these.
+_ADAPTER_NAMES = ("cam", "core", "fusion", "doEvents")
 
 # One source of truth for the design-type strings: ``undo`` compares against the
 # copy the runtime hands the handler, so the fake design must use that same one.
@@ -327,6 +330,10 @@ def install() -> None:
 
     from addon.server import fusion_api
 
+    # A fresh session per install: ``get()`` memoises like Fusion's, and state (events,
+    # unregistrations) must not leak from one fixture use into the next.
+    FakeApplication.reset()
+
     fusion_api.core = core
     fusion_api.fusion = fusion
     fusion_api.cam = cam
@@ -335,15 +342,25 @@ def install() -> None:
 
 @contextmanager
 def fake_runtime() -> Iterator[types.ModuleType]:
-    """Inject the fakes, import the handler, and reset the adapter afterwards.
+    """Inject the fakes, import the handler, and restore the adapter afterwards.
 
     Scoped to the caller: a module that inherited a previous test module's injected
-    adapter would pass for the wrong reason, so the reset is in a ``finally``.
+    adapter would pass for the wrong reason, so the restore is in a ``finally``.
+
+    **Restores rather than resets**, so nesting works: an inner ``with fake_runtime()``
+    inside a module-scoped ``handler_module`` puts the outer fakes back instead of
+    wiping them for the rest of the module.
     """
     from addon.server import fusion_api
 
+    absent = object()
+    saved = {n: fusion_api.__dict__.get(n, absent) for n in _ADAPTER_NAMES}
     install()
     try:
         yield importlib.import_module("addon.server.command_handler")
     finally:
-        fusion_api.reset()
+        for name, value in saved.items():
+            if value is absent:
+                fusion_api.__dict__.pop(name, None)
+            else:
+                setattr(fusion_api, name, value)
