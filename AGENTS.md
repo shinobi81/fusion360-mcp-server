@@ -48,6 +48,14 @@ that form appears, so a formatter you did not ask for cannot reach `main`.
 it replace `.venv/Scripts/fusion360-mcp-server.exe` while a running MCP server holds it
 (`os error 32`). When that bites, use `uv run --no-sync …`, or stop the server first.
 
+**Coverage is two gates, not one.** `pytest` measures `src/fusion360_mcp` _and_
+`addon/server`, and the floor in `addopts` (59) is set just under the combined total —
+the add-in's CAM, export and viewport families only run inside Fusion, so its own number
+is low on purpose. The server keeps its own gate: CI runs
+`uv run coverage report --include="src/fusion360_mcp/*" --fail-under=95` after pytest, so
+an add-in regression cannot buy slack for `src/`. Run both before opening a PR that
+touches either.
+
 The add-in cannot be unit-imported (it needs Fusion's `adsk` runtime), so tests load
 `command_handler.py` against the fake runtime in `tests/fakes/` — `runtime.py` for the
 `adsk` surface and the loader, `sketch.py` and `design.py` for geometry and the document

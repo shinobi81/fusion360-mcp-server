@@ -290,7 +290,6 @@ def _primitives() -> types.ModuleType:
     return importlib.import_module("tests.fakes.bodies")
 
 
-
 def install() -> None:
     """Point the add-in's one import site at the fake API.
 
