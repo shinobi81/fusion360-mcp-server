@@ -3176,9 +3176,12 @@ class CommandHandler:
         root = self._root()
         temp_brep = adsk.fusion.TemporaryBRepManager.get()
 
-        # Box orientation matrix
+        # The oriented box's point is its CENTRE (adsk.core.OrientedBoundingBox3D),
+        # so the caller's centre goes in unchanged.  It used to go in as
+        # ``center_z + height / 2``, which centred X and Y and *based* Z: a box
+        # asked for at centre 1 came out spanning 1..3, while its name said centre.
         orient = adsk.core.OrientedBoundingBox3D.create(
-            adsk.core.Point3D.create(center_x, center_y, center_z + height / 2),
+            adsk.core.Point3D.create(center_x, center_y, center_z),
             adsk.core.Vector3D.create(1, 0, 0),
             adsk.core.Vector3D.create(0, 1, 0),
             length,

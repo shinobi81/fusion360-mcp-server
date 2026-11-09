@@ -7,6 +7,8 @@ and its ``deleteMe()`` really removes it from the root's collection.
 
 from __future__ import annotations
 
+import math
+
 from .collection import FakeCollection, FakeDeletable
 from .runtime import (
     FakeCylinderGeometry,
@@ -25,6 +27,143 @@ class FakeBoundingBox:
     ):
         self.minPoint = FakePoint3D(*min_point)
         self.maxPoint = FakePoint3D(*max_point)
+
+
+class FakeOrientedBoundingBox3D:
+    """``adsk.core.OrientedBoundingBox3D``: a centre, two directions, three sizes.
+
+    Read from the shipped stub (``adsk/core.py``, ``OrientedBoundingBox3D.create``):
+    ``centerPoint`` is the box's **centre**, the length and width directions carry
+    only a direction ("the magnitude of the vector is ignored"), the width
+    direction "must be perpendicular to the length direction", and the height runs
+    along length x width by the right-hand rule.
+
+    The perpendicularity and the size checks are the fake's **own** stricter
+    rules, not quoted refusals: the stub says the width direction "must be
+    perpendicular to the length direction" and gives no error, and says nothing at
+    all about a zero or negative size.  Being stricter than Fusion is safe here -
+    it can only fail a call Fusion would reject or mishandle - but neither is
+    evidence of what Fusion does.
+    """
+
+    def __init__(
+        self,
+        center_point: FakePoint3D,
+        length_direction: FakePoint3D,
+        width_direction: FakePoint3D,
+        length: float,
+        width: float,
+        height: float,
+    ):
+        self.centerPoint = center_point
+        self.lengthDirection = FakeVector3D(*_as_unit(length_direction, "length"))
+        self.widthDirection = FakeVector3D(*_as_unit(width_direction, "width"))
+        if abs(_dot(self.lengthDirection, self.widthDirection)) > 1e-9:
+            raise ValueError("widthDirection must be perpendicular to lengthDirection")
+        self.heightDirection = FakeVector3D(
+            *_cross(self.lengthDirection, self.widthDirection)
+        )
+        for name, value in (
+            ("length", length),
+            ("width", width),
+            ("height", height),
+        ):
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be a positive finite size: {value!r}")
+        self.length = float(length)
+        self.width = float(width)
+        self.height = float(height)
+
+    @staticmethod
+    def create(
+        centerPoint: FakePoint3D,
+        lengthDirection: FakePoint3D,
+        widthDirection: FakePoint3D,
+        length: float,
+        width: float,
+        height: float,
+    ) -> "FakeOrientedBoundingBox3D":
+        return FakeOrientedBoundingBox3D(
+            centerPoint, lengthDirection, widthDirection, length, width, height
+        )
+
+    def world_half_extents(self) -> tuple[float, float, float]:
+        """Half the box's size along each **world** axis, after orientation.
+
+        An oriented box's axis-aligned box is the projection of its three edge
+        vectors, which for a box built on the world axes is simply half its size
+        on that axis.
+        """
+        directions = (
+            self.lengthDirection,
+            self.widthDirection,
+            self.heightDirection,
+        )
+        halves = (self.length / 2, self.width / 2, self.height / 2)
+        return (
+            sum(abs(d.coords()[0]) * h for d, h in zip(directions, halves)),
+            sum(abs(d.coords()[1]) * h for d, h in zip(directions, halves)),
+            sum(abs(d.coords()[2]) * h for d, h in zip(directions, halves)),
+        )
+
+
+class FakeTemporaryBRepManager:
+    """``adsk.fusion.TemporaryBRepManager``: ``get()`` and ``createBox``.
+
+    ``createBox`` is the only primitive modelled, because it is the only one a
+    test drives: ``createCylinderOrCone``, ``createSphere`` and ``createTorus``
+    are absent, so those three handlers still cannot run under the fake.  The body
+    returned is transient and face-less - not null - whose box is the oriented box
+    projected onto the world axes, so a test reads where the solid actually landed
+    rather than trusting the arguments it was asked for.  Its ``volume`` and
+    ``area`` are the box's real ones; its face count is not modelled, because
+    nothing reads a primitive's faces.
+    """
+
+    @staticmethod
+    def get() -> "FakeTemporaryBRepManager":
+        return FakeTemporaryBRepManager()
+
+    def createBox(self, box: object) -> "FakeBody":
+        if not isinstance(box, FakeOrientedBoundingBox3D):
+            raise TypeError(
+                f"createBox takes an OrientedBoundingBox3D, not {type(box).__name__}"
+            )
+        centre = box.centerPoint.coords()
+        half = box.world_half_extents()
+        body = FakeBody(
+            "Box",
+            faces=FakeCollection(),
+            bounding_box=FakeBoundingBox(
+                (centre[0] - half[0], centre[1] - half[1], centre[2] - half[2]),
+                (centre[0] + half[0], centre[1] + half[1], centre[2] + half[2]),
+            ),
+        )
+        length, width, height = box.length, box.width, box.height
+        body.volume = length * width * height
+        body.area = 2 * (length * width + length * height + width * height)
+        return body
+
+
+def _as_unit(vector: FakePoint3D, name: str) -> tuple[float, float, float]:
+    """A direction vector, normalised - Fusion ignores the magnitude."""
+    x, y, z = vector.coords()
+    length = math.sqrt(x * x + y * y + z * z)
+    if length == 0:
+        raise ValueError(f"{name}Direction has no direction: {vector!r}")
+    return (x / length, y / length, z / length)
+
+
+def _dot(a: FakePoint3D, b: FakePoint3D) -> float:
+    ax, ay, az = a.coords()
+    bx, by, bz = b.coords()
+    return ax * bx + ay * by + az * bz
+
+
+def _cross(a: FakePoint3D, b: FakePoint3D) -> tuple[float, float, float]:
+    ax, ay, az = a.coords()
+    bx, by, bz = b.coords()
+    return (ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx)
 
 
 class FakeEvaluator:

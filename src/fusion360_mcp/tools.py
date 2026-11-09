@@ -1938,18 +1938,47 @@ TOOLS: list[dict] = [
         "name": "create_box",
         "title": "Create Box",
         "description": (
-            "Create a box primitive (non-parametric via TemporaryBRepManager)"
+            "Create a box primitive (non-parametric via TemporaryBRepManager), "
+            "centred on (center_x, center_y, center_z): it spans half the "
+            "length, width and height either side of that point on every axis"
         ),
         "inputSchema": {
             "type": "object",
             "required": ["length", "width", "height"],
             "properties": {
-                "length": {"type": "number", "minimum": 0.001},
-                "width": {"type": "number", "minimum": 0.001},
-                "height": {"type": "number", "minimum": 0.001},
-                "center_x": {"type": "number", "default": 0},
-                "center_y": {"type": "number", "default": 0},
-                "center_z": {"type": "number", "default": 0},
+                "length": {
+                    "type": "number",
+                    "minimum": 0.001,
+                    "description": "Size along X, centred on center_x",
+                },
+                "width": {
+                    "type": "number",
+                    "minimum": 0.001,
+                    "description": "Size along Y, centred on center_y",
+                },
+                "height": {
+                    "type": "number",
+                    "minimum": 0.001,
+                    "description": "Size along Z, centred on center_z",
+                },
+                "center_x": {
+                    "type": "number",
+                    "default": 0,
+                    "description": "Centre of the box in X (cm), not a face",
+                },
+                "center_y": {
+                    "type": "number",
+                    "default": 0,
+                    "description": "Centre of the box in Y (cm), not a face",
+                },
+                "center_z": {
+                    "type": "number",
+                    "default": 0,
+                    "description": (
+                        "Centre of the box in Z (cm), not its base: the box "
+                        "spans center_z - height/2 to center_z + height/2"
+                    ),
+                },
             },
         },
     },

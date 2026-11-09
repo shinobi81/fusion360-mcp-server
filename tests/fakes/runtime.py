@@ -289,6 +289,16 @@ def _dimension_orientations() -> types.SimpleNamespace:
     )
 
 
+def _primitives() -> types.ModuleType:
+    """``tests.fakes.bodies``, imported here rather than at module scope.
+
+    ``bodies`` imports this module for ``FakePoint3D`` and friends, so importing it
+    at the top of this file would be circular.  By the time ``install()`` runs both
+    modules are loaded.
+    """
+    return importlib.import_module("tests.fakes.bodies")
+
+
 _ADSK_MODULES = ("adsk", "adsk.core", "adsk.fusion", "adsk.cam")
 
 
@@ -306,6 +316,7 @@ def install() -> None:
         Plane=FakePlane,
         ObjectCollection=FakeObjectCollection,
         ValueInput=FakeValueInput,
+        OrientedBoundingBox3D=_primitives().FakeOrientedBoundingBox3D,
     )
     fusion = module(
         "adsk.fusion",
@@ -316,6 +327,7 @@ def install() -> None:
         JointKeyPointTypes=_joint_key_points(),
         JointGeometry=FakeJointGeometry,
         DimensionOrientations=_dimension_orientations(),
+        TemporaryBRepManager=_primitives().FakeTemporaryBRepManager,
     )
     cam = module("adsk.cam")
     adsk = module(
