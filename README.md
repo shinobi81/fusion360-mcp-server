@@ -218,9 +218,8 @@ with
 **[AGENTS.md](AGENTS.md)**.
 
 Deeper notes: **[docs/TESTING.md](docs/TESTING.md)** (how the suite and the fuzz targets
-run, what they deliberately cannot run), **[docs/ROADMAP.md](docs/ROADMAP.md)** (what is
-planned and why it is not here yet) and **[docs/BADGE.md](docs/BADGE.md)** (every OpenSSF
-Best Practices passing criterion mapped to the file that answers it).
+run, what they deliberately cannot run) and
+**[docs/ROADMAP.md](docs/ROADMAP.md)** (what is planned and why it is not here yet).
 
 ## This repo
 

@@ -1,26 +1,22 @@
 # Roadmap
 
 What is likely to happen next, in the order it is likely to happen. This is not a promise
-and it carries no dates: it exists so a reader - and the agent filling in the OpenSSF
-questionnaire - can see where the project is going, and so a known gap is visibly known
-rather than merely absent.
+and it carries no dates: it exists so a reader can see where the project is going, and so
+a known gap is visibly known rather than merely absent.
 
-Nothing here is a criterion of its own; [BADGE.md](BADGE.md) is the map from criteria to
-evidence, and only `warnings_strict` below comes from that map.
+## 1. A stricter lint selection
 
-## 1. The OpenSSF Best Practices badge
+`pyproject.toml` sets `select = ["E", "F", "I", "RUF"]`, which is a linter configuration
+rather than a strict one: `B` (bugbear) reports constructs that are almost always a
+mistake, and `SIM` (simplify) reports code that says at more length what it could say at
+less. Adding both is one line in the config - the work is triaging what they report over
+all four linted trees (`src/`, `tests/`, `fuzz/`, `addon/`), and if the first pass is
+large, one rule family per PR. `addon/` executes on Fusion's own interpreter, so a
+rewrite proposed there is judged against that rather than against CPython 3.14 alone.
 
-- Register the project at <https://www.bestpractices.dev/> (GitHub OAuth) and answer the
-  questionnaire from [BADGE.md](BADGE.md). Four MUST criteria there are answers only the
-  maintainer has: `report_responses`, `vulnerability_report_response`,
-  `know_secure_design`, `know_common_errors`.
-- Widen the ruff selection in `pyproject.toml` beyond `E`, `F`, `I`, `RUF` - `warnings_strict`
-  is SUGGESTED, so it does not block Passing, and it is the one gap in BADGE.md that is
-  work in this repository rather than a questionnaire answer.
-- Add the badge markup to `README.md` once a project id exists - that is the only
-  step left outside the code. The Scorecard `Signed-Releases` asset is done:
-  `release.yml` attaches the attestation bundle as `provenance.sigstore.json`, the
-  name the check reads; the score reaches 8/10 once five releases carry it.
+Nothing else about the configuration changes. `line-length = 88` matches the prose gates,
+and `target-version` stays inferred from `requires-python`, so the support window is
+stated once.
 
 ## 2. The test refactor - done
 
@@ -59,5 +55,4 @@ compares `CommandHandler._COMMANDS` and `_MUTATION_COMMANDS` against `mock.py`'s
 `test_addon_sources.py` reads the add-in's tokens because both PEP 758 spellings parse
 the same. Each is a property of the source rather than of running it.
 
-Nothing else is queued behind this section. Section 1 is what is left, and it holds one
-code step - a wider ruff selection - plus the questionnaire and the badge.
+Nothing else is queued behind this section; section 1 is what is left.

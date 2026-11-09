@@ -101,26 +101,33 @@ def test_there_is_no_second_pyright_config():
 
 
 def test_documents_quoting_the_ruff_selection_match_the_config():
-    """A quoted ``select = [...]`` in docs is a claim about this config.
+    """A quoted rule set in docs is a claim about this config.
 
-    Four stale copies of the rule set have surfaced in three changes, one of them
-    in the Scorecard evidence table that argues a criterion is met.  Quoting the
-    list in a document is fine; quoting a list the configuration no longer has is
-    a false claim that no reader can be expected to catch.
+    Stale copies have surfaced across more than one change, one of them in a table that
+    argued an external criterion was met.  Quoting the list in a document is fine;
+    quoting a list the configuration no longer has is a false claim that no reader can
+    be expected to catch.  Two spellings are in use - ``select = [...]`` in the roadmap
+    and the prose ``rules `E`, `F`, ...`` in CONTRIBUTING - so both are read, and each
+    must still be found: a quote that quietly disappears takes the guard with it.
     """
     configured = sorted(_pyproject()["tool"]["ruff"]["lint"]["select"])
-    quoted = re.compile(r"select = \[([^\]]*)\]")
+    readers = (
+        (REPO_ROOT / "docs" / "ROADMAP.md", re.compile(r"select = \[([^\]]*)\]")),
+        (REPO_ROOT / "CONTRIBUTING.md", re.compile(r"rules ((?:`[A-Z]+`(?:, )?)+)")),
+    )
     offenders = []
-    for doc in (REPO_ROOT / "docs" / "BADGE.md", REPO_ROOT / "CONTRIBUTING.md"):
-        if not doc.exists():
-            continue
+    for doc, pattern in readers:
+        assert doc.exists(), f"{doc.name} is gone; this guard would pass vacuously"
+        hits = 0
         for number, line in enumerate(doc.read_text(encoding="utf-8").splitlines(), 1):
-            found = quoted.search(line)
+            found = pattern.search(line)
             if found is None:
                 continue
-            stated = sorted(re.findall(r'"([^"]+)"', found.group(1)))
+            hits += 1
+            stated = sorted(re.findall(r'["`]([A-Z]+)["`]', found.group(1)))
             if stated != configured:
                 offenders.append(f"{doc.name}:{number} quotes {stated}")
+        assert hits, f"{doc.name} no longer quotes the rule set; the guard is vacuous"
     assert offenders == [], f"{'; '.join(offenders)}; pyproject configures {configured}"
 
 

@@ -109,5 +109,7 @@ A pull request merges when all of this is true, and the ruleset on `main` enforc
   checks it and the `threads` CI job runs the same script, because the code owner's
   `gh pr merge --admin` bypasses the ruleset that would otherwise enforce it.
 
-The fuzz job is deliberately outside that list - see `docs/BADGE.md` for how the OpenSSF
-criteria map onto these workflows.
+The fuzz job is deliberately outside that list: atheris is available on Linux only, and
+the invariants it explores already run in the ordinary suite through
+`tests/test_fuzz_targets.py`, so a fuzz finding is turned into a regression test rather
+than gating an unrelated pull request.
