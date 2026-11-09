@@ -92,7 +92,7 @@ error that motivated it.
 - Python: `ruff check` and `ruff format` (line length 88, rules `E`, `F`, `I`, `RUF`).
 - Markdown: `npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"` — 88-column
   prose, tables exempt (see `.markdownlint-cli2.jsonc`).
-- `addon/` is excluded from pyright/mypy on purpose: it calls Fusion's `adsk` runtime
+- `addon/` is excluded from pyright/mypy on purpose: it reaches Fusion's `adsk` API
   through a lazy adapter, and `adsk` cannot be resolved outside Fusion. Don't add type
   ignores for it.
 

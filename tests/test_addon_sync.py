@@ -32,8 +32,8 @@ def _load_module_by_path(path: Path, name: str):
 def _extract_class_attr_set(path: Path, class_name: str, attr: str) -> set[str]:
     """Pull ``ClassName.attr`` (a set/frozenset literal) out of *path* via AST.
 
-    Avoids importing the addon module, which depends on Fusion's ``adsk``
-    runtime and isn't installable in unit-test environments.
+    The invariant is "this table matches that schema", which is a property of the
+    source rather than of running it, so the literal is read instead of imported.
     """
     tree = ast.parse(path.read_text())
     for cls in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
@@ -96,8 +96,8 @@ def test_mutation_sets_in_sync():
 
 def _extract_command_dispatch_keys(path: Path) -> set[str]:
     """Pull the string keys of the ``_COMMANDS`` dict literal out of the
-    add-in's command_handler via AST (the module can't be imported without
-    Fusion's ``adsk`` runtime)."""
+    add-in's command_handler via AST: the table is the contract, and reading a
+    literal needs neither Fusion nor the fake runtime."""
     tree = ast.parse(path.read_text())
     for node in ast.walk(tree):
         if not isinstance(node, ast.Assign):
