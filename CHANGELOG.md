@@ -7,6 +7,44 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.7.0] - 2026-11-09
+
+The release where a box is centred on the point it is given, and the add-in becomes
+importable. Minor rather than patch because `create_box` moves geometry: a box asked for
+at `center_z=1` with height 2 used to span z 1..3 and now spans 0..2. No parameter was
+renamed or removed and no tool changed shape, so every existing call still runs — but a
+box lands half its height lower, and that is visible in any design built with the old
+placement.
+
+### Changed
+
+- **`create_box` centres the box on `center_z`.** The orientation matrix was built at
+  `center_z + height / 2`, so X and Y were centred on the caller's point while Z *started*
+  there. The schema now says which it means, which it previously did not: `center_x`,
+  `center_y` and `center_z` carry descriptions, and the three sizes name the axis they
+  bound. Measured on Fusion 2706, `create_box(length=10, width=6, height=2, center_z=1)`
+  returns a body spanning z 0.0..2.0. (#66)
+- **The add-in is importable under pytest.** Nothing under `addon/` imports `adsk` at
+  module scope any more: it resolves Autodesk's API through one lazy adapter
+  (`addon/server/fusion_api.py`), and the log handlers are attached by an explicit
+  `configure()` rather than at import. The suite therefore measures `addon/server` and
+  injects its fakes through a single seam instead of writing `sys.modules`. No tool
+  behaviour changes and the wire protocol is untouched, so an older add-in still talks to
+  this server. (#68)
+
+### Testing
+
+- **Coverage measures the add-in, and `src/` keeps its own floor.** The combined floor is
+  59 over both packages, because the add-in's CAM, export and viewport paths only run
+  inside Fusion; CI adds
+  `coverage report --include="src/fusion360_mcp/*" --fail-under=95` as a second gate, so
+  a server regression cannot hide behind the add-in's number. 888 tests. (#68)
+- **`create_hole`'s call-site guards are behavioural tests.** Five source scans became six
+  tests that drive the handler against a hole-feature model; the sixth pins the planar-face
+  skip the scans never covered. (#65)
+- **Six documents that still said the add-in could not be imported are corrected**, and
+  the three that said it in different words were found by the review. (#69)
+
 ## [0.6.4] - 2026-11-08
 
 The release where a joint frame with no usable axis is refused instead of answered with
