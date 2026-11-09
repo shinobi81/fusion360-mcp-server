@@ -39,9 +39,9 @@ source text rather than on behaviour. Three parcels, in order, one PR each - two
    (`addon/server/fusion_api.py`) resolves `adsk` lazily, so nothing under `addon/` imports
    it at module scope; `addon/server` is in `[tool.coverage.run] source` and the floor is
    re-based from the measurement (59 combined, with `src/` keeping its own 95 gate in CI).
-   The new code is exercised in Fusion 2706 before merge — the adapter's four names and the
-   bridge's handler class, driven against the real API; the reload-and-drive through the
-   socket is done immediately after, since the add-in is registered against `main`.
+   The new code is exercised in Fusion 2706 before merge — the adapter's four names and
+   the bridge's handler class, driven against the real API; the reload-and-drive through
+   the socket is done immediately after, since the add-in is registered against `main`.
 
 `tests/fakes/` is over its soft size cap in exchange for retiring the guards wholesale;
 the two conversion parcels above are deliberately not free, and a file that keeps its
