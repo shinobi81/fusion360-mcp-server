@@ -27,11 +27,13 @@ evidence, and only `warnings_strict` below comes from that map.
 The add-in's tests used to reach the Fusion API through `ast` guards, which assert on
 source text rather than on behaviour. Three parcels, one PR each, all merged:
 
-1. **`tests/test_addon_joints.py`** - *done (#63).* Fifteen of its sixteen tests parsed
-   `command_handler.py`; the eight behavioural ones now run the handler against fakes that
-   model the seven motion setters, a driveable value per joint type and `asBuiltJoints`.
-   The nine tests left are table-against-schema checks, which no test can observe any
-   other way.
+1. **`tests/test_addon_joints.py`** - *done (#63).* Fifteen of its tests parsed the
+   handler's source; eight of them are gone, replaced by tests in
+   `test_addon_joint_values.py` and `test_addon_joint_frame.py` that run the
+   handler, and by a fake that declares Fusion's real one-argument `createByPoint`
+   and refuses the attributes Fusion does not expose. The nine left are
+   table-and-schema reads: those tables are data, and a table asserting itself
+   proves nothing.
 2. **The `create_hole` call-site guards** - *done (#65).* The five guards in
    `tests/test_hole_geometry.py` are replaced by six tests in `tests/test_addon_hole.py`,
    which drive the handler against a hole-feature model: a planar face carrying its own
