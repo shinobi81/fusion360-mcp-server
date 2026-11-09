@@ -420,10 +420,21 @@ _SHELL_SELECTIONS = ("top", "bottom")
 
 def _shell(p: dict) -> dict:
     # The handler refuses anything but top/bottom before it looks at a body, so
-    # mock mode must not accept a call Fusion rejects.
+    # mock mode must not accept a call Fusion rejects.  Same for the wall: Fusion
+    # answers a zero, negative, NaN or infinite thickness with an opaque
+    # "InternalValidationError", so the handler now refuses it first (§24.5).
     selection = p.get("face_selection", "top")
     if selection not in _SHELL_SELECTIONS:
         return _mock_error(f"Unknown face_selection '{selection}' — use top/bottom")
+    thickness = p.get("thickness", 0.1)
+    refusal = _non_finite_error(thickness)
+    if refusal is not None:
+        return refusal
+    if thickness <= 0:
+        return _mock_error(
+            f"thickness must be positive, got {thickness} cm - a shell removes "
+            "material, so the wall has to be a real distance"
+        )
     return {
         "body_name": p.get("body_name", "Body1"),
         "thickness": p.get("thickness", 0.1),
@@ -905,7 +916,7 @@ def _entity_shape_error(
     report success; mock mode should not teach the same call.
     """
     kind = p.get(type_field)
-    needs_two = table.get(kind)
+    needs_two = table.get(kind) if isinstance(kind, str) else None
     if needs_two is None:
         return {
             "ok": False,

@@ -231,3 +231,26 @@ def test_mock_accepts_the_two_it_documents():
         assert mock_command("shell", {"thickness": 0.2, "face_selection": selection})[
             "ok"
         ]
+
+
+@pytest.mark.parametrize("thickness", [0.0, -1.0, float("nan"), float("inf")])
+def test_shell_refuses_a_thickness_fusion_cannot_honour(bound_handler, thickness):
+    """A wall thickness of zero, negative, NaN or infinity never reaches Fusion.
+
+    The schema says ``minimum: 0.001``, but the socket takes anything a client
+    sends - ``json.loads`` accepts ``NaN`` and ``Infinity`` - and Fusion answers
+    with ``2 : InternalValidationError : res``, which used to arrive as UNKNOWN
+    with no hints (filed in §24.5).  Refusing here names the field and the unit.
+    """
+    design = _design(box_faces())
+    handler = bound_handler(design)
+
+    with pytest.raises((RuntimeError, ValueError)) as raised:
+        handler.shell(thickness=thickness)
+
+    message = str(raised.value)
+    assert "thickness" in message
+    assert classify(message)[0] == "INVALID_INPUT"
+    assert design.rootComponent.features.shellFeatures.inputs == [], (
+        "no shell input was built for a value Fusion would refuse"
+    )

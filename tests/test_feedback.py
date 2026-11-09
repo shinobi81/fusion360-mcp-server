@@ -361,3 +361,36 @@ def test_a_fillet_with_nothing_to_round_is_classified():
 
     assert kind == "INVALID_INPUT"
     assert any("is_degenerate" in hint for hint in hints), hints
+
+
+class TestFusionRefusals:
+    """Fusion's own opaque refusals must still reach the caller with advice.
+
+    Both of these were filed in HANDOVER §24.5: the first is Fusion rejecting the
+    input's state, the second is a wall thickness a shell cannot honour. Neither
+    matched a rule, so both arrived as ``UNKNOWN`` with no hints - the failure mode
+    every rule in the table exists to stop.
+    """
+
+    def test_an_internal_validation_error_is_advice_not_unknown(self):
+        kind, hints = classify("2 : InternalValidationError : res")
+
+        assert kind == "INVALID_INPUT"
+        assert hints, "an opaque Fusion refusal still needs a next step"
+
+    def test_a_generic_argument_refusal_is_advice_not_unknown(self):
+        """``3 : Some input argument is invalid`` - measured for a zero shell wall.
+
+        It is also what Fusion answers for a dimension label it will not accept,
+        so the family recurs; the rule names the two cases measured.
+        """
+        kind, hints = classify("3 : Some input argument is invalid.")
+
+        assert kind == "INVALID_INPUT"
+        assert any("thickness" in hint for hint in hints)
+
+    def test_a_non_positive_shell_thickness_is_advice_not_unknown(self):
+        kind, hints = classify("thickness must be positive, got 0.0 cm")
+
+        assert kind == "INVALID_INPUT"
+        assert any("cm" in hint for hint in hints)

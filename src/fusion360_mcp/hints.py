@@ -326,6 +326,44 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # Fusion's generic argument refusal - "3 : Some input argument is invalid".
+        # Measured on 2706 for a shell wall of zero or less, and for a sketch
+        # dimension label at a point Fusion will not accept; both reached the caller
+        # as UNKNOWN with no hints.
+        r"Some input argument is invalid",
+        "INVALID_INPUT",
+        [
+            "Fusion rejected one of the arguments: check its range and its unit.",
+            "For shell, the wall thickness must be a positive distance in cm.",
+            "For a dimension, the curve must be one that sketch can measure.",
+        ],
+    ),
+    (
+        # Fusion's own "N : InternalValidationError" - the API refused the input's
+        # STATE (a property unset, or a value it will not accept) rather than the
+        # call's arguments.  Filed in §24.5: it reached the caller as UNKNOWN with
+        # no hints, which is the failure mode every rule here exists to stop.
+        r"InternalValidationError",
+        "INVALID_INPUT",
+        [
+            "Fusion rejected the input's state, not the arguments: a required "
+            "property was unset or a value was unacceptable.",
+            "For shell, the wall thickness must be a positive distance in cm.",
+            "Check the entity exists and belongs to the body the feature acts on.",
+        ],
+    ),
+    (
+        # A shell wall Fusion cannot honour.  The schema says minimum 0.001, but the
+        # socket takes what a client sends, and json.loads accepts NaN and Infinity.
+        r"thickness must be positive",
+        "INVALID_INPUT",
+        [
+            "thickness is a distance in cm and must be greater than zero.",
+            "A typical wall is 0.1-0.3 cm; the schema floor is 0.001.",
+            "A shell removes material, so it cannot add a negative wall.",
+        ],
+    ),
+    (
         # ``midpoint``'s first entity is a sketch POINT, and it was resolved against
         # the curve list: a point index inside the curve list named the wrong item,
         # and a refusal spoke about curves.  Placed ABOVE the curve-index rule so
