@@ -62,7 +62,10 @@ class _EventSource(Protocol):
     """
 
     def registerCustomEvent(self, event_id: str) -> _CustomEvent:
-        pass
+        # An abstract member: raising is what a Protocol body does, and unlike
+        # `pass` it satisfies the declared return type.  `...` said the same thing
+        # but CodeQL reads it as a statement with no effect.
+        raise NotImplementedError
 
     def fireCustomEvent(self, event_id: str) -> None:
         pass

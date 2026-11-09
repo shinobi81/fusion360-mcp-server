@@ -1674,6 +1674,13 @@ class CommandHandler:
                 f"a {dimension_type} dimension needs {' and '.join(missing)} (a "
                 f"curve index) - sketch '{sketch.name}' has {len(curves)} curve(s)"
             )
+        # Narrowed AFTER the refusal, never before it: an assert ahead of the guard
+        # turns a missing index into an AssertionError instead of the message the
+        # caller can act on.  These tell the type checker what the guard guarantees.
+        if "entity_one" in needed:
+            assert e1 is not None
+        if "entity_two" in needed:
+            assert e2 is not None
         # Where the label sits.  The one-entity types need a point away from the
         # curve's centre: measured on 2706, a radial label at the world origin over a
         # circle centred there raises "3 : Some input argument is invalid", while the
@@ -2155,6 +2162,31 @@ class CommandHandler:
         body_index: int = 0,
         face_selection: str = "top",
     ):
+        # Judged before the body is looked up: a wall Fusion cannot honour is the
+        # caller's value, not the design's problem.  NaN and infinity are deliverable
+        # over the socket (json.loads accepts both), and Fusion answers a wall of
+        # zero or less with "3 : Some input argument is invalid." (measured on 2706;
+        # the "2 : InternalValidationError" in §24.5 comes from *reading*
+        # insideThickness before it is set, not from a bad wall).
+        try:
+            thickness = _param_units.require_finite(thickness)
+        except ValueError as exc:
+            # require_finite's message is shaped to classify as INVALID_INPUT; the
+            # field is prepended here because it is the caller's only clue.
+            raise ValueError(f"thickness must be finite, in cm: {exc}") from exc
+        # ``require_finite`` passes a non-number through on purpose, and comparing
+        # one raises TypeError, which classifies as UNKNOWN with no hints - so the
+        # type is judged here.  A bool is not a distance, whatever ``True == 1`` says.
+        if isinstance(thickness, bool) or not isinstance(thickness, (int, float)):
+            raise RuntimeError(
+                f"thickness must be a positive number in cm, got {thickness!r}"
+            )
+        if thickness <= 0:
+            raise RuntimeError(
+                f"thickness must be a positive number in cm, got {thickness!r} - a "
+                "shell removes material, so the wall has to be a real distance"
+            )
+
         root = self._root()
         body = (
             self._body_by_name(body_name)

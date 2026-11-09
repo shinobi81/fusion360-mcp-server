@@ -575,3 +575,17 @@ def test_mock_refuses_an_unknown_type_with_the_same_kind(command, params):
 
     assert result["ok"] is False
     assert result["error_kind"] == "INVALID_INPUT"
+
+
+def test_an_unhashable_type_name_is_refused_not_crashed():
+    """``dimension_type`` as a list used to raise out of ``mock_command``.
+
+    ``table.get(kind)`` needs a hashable key, and a client can send a list.  The
+    handler compares with ``==``, so it refuses cleanly; mock mode must match.
+    """
+    result = mock_mod.mock_command(
+        "add_dimension", {"dimension_type": ["distance"], "entity_one": 0}
+    )
+
+    assert result["ok"] is False
+    assert result["error_kind"] == "INVALID_INPUT"
