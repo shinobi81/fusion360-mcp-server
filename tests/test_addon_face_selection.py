@@ -84,7 +84,7 @@ def test_the_fake_allows_a_body_with_another_bodys_face(bound_handler):
     """Ownership, not mere presence: Fusion accepts this call, so the fake must."""
     design = _design(box_faces())
     other = FakeBody("Other", faces=FakeCollection(box_faces()))
-    design.rootComponent.bRepBodies.add(other)
+    design.rootComponent.bRepBodies.add_existing(other)
     body = design.rootComponent.bRepBodies.item(0)
 
     inp = design.rootComponent.features.shellFeatures.createInput(

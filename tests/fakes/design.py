@@ -148,14 +148,20 @@ class FakeComponent:
 
 
 class FakeBaseFeature(FakeDeletable):
-    """``features.baseFeatures.add()``: a feature that must be *in edit* to add to.
+    """``features.baseFeatures.add()``: a feature a body is added *inside*.
 
     Fusion's ``BRepBodies.add`` docstring is explicit - "you must first call the
     edit method of the base feature, then use the add method to create the body,
     and finally call the finishEdit method ... The base feature must be in an
     'edit' state to be able to add any additional items to it" - so the state is
-    modelled and an add outside it is refused.  A fake that accepted either order
-    could not tell a correct ``create_box`` from one that never opened the edit.
+    tracked and an add outside it is refused.
+
+    What is **not** modelled: Fusion documents no refusal for creating a second
+    base feature while one is in edit (``BaseFeatures.add`` says only "Creates a
+    new empty base feature"), and ``finishEdit`` is documented as "if this base
+    feature is not in edit mode, then nothing happens" - so neither is invented
+    here.  A handler that never finishes the edit is caught by asserting
+    ``editing`` is false afterwards, not by a fake refusal.
     """
 
     def __init__(self, name: str = "Base Feature1"):
@@ -176,7 +182,9 @@ class FakeBaseFeatures:
     """``features.baseFeatures``: numbered the way Fusion numbers them.
 
     Not a ``FakeCollection``: Fusion's ``BaseFeatures.add`` takes no argument, so
-    it cannot share that collection's ``add(item)`` shape.
+    it cannot share that collection's ``add(item)`` shape.  A base feature is a
+    timeline entry in Fusion; this collection does not grow ``design.features``,
+    because no handler test reads the timeline after a primitive.
     """
 
     def __init__(self):
@@ -201,20 +209,43 @@ class FakeBaseFeatures:
 class FakeBRepBodies(FakeCollection):
     """``component.bRepBodies``: ``add`` persists a body, into a base feature.
 
-    ``targetBaseFeature`` is optional in Fusion's signature and required in a
-    parametric design, which is the design these tests build, so the fake models
-    the edit-state rule whenever one is passed at all.
+    Fusion's ``BRepBodies.add`` docstring: the base feature "is an optional
+    requirement. It is required in a parametric modeling design but is ignored in
+    a direct modeling design."  So when the owning design is parametric - which is
+    ``FakeDesign``'s default - a body with no base feature, or a base feature that
+    is not in edit, is refused here exactly as Fusion refuses it.  A fake that
+    accepted it could not tell ``create_box`` from one that drops the feature.
+
+    ``add_existing`` is the escape hatch for a fixture that models a body the
+    *user* already has: such a body was created by some earlier feature, and
+    wrapping it in a base feature now would be inventing history.
 
     A body added this way does **not** grow ``design.features`` or
     ``design.bodies``: those are the timeline's count and a fixed number set at
     construction, and no handler test reads either after a primitive.
     """
 
+    def __init__(self, items=None, design: "FakeDesign | None" = None):
+        super().__init__(items)
+        self._design = design
+
     def add(self, body, targetBaseFeature: FakeBaseFeature | None = None):
-        if targetBaseFeature is not None:
+        """Persist a new body, refusing what a parametric design refuses."""
+        parametric = self._design is not None and self._design.designType == PARAMETRIC
+        if parametric:
+            if targetBaseFeature is None:
+                raise RuntimeError(
+                    "3 : a base feature is required to add a body to a parametric "
+                    "design"
+                )
             if not targetBaseFeature.editing:
                 raise RuntimeError("3 : the base feature is not in an edit state")
+        if targetBaseFeature is not None:
             targetBaseFeature.bodies.append(body)
+        return super().add(body)
+
+    def add_existing(self, body):
+        """A body that is already in this component, as a test fixture."""
         return super().add(body)
 
 
@@ -993,7 +1024,8 @@ class FakeRoot:
         bodies=None,
     ):
         self.bRepBodies = FakeBRepBodies(
-            list(bodies) if bodies is not None else _default_bodies(design)
+            list(bodies) if bodies is not None else _default_bodies(design),
+            design=design,
         )
         self.sketches = FakeSketches(list(sketches))
         self.features = FakeFeatures(design)

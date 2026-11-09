@@ -107,7 +107,7 @@ def test_the_hole_is_limited_to_the_body_it_was_asked_for(bound_handler):
     "none".
     """
     design = _plate()
-    design.rootComponent.bRepBodies.add(
+    design.rootComponent.bRepBodies.add_existing(
         FakeBody("Base", faces=FakeCollection([FakeFace()]))
     )
     handler = bound_handler(design)

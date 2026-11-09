@@ -4,12 +4,13 @@
 ``center_z + height / 2``, so X and Y were centred on the caller's point while Z
 *started* there: a 10 x 10 x 2 box asked for at ``center_z=1`` came out spanning
 z 1..3, and one asked for with the default ``center_z=0`` sat on the origin plane
-instead of straddling it.  Nothing in the response said where the solid went, so
-nothing noticed - the schema name was the only statement about it, and the schema
-name was wrong.
+instead of straddling it.
 
-The fake had no primitives at all, which is why this was measured by hand rather
-than tested: ``TemporaryBRepManager``, ``OrientedBoundingBox3D`` and a base
+The placement *was* reported, but only as the whole design's ``deltas.bbox_after``
+- which is the box's own position in a one-body design and nothing legible in any
+other, and which no test read.  What stated the intent was the parameter name, and
+the name was wrong.  The fake had no primitives at all, which is why this was
+never tested: ``TemporaryBRepManager``, ``OrientedBoundingBox3D`` and a base
 feature a body can be added to all had to exist before the handler could run.
 """
 
@@ -77,3 +78,19 @@ def test_the_default_box_straddles_the_model_origin(bound_handler):
 
     assert body.boundingBox.minPoint.z == pytest.approx(-1.0)
     assert body.boundingBox.maxPoint.z == pytest.approx(1.0)
+
+
+def test_the_base_feature_is_finished_after_the_add(bound_handler):
+    """The body is added *inside* the base feature, which is then closed again.
+
+    Fusion's ``BRepBodies.add`` requires the base feature to be in edit for the
+    add and says ``finishEdit`` exits that mode; a handler that never calls it
+    leaves the design mid-edit.  Nothing else observes this, so it is asserted
+    from the design's own state rather than inferred from the call.
+    """
+    design = FakeDesign(features=0)
+    bound_handler(design).create_box(length=1, width=1, height=1)
+
+    feature = design.rootComponent.features.baseFeatures.item(0)
+    assert feature.bodies == [design.rootComponent.bRepBodies.item(0)]
+    assert not feature.editing, "the base feature is finished after the add"

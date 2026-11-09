@@ -38,11 +38,12 @@ class FakeOrientedBoundingBox3D:
     direction "must be perpendicular to the length direction", and the height runs
     along length x width by the right-hand rule.
 
-    The perpendicularity is enforced rather than waved through: two parallel axes
-    describe no box, and a fake that accepted them could not tell a working
-    ``create_box`` from one that builds a degenerate solid.  A non-finite size or
-    a non-positive one is refused for the same reason - it is a size Fusion would
-    not build either.
+    The perpendicularity and the size checks are the fake's **own** stricter
+    rules, not quoted refusals: the stub says the width direction "must be
+    perpendicular to the length direction" and gives no error, and says nothing at
+    all about a zero or negative size.  Being stricter than Fusion is safe here -
+    it can only fail a call Fusion would reject or mishandle - but neither is
+    evidence of what Fusion does.
     """
 
     def __init__(
@@ -109,10 +110,14 @@ class FakeOrientedBoundingBox3D:
 class FakeTemporaryBRepManager:
     """``adsk.fusion.TemporaryBRepManager``: ``get()`` and ``createBox``.
 
-    Only ``createBox`` is modelled, because it is the only primitive the handler
-    calls.  It returns a transient, face-less body - not null - whose box is the
-    oriented box projected onto the world axes, so a test reads where the solid
-    actually landed rather than trusting the arguments it was asked for.
+    ``createBox`` is the only primitive modelled, because it is the only one a
+    test drives: ``createCylinderOrCone``, ``createSphere`` and ``createTorus``
+    are absent, so those three handlers still cannot run under the fake.  The body
+    returned is transient and face-less - not null - whose box is the oriented box
+    projected onto the world axes, so a test reads where the solid actually landed
+    rather than trusting the arguments it was asked for.  Its ``volume`` and
+    ``area`` are the box's real ones; its face count is not modelled, because
+    nothing reads a primitive's faces.
     """
 
     @staticmethod
@@ -126,7 +131,7 @@ class FakeTemporaryBRepManager:
             )
         centre = box.centerPoint.coords()
         half = box.world_half_extents()
-        return FakeBody(
+        body = FakeBody(
             "Box",
             faces=FakeCollection(),
             bounding_box=FakeBoundingBox(
@@ -134,6 +139,10 @@ class FakeTemporaryBRepManager:
                 (centre[0] + half[0], centre[1] + half[1], centre[2] + half[2]),
             ),
         )
+        length, width, height = box.length, box.width, box.height
+        body.volume = length * width * height
+        body.area = 2 * (length * width + length * height + width * height)
+        return body
 
 
 def _as_unit(vector: FakePoint3D, name: str) -> tuple[float, float, float]:

@@ -198,7 +198,7 @@ record why not — in the thread — before merging.
 
 | Tool                    | Description                                                          |
 | ----------------------- | -------------------------------------------------------------------- |
-| `create_box`            | Box (via TemporaryBRepManager)                                       |
+| `create_box`            | Box (via TemporaryBRepManager), centred on `center_x`/`center_y`/`center_z` |
 | `create_cylinder`       | Cylinder                                                             |
 | `create_sphere`         | Sphere                                                               |
 | `create_torus`          | Torus                                                                |
