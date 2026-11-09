@@ -7,6 +7,76 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.7.1] - 2026-11-09
+
+The release where a dimension can name the curve it measures. No tool, parameter or
+response field was removed and no documented parameter changed meaning, so this is a
+patch: a schema-legal radial dimension now works, a `midpoint` constraint resolves the
+point it was given, and refusals that used to arrive as `UNKNOWN` with no hints now
+carry their `error_kind` and hints - a missing entity field, an unknown dimension or
+constraint type, a point index that names no point, and Fusion's two opaque shell
+messages.
+
+**The behaviour lives in the add-in**, so pull and reload it (`reload_handler` over the
+socket, or Shift+S > Add-Ins > Run). The wire protocol is untouched, so this server
+still talks to an older add-in - but that add-in keeps classifying those refusals
+`UNKNOWN`, and the wheel carries only `src/`, so installing 0.7.1 on its own changes
+nothing in real mode.
+
+### Fixed
+
+- **`add_dimension` creates a radial or diameter dimension.** The guard demanded
+  `entity_two` for every type, so `add_dimension("radial", 2.0, entity_one=0)` - legal
+  under the schema - could not be created at all, and the refusal classified `UNKNOWN`
+  with no hints. A table now says which entities each type needs, and the refusal names
+  the field that is missing instead of both. Measured on 2706: a radial dimension on a
+  sketch offset to z=5 applies, value 3.0. (#71)
+- **`add_constraint("midpoint")` resolves its first entity against sketch points.** It
+  was validated against `sketchCurves`, so a point index that also fell inside the curve
+  list named the wrong item, and one past it was refused with advice about curves. The
+  index is checked as a whole-number point index against `sketchPoints` now, and a
+  missing first entity is refused instead of being reported as `entity_one: 0`. (#71)
+- **`shell` refuses a wall Fusion cannot honour.** A non-finite, non-positive or
+  non-numeric `thickness` reached Fusion and came back as `UNKNOWN` with no hints: the
+  schema's `minimum` is enforced by the MCP layer, but the socket takes what a client
+  sends and `json.loads` accepts `NaN` and `Infinity`. The wall is judged before the
+  body lookup, a `bool` is not a distance, and mock mode refuses the same shapes.
+  Measured on 2706: `0`, `-1` and `NaN` are each refused by name and the shell-feature
+  count is unchanged, so nothing reaches Fusion. (#72)
+- **Two Fusion shell refusals are classified.** Reading `insideThickness` before setting
+  it returns `2 : InternalValidationError : res`, and an impossible wall returns
+  `3 : Some input argument is invalid.` Each family has a rule in both hints mirrors, so
+  neither arrives as `UNKNOWN`. (#72)
+
+### Changed
+
+- **`add_dimension`'s and `add_constraint`'s descriptions say what their parameters
+  mean.** `entity_one` is a sketch point for `midpoint` and a curve for every other
+  type. `add_dimension`'s `entity_two` is needed by distance, horizontal, vertical and
+  angular only; `add_constraint`'s says it is not needed for fix, horizontal or
+  vertical. No `required` entry changed, so every call that worked before still works.
+  (#71)
+- **`docs/ROADMAP.md`'s test-refactor section is closed**, naming the three parcels that
+  retired the source scans and the three source reads that stay. (#73)
+
+### Removed
+
+- **`docs/BADGE.md`, and the plan to earn the OpenSSF Best Practices badge.** The badge
+  is not being pursued, so the passing-criteria map and ROADMAP's registration section
+  are gone with it; the evidence it cited was already where a reader looks - coverage
+  floors in `docs/TESTING.md` and `pyproject.toml`, the local-trust design notes in
+  `SECURITY.md`. The roadmap now carries one open item, a stricter lint selection. (#74)
+
+### Testing
+
+- **The rule-set drift guard reads both spellings.** It matched `select = [...]` only,
+  which `CONTRIBUTING.md`'s prose form - `` rules `E`, `F`, ... `` - never had, so the
+  copy a past sweep had to repair was the copy nothing guarded. Each document must now
+  still quote the set, and a missing one fails loudly rather than passing vacuously.
+  (#74)
+- **940 tests**, coverage **60.73%** over `src/fusion360_mcp` and `addon/server`, with
+  `src/` keeping its own 95 floor in CI. (#71, #72, #73, #74)
+
 ## [0.7.0] - 2026-11-09
 
 The release where a box is centred on the point it is given, and the add-in becomes
@@ -462,6 +532,9 @@ reporting a result it had only echoed back.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.7.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.0...v0.7.1
+[0.7.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.6.4...v0.7.0
+[0.6.4]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.6.0...v0.6.1

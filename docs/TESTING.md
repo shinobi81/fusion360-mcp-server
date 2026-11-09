@@ -25,7 +25,7 @@ recorded there. The floor is **two gates**, because one number cannot hold two v
 different populations:
 
 - **59** for the whole suite, which now measures `src/fusion360_mcp` **and**
-  `addon/server`. The measured total is 59.90%; the add-in's CAM, export, view-sheet and
+  `addon/server`. The measured total is 60.73%; the add-in's CAM, export, view-sheet and
   viewport-render paths only run inside Fusion, and they account for almost all of the
   gap.
 - **95** for the server alone, enforced separately in CI:
