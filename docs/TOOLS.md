@@ -132,7 +132,7 @@ what a selection returns.
 
 | Tool                    | Description                                                                                                                                                                                       |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `create_box`            | Box (via TemporaryBRepManager, history-less)                                                                                                                                                      |
+| `create_box`            | Box (via TemporaryBRepManager, history-less), centred on `center_x`/`center_y`/`center_z`: it spans half its size either side of that point on every axis |
 | `create_box_parametric` | History-based box: sketch rectangle + dimensions + extrude. `length`/`width`/`height` accept numbers (cm) or string expressions referencing User Parameters (e.g. `"boxL"`, `"outer - 2*wall_t"`) |
 | `create_cylinder`       | Cylinder                                                                                                                                                                                          |
 | `create_sphere`         | Sphere                                                                                                                                                                                            |

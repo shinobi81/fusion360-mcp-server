@@ -144,7 +144,78 @@ class FakeUserParameters:
 class FakeComponent:
     def __init__(self, name: str, bodies=()):
         self.name = name
-        self.bRepBodies = FakeCollection(list(bodies))
+        self.bRepBodies = FakeBRepBodies(list(bodies))
+
+
+class FakeBaseFeature(FakeDeletable):
+    """``features.baseFeatures.add()``: a feature that must be *in edit* to add to.
+
+    Fusion's ``BRepBodies.add`` docstring is explicit - "you must first call the
+    edit method of the base feature, then use the add method to create the body,
+    and finally call the finishEdit method ... The base feature must be in an
+    'edit' state to be able to add any additional items to it" - so the state is
+    modelled and an add outside it is refused.  A fake that accepted either order
+    could not tell a correct ``create_box`` from one that never opened the edit.
+    """
+
+    def __init__(self, name: str = "Base Feature1"):
+        super().__init__(name)
+        self.editing = False
+        self.bodies: list = []
+
+    def startEdit(self) -> bool:
+        self.editing = True
+        return True
+
+    def finishEdit(self) -> bool:
+        self.editing = False
+        return True
+
+
+class FakeBaseFeatures:
+    """``features.baseFeatures``: numbered the way Fusion numbers them.
+
+    Not a ``FakeCollection``: Fusion's ``BaseFeatures.add`` takes no argument, so
+    it cannot share that collection's ``add(item)`` shape.
+    """
+
+    def __init__(self):
+        self.added: list[FakeBaseFeature] = []
+
+    def add(self) -> FakeBaseFeature:
+        feature = FakeBaseFeature(f"Base Feature{len(self.added) + 1}")
+        self.added.append(feature)
+        return feature
+
+    @property
+    def count(self) -> int:
+        return len(self.added)
+
+    def item(self, index: int) -> FakeBaseFeature:
+        return self.added[index]
+
+    def __iter__(self):
+        return iter(self.added)
+
+
+class FakeBRepBodies(FakeCollection):
+    """``component.bRepBodies``: ``add`` persists a body, into a base feature.
+
+    ``targetBaseFeature`` is optional in Fusion's signature and required in a
+    parametric design, which is the design these tests build, so the fake models
+    the edit-state rule whenever one is passed at all.
+
+    A body added this way does **not** grow ``design.features`` or
+    ``design.bodies``: those are the timeline's count and a fixed number set at
+    construction, and no handler test reads either after a primitive.
+    """
+
+    def add(self, body, targetBaseFeature: FakeBaseFeature | None = None):
+        if targetBaseFeature is not None:
+            if not targetBaseFeature.editing:
+                raise RuntimeError("3 : the base feature is not in an edit state")
+            targetBaseFeature.bodies.append(body)
+        return super().add(body)
 
 
 class FakeTransform:
@@ -607,6 +678,7 @@ class FakeFeatures:
         self.combineFeatures = FakeCombineFeatures()
         self.shellFeatures = FakeShellFeatures()
         self.holeFeatures = FakeHoleFeatures(design)
+        self.baseFeatures = FakeBaseFeatures()
 
     def createPath(self, curve):
         """``features.createPath``: a sweep needs a Path around the curve."""
@@ -920,7 +992,7 @@ class FakeRoot:
         sketches=(),
         bodies=None,
     ):
-        self.bRepBodies = FakeCollection(
+        self.bRepBodies = FakeBRepBodies(
             list(bodies) if bodies is not None else _default_bodies(design)
         )
         self.sketches = FakeSketches(list(sketches))
