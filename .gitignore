@@ -30,4 +30,5 @@ docs/superpowers/
 
 # review/PR scratch files: a 'git add -A' must not swallow these
 .review-diff*
-.pr-body*
+.pr[-_]body*
+.pr[-_]diff*
