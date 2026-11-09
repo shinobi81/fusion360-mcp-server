@@ -1,5 +1,6 @@
 """Fusion360MCP Server Package — v2 (CustomEvent bridge architecture)"""
 
+import functools
 import logging
 import os
 import sys
@@ -7,11 +8,7 @@ from logging.handlers import RotatingFileHandler
 
 LOG_PATH = os.path.join(os.path.expanduser("~"), "fusion360mcp.log")
 
-#: Set once by :func:`configure`.  A module flag rather than an inspection of the
-#: logger, so a second call cannot attach a second file handler and double every line.
-_configured = False
-
-
+@functools.cache
 def configure() -> None:
     """Attach the log handlers, once.  The add-in's entry point calls this first thing.
 
@@ -21,11 +18,11 @@ def configure() -> None:
     does - writes to the user's home directory.
 
     ``LOG_PATH`` is read on each call rather than captured, so it stays patchable.
-    """
-    global _configured
-    if _configured:
-        return
 
+    ``functools.cache`` is what makes it idempotent: the second call returns the cached
+    result without running the body, so a second ``run()`` cannot attach a second file
+    handler and double every log line.  Tests clear the cache rather than patch a flag.
+    """
     logger = logging.getLogger("fusion360mcp")
     logger.setLevel(logging.DEBUG)
 
@@ -47,8 +44,6 @@ def configure() -> None:
     stream_handler.setLevel(logging.INFO)
     stream_handler.setFormatter(logging.Formatter("[MCP] %(message)s"))
     logger.addHandler(stream_handler)
-
-    _configured = True
 
 
 def get_logger(name: str | None = None) -> logging.Logger:

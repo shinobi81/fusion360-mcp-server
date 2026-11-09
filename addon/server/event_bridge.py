@@ -47,9 +47,11 @@ class WorkItem:
 class _CustomEvent(Protocol):
     """``adsk.core.CustomEvent``: the handler list the bridge adds to and drops from."""
 
-    def add(self, handler) -> None: ...
+    def add(self, handler) -> None:
+        pass
 
-    def remove(self, handler) -> None: ...
+    def remove(self, handler) -> None:
+        pass
 
 
 class _EventSource(Protocol):
@@ -59,11 +61,14 @@ class _EventSource(Protocol):
     and because it is the whole dependency - the bridge never touches a document.
     """
 
-    def registerCustomEvent(self, event_id: str) -> _CustomEvent: ...
+    def registerCustomEvent(self, event_id: str) -> _CustomEvent:
+        pass
 
-    def fireCustomEvent(self, event_id: str) -> None: ...
+    def fireCustomEvent(self, event_id: str) -> None:
+        pass
 
-    def unregisterCustomEvent(self, event_id: str) -> None: ...
+    def unregisterCustomEvent(self, event_id: str) -> None:
+        pass
 
 
 class _DrainsQueue(Protocol):
@@ -73,7 +78,8 @@ class _DrainsQueue(Protocol):
     visible, and so a test can stand in for the bridge without constructing one.
     """
 
-    def drain_queue(self) -> None: ...
+    def drain_queue(self) -> None:
+        pass
 
 
 def _handler_class(base):

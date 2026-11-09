@@ -44,10 +44,9 @@ def _clean_logging():
 
     logger = logging.getLogger("fusion360mcp")
     saved_handlers = logger.handlers[:]
-    saved_configured = server._configured
     yield
     logger.handlers[:] = saved_handlers
-    server._configured = saved_configured
+    server.configure.cache_clear()
 
 
 def _synthetic_adsk(monkeypatch):
