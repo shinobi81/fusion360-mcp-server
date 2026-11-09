@@ -419,22 +419,30 @@ _SHELL_SELECTIONS = ("top", "bottom")
 
 
 def _shell(p: dict) -> dict:
-    # The handler refuses anything but top/bottom before it looks at a body, so
-    # mock mode must not accept a call Fusion rejects.  Same for the wall: Fusion
-    # answers a zero, negative, NaN or infinite thickness with an opaque
-    # "InternalValidationError", so the handler now refuses it first (§24.5).
-    selection = p.get("face_selection", "top")
-    if selection not in _SHELL_SELECTIONS:
-        return _mock_error(f"Unknown face_selection '{selection}' — use top/bottom")
+    # Same order as the handler: the wall is judged before the selection, so a call
+    # wrong in both ways reports the same first error here as in Fusion.  Fusion
+    # answers a wall of zero or less with an opaque "3 : Some input argument is
+    # invalid." (§24.5), which is why the handler - and this - refuse it first.
     thickness = p.get("thickness", 0.1)
     refusal = _non_finite_error(thickness)
     if refusal is not None:
-        return refusal
+        # The handler prepends the field, so mock reports the same sentence.
+        return _mock_error(
+            f"thickness must be finite, in cm: {refusal['error_message']}"
+        )
+    if isinstance(thickness, bool) or not isinstance(thickness, (int, float)):
+        return _mock_error(
+            f"thickness must be a positive number in cm, got {thickness!r}"
+        )
     if thickness <= 0:
         return _mock_error(
-            f"thickness must be positive, got {thickness} cm - a shell removes "
-            "material, so the wall has to be a real distance"
+            f"thickness must be a positive number in cm, got {thickness!r} - a "
+            "shell removes material, so the wall has to be a real distance"
         )
+
+    selection = p.get("face_selection", "top")
+    if selection not in _SHELL_SELECTIONS:
+        return _mock_error(f"Unknown face_selection '{selection}' — use top/bottom")
     return {
         "body_name": p.get("body_name", "Body1"),
         "thickness": p.get("thickness", 0.1),

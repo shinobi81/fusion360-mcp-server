@@ -355,7 +355,7 @@ _RULES: list[tuple[str, str, list[str]]] = [
     (
         # A shell wall Fusion cannot honour.  The schema says minimum 0.001, but the
         # socket takes what a client sends, and json.loads accepts NaN and Infinity.
-        r"thickness must be positive",
+        r"thickness must be (?:a )?positive",
         "INVALID_INPUT",
         [
             "thickness is a distance in cm and must be greater than zero.",

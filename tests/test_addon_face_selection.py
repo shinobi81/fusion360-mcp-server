@@ -233,7 +233,9 @@ def test_mock_accepts_the_two_it_documents():
         ]
 
 
-@pytest.mark.parametrize("thickness", [0.0, -1.0, float("nan"), float("inf")])
+@pytest.mark.parametrize(
+    "thickness", [0.0, -1.0, float("nan"), float("inf"), "0.2", True]
+)
 def test_shell_refuses_a_thickness_fusion_cannot_honour(bound_handler, thickness):
     """A wall thickness of zero, negative, NaN or infinity never reaches Fusion.
 
@@ -254,3 +256,39 @@ def test_shell_refuses_a_thickness_fusion_cannot_honour(bound_handler, thickness
     assert design.rootComponent.features.shellFeatures.inputs == [], (
         "no shell input was built for a value Fusion would refuse"
     )
+
+
+def test_the_wall_is_judged_before_the_body_is_looked_up(bound_handler):
+    """A bad wall and a missing body must report the wall, not the lookup.
+
+    Both are wrong; the caller's value is judged first because it is the value they
+    passed, and the message names the field.
+    """
+    design = _design(box_faces())
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError) as raised:
+        handler.shell(thickness=0.0, body_name="Missing")
+
+    assert "thickness" in str(raised.value)
+    assert "Missing" not in str(raised.value)
+
+
+@pytest.mark.parametrize("thickness", [0.0, -1.0, float("nan"), float("inf"), "0.2"])
+def test_mock_refuses_a_wall_the_handler_refuses(thickness):
+    """Mock mode is where an agent develops the sequence; it must not teach this."""
+    result = mock_command("shell", {"thickness": thickness})
+
+    assert result["ok"] is False
+    assert result["error_kind"] == "INVALID_INPUT"
+    assert result["hints"]
+    assert "thickness" in result["error_message"]
+
+
+def test_mock_shell_judges_the_wall_before_the_selection():
+    """Same order as the handler, so the first error matches."""
+    result = mock_command("shell", {"thickness": 0.0, "face_selection": "sideways"})
+
+    assert result["ok"] is False
+    assert "thickness" in result["error_message"]
+    assert "sideways" not in result["error_message"]
