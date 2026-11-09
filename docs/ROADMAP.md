@@ -28,18 +28,19 @@ The add-in's tests used to reach the Fusion API through `ast` guards, which asse
 source text rather than on behaviour. Three parcels, one PR each, all merged:
 
 1. **`tests/test_addon_joints.py`** - *done (#63).* Fifteen of its tests parsed the
-   handler's source; eight of them are gone, replaced by tests in
-   `test_addon_joint_values.py` and `test_addon_joint_frame.py` that run the
-   handler, and by a fake that declares Fusion's real one-argument `createByPoint`
-   and refuses the attributes Fusion does not expose. The nine left are
-   table-and-schema reads: those tables are data, and a table asserting itself
-   proves nothing.
+   handler's source. Eight are gone: the behavioural ones now drive the handler from
+   `test_addon_joint_values.py` and `test_addon_joint_frame.py`, the `createByPoint`
+   arity is pinned by a fake that declares Fusion's real one-argument signature, and the
+   two as-built scans were already covered by #61. The nine left read tables: eight that
+   survived, plus the `required` schema read the review restored - because a table is
+   data, and a table asserting itself proves nothing.
 2. **The `create_hole` call-site guards** - *done (#65).* The five guards in
    `tests/test_hole_geometry.py` are replaced by six tests in `tests/test_addon_hole.py`,
    which drive the handler against a hole-feature model: a planar face carrying its own
    surface, a sketch created on that face, `sketchPoints.add`,
    `HoleFeatures.createSimpleInput` and `participantBodies`. The sixth pins the
-   planar-face skip the scans never covered; the pure-module tests stay as they are.
+   planar-face skip the scans never covered; the pure-module tests there stay as they
+   are.
 3. **Make the add-in importable.** - *done (#68).* One adapter
    (`addon/server/fusion_api.py`) resolves `adsk` lazily, so nothing under `addon/` imports
    it at module scope; `addon/server` is in `[tool.coverage.run] source` and the floor is
@@ -49,11 +50,14 @@ source text rather than on behaviour. Three parcels, one PR each, all merged:
    the socket is done immediately after, since the add-in is registered against `main`.
 
 `tests/fakes/` is over its soft size cap in exchange for retiring the guards wholesale;
-the three parcels above are deliberately not free, and a file that keeps its guards says
-why in its docstring. Two source readers stay on purpose, and neither is a behavioural
-claim: `test_addon_sync.py`'s table-against-schema check, which is a property of the
-source rather than of running it, and `test_addon_joints.py`'s `_class_assign`, which
-reads the two `CommandHandler` tables the tests compare against the schemas.
+the two conversion parcels above are deliberately not free, and a file that keeps its
+guards says why in its docstring.
 
-Nothing else is queued behind this section. What is left is section 1, and there the
-badge markup is the only step outside a form.
+Three source reads stay, and none of them is a behavioural claim: `test_addon_sync.py`
+compares `CommandHandler._COMMANDS` and `_MUTATION_COMMANDS` against `mock.py`'s tables,
+`test_addon_joints.py` compares the joint tables against the schemas, and
+`test_addon_sources.py` reads the add-in's tokens because both PEP 758 spellings parse
+the same. Each is a property of the source rather than of running it.
+
+Nothing else is queued behind this section. Section 1 is what is left, and it holds one
+code step - a wider ruff selection - plus the questionnaire and the badge.
