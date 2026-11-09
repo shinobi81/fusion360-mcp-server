@@ -210,8 +210,10 @@ uv run ruff format --check src/ tests/ fuzz/  # format gate (what CI runs)
 npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"
 ```
 
-The add-in can't be imported under pytest — it needs Fusion's `adsk` runtime — so tests
-load `command_handler.py` against the fake runtime in `tests/fakes/`. Start with
+The add-in is imported under pytest as an ordinary module: it resolves Fusion's `adsk`
+through the lazy adapter in `addon/server/fusion_api.py`, and the `handler_module`
+fixture in `tests/conftest.py` injects the fake runtime from `tests/fakes/` into it. Start
+with
 **[CONTRIBUTING.md](CONTRIBUTING.md)**; architecture and tool conventions are in
 **[AGENTS.md](AGENTS.md)**.
 

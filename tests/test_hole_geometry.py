@@ -1,8 +1,8 @@
 """Tests for create_hole's face picking and plane solving.
 
-``addon/server/hole_geometry.py`` is loaded by path: the addon package
-imports Fusion's ``adsk`` runtime, which isn't installable here, but this
-module deliberately has no such dependency.
+``addon/server/hole_geometry.py`` is loaded by path so the test needs neither the
+add-in package nor the fake runtime: this module deliberately has no ``adsk``
+dependency.
 
 The rules here are the pure ones - whether a face counts as horizontal, how two
 candidates rank, and where a plane sits above an (x, y).  The call site that

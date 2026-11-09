@@ -6,9 +6,8 @@ model ``z=-0.65`` (``create_sketch(z_offset=-0.65)``), drawing with
 ``center_z=-0.65`` used to put the circle at model ``z=-1.30`` — the offset
 applied twice, reported as success.
 
-The add-in cannot be imported under pytest because it needs Fusion's ``adsk``
-runtime, so these tests load ``command_handler.py`` against a minimal fake and
-assert on what is handed to the sketch curves — the geometry Fusion actually
+These tests load ``command_handler.py`` against the fake runtime in ``tests/fakes/``
+and assert on what is handed to the sketch curves — the geometry Fusion actually
 builds.
 """
 
