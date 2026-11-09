@@ -1687,35 +1687,33 @@ class CommandHandler:
                 box.maxPoint.x, box.maxPoint.y, box.maxPoint.z
             )
 
-        if dimension_type == "distance":
-            dim = dims.addDistanceDimension(
+        # One dict, not an if/elif chain with an unreachable else: membership is
+        # the table's job (it raised above), and a type added to the table without a
+        # call here fails the parity test rather than at a caller's expense.
+        calls = {
+            "distance": lambda: dims.addDistanceDimension(
                 e1.startSketchPoint,
                 e2.startSketchPoint,
                 adsk.fusion.DimensionOrientations.AlignedDimensionOrientation,
                 text_pt,
-            )
-        elif dimension_type == "horizontal":
-            dim = dims.addDistanceDimension(
+            ),
+            "horizontal": lambda: dims.addDistanceDimension(
                 e1.startSketchPoint,
                 e2.startSketchPoint,
                 adsk.fusion.DimensionOrientations.HorizontalDimensionOrientation,
                 text_pt,
-            )
-        elif dimension_type == "vertical":
-            dim = dims.addDistanceDimension(
+            ),
+            "vertical": lambda: dims.addDistanceDimension(
                 e1.startSketchPoint,
                 e2.startSketchPoint,
                 adsk.fusion.DimensionOrientations.VerticalDimensionOrientation,
                 text_pt,
-            )
-        elif dimension_type == "angular":
-            dim = dims.addAngularDimension(e1, e2, text_pt)
-        elif dimension_type == "radial":
-            dim = dims.addRadialDimension(e1, text_pt)
-        elif dimension_type == "diameter":
-            dim = dims.addDiameterDimension(e1, text_pt)
-        else:
-            raise RuntimeError(f"Unknown dimension type: {dimension_type}")
+            ),
+            "angular": lambda: dims.addAngularDimension(e1, e2, text_pt),
+            "radial": lambda: dims.addRadialDimension(e1, text_pt),
+            "diameter": lambda: dims.addDiameterDimension(e1, text_pt),
+        }
+        dim = calls[dimension_type]()
 
         dim.parameter.value = value
         return {"sketch": sketch.name, "dimension_type": dimension_type, "value": value}

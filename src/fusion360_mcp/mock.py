@@ -916,13 +916,23 @@ def _entity_shape_error(
             ),
             "hints": [f"Choose one of: {', '.join(sorted(table))}."],
         }
+    if p.get("entity_one") is None:
+        return {
+            "ok": False,
+            "error_kind": "INVALID_INPUT",
+            "error_message": (
+                f"a {kind} {tool} needs entity_one - mock mode has no sketch, so "
+                "the index itself is not checked here"
+            ),
+            "hints": ["Pass entity_one: every type takes a first entity."],
+        }
     if needs_two and p.get("entity_two") is None:
         return {
             "ok": False,
             "error_kind": "INVALID_INPUT",
             "error_message": (
-                f"a {kind} {tool} needs entity_two (a curve index) - mock mode "
-                "has no sketch, so the index itself is not checked here"
+                f"a {kind} {tool} needs entity_two - mock mode has no sketch, so "
+                "the index itself is not checked here"
             ),
             "hints": ["Pass entity_two: this type takes two entities."],
         }

@@ -1316,7 +1316,10 @@ TOOLS: list[dict] = [
                 },
                 "entity_one": {
                     "type": "integer",
-                    "description": "Index of the first sketch entity",
+                    "description": (
+                        "Index of the first entity: a sketch POINT for midpoint, "
+                        "a curve for every other type"
+                    ),
                     "minimum": 0,
                 },
                 "entity_two": {
@@ -1398,14 +1401,17 @@ TOOLS: list[dict] = [
                 },
                 "entity_one": {
                     "type": "integer",
-                    "description": "Index of first entity (point or curve)",
+                    "description": (
+                        "Index of the curve to measure (radial and diameter take "
+                        "this one only)"
+                    ),
                     "minimum": 0,
                 },
                 "entity_two": {
                     "type": "integer",
                     "description": (
-                        "Index of second entity "
-                        "(for distance/angular; not for radial/diameter)"
+                        "Index of the second curve (distance, horizontal, vertical "
+                        "and angular need it; radial and diameter do not)"
                     ),
                     "minimum": 0,
                 },

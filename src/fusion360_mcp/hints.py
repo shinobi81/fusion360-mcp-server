@@ -302,6 +302,30 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # A field the type needs is missing.  These messages contain "a curve
+        # index", so without a rule above the curve-index one they inherit its
+        # advice ("a negative index is refused, never wrapped") - which answers a
+        # question the caller did not ask.  Anchored on "needs entity_..." only.
+        r"needs entity_(one|two)",
+        "INVALID_INPUT",
+        [
+            "Pass the field the type needs: it is missing, not invalid.",
+            "radial and diameter measure one curve, so they take entity_one only.",
+            "distance, horizontal, vertical and angular take both entity indices.",
+            "Constraints follow the same shape: fix/horizontal/vertical take one.",
+        ],
+    ),
+    (
+        # A type the tool does not know used to fall through to UNKNOWN with no
+        # hints, which is the failure mode every rule here exists to prevent.
+        r"unknown (?:dimension|constraint) type",
+        "INVALID_INPUT",
+        [
+            "Use one of the types the error message lists - it is the full set.",
+            "The same list is the tool's inputSchema enum.",
+        ],
+    ),
+    (
         # ``midpoint``'s first entity is a sketch POINT, and it was resolved against
         # the curve list: a point index inside the curve list named the wrong item,
         # and a refusal spoke about curves.  Placed ABOVE the curve-index rule so

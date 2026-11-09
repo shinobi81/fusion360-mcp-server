@@ -27,8 +27,10 @@ from __future__ import annotations
 
 import pytest
 
+import fusion360_mcp.mock as mock_mod
 from fusion360_mcp.hints import classify
 from fusion360_mcp.mock import mock_command
+from fusion360_mcp.tools import TOOLS
 from tests.fakes.design import FakeDesign
 from tests.fakes.runtime import FakePoint3D
 from tests.fakes.sketch import FakeSketch
@@ -231,19 +233,28 @@ def test_a_valid_dimension_still_sets_its_value(bound_handler):
 def test_mock_refuses_an_index_that_cannot_name_a_curve(index):
     """Mock mode has no sketch, so it can only refuse what is never valid."""
     result = mock_command(
-        "add_constraint", {"constraint_type": "parallel", "entity_one": index}
+        "add_constraint",
+        {"constraint_type": "parallel", "entity_one": index, "entity_two": 1},
     )
 
     assert result["ok"] is False
     assert result["error_kind"] == "INVALID_INPUT"
-    assert result["hints"]
+    message = result["error_message"]
+    assert "0-based" in message or "whole-number" in message, (
+        "the index check fired, not the shape one"
+    )
 
 
 @pytest.mark.parametrize("index", [-1, 0.5])
 def test_mock_dimension_refuses_a_negative_index(index):
     result = mock_command(
         "add_dimension",
-        {"dimension_type": "distance", "value": 1.0, "entity_one": index},
+        {
+            "dimension_type": "distance",
+            "value": 1.0,
+            "entity_one": index,
+            "entity_two": 1,
+        },
     )
 
     assert result["ok"] is False
@@ -364,35 +375,16 @@ def test_a_two_entity_constraint_without_its_second_index_is_refused(bound_handl
 
 # ── mock mode and the handler agree about the shape each type needs ───
 
-DIMENSION_SHAPES = [
-    ("distance", True),
-    ("horizontal", True),
-    ("vertical", True),
-    ("angular", True),
-    ("radial", False),
-    ("diameter", False),
-]
-
-CONSTRAINT_SHAPES = [
-    ("coincident", True),
-    ("parallel", True),
-    ("perpendicular", True),
-    ("tangent", True),
-    ("equal", True),
-    ("fix", False),
-    ("horizontal", False),
-    ("vertical", False),
-    ("concentric", True),
-    ("collinear", True),
-    ("smooth", True),
-    ("midpoint", True),
-    ("symmetry", True),
-]
+#: Derived from the mock's tables, not written out: a fourth copy of the same
+#: knowledge is a fourth thing to drift.  ``test_the_*_tables_and_the_schema_agree``
+#: then ties the handler's table and the tool schema to these.
+DIMENSION_SHAPES = sorted(mock_mod._DIMENSION_NEEDS_TWO.items())
+CONSTRAINT_SHAPES = sorted(mock_mod._CONSTRAINT_NEEDS_TWO.items())
 
 
 @pytest.mark.parametrize("dimension_type, needs_two", DIMENSION_SHAPES)
 def test_mock_and_handler_agree_about_a_dimension_shape(
-    bound_handler, dimension_type, needs_two
+    bound_handler, handler_module, dimension_type, needs_two
 ):
     """A shape real mode accepts must be accepted in mock mode, and vice versa.
 
@@ -400,6 +392,9 @@ def test_mock_and_handler_agree_about_a_dimension_shape(
     handler refuses must not come back ``ok`` there - which is how a radial
     dimension became impossible without a meaningless second index.
     """
+    needed = handler_module.CommandHandler._DIMENSION_ENTITIES[dimension_type]
+    assert (len(needed) == 2) is needs_two, "handler table and mock table agree"
+
     design, _sketch = four_curve_design()
     handler = bound_handler(design)
     params = {"dimension_type": dimension_type, "value": 1.0, "entity_one": 0}
@@ -418,8 +413,13 @@ def test_mock_and_handler_agree_about_a_dimension_shape(
 
 @pytest.mark.parametrize("constraint_type, needs_two", CONSTRAINT_SHAPES)
 def test_mock_and_handler_agree_about_a_constraint_shape(
-    bound_handler, constraint_type, needs_two
+    bound_handler, handler_module, constraint_type, needs_two
 ):
+    _kind, handler_needs_two = handler_module.CommandHandler._CONSTRAINT_ENTITIES[
+        constraint_type
+    ]
+    assert handler_needs_two is needs_two, "handler table and mock table agree"
+
     design, sketch = four_curve_design()
     if constraint_type == "midpoint":
         sketch.sketchPoints.add(FakePoint3D(0.0, 5.0, 0.0))
@@ -472,3 +472,107 @@ def test_a_two_entity_dimension_keeps_the_origin_label(bound_handler):
 
     _method, args = sketch.sketchDimensions.calls[0]
     assert (args[3].x, args[3].y, args[3].z) == (0.0, 0.0, 0.0)
+
+
+def _tool_enum(tool_name: str, field: str) -> set:
+    for tool in TOOLS:
+        if tool["name"] == tool_name:
+            return set(tool["inputSchema"]["properties"][field]["enum"])
+    raise AssertionError(f"{tool_name} is not a tool")
+
+
+def test_the_dimension_tables_and_the_schema_agree(handler_module):
+    """Three copies of the same knowledge - handler, mock, schema - in one place.
+
+    Set equality in both directions: a type added to one and forgotten in another
+    is exactly the drift a fixed list of test cases cannot see.
+    """
+    handler_types = set(handler_module.CommandHandler._DIMENSION_ENTITIES)
+
+    assert handler_types == _tool_enum("add_dimension", "dimension_type")
+    assert handler_types == set(mock_mod._DIMENSION_NEEDS_TWO)
+
+
+def test_the_constraint_tables_and_the_schema_agree(handler_module):
+    handler_types = set(handler_module.CommandHandler._CONSTRAINT_ENTITIES)
+
+    assert handler_types == _tool_enum("add_constraint", "constraint_type")
+    assert handler_types == set(mock_mod._CONSTRAINT_NEEDS_TWO)
+
+
+def test_mock_refuses_a_call_missing_its_first_entity():
+    """Mock mode invented ``entity_one: 0`` and reported success.
+
+    The handler refuses every type without ``entity_one``, so mock mode teaching
+    that shape would send an agent to a guaranteed failure.
+    """
+    for command, params in (
+        (
+            "add_dimension",
+            {"dimension_type": "distance", "value": 1.0, "entity_two": 1},
+        ),
+        ("add_constraint", {"constraint_type": "parallel", "entity_two": 1}),
+    ):
+        result = mock_command(command, params)
+
+        assert result["ok"] is False
+        assert result["error_kind"] == "INVALID_INPUT"
+        assert result["hints"]
+        assert "entity_one" in result["error_message"]
+
+
+def test_a_non_integer_point_index_is_refused_with_point_advice(bound_handler):
+    """This message matches the POINT rule and nothing else.
+
+    ``is outside sketch`` would be caught by the curve rule, so only a
+    non-integer point index proves the point rule exists and is ordered first.
+    """
+    design, _sketch = four_curve_design()
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError) as raised:
+        handler.add_constraint("midpoint", entity_one=1.5, entity_two=0)
+
+    kind, hints = classify(str(raised.value))
+    assert kind == "INVALID_INPUT"
+    assert hints[0].startswith("Point indices are 0-based"), hints[0]
+
+
+@pytest.mark.parametrize(
+    "call, message",
+    [
+        (
+            lambda handler: handler.add_dimension("scalar", 1.0, entity_one=0),
+            "Unknown dimension type",
+        ),
+        (
+            lambda handler: handler.add_constraint("glue", entity_one=0),
+            "Unknown constraint type",
+        ),
+    ],
+)
+def test_an_unknown_type_is_refused_with_advice(bound_handler, call, message):
+    """A typo used to reach the caller as UNKNOWN with no hints."""
+    design, _sketch = four_curve_design()
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError) as raised:
+        call(handler)
+
+    assert message in str(raised.value)
+    kind, hints = classify(str(raised.value))
+    assert kind == "INVALID_INPUT" and hints
+
+
+@pytest.mark.parametrize(
+    "command, params",
+    [
+        ("add_dimension", {"dimension_type": "scalar", "value": 1.0, "entity_one": 0}),
+        ("add_constraint", {"constraint_type": "glue", "entity_one": 0}),
+    ],
+)
+def test_mock_refuses_an_unknown_type_with_the_same_kind(command, params):
+    result = mock_command(command, params)
+
+    assert result["ok"] is False
+    assert result["error_kind"] == "INVALID_INPUT"
