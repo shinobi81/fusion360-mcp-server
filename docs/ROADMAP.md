@@ -6,11 +6,13 @@ a known gap is visibly known rather than merely absent.
 
 ## 1. A stricter lint selection
 
-`pyproject.toml` sets `select = ["E", "F", "I", "RUF"]`, which is a linter rather than
-strict: `B` (bugbear) reports constructs that are almost always a mistake, and `SIM`
-(simplify) reports code that says at more length what it could say at less. Adding both
-is one line in the config - the work is triaging what they report, and if the first pass
-is large, one rule family per PR.
+`pyproject.toml` sets `select = ["E", "F", "I", "RUF"]`, which is a linter configuration
+rather than a strict one: `B` (bugbear) reports constructs that are almost always a
+mistake, and `SIM` (simplify) reports code that says at more length what it could say at
+less. Adding both is one line in the config - the work is triaging what they report over
+all four linted trees (`src/`, `tests/`, `fuzz/`, `addon/`), and if the first pass is
+large, one rule family per PR. `addon/` executes on Fusion's own interpreter, so a
+rewrite proposed there is judged against that rather than against CPython 3.14 alone.
 
 Nothing else about the configuration changes. `line-length = 88` matches the prose gates,
 and `target-version` stays inferred from `requires-python`, so the support window is
