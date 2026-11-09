@@ -142,3 +142,28 @@ def test_command_handler_imports_without_adsk(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "No module named 'adsk'" not in result.stderr
     assert result.stdout.strip() == "[]", "importing the handler must create no file"
+
+
+def test_the_bridge_and_socket_import_without_adsk(tmp_path):
+    """The two modules that still reach ``adsk`` at import: both must be lazy now."""
+    result = _import_in_subprocess(
+        tmp_path, "addon.server.event_bridge", "addon.server.socket_server"
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "No module named 'adsk'" not in result.stderr
+    assert result.stdout.strip() == "[]", "importing the bridge must create no file"
+
+
+def test_a_missing_adsk_raises_AttributeError(monkeypatch):
+    """``__getattr__`` must not let an ImportError escape.
+
+    ``getattr(x, name, default)``, ``hasattr`` and ``monkeypatch.setattr`` all catch
+    AttributeError only, so an ImportError from here breaks every one of them - it did,
+    as a teardown failure that looked like a fixture bug.
+    """
+    monkeypatch.delitem(sys.modules, "adsk", raising=False)
+    fusion_api.reset()
+
+    with pytest.raises(AttributeError, match="adsk is not importable"):
+        fusion_api.core

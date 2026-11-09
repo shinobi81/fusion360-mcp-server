@@ -20,11 +20,14 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # declared for type checkers; resolved lazily at runtime instead
     from collections.abc import Callable
-    from types import ModuleType
+    from typing import Any
 
-    cam: ModuleType
-    core: ModuleType
-    fusion: ModuleType
+    #: Fusion's own modules are only resolvable inside Fusion, so ``Any`` is the honest
+    #: type for them offline - saying ``ModuleType`` would be a lie that then breaks
+    #: every ``adsk.core.Application`` annotation in the add-in.
+    cam: Any
+    core: Any
+    fusion: Any
     doEvents: Callable[[], None]
 
 #: The names ``__getattr__`` serves.  Keep in step with the declarations above.
@@ -34,7 +37,14 @@ _NAMES = ("cam", "core", "fusion", "doEvents")
 def __getattr__(name: str):
     if name not in _NAMES:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    value = _resolve(name)
+    try:
+        value = _resolve(name)
+    except ImportError as exc:  # no Fusion here at all
+        # ``__getattr__`` that raises ImportError breaks ``getattr(x, n, default)``,
+        # ``hasattr`` and ``monkeypatch.setattr``: all three catch AttributeError only.
+        raise AttributeError(
+            f"module {__name__!r} cannot resolve {name!r}: adsk is not importable"
+        ) from exc
     # Cached as a real attribute: later lookups never reach this function, which is why
     # an injected fake and a resolved module behave identically.
     globals()[name] = value
