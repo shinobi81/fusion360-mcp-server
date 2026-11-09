@@ -22,27 +22,36 @@ evidence, and only `warnings_strict` below comes from that map.
   `release.yml` attaches the attestation bundle as `provenance.sigstore.json`, the
   name the check reads; the score reaches 8/10 once five releases carry it.
 
-## 2. The test refactor
+## 2. The test refactor - done
 
 The add-in's tests used to reach the Fusion API through `ast` guards, which assert on
-source text rather than on behaviour. Three parcels, in order, one PR each - two are done:
+source text rather than on behaviour. Three parcels, one PR each, all merged:
 
-1. **`tests/test_addon_joints.py`** - *done.* The behavioural guards (argument counts,
-   motion per `joint_type`, as-built joints, "never calls `computeAll`") now run the
-   handler. What is left is table-against-schema checking, which no test can observe.
-2. **The `create_hole` call-site guards** - *done.* The five guards in
-   `tests/test_hole_geometry.py` are replaced by `tests/test_addon_hole.py`, which drives
-   the handler against a hole-feature model: a planar face carrying its own surface, a
-   sketch created on that face, `sketchPoints.add`, `HoleFeatures.createSimpleInput` and
-   `participantBodies`. The pure-module tests there stay as they are.
-3. **Make the add-in importable.** — **done (#68).** One adapter
+1. **`tests/test_addon_joints.py`** - *done (#63).* Fifteen of its sixteen tests parsed
+   `command_handler.py`; the eight behavioural ones now run the handler against fakes that
+   model the seven motion setters, a driveable value per joint type and `asBuiltJoints`.
+   The nine tests left are table-against-schema checks, which no test can observe any
+   other way.
+2. **The `create_hole` call-site guards** - *done (#65).* The five guards in
+   `tests/test_hole_geometry.py` are replaced by six tests in `tests/test_addon_hole.py`,
+   which drive the handler against a hole-feature model: a planar face carrying its own
+   surface, a sketch created on that face, `sketchPoints.add`,
+   `HoleFeatures.createSimpleInput` and `participantBodies`. The sixth pins the
+   planar-face skip the scans never covered; the pure-module tests stay as they are.
+3. **Make the add-in importable.** - *done (#68).* One adapter
    (`addon/server/fusion_api.py`) resolves `adsk` lazily, so nothing under `addon/` imports
    it at module scope; `addon/server` is in `[tool.coverage.run] source` and the floor is
    re-based from the measurement (59 combined, with `src/` keeping its own 95 gate in CI).
-   The new code is exercised in Fusion 2706 before merge — the adapter's four names and
+   The new code is exercised in Fusion 2706 before merge - the adapter's four names and
    the bridge's handler class, driven against the real API; the reload-and-drive through
    the socket is done immediately after, since the add-in is registered against `main`.
 
 `tests/fakes/` is over its soft size cap in exchange for retiring the guards wholesale;
-the two conversion parcels above are deliberately not free, and a file that keeps its
-guards says why in its docstring.
+the three parcels above are deliberately not free, and a file that keeps its guards says
+why in its docstring. Two source readers stay on purpose, and neither is a behavioural
+claim: `test_addon_sync.py`'s table-against-schema check, which is a property of the
+source rather than of running it, and `test_addon_joints.py`'s `_class_assign`, which
+reads the two `CommandHandler` tables the tests compare against the schemas.
+
+Nothing else is queued behind this section. What is left is section 1, and there the
+badge markup is the only step outside a form.
