@@ -167,3 +167,38 @@ def test_a_missing_adsk_raises_AttributeError(monkeypatch):
 
     with pytest.raises(AttributeError, match="adsk is not importable"):
         fusion_api.core
+
+
+def test_the_fixture_installs_its_fakes_on_the_adapter():
+    """The seam is the same code path production uses: a module attribute."""
+    from tests.fakes.runtime import fake_runtime
+
+    with fake_runtime():
+        point = fusion_api.core.Point3D.create(1, 2, 3)
+        assert type(point).__name__ == "FakePoint3D", "the fake, not Fusion"
+
+    assert "core" not in vars(fusion_api), "the fixture must reset the adapter"
+
+
+def test_a_reload_after_the_adapter_change_still_swaps_the_handler():
+    """``reload_handler`` is the hot path the add-in uses between edits.
+
+    It reloads the sibling modules and builds a fresh ``CommandHandler()`` — the one
+    place a real construction happens outside Fusion, and the reason the fake core
+    needs ``Application``.
+    """
+    from addon.server import event_bridge
+    from tests.fakes.app import FakeApplication
+    from tests.fakes.runtime import fake_runtime
+    from tests.test_addon_bridge import Handler
+
+    with fake_runtime():
+        bridge = event_bridge.EventBridge(FakeApplication(), Handler())
+        try:
+            before = bridge._handler
+            bridge.reload_handler()
+
+            assert bridge._handler is not before
+            assert bridge._handler.app is not None, "a real CommandHandler()"
+        finally:
+            bridge.stop()

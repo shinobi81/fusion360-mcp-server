@@ -2,7 +2,7 @@
 
 ``command_handler.py`` imports ``adsk.cam``, ``adsk.core`` and ``adsk.fusion``
 at module level, so no test can import it without them.  This module supplies
-those three, loads the handler against them, and restores ``sys.modules`` when
+those three, injects them into the add-in's adapter, and resets the adapter when
 the test module finishes — a fake left behind would be handed to the next module
 that imports adsk-dependent code instead of failing loudly.
 
@@ -21,20 +21,11 @@ Geometry lives in ``tests.fakes.sketch`` and the design tree in
 from __future__ import annotations
 
 import importlib
-import logging
-import sys
 import types
 from collections.abc import Iterator
 from contextlib import contextmanager
-from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SERVER_DIR = REPO_ROOT / "addon" / "server"
-
-# One synthetic package name for every add-in test: the handler is imported
-# once per test module, and a stable name keeps ``sys.modules`` bookkeeping
-# trivial.
-FAKE_PACKAGE = "addon_handler_under_test"
+from .app import FakeApplication, FakeCustomEventHandler
 
 # One source of truth for the design-type strings: ``undo`` compares against the
 # copy the runtime hands the handler, so the fake design must use that same one.
@@ -299,15 +290,17 @@ def _primitives() -> types.ModuleType:
     return importlib.import_module("tests.fakes.bodies")
 
 
-_ADSK_MODULES = ("adsk", "adsk.core", "adsk.fusion", "adsk.cam")
-
 
 def install() -> None:
-    """Put a fake ``adsk`` in ``sys.modules``.
+    """Point the add-in's one import site at the fake API.
 
-    The surface is the union of what the three add-in test modules need: a
-    small, fixed set of constructors and enums.  Adding a name here is the only
-    way to widen it, so it stays reviewable.
+    The surface is the union of what the add-in test modules need: a small, fixed
+    set of constructors and enums.  Adding a name here is the only way to widen it,
+    so it stays reviewable.
+
+    Nothing goes into ``sys.modules``: the add-in resolves ``adsk`` through
+    ``fusion_api``, so injecting attributes *is* the production path - the same code
+    Fusion runs, with different values.
     """
     core = module(
         "adsk.core",
@@ -317,6 +310,8 @@ def install() -> None:
         ObjectCollection=FakeObjectCollection,
         ValueInput=FakeValueInput,
         OrientedBoundingBox3D=_primitives().FakeOrientedBoundingBox3D,
+        Application=FakeApplication,
+        CustomEventHandler=FakeCustomEventHandler,
     )
     fusion = module(
         "adsk.fusion",
@@ -330,50 +325,26 @@ def install() -> None:
         TemporaryBRepManager=_primitives().FakeTemporaryBRepManager,
     )
     cam = module("adsk.cam")
-    adsk = module(
-        "adsk",
-        core=core,
-        fusion=fusion,
-        cam=cam,
-        doEvents=lambda: None,
-    )
-    sys.modules.update(
-        {"adsk": adsk, "adsk.core": core, "adsk.fusion": fusion, "adsk.cam": cam}
-    )
 
+    from addon.server import fusion_api
 
-def _import_handler() -> types.ModuleType:
-    """Import ``command_handler.py`` under the synthetic package."""
-    package = types.ModuleType(FAKE_PACKAGE)
-    package.__path__ = [str(SERVER_DIR.parent)]
-    server = types.ModuleType(f"{FAKE_PACKAGE}.server")
-    server.__path__ = [str(SERVER_DIR)]
-    # The add-in's package __init__ imports Fusion's logger; this is the one
-    # piece of it the handler needs.
-    setattr(server, "get_logger", lambda name=None: logging.getLogger("addon-test"))
-    sys.modules[FAKE_PACKAGE] = package
-    sys.modules[f"{FAKE_PACKAGE}.server"] = server
-    return importlib.import_module(f"{FAKE_PACKAGE}.server.command_handler")
+    fusion_api.core = core
+    fusion_api.fusion = fusion
+    fusion_api.cam = cam
+    fusion_api.doEvents = lambda: None
 
 
 @contextmanager
 def fake_runtime() -> Iterator[types.ModuleType]:
-    """Install the fake adsk, load the handler, then restore ``sys.modules``.
+    """Inject the fakes, import the handler, and reset the adapter afterwards.
 
-    Scoped to the caller, not to the session: two test modules must not share
-    the fake, and anything that was in ``sys.modules`` before (a real ``adsk``,
-    however unlikely) is put back.
+    Scoped to the caller: a module that inherited a previous test module's injected
+    adapter would pass for the wrong reason, so the reset is in a ``finally``.
     """
-    saved = {
-        name: sys.modules[name]
-        for name in list(sys.modules)
-        if name in _ADSK_MODULES or name.startswith(FAKE_PACKAGE)
-    }
+    from addon.server import fusion_api
+
     install()
     try:
-        yield _import_handler()
+        yield importlib.import_module("addon.server.command_handler")
     finally:
-        for name in list(sys.modules):
-            if name in _ADSK_MODULES or name.startswith(FAKE_PACKAGE):
-                del sys.modules[name]
-        sys.modules.update(saved)
+        fusion_api.reset()
