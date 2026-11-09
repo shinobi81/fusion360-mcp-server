@@ -8,6 +8,11 @@ subprocess where no ``adsk`` exists at all.
 
 from __future__ import annotations
 
+import logging
+import logging.handlers
+import os
+import pathlib
+import subprocess
 import sys
 import types
 
@@ -61,3 +66,70 @@ def test_reset_forgets_an_injected_name(monkeypatch):
     assert fusion_api.core == "injected"
     fusion_api.reset()
     assert fusion_api.core is core
+
+
+_ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+def _import_in_subprocess(tmp_path, *modules: str):
+    """Import *modules* in a fresh interpreter with no ``adsk`` and a temp ``HOME``.
+
+    ``LOG_PATH`` follows ``HOME`` on POSIX and ``USERPROFILE`` on Windows; both point
+    into *tmp_path*, so a log file created by importing shows up as a new entry there.
+    """
+    source = "\n".join(
+        [
+            "import os, pathlib",
+            "home = pathlib.Path(os.environ['HOME'])",
+            "before = {p.name for p in home.iterdir()}",
+            *[f"import {name}" for name in modules],
+            "after = {p.name for p in home.iterdir()}",
+            "print(sorted(after - before))",
+        ]
+    )
+    env = {
+        **os.environ,
+        "HOME": str(tmp_path),
+        "USERPROFILE": str(tmp_path),
+        "PYTHONPATH": str(_ROOT),
+    }
+    return subprocess.run(
+        [sys.executable, "-c", source],
+        cwd=_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+
+def test_importing_the_package_creates_no_log_file(tmp_path):
+    """``RotatingFileHandler`` opens its file when constructed.
+
+    It used to be constructed at import of ``addon.server``, so merely importing the
+    add-in created ``~/fusion360mcp.log``.  Making ``get_logger`` lazy is not enough:
+    three modules call it at module scope.
+    """
+    result = _import_in_subprocess(tmp_path, "addon.server")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "[]", "importing the package must create no file"
+
+
+def test_configure_is_idempotent(tmp_path, monkeypatch):
+    """A second ``run()`` must not double every log line."""
+    from addon.server import configure
+
+    log_path = tmp_path / "fusion360mcp.log"
+    monkeypatch.setattr("addon.server.LOG_PATH", str(log_path))
+
+    configure()
+    configure()
+
+    file_handlers = [
+        handler
+        for handler in logging.getLogger("fusion360mcp").handlers
+        if isinstance(handler, logging.handlers.RotatingFileHandler)
+    ]
+    assert len(file_handlers) == 1
+    assert file_handlers[0].baseFilename == str(log_path)
