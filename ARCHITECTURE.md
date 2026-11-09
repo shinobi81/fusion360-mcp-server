@@ -80,9 +80,10 @@ Three Fusion behaviours that are easy to get wrong, each learned by measurement:
 
 ## Testing strategy
 
-The add-in needs Fusion's `adsk` runtime, so it cannot be imported under pytest. Tests
-load `command_handler.py` against the **fake runtime in `tests/fakes/`** and assert on
-the arguments the Fusion API receives — the points handed to `sketchCircles`, the marker
+The add-in is imported under pytest through the lazy `adsk` adapter in
+`addon/server/fusion_api.py`, with the fake runtime in `tests/fakes/` injected into it.
+Tests load `command_handler.py` that way and assert on the arguments the Fusion API
+receives — the points handed to `sketchCircles`, the marker
 written to `timeline`, the command definition executed. That is why the fakes model
 Fusion's awkwardness on purpose: `design.timeline` raises in direct mode, and a queued
 undo does not land until the next event pump.

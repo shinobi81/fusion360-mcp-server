@@ -1,8 +1,9 @@
 """Table-and-schema agreement for the joint tools — and nothing else.
 
-The add-in imports Fusion's ``adsk`` runtime, which exists only inside Fusion, so
-``command_handler`` cannot be imported in CI. Reading a class-level table
-therefore needs ``ast``, and that is the only reason ``ast`` is still here.
+The add-in's *tables* are read statically: ``ast`` is the only way to check a
+class-level table against a schema, and Fusion itself is not available to ask.  The
+add-in is importable in CI now - see ``tests/test_addon_importable.py`` - so that is no
+longer the reason: the reason is that a table is data, not behaviour.
 
 **Every claim about behaviour has moved out.** It used to be the other way round:
 this file parsed the source to check that ``add_joint`` returned certain keys, did

@@ -1,9 +1,9 @@
 """Fixtures shared by the add-in tests.
 
-``handler_module`` is the whole harness: it installs a fake ``adsk``, imports
-``command_handler.py`` under a synthetic package, and restores ``sys.modules``
-when the test module finishes.  It is module-scoped, so each test module gets a
-clean runtime and no fake leaks into the next one.
+``handler_module`` is the whole harness: it injects the fake API into the add-in's
+adapter (``addon/server/fusion_api.py``), imports ``command_handler.py`` as an ordinary
+module, and restores the adapter when the test module finishes.  It is module-scoped, so
+each test module gets a clean runtime and no fake leaks into the next one.
 
 ``bound_handler`` wires a handler to a fake design without a Fusion application,
 which is how most add-in tests reach a method.

@@ -35,12 +35,13 @@ source text rather than on behaviour. Three parcels, in order, one PR each - two
    the handler against a hole-feature model: a planar face carrying its own surface, a
    sketch created on that face, `sketchPoints.add`, `HoleFeatures.createSimpleInput` and
    `participantBodies`. The pure-module tests there stay as they are.
-3. **Make the add-in importable.** One adapter (e.g. `addon/server/fusion_api.py`) so
-   `command_handler` resolves `adsk` through a single import site, then add
-   `addon/server` to `[tool.coverage.run] source` and re-base the coverage floor - the
-   total will drop a long way. This is the only parcel that can break the daily workflow,
-   so it does not merge on CI alone: the add-in has to be loaded in Fusion and exercised
-   by hand first.
+3. **Make the add-in importable.** — **done (#68).** One adapter
+   (`addon/server/fusion_api.py`) resolves `adsk` lazily, so nothing under `addon/` imports
+   it at module scope; `addon/server` is in `[tool.coverage.run] source` and the floor is
+   re-based from the measurement (59 combined, with `src/` keeping its own 95 gate in CI).
+   The new code is exercised in Fusion 2706 before merge — the adapter's four names and
+   the bridge's handler class, driven against the real API; the reload-and-drive through
+   the socket is done immediately after, since the add-in is registered against `main`.
 
 `tests/fakes/` is over its soft size cap in exchange for retiring the guards wholesale;
 the two conversion parcels above are deliberately not free, and a file that keeps its

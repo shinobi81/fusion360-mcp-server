@@ -20,24 +20,39 @@ Nothing in the suite needs Fusion, a network, or a display. The socket tests bin
 
 ## The coverage floor
 
-`addopts` in `pyproject.toml` measures coverage on every run and fails below **95%**;
-the suite currently sits at **97.59%** (623 statements, 15 uncovered). The floor lives in
-`addopts`, so it applies to the whole suite and not to one file - that is why a subset is
-run with `--no-cov`. The statements that are uncovered on purpose, and the reason the
-floor is 95 rather than a rounder 100, are listed in the comment above `addopts`.
+`addopts` in `pyproject.toml` measures coverage on every run and fails below the floor
+recorded there. The floor is **two gates**, because one number cannot hold two very
+different populations:
+
+- **59** for the whole suite, which now measures `src/fusion360_mcp` **and**
+  `addon/server`. The measured total is 59.90%; the add-in's CAM, export, view-sheet and
+  viewport-render paths only run inside Fusion, and they account for almost all of the
+  gap.
+- **95** for the server alone, enforced separately in CI:
+  `uv run coverage report --include="src/fusion360_mcp/*" --fail-under=95`. Without it,
+  an add-in regression would buy slack for `src/`.
+
+Both live in `addopts`/CI rather than in one file's scope, so a subset is run with
+`--no-cov`. The statements that are uncovered on purpose are listed in the comment above
+`addopts`.
 
 ## The fake runtime
 
-The add-in cannot be imported under pytest - it needs Fusion's `adsk` runtime, which only
-exists inside Fusion. So `tests/conftest.py`'s `handler_module` fixture installs a fake
-`adsk` from `tests/fakes/` (`runtime.py` for the API surface and the loader, `sketch.py`
-and `design.py` for geometry and the document tree), imports `command_handler.py` under
-a synthetic package, and restores `sys.modules` when the module finishes. `bound_handler`
-then wires a handler to a fake design, which is how most add-in tests reach a method.
+The add-in is imported under pytest as an ordinary module. Nothing under `addon/` imports
+`adsk` at module scope: it resolves Autodesk's API through the lazy adapter in
+`addon/server/fusion_api.py`, and `tests/conftest.py`'s `handler_module` fixture
+injects a fake `adsk` into that adapter from `tests/fakes/` (`runtime.py` for the API
+surface, `app.py` for the application, `sketch.py` and `design.py` for geometry and the
+document tree). `bound_handler` then wires a handler to a fake design, which is how most
+add-in tests reach a method.
 
-Because of that, `addon/` is excluded from pyright and mypy in `pyproject.toml` on
-purpose. Do not "fix" it with type ignores: `adsk` genuinely cannot resolve outside
-Fusion, and ruff plus the suite still cover the directory.
+`tests/test_addon_importable.py` pins the invariant in a subprocess: the package, the
+handler and the bridge all import with no `adsk` installed, and importing them creates no
+files.
+
+Because `adsk` still cannot resolve offline, `addon/` is excluded from pyright and mypy
+in `pyproject.toml` on purpose. Do not "fix" it with type ignores: ruff plus the suite
+still cover the directory.
 
 ## The policy
 
@@ -78,8 +93,6 @@ Two more things the job depends on:
 
 - **No `PYTHONOPTIMIZE`.** The targets' invariants are bare `assert`s. `-O` compiles them
   out, and a fuzzer that reports clean because it checks nothing is worse than no fuzzer.
-- **A writable `$HOME`.** `addon/server/__init__.py` opens `~/fusion360mcp.log` at import,
-  so each target fails at import in a container without one.
 
 Every target exposes `check(data: bytes) -> None`, which is also how
 `tests/test_fuzz_targets.py` drives the same invariants inside the ordinary suite - that

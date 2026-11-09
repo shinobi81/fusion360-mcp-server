@@ -48,12 +48,22 @@ that form appears, so a formatter you did not ask for cannot reach `main`.
 it replace `.venv/Scripts/fusion360-mcp-server.exe` while a running MCP server holds it
 (`os error 32`). When that bites, use `uv run --no-sync …`, or stop the server first.
 
-The add-in cannot be unit-imported (it needs Fusion's `adsk` runtime), so tests load
-`command_handler.py` against the fake runtime in `tests/fakes/` — `runtime.py` for the
-`adsk` surface and the loader, `sketch.py` and `design.py` for geometry and the document
-tree. The `handler_module` fixture in `tests/conftest.py` installs it for a whole test
-module and restores `sys.modules` afterwards. Neither pyright nor mypy can resolve `adsk`;
-`addon/` is therefore excluded from both in `pyproject.toml`.
+**Coverage is two gates, not one.** `pytest` measures `src/fusion360_mcp` _and_
+`addon/server`, and the floor in `addopts` (59) is set just under the combined total —
+the add-in's CAM, export and viewport families only run inside Fusion, so its own number
+is low on purpose. The server keeps its own gate: CI runs
+`uv run coverage report --include="src/fusion360_mcp/*" --fail-under=95` after pytest, so
+an add-in regression cannot buy slack for `src/`. Run both before opening a PR that
+touches either.
+
+The add-in is importable under pytest: nothing under `addon/` imports `adsk` at module
+scope — it resolves Autodesk's API through the lazy adapter in
+`addon/server/fusion_api.py`. The `handler_module` fixture in `tests/conftest.py` injects
+the fake API into that adapter for a whole test module (`tests/fakes/runtime.py` for the
+surface, `sketch.py` and `design.py` for geometry and the document tree) and restores it
+afterwards, and `tests/test_addon_importable.py` asserts the import works in a subprocess
+where no `adsk` exists at all. Neither pyright nor mypy can resolve `adsk`; `addon/` is
+therefore still excluded from both in `pyproject.toml`.
 
 `fuzz/` is the other test surface: four atheris targets whose `check(data)` functions are
 also driven by `tests/test_fuzz_targets.py`, so their invariants run in the ordinary

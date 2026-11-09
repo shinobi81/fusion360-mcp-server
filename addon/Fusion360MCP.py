@@ -14,9 +14,6 @@ this on a trusted LAN — the socket has no authentication.
 import os
 import traceback
 
-import adsk.core
-import adsk.fusion
-
 # Globals — prevent GC of handler / server references
 _app = None
 _ui = None
@@ -30,14 +27,18 @@ def run(context) -> None:
     global _app, _ui, _bridge, _server, _handler, _log
 
     try:
-        _app = adsk.core.Application.get()
-        _ui = _app.userInterface
-
-        # Late imports so the add-in folder is on sys.path
-        from .server import LOG_PATH, get_logger
+        # Late imports so the add-in folder is on sys.path.  ``fusion_api`` is the
+        # add-in's one import site for Autodesk's API, and ``configure()`` wires the log
+        # handlers - both moved out of module scope so the add-in can be imported
+        # outside Fusion (by the test suite).
+        from .server import LOG_PATH, configure, fusion_api, get_logger
         from .server.command_handler import CommandHandler
         from .server.event_bridge import EventBridge
         from .server.socket_server import Fusion360MCPServer
+
+        configure()
+        _app = fusion_api.core.Application.get()
+        _ui = _app.userInterface
 
         _log = get_logger("main")
 

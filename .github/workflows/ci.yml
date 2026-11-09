@@ -65,6 +65,12 @@ jobs:
       - name: Test
         run: uv run pytest -v
 
+      # The combined floor in addopts is dominated by the add-in's live-only branches (CAM,
+      # export, viewport render).  This keeps the server's own floor where it was, so an
+      # add-in regression cannot buy slack for src/.
+      - name: src coverage floor
+        run: uv run coverage report --include="src/fusion360_mcp/*" --fail-under=95
+
   # This project has Windows-specific behaviour (loopback resolution, an .exe
   # the running MCP server keeps open), so the suite runs there too.
   windows:

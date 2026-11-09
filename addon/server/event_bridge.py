@@ -6,14 +6,16 @@ happen on the main thread.  A 200 ms backup timer fires the custom event
 periodically in case fireCustomEvent from a daemon thread is unreliable.
 """
 
+from __future__ import annotations
+
 import queue
 import threading
 import time
 import traceback
 from contextlib import suppress
+from typing import Protocol
 
-import adsk.core
-
+from . import fusion_api as adsk
 from . import get_logger
 from .hints import classify
 
@@ -42,15 +44,62 @@ class WorkItem:
         self.cancelled = False
 
 
-class _MainThreadHandler(adsk.core.CustomEventHandler):
-    """Attached to the CustomEvent; runs on Fusion's main thread."""
+class _CustomEvent(Protocol):
+    """``adsk.core.CustomEvent``: the handler list the bridge adds to and drops from."""
 
-    def __init__(self, bridge: "EventBridge"):
-        super().__init__()
-        self._bridge = bridge
+    def add(self, handler) -> None:
+        pass
 
-    def notify(self, args):  # called on main thread
-        self._bridge.drain_queue()
+    def remove(self, handler) -> None:
+        pass
+
+
+class _EventSource(Protocol):
+    """What the bridge needs from ``adsk.core.Application``: its custom-event API.
+
+    Stated structurally because Fusion's own class cannot be resolved outside Fusion,
+    and because it is the whole dependency - the bridge never touches a document.
+    """
+
+    def registerCustomEvent(self, event_id: str) -> _CustomEvent:
+        pass
+
+    def fireCustomEvent(self, event_id: str) -> None:
+        pass
+
+    def unregisterCustomEvent(self, event_id: str) -> None:
+        pass
+
+
+class _DrainsQueue(Protocol):
+    """Everything the CustomEvent handler needs from the bridge: one method.
+
+    Stated as a protocol rather than as ``EventBridge`` so the handler's dependency is
+    visible, and so a test can stand in for the bridge without constructing one.
+    """
+
+    def drain_queue(self) -> None:
+        pass
+
+
+def _handler_class(base):
+    """The CustomEvent handler, built with the base class Fusion provides.
+
+    Not a module-level subclass: that resolved ``adsk.core.CustomEventHandler`` at
+    import time, which is what kept this module unimportable outside Fusion.
+    """
+
+    class MainThreadHandler(base):
+        """Attached to the CustomEvent; runs on Fusion's main thread."""
+
+        def __init__(self, bridge: _DrainsQueue):
+            super().__init__()
+            self._bridge = bridge
+
+        def notify(self, args):  # called on main thread
+            self._bridge.drain_queue()
+
+    return MainThreadHandler
 
 
 class EventBridge:
@@ -62,14 +111,17 @@ class EventBridge:
     result.
     """
 
-    def __init__(self, app: adsk.core.Application, command_handler):
+    def __init__(self, app: _EventSource, command_handler):
         self._app = app
         self._handler = command_handler
         self._queue: queue.Queue = queue.Queue()
 
-        # Register a custom event on the main thread
+        # Register a custom event on the main thread.  The base class is resolved first:
+        # a failure here would otherwise leave an event registered with no handler, and
+        # ``stop()`` would never run to unregister it.
+        handler_class = _handler_class(adsk.core.CustomEventHandler)
         self._event = app.registerCustomEvent(CUSTOM_EVENT_ID)
-        self._event_handler = _MainThreadHandler(self)
+        self._event_handler = handler_class(self)
         self._event.add(self._event_handler)
 
         # Backup timer thread — fires the custom event every 200 ms

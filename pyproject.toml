@@ -57,19 +57,24 @@ select = ["E", "F", "I", "RUF"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Coverage is measured on every run so a regression is visible in the diff, and
-# floored just under the current number rather than at a round figure.  95 leaves
-# about 13 statements of slack, which covers the permanent gaps below and any one
-# deliberate dead branch; 97 would leave one, and redden five CI jobs at once.
-# This lives in addopts, so run a subset with `--no-cov` (see AGENTS.md): the
-# floor is about the whole suite, not one file.
+# Coverage is measured on every run so a regression is visible in the diff, and floored
+# just under the current number rather than at a round figure.  The measured total is
+# 59.90% over both packages, so the floor is 59: about 30 statements of slack, which
+# covers the permanent gaps below and any one deliberate dead branch.
+#
+# That total is dominated by the add-in: `addon/server` is 2566 statements at ~49%,
+# because CAM, export, view-sheet and viewport-render only run inside Fusion.  The add-in's
+# own floor is therefore low on purpose, and the server keeps its own gate - CI runs
+# `coverage report --include="src/fusion360_mcp/*" --fail-under=95` after pytest - so an
+# add-in regression cannot buy slack for `src/`.
+#
+# This lives in addopts, so run a subset with `--no-cov` (see AGENTS.md): the floor is
+# about the whole suite, not one file.
 #
 # Permanently uncovered, by design: `server.py` line 91 (`bbox_before` is never set
 # by a mock), line 444 (the unreachable prompt fallback), 493-494 (`app.run` inside
-# main()'s stdio coroutine), and `__main__.py`'s click entry point.  Adding
-# `addon/` to `source` — the last step of the test refactor — will drop the total
-# and needs this floor re-based.
-addopts = "--cov --cov-report=term-missing --cov-fail-under=95"
+# main()'s stdio coroutine), and `__main__.py`'s click entry point.
+addopts = "--cov --cov-report=term-missing --cov-fail-under=59"
 
 # The add-in imports Fusion's `adsk` runtime, which exists only inside Fusion.
 # No static type checker can resolve it, and each unresolved import cascades into
@@ -123,7 +128,7 @@ fuzz = [
 ]
 
 [tool.coverage.run]
-source = ["src/fusion360_mcp"]
+source = ["src/fusion360_mcp", "addon/server"]
 
 [tool.coverage.report]
 omit = ["*/tests/*"]
