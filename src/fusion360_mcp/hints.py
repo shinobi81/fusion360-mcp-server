@@ -302,6 +302,19 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # ``midpoint``'s first entity is a sketch POINT, and it was resolved against
+        # the curve list: a point index inside the curve list named the wrong item,
+        # and a refusal spoke about curves.  Placed ABOVE the curve-index rule so
+        # "is outside sketch" cannot steal these and answer with curve advice.
+        r"point index|has no points|point\(s\), indexed",
+        "INVALID_INPUT",
+        [
+            "Point indices are 0-based: a sketch with N points offers 0 to N-1.",
+            "A negative index is refused, never wrapped: -1 is not the last point.",
+            "midpoint takes a POINT for entity_one and a CURVE for entity_two.",
+        ],
+    ),
+    (
         # A curve index past the end used to raise IndexError from `curves[i]`,
         # which matched no rule and reached the caller as UNKNOWN with no hints.
         # The three messages the handler now raises each carry one of these

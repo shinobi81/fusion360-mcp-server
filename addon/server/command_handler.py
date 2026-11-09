@@ -1438,6 +1438,55 @@ class CommandHandler:
             )
         return curves[index]
 
+    def _point_by_index(self, sketch, points, index, field: str):
+        """The sketch point *index* names, or a refusal that says which one missed.
+
+        ``midpoint``'s first entity is a POINT, and it used to be validated against
+        the curve list: a point index that was also inside the curve list named the
+        wrong item, and a point index one past it was refused with a message about
+        curves - advice for a different collection.
+
+        ``points`` is Fusion's collection (``count``/``item``), not a list: that is
+        the surface it offers, and it is what the fake models.
+        """
+        count = points.count
+        if isinstance(index, bool) or not isinstance(index, int):
+            raise RuntimeError(
+                f"{field} must be a whole-number point index, got {index!r} - "
+                f"sketch '{sketch.name}' has {count} point(s)"
+            )
+        if count == 0:
+            raise RuntimeError(
+                f"sketch '{sketch.name}' has no points, so {field} {index} names "
+                "nothing - draw the geometry first"
+            )
+        if index < 0 or index >= count:
+            raise RuntimeError(
+                f"{field} {index} is outside sketch '{sketch.name}': it has "
+                f"{count} point(s), indexed 0..{count - 1}"
+            )
+        return points.item(index)
+
+    #: What each constraint resolves: the kind of ``entity_one`` (a curve for every
+    #: type except ``midpoint``, whose first entity is a sketch point), and whether
+    #: a second entity is needed.  A table because ``addParallel(e1, None)`` used to
+    #: reach Fusion and come back ``ok: true``.
+    _CONSTRAINT_ENTITIES: ClassVar[dict[str, tuple[str, bool]]] = {
+        "coincident": ("curve", True),
+        "parallel": ("curve", True),
+        "perpendicular": ("curve", True),
+        "tangent": ("curve", True),
+        "equal": ("curve", True),
+        "fix": ("curve", False),
+        "horizontal": ("curve", False),
+        "vertical": ("curve", False),
+        "concentric": ("curve", True),
+        "collinear": ("curve", True),
+        "smooth": ("curve", True),
+        "midpoint": ("point", True),
+        "symmetry": ("curve", True),
+    }
+
     def add_constraint(
         self,
         constraint_type: str,
@@ -1452,16 +1501,45 @@ class CommandHandler:
         constraints = sketch.geometricConstraints
         curves = list(sketch.sketchCurves)
 
-        e1 = (
-            self._curve_by_index(sketch, curves, entity_one, "entity_one")
-            if entity_one is not None
-            else None
-        )
+        needs = self._CONSTRAINT_ENTITIES.get(constraint_type)
+        if needs is None:
+            raise RuntimeError(
+                f"Unknown constraint type: {constraint_type} (expected one of "
+                + ", ".join(sorted(self._CONSTRAINT_ENTITIES))
+                + ")"
+            )
+        first_kind, needs_two = needs
+
+        # entity_one is a curve for every type except midpoint, whose first entity
+        # is a sketch POINT - resolving it against the curves named the wrong item.
+        point = None
+        e1 = None
+        if entity_one is not None:
+            if first_kind == "point":
+                point = self._point_by_index(
+                    sketch, sketch.sketchPoints, entity_one, "entity_one"
+                )
+            else:
+                e1 = self._curve_by_index(sketch, curves, entity_one, "entity_one")
         e2 = (
             self._curve_by_index(sketch, curves, entity_two, "entity_two")
             if entity_two is not None
             else None
         )
+
+        # Refuse before the call, not inside Fusion: addParallel(e1, None) used to
+        # reach the API and report success.
+        if (point if first_kind == "point" else e1) is None:
+            raise RuntimeError(
+                f"a {constraint_type} constraint needs entity_one "
+                f"(a {'point' if first_kind == 'point' else 'curve'} index) - "
+                f"sketch '{sketch.name}' has {len(curves)} curve(s)"
+            )
+        if needs_two and e2 is None:
+            raise RuntimeError(
+                f"a {constraint_type} constraint needs entity_two (a curve index) "
+                f"- sketch '{sketch.name}' has {len(curves)} curve(s)"
+            )
 
         # symmetry is the only constraint needing a third entity; resolve it here
         # so the map below just names it and a missing index is a clear refusal.
@@ -1488,14 +1566,9 @@ class CommandHandler:
             "concentric": lambda: constraints.addConcentric(e1, e2),
             "collinear": lambda: constraints.addCollinear(e1, e2),
             "smooth": lambda: constraints.addSmooth(e1, e2),
-            "midpoint": lambda: constraints.addMidPoint(
-                sketch.sketchPoints.item(entity_one), e2
-            ),
+            "midpoint": lambda: constraints.addMidPoint(point, e2),
             "symmetry": lambda: constraints.addSymmetry(e1, e2, mirror_line),
         }
-
-        if constraint_type not in constraint_map:
-            raise RuntimeError(f"Unknown constraint type: {constraint_type}")
 
         constraint_map[constraint_type]()
         return {"sketch": sketch.name, "constraint_type": constraint_type}
@@ -1547,6 +1620,18 @@ class CommandHandler:
             "result_option": result_option,
         }
 
+    #: Which entities each dimension type resolves.  ``radial`` and ``diameter``
+    #: measure ONE curve; the rest need two.  A guard demanding both for every type
+    #: refused a schema-legal radial dimension outright.
+    _DIMENSION_ENTITIES: ClassVar[dict[str, tuple[str, ...]]] = {
+        "distance": ("entity_one", "entity_two"),
+        "horizontal": ("entity_one", "entity_two"),
+        "vertical": ("entity_one", "entity_two"),
+        "angular": ("entity_one", "entity_two"),
+        "radial": ("entity_one",),
+        "diameter": ("entity_one",),
+    }
+
     def add_dimension(
         self,
         dimension_type: str,
@@ -1561,23 +1646,46 @@ class CommandHandler:
         dims = sketch.sketchDimensions
         curves = list(sketch.sketchCurves)
 
+        needed = self._DIMENSION_ENTITIES.get(dimension_type)
+        if needed is None:
+            raise RuntimeError(
+                f"Unknown dimension type: {dimension_type} (expected one of "
+                + ", ".join(sorted(self._DIMENSION_ENTITIES))
+                + ")"
+            )
+
         e1 = (
             self._curve_by_index(sketch, curves, entity_one, "entity_one")
-            if entity_one is not None
+            if "entity_one" in needed and entity_one is not None
             else None
         )
         e2 = (
             self._curve_by_index(sketch, curves, entity_two, "entity_two")
-            if entity_two is not None
+            if "entity_two" in needed and entity_two is not None
             else None
         )
-        if e1 is None or e2 is None:
+        missing = [
+            field
+            for field, value in (("entity_one", e1), ("entity_two", e2))
+            if field in needed and value is None
+        ]
+        if missing:
             raise RuntimeError(
-                f"entity_one/entity_two are invalid for sketch '{sketch.name}': it "
-                f"has {len(curves)} curve(s), so indices {entity_one} and "
-                f"{entity_two} must both name one"
+                f"a {dimension_type} dimension needs {' and '.join(missing)} (a "
+                f"curve index) - sketch '{sketch.name}' has {len(curves)} curve(s)"
             )
-        text_pt = adsk.core.Point3D.create(0, 0, 0)
+        # Where the label sits.  The one-entity types need a point away from the
+        # curve's centre: measured on 2706, a radial label at the world origin over a
+        # circle centred there raises "3 : Some input argument is invalid", while the
+        # curve's bounding-box corner is accepted.  The two-entity calls take the
+        # origin, measured the same way.
+        if "entity_two" in needed:
+            text_pt = adsk.core.Point3D.create(0, 0, 0)
+        else:
+            box = e1.boundingBox
+            text_pt = adsk.core.Point3D.create(
+                box.maxPoint.x, box.maxPoint.y, box.maxPoint.z
+            )
 
         if dimension_type == "distance":
             dim = dims.addDistanceDimension(

@@ -206,9 +206,8 @@ def test_a_valid_index_still_adds_that_constraint(bound_handler):
 def test_a_valid_dimension_still_sets_its_value(bound_handler):
     """A distance dimension is the two-entity shape the tool documents.
 
-    ``radial``/``diameter`` are *not* covered here: the handler demands
-    ``entity_two`` for every dimension type, so they cannot be created at all
-    without a meaningless second index (measured live, filed not fixed).
+    The one-entity types have their own tests below, where each type's needs are
+    stated rather than inferred from the two-entity ones.
     """
     design, sketch = four_curve_design()
     handler = bound_handler(design)
@@ -269,3 +268,207 @@ def test_mock_refuses_a_bad_index_in_every_guarded_tool(method, payload):
     assert result["ok"] is False, f"mock mode accepted {method} with {payload}"
     assert result["error_kind"] == "INVALID_INPUT"
     assert result["hints"]
+
+
+# ── what each type actually needs ─────────────────────────────────────
+
+
+def test_a_radial_dimension_needs_only_the_curve_it_measures(bound_handler):
+    """``radial`` measures one curve; demanding a second index made it impossible.
+
+    Measured live before the fix: ``add_dimension("radial", 2.0, entity_one=0)`` was
+    refused with "indices 0 and None must both name one" - a schema-legal call that
+    could not be made at all.
+    """
+    design, sketch = four_curve_design()
+    handler = bound_handler(design)
+
+    result = handler.add_dimension("radial", 2.0, entity_one=1)
+
+    method, args = sketch.sketchDimensions.calls[0]
+    assert method == "addRadialDimension"
+    assert args[0] is list(sketch.sketchCurves)[1], "the curve the caller named"
+    assert result["dimension_type"] == "radial"
+
+
+def test_a_diameter_dimension_needs_only_the_curve_it_measures(bound_handler):
+    design, sketch = four_curve_design()
+    handler = bound_handler(design)
+
+    handler.add_dimension("diameter", 4.0, entity_one=2)
+
+    method, args = sketch.sketchDimensions.calls[0]
+    assert method == "addDiameterDimension"
+    assert args[0] is list(sketch.sketchCurves)[2]
+
+
+def test_a_two_entity_dimension_without_its_second_index_is_refused(bound_handler):
+    """The refusal names the field that is missing, not both of them."""
+    design, _sketch = four_curve_design()
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError) as raised:
+        handler.add_dimension("distance", 1.0, entity_one=0)
+
+    message = str(raised.value)
+    kind, hints = classify(message)
+    assert kind == "INVALID_INPUT" and hints
+    assert "entity_two" in message
+
+
+def test_a_midpoint_constraint_indexes_a_point_not_a_curve(bound_handler):
+    """``midpoint``'s first entity is a POINT; a curve index names the wrong item.
+
+    A sketch with four curves and five points makes the two index spaces differ, so
+    a point index of 4 cannot be mistaken for a curve index.
+    """
+    design, sketch = four_curve_design()
+    for row in range(4):
+        sketch.sketchPoints.add(FakePoint3D(float(row), 5.0, 0.0))
+    handler = bound_handler(design)
+
+    handler.add_constraint("midpoint", entity_one=4, entity_two=0)
+
+    method, args = sketch.geometricConstraints.added[0]
+    assert method == "addMidPoint"
+    assert args[0] is sketch.sketchPoints.item(4), "the point the caller named"
+    assert args[1] is next(iter(sketch.sketchCurves))
+
+
+def test_a_midpoint_point_index_past_the_last_point_is_refused(bound_handler):
+    design, _sketch = four_curve_design()
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError) as raised:
+        handler.add_constraint("midpoint", entity_one=99, entity_two=0)
+
+    message = str(raised.value)
+    kind, hints = classify(message)
+    assert kind == "INVALID_INPUT" and hints
+    assert "point(s)" in message, "the refusal speaks about points, not curves"
+
+
+def test_a_two_entity_constraint_without_its_second_index_is_refused(bound_handler):
+    """``addParallel(e1, None)`` reached Fusion and reported success."""
+    design, _sketch = four_curve_design()
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError) as raised:
+        handler.add_constraint("parallel", entity_one=0)
+
+    message = str(raised.value)
+    kind, _hints = classify(message)
+    assert kind == "INVALID_INPUT"
+    assert "entity_two" in message
+
+
+# ── mock mode and the handler agree about the shape each type needs ───
+
+DIMENSION_SHAPES = [
+    ("distance", True),
+    ("horizontal", True),
+    ("vertical", True),
+    ("angular", True),
+    ("radial", False),
+    ("diameter", False),
+]
+
+CONSTRAINT_SHAPES = [
+    ("coincident", True),
+    ("parallel", True),
+    ("perpendicular", True),
+    ("tangent", True),
+    ("equal", True),
+    ("fix", False),
+    ("horizontal", False),
+    ("vertical", False),
+    ("concentric", True),
+    ("collinear", True),
+    ("smooth", True),
+    ("midpoint", True),
+    ("symmetry", True),
+]
+
+
+@pytest.mark.parametrize("dimension_type, needs_two", DIMENSION_SHAPES)
+def test_mock_and_handler_agree_about_a_dimension_shape(
+    bound_handler, dimension_type, needs_two
+):
+    """A shape real mode accepts must be accepted in mock mode, and vice versa.
+
+    Mock mode is where an agent develops the sequence it replays, so a shape the
+    handler refuses must not come back ``ok`` there - which is how a radial
+    dimension became impossible without a meaningless second index.
+    """
+    design, _sketch = four_curve_design()
+    handler = bound_handler(design)
+    params = {"dimension_type": dimension_type, "value": 1.0, "entity_one": 0}
+    if needs_two:
+        params["entity_two"] = 1
+
+    handler.add_dimension(**params)
+    assert mock_command("add_dimension", dict(params))["ok"] is True
+
+    if needs_two:
+        short = {key: value for key, value in params.items() if key != "entity_two"}
+        with pytest.raises(RuntimeError, match="entity_two"):
+            handler.add_dimension(**short)
+        assert mock_command("add_dimension", dict(short))["ok"] is False
+
+
+@pytest.mark.parametrize("constraint_type, needs_two", CONSTRAINT_SHAPES)
+def test_mock_and_handler_agree_about_a_constraint_shape(
+    bound_handler, constraint_type, needs_two
+):
+    design, sketch = four_curve_design()
+    if constraint_type == "midpoint":
+        sketch.sketchPoints.add(FakePoint3D(0.0, 5.0, 0.0))
+    handler = bound_handler(design)
+    params = {"constraint_type": constraint_type, "entity_one": 0}
+    if needs_two:
+        params["entity_two"] = 1
+    if constraint_type == "symmetry":
+        params["symmetry_line"] = 2
+
+    handler.add_constraint(**params)
+    assert mock_command("add_constraint", dict(params))["ok"] is True
+
+    if needs_two:
+        short = {key: value for key, value in params.items() if key != "entity_two"}
+        with pytest.raises(RuntimeError, match="entity_two"):
+            handler.add_constraint(**short)
+        assert mock_command("add_constraint", dict(short))["ok"] is False
+
+
+def test_a_one_entity_dimension_labels_outside_the_curve_centre(bound_handler):
+    """Fusion refuses a radial label at the curve's centre; the box corner works.
+
+    Measured on 2706: the label point used to be the world origin for every type,
+    and ``addRadialDimension`` over a circle centred there raised "3 : Some input
+    argument is invalid" - so the dimension could not be created even once the
+    index guard stopped refusing it.
+    """
+    design, sketch = four_curve_design()
+    handler = bound_handler(design)
+
+    handler.add_dimension("radial", 2.0, entity_one=1)
+
+    _method, args = sketch.sketchDimensions.calls[0]
+    text_point = args[1]
+    box = list(sketch.sketchCurves)[1].boundingBox
+    assert (
+        text_point.x,
+        text_point.y,
+        text_point.z,
+    ) == (box.maxPoint.x, box.maxPoint.y, box.maxPoint.z)
+
+
+def test_a_two_entity_dimension_keeps_the_origin_label(bound_handler):
+    """The two-entity path accepts the origin, measured on the same run."""
+    design, sketch = four_curve_design()
+    handler = bound_handler(design)
+
+    handler.add_dimension("distance", 1.0, entity_one=0, entity_two=1)
+
+    _method, args = sketch.sketchDimensions.calls[0]
+    assert (args[3].x, args[3].y, args[3].z) == (0.0, 0.0, 0.0)

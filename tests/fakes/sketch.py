@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import math
 
+from .bodies import FakeBoundingBox
 from .collection import FakeCollection
 from .runtime import FakePlane, FakePoint3D, FakeVector3D
 
@@ -84,6 +85,27 @@ class FakeLine:
         self.isConstruction = False
         self.startSketchPoint = FakeSketchPoint(start)
         self.endSketchPoint = FakeSketchPoint(end)
+
+    @property
+    def boundingBox(self) -> FakeBoundingBox:
+        """The line's own box.  ``add_dimension`` places a one-entity label here.
+
+        Fusion refuses a radial/diameter label at the curve's centre (measured on
+        2706: "3 : Some input argument is invalid" for the world origin over a
+        circle centred there) and accepts the box corner, so the handler reads this.
+        """
+        return FakeBoundingBox(
+            (
+                min(self.start.x, self.end.x),
+                min(self.start.y, self.end.y),
+                min(self.start.z, self.end.z),
+            ),
+            (
+                max(self.start.x, self.end.x),
+                max(self.start.y, self.end.y),
+                max(self.start.z, self.end.z),
+            ),
+        )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"FakeLine({self.start} -> {self.end})"

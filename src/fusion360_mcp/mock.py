@@ -840,7 +840,9 @@ def _curve_index_error(p: dict, fields: tuple[str, ...]) -> dict | None:
 
 
 def _add_constraint(p: dict) -> dict:
-    refusal = _curve_index_error(p, ("entity_one", "entity_two", "symmetry_line"))
+    refusal = _entity_shape_error(
+        p, "constraint", _CONSTRAINT_NEEDS_TWO, "constraint_type"
+    ) or _curve_index_error(p, ("entity_one", "entity_two", "symmetry_line"))
     if refusal is not None:
         return refusal
     return {
@@ -862,8 +864,75 @@ def _auto_constrain(p: dict) -> dict:
     }
 
 
+#: Which entities each dimension type needs.  The add-in's table, mirrored: mock
+#: mode is where an agent develops the sequence it replays, so a shape real mode
+#: refuses must not come back ``ok`` here.  A parity test drives both.
+_DIMENSION_NEEDS_TWO: dict[str, bool] = {
+    "distance": True,
+    "horizontal": True,
+    "vertical": True,
+    "angular": True,
+    "radial": False,
+    "diameter": False,
+}
+
+#: The same for constraints: every type needs ``entity_two`` except these three.
+_CONSTRAINT_NEEDS_TWO: dict[str, bool] = {
+    "coincident": True,
+    "parallel": True,
+    "perpendicular": True,
+    "tangent": True,
+    "equal": True,
+    "fix": False,
+    "horizontal": False,
+    "vertical": False,
+    "concentric": True,
+    "collinear": True,
+    "smooth": True,
+    "midpoint": True,
+    "symmetry": True,
+}
+
+
+def _entity_shape_error(
+    p: dict, tool: str, table: dict[str, bool], type_field: str
+) -> dict | None:
+    """The entity-count check the add-in makes per type, or None.
+
+    Mock mode has no sketch, so it cannot know an index is past the end - but it
+    does know which types take one entity and which take two, and that is a shape
+    check, not a geometry one.  ``addParallel(e1, None)`` used to reach Fusion and
+    report success; mock mode should not teach the same call.
+    """
+    kind = p.get(type_field)
+    needs_two = table.get(kind)
+    if needs_two is None:
+        return {
+            "ok": False,
+            "error_kind": "INVALID_INPUT",
+            "error_message": (
+                f"Unknown {type_field.replace('_type', '')} type: {kind} "
+                f"(expected one of {', '.join(sorted(table))})"
+            ),
+            "hints": [f"Choose one of: {', '.join(sorted(table))}."],
+        }
+    if needs_two and p.get("entity_two") is None:
+        return {
+            "ok": False,
+            "error_kind": "INVALID_INPUT",
+            "error_message": (
+                f"a {kind} {tool} needs entity_two (a curve index) - mock mode "
+                "has no sketch, so the index itself is not checked here"
+            ),
+            "hints": ["Pass entity_two: this type takes two entities."],
+        }
+    return None
+
+
 def _add_dimension(p: dict) -> dict:
-    refusal = _curve_index_error(p, ("entity_one", "entity_two"))
+    refusal = _entity_shape_error(
+        p, "dimension", _DIMENSION_NEEDS_TWO, "dimension_type"
+    ) or _curve_index_error(p, ("entity_one", "entity_two"))
     if refusal is not None:
         return refusal
     return {
