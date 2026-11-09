@@ -29,7 +29,6 @@ import pytest
 
 import fusion360_mcp.mock as mock_mod
 from fusion360_mcp.hints import classify
-from fusion360_mcp.mock import mock_command
 from fusion360_mcp.tools import TOOLS
 from tests.fakes.design import FakeDesign
 from tests.fakes.runtime import FakePoint3D
@@ -232,7 +231,7 @@ def test_a_valid_dimension_still_sets_its_value(bound_handler):
 @pytest.mark.parametrize("index", [-1, 1.5, True])
 def test_mock_refuses_an_index_that_cannot_name_a_curve(index):
     """Mock mode has no sketch, so it can only refuse what is never valid."""
-    result = mock_command(
+    result = mock_mod.mock_command(
         "add_constraint",
         {"constraint_type": "parallel", "entity_one": index, "entity_two": 1},
     )
@@ -247,7 +246,7 @@ def test_mock_refuses_an_index_that_cannot_name_a_curve(index):
 
 @pytest.mark.parametrize("index", [-1, 0.5])
 def test_mock_dimension_refuses_a_negative_index(index):
-    result = mock_command(
+    result = mock_mod.mock_command(
         "add_dimension",
         {
             "dimension_type": "distance",
@@ -274,7 +273,7 @@ MOCK_CURVE_INDEX_CALLS = [
 
 @pytest.mark.parametrize(("method", "payload"), MOCK_CURVE_INDEX_CALLS)
 def test_mock_refuses_a_bad_index_in_every_guarded_tool(method, payload):
-    result = mock_command(method, payload)
+    result = mock_mod.mock_command(method, payload)
 
     assert result["ok"] is False, f"mock mode accepted {method} with {payload}"
     assert result["error_kind"] == "INVALID_INPUT"
@@ -402,13 +401,13 @@ def test_mock_and_handler_agree_about_a_dimension_shape(
         params["entity_two"] = 1
 
     handler.add_dimension(**params)
-    assert mock_command("add_dimension", dict(params))["ok"] is True
+    assert mock_mod.mock_command("add_dimension", dict(params))["ok"] is True
 
     if needs_two:
         short = {key: value for key, value in params.items() if key != "entity_two"}
         with pytest.raises(RuntimeError, match="entity_two"):
             handler.add_dimension(**short)
-        assert mock_command("add_dimension", dict(short))["ok"] is False
+        assert mock_mod.mock_command("add_dimension", dict(short))["ok"] is False
 
 
 @pytest.mark.parametrize("constraint_type, needs_two", CONSTRAINT_SHAPES)
@@ -431,13 +430,13 @@ def test_mock_and_handler_agree_about_a_constraint_shape(
         params["symmetry_line"] = 2
 
     handler.add_constraint(**params)
-    assert mock_command("add_constraint", dict(params))["ok"] is True
+    assert mock_mod.mock_command("add_constraint", dict(params))["ok"] is True
 
     if needs_two:
         short = {key: value for key, value in params.items() if key != "entity_two"}
         with pytest.raises(RuntimeError, match="entity_two"):
             handler.add_constraint(**short)
-        assert mock_command("add_constraint", dict(short))["ok"] is False
+        assert mock_mod.mock_command("add_constraint", dict(short))["ok"] is False
 
 
 def test_a_one_entity_dimension_labels_outside_the_curve_centre(bound_handler):
@@ -513,7 +512,7 @@ def test_mock_refuses_a_call_missing_its_first_entity():
         ),
         ("add_constraint", {"constraint_type": "parallel", "entity_two": 1}),
     ):
-        result = mock_command(command, params)
+        result = mock_mod.mock_command(command, params)
 
         assert result["ok"] is False
         assert result["error_kind"] == "INVALID_INPUT"
@@ -572,7 +571,7 @@ def test_an_unknown_type_is_refused_with_advice(bound_handler, call, message):
     ],
 )
 def test_mock_refuses_an_unknown_type_with_the_same_kind(command, params):
-    result = mock_command(command, params)
+    result = mock_mod.mock_command(command, params)
 
     assert result["ok"] is False
     assert result["error_kind"] == "INVALID_INPUT"
