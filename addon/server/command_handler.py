@@ -17,10 +17,9 @@ import traceback
 from contextlib import redirect_stdout, suppress
 from typing import Any, ClassVar
 
-import adsk.cam
-import adsk.core
-import adsk.fusion
-
+# One import site for Autodesk's API: resolved lazily, so this module imports outside
+# Fusion.  Only the import line changed; every ``adsk.`` use below is untouched.
+from . import fusion_api as adsk
 from . import get_logger
 from . import hints as _hints
 from . import hole_geometry as _hole_geom

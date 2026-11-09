@@ -133,3 +133,12 @@ def test_configure_is_idempotent(tmp_path, monkeypatch):
     ]
     assert len(file_handlers) == 1
     assert file_handlers[0].baseFilename == str(log_path)
+
+
+def test_command_handler_imports_without_adsk(tmp_path):
+    """The invariant: no ``adsk``, and no log file, on the import path."""
+    result = _import_in_subprocess(tmp_path, "addon.server.command_handler")
+
+    assert result.returncode == 0, result.stderr
+    assert "No module named 'adsk'" not in result.stderr
+    assert result.stdout.strip() == "[]", "importing the handler must create no file"
