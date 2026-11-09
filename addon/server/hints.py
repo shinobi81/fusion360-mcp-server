@@ -349,8 +349,8 @@ _RULES: list[tuple[str, str, list[str]]] = [
         r"InternalValidationError",
         "INVALID_INPUT",
         [
-            "Fusion rejected the input's state, not the arguments: a required "
-            "property was unset or a value was unacceptable.",
+            "Fusion rejected the input's state, not its arguments.",
+            "A required property may be unset, or a value it will not accept.",
             "For shell, the wall thickness must be a positive distance in cm.",
             "Check the entity exists and belongs to the body the feature acts on.",
         ],
