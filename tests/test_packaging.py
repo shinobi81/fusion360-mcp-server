@@ -103,15 +103,16 @@ def test_there_is_no_second_pyright_config():
 def test_documents_quoting_the_ruff_selection_match_the_config():
     """A quoted ``select = [...]`` in docs is a claim about this config.
 
-    Four stale copies of the rule set have surfaced in three changes, one of them
-    in the Scorecard evidence table that argues a criterion is met.  Quoting the
-    list in a document is fine; quoting a list the configuration no longer has is
-    a false claim that no reader can be expected to catch.
+    Three stale copies of the rule set surfaced across two changes, one of them in a
+    table that argued an external criterion was met.  Quoting the list in a document is
+    fine; quoting a list the configuration no longer has is a false claim that no reader
+    can be expected to catch.  ``docs/ROADMAP.md`` is where it is quoted now, and
+    widening the selection is the change most likely to leave it stale.
     """
     configured = sorted(_pyproject()["tool"]["ruff"]["lint"]["select"])
     quoted = re.compile(r"select = \[([^\]]*)\]")
     offenders = []
-    for doc in (REPO_ROOT / "docs" / "BADGE.md", REPO_ROOT / "CONTRIBUTING.md"):
+    for doc in (REPO_ROOT / "docs" / "ROADMAP.md",):
         if not doc.exists():
             continue
         for number, line in enumerate(doc.read_text(encoding="utf-8").splitlines(), 1):
