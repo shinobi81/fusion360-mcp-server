@@ -144,7 +144,7 @@ def test_a_permanently_dead_fire_times_out_instead_of_raising():
     """
     app = FakeApplication()
 
-    def dead(_event_id):
+    def dead(event_id):  # named as ``FakeApplication.fireCustomEvent`` declares it
         raise RuntimeError("no event")
 
     app.fireCustomEvent = dead
