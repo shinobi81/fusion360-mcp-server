@@ -100,10 +100,13 @@ class FakeOrientedBoundingBox3D:
             self.heightDirection,
         )
         halves = (self.length / 2, self.width / 2, self.height / 2)
+        # Materialised so ``strict`` is checked once, and so each sum below reads
+        # the same three (direction, half-extent) pairs.
+        edges = tuple(zip(directions, halves, strict=True))
         return (
-            sum(abs(d.coords()[0]) * h for d, h in zip(directions, halves)),
-            sum(abs(d.coords()[1]) * h for d, h in zip(directions, halves)),
-            sum(abs(d.coords()[2]) * h for d, h in zip(directions, halves)),
+            sum(abs(d.coords()[0]) * h for d, h in edges),
+            sum(abs(d.coords()[1]) * h for d, h in edges),
+            sum(abs(d.coords()[2]) * h for d, h in edges),
         )
 
 

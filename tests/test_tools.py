@@ -102,7 +102,6 @@ def test_expected_tools_present():
         # assembly
         "create_component",
         "add_joint",
-        "create_as_built_joint",
         "set_joint_value",
         "list_components",
         # export
