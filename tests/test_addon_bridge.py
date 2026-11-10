@@ -96,3 +96,27 @@ def test_the_factory_builds_a_subclass_of_the_base_it_is_given():
 
     instance.notify(None)
     assert bridge.drained == 1, "the handler reached the bridge it was given"
+
+
+def test_submit_survives_a_failing_fire_because_the_timer_retries():
+    """A dead ``fireCustomEvent`` must not fail the call: the timer picks it up.
+
+    Firing the event is only a nudge - ``_timer_loop`` is the backstop - so a
+    raising ``fireCustomEvent`` has to be swallowed rather than propagated to the
+    socket thread.  ``timeout=0`` keeps this out of the 200 ms timer's way: the
+    item is queued, then cancelled, and nothing from the fire can reach the caller.
+    """
+    app = FakeApplication()
+
+    def boom(_event_id):
+        raise RuntimeError("no event")
+
+    app.fireCustomEvent = boom
+    bridge = event_bridge.EventBridge(app, Handler())
+
+    try:
+        result = bridge.submit({"type": "noop"}, timeout=0)
+    finally:
+        bridge.stop()
+
+    assert result["error_kind"] == "TIMEOUT"
