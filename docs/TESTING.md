@@ -36,6 +36,13 @@ Both live in `addopts`/CI rather than in one file's scope, so a subset is run wi
 `--no-cov`. The statements that are uncovered on purpose are listed in the comment above
 `addopts`.
 
+The figure quoted above, and the one in that comment, are checked against the run
+by `scripts/check_coverage_figures.py`, in CI immediately after the test step. It
+cannot be an assertion inside the suite, because the measured total is the thing
+being measured and exists only once pytest has written `.coverage`. `CHANGELOG.md`
+is deliberately not read: its percentages describe releases, and stay true of the
+release they describe.
+
 ## The fake runtime
 
 The add-in is imported under pytest as an ordinary module. Nothing under `addon/` imports
