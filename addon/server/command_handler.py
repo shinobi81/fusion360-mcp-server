@@ -1677,19 +1677,26 @@ class CommandHandler:
         # Narrowed AFTER the refusal, never before it: an assert ahead of the guard
         # turns a missing index into an AssertionError instead of the message the
         # caller can act on.  These tell the type checker what the guard guarantees.
-        if "entity_one" in needed:
-            assert e1 is not None
+        #
+        # ``first``/``second`` rather than ``e1``/``e2`` because the narrowing has to
+        # survive into the lambda table below, where the merged type after this
+        # if/else is otherwise ``Any | None`` for both.  For a one-entity type
+        # ``second`` aliases the same curve and no entry reads it; nothing is touched
+        # eagerly, so an attribute Fusion may not expose is still only read when its
+        # own lambda runs.
         if "entity_two" in needed:
-            assert e2 is not None
-        # Where the label sits.  The one-entity types need a point away from the
-        # curve's centre: measured on 2706, a radial label at the world origin over a
-        # circle centred there raises "3 : Some input argument is invalid", while the
-        # curve's bounding-box corner is accepted.  The two-entity calls take the
-        # origin, measured the same way.
-        if "entity_two" in needed:
+            assert e1 is not None and e2 is not None
+            first, second = e1, e2
+            # The two-entity label takes the origin, measured on 2706.
             text_pt = adsk.core.Point3D.create(0, 0, 0)
         else:
-            box = e1.boundingBox
+            assert e1 is not None
+            first, second = e1, e1
+            # The one-entity label needs a point away from the curve's centre: measured
+            # on 2706, a radial label at the world origin over a circle centred there
+            # raises "3 : Some input argument is invalid", while the curve's
+            # bounding-box corner is accepted.
+            box = first.boundingBox
             text_pt = adsk.core.Point3D.create(
                 box.maxPoint.x, box.maxPoint.y, box.maxPoint.z
             )
@@ -1699,26 +1706,26 @@ class CommandHandler:
         # call here fails the parity test rather than at a caller's expense.
         calls = {
             "distance": lambda: dims.addDistanceDimension(
-                e1.startSketchPoint,
-                e2.startSketchPoint,
+                first.startSketchPoint,
+                second.startSketchPoint,
                 adsk.fusion.DimensionOrientations.AlignedDimensionOrientation,
                 text_pt,
             ),
             "horizontal": lambda: dims.addDistanceDimension(
-                e1.startSketchPoint,
-                e2.startSketchPoint,
+                first.startSketchPoint,
+                second.startSketchPoint,
                 adsk.fusion.DimensionOrientations.HorizontalDimensionOrientation,
                 text_pt,
             ),
             "vertical": lambda: dims.addDistanceDimension(
-                e1.startSketchPoint,
-                e2.startSketchPoint,
+                first.startSketchPoint,
+                second.startSketchPoint,
                 adsk.fusion.DimensionOrientations.VerticalDimensionOrientation,
                 text_pt,
             ),
-            "angular": lambda: dims.addAngularDimension(e1, e2, text_pt),
-            "radial": lambda: dims.addRadialDimension(e1, text_pt),
-            "diameter": lambda: dims.addDiameterDimension(e1, text_pt),
+            "angular": lambda: dims.addAngularDimension(first, second, text_pt),
+            "radial": lambda: dims.addRadialDimension(first, text_pt),
+            "diameter": lambda: dims.addDiameterDimension(first, text_pt),
         }
         dim = calls[dimension_type]()
 
