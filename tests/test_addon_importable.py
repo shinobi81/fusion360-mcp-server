@@ -15,6 +15,7 @@ import pathlib
 import subprocess
 import sys
 import types
+from typing import Any
 
 import pytest
 
@@ -52,7 +53,9 @@ def _clean_logging():
 def _synthetic_adsk(monkeypatch):
     """A stand-in ``adsk`` with one submodule and one package-level function."""
     calls = []
-    adsk = types.ModuleType("adsk")
+    # ``Any`` because this is a deliberately fabricated module: pyright cannot know
+    # which attributes a ModuleType grows, and these two are the seam under test.
+    adsk: Any = types.ModuleType("adsk")
     core = types.ModuleType("adsk.core")
     adsk.core = core
     adsk.doEvents = lambda: calls.append("doEvents")
