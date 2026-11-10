@@ -6,8 +6,9 @@ infer it).  Once, these disagreed for four years while nobody looked — the flo
 said 3.10 and 3.10 was already EOL.  These tests read the floor and fail the
 suite when any surface falls out of step with it, when a tool grows a second copy
 of the floor that can drift independently, when a document quotes a lint rule set
-the configuration no longer has, or when CI stops running a gate those
-configurations describe.
+the configuration no longer has, when CI stops running a gate those configurations
+describe, or when the add-in's Fusion manifest declares a version the release does
+not.
 """
 
 from __future__ import annotations
@@ -272,11 +273,21 @@ def test_the_add_in_manifest_declares_the_version_being_released():
 
     The add-in and the server ship together - one changelog, one tag - so the manifest
     is not free to lag behind ``pyproject.toml``.  It said 0.1.0 from the commit that
-    created it through seven releases, which is the same shape of stale claim the
-    coverage-figure check exists to stop.
+    created it until 0.7.2, sixteen tagged releases, which is the same shape of stale
+    claim the coverage-figure check exists to stop.
+
+    The file has to stay strict JSON: Fusion parses it with the same rules, so a comment
+    or a trailing comma makes the add-in unloadable, not merely this test red.
     """
     manifest = REPO_ROOT / "addon" / "Fusion360MCP.manifest"
-    declared = json.loads(manifest.read_text(encoding="utf-8"))["version"]
+    assert manifest.exists(), (
+        "addon/Fusion360MCP.manifest is gone; this guard would pass vacuously"
+    )
+    facts = json.loads(manifest.read_text(encoding="utf-8"))
+    assert "version" in facts, (
+        "addon/Fusion360MCP.manifest states no version; this guard would pass vacuously"
+    )
+    declared = facts["version"]
     packaged = _pyproject()["project"]["version"]
 
     assert declared == packaged, (
