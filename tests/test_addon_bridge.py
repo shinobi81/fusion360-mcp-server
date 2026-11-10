@@ -131,3 +131,29 @@ def test_submit_survives_a_failing_fire_because_the_timer_retries():
     assert fires[0] == event_bridge.CUSTOM_EVENT_ID
     assert len(fires) >= 2, "the timer never retried the fire"
     assert result == {"ok": True, "ran": "noop"}
+
+
+def test_a_permanently_dead_fire_times_out_instead_of_raising():
+    """A nudge that never works is a timeout, not an exception at the caller.
+
+    The item can never be drained here - the only thing that would drain it is the
+    same ``fireCustomEvent``, and that raises every time - so ``timeout=0`` decides
+    the result deterministically.  This is the caller-facing half of the ``suppress``:
+    a dead nudge delays nothing, and what comes back is the envelope any unpicked-up
+    command gets.
+    """
+    app = FakeApplication()
+
+    def dead(_event_id):
+        raise RuntimeError("no event")
+
+    app.fireCustomEvent = dead
+    bridge = event_bridge.EventBridge(app, Handler())
+
+    try:
+        result = bridge.submit({"type": "noop"}, timeout=0)
+    finally:
+        bridge.stop()
+
+    assert result["status"] == "error"
+    assert result["error_kind"] == "TIMEOUT"
