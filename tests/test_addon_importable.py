@@ -54,8 +54,8 @@ def _synthetic_adsk(monkeypatch):
     calls = []
     adsk = types.ModuleType("adsk")
     core = types.ModuleType("adsk.core")
-    setattr(adsk, "core", core)
-    setattr(adsk, "doEvents", lambda: calls.append("doEvents"))
+    adsk.core = core
+    adsk.doEvents = lambda: calls.append("doEvents")
     monkeypatch.setitem(sys.modules, "adsk", adsk)
     monkeypatch.setitem(sys.modules, "adsk.core", core)
     return adsk, core, calls

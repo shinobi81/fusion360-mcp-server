@@ -34,7 +34,7 @@ def _bridge_base():
             CustomEventHandler=FakeCustomEventHandler
         )
     elif added:
-        setattr(installed, "CustomEventHandler", FakeCustomEventHandler)
+        installed.CustomEventHandler = FakeCustomEventHandler
 
     yield
 
