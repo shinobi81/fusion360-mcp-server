@@ -15,7 +15,6 @@ import pathlib
 import subprocess
 import sys
 import types
-from typing import Any
 
 import pytest
 
@@ -53,12 +52,13 @@ def _clean_logging():
 def _synthetic_adsk(monkeypatch):
     """A stand-in ``adsk`` with one submodule and one package-level function."""
     calls = []
-    # ``Any`` because this is a deliberately fabricated module: pyright cannot know
-    # which attributes a ModuleType grows, and these two are the seam under test.
-    adsk: Any = types.ModuleType("adsk")
+    adsk = types.ModuleType("adsk")
     core = types.ModuleType("adsk.core")
-    adsk.core = core
-    adsk.doEvents = lambda: calls.append("doEvents")
+    # Written through ``__dict__`` because a ModuleType declares no attributes: a plain
+    # assignment reads as a static error to pyright even though it is exactly how this
+    # fake works.  These two names are the seam under test.
+    adsk.__dict__["core"] = core
+    adsk.__dict__["doEvents"] = lambda: calls.append("doEvents")
     monkeypatch.setitem(sys.modules, "adsk", adsk)
     monkeypatch.setitem(sys.modules, "adsk.core", core)
     return adsk, core, calls
