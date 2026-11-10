@@ -141,7 +141,12 @@ def test_execute_code_reports_a_syntax_error_without_chaining_it(bound_handler):
     with pytest.raises(RuntimeError) as raised:
         handler.execute_code("def (")
 
-    assert str(raised.value).startswith("SyntaxError: ")
+    message = str(raised.value)
+    assert message.startswith("SyntaxError: ")
+    assert "def (" in message and "^" in message, (
+        "the offending line and its caret are the only view of the source the agent "
+        "gets once the chained block is suppressed"
+    )
     assert raised.value.__suppress_context__ is True
     # ``from None`` and ``from exc`` both suppress the context; only the cause
     # tells them apart, and ``from exc`` would re-print the parser's message.
