@@ -1,9 +1,11 @@
 """Table-and-schema agreement for the joint tools — and nothing else.
 
-The add-in's *tables* are read statically: ``ast`` is the only way to check a
-class-level table against a schema, and Fusion itself is not available to ask.  The
-add-in is importable in CI now - see ``tests/test_addon_importable.py`` - so that is no
-longer the reason: the reason is that a table is data, not behaviour.
+The add-in's *tables* are read from the imported ``CommandHandler`` class, not parsed
+out of its source: the add-in is importable under pytest (see
+``tests/test_addon_importable.py``) and the tables are class attributes, so ``getattr``
+reads the very object the handler uses - including a table built from a call no parser
+could evaluate.  What this file asserts has not changed: a table is data, not
+behaviour, and a table asserting itself proves nothing.
 
 **Every claim about behaviour has moved out.** It used to be the other way round:
 this file parsed the source to check that ``add_joint`` returned certain keys, did
@@ -27,46 +29,21 @@ drift apart, which is the one thing only a source read can catch.
 
 from __future__ import annotations
 
-import ast
-from pathlib import Path
+import pytest
 
 from fusion360_mcp.tools import TOOLS
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-HANDLER = REPO_ROOT / "addon" / "server" / "command_handler.py"
 
+@pytest.fixture
+def handler_class(handler_module):
+    """``CommandHandler`` itself: its tables are class attributes, not source text.
 
-def _class_assign(attr: str):
-    """Return the literal value of ``CommandHandler.<attr>`` parsed via AST."""
-    tree = ast.parse(HANDLER.read_text())
-    for cls in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
-        if cls.name != "CommandHandler":
-            continue
-        for stmt in cls.body:
-            # The tables are static, whether declared plain (``X = {...}``) or
-            # annotated (``X: ClassVar[...] = {...}``, which is ast.AnnAssign and
-            # has a single target).  Both are the same invariant; skipping the
-            # annotated form would let a table drift out of this guard silently.
-            if isinstance(stmt, ast.Assign):
-                targets = stmt.targets
-            elif isinstance(stmt, ast.AnnAssign):
-                targets = [stmt.target]
-            else:
-                continue
-            if stmt.value is not None and any(
-                isinstance(t, ast.Name) and t.id == attr for t in targets
-            ):
-                value = stmt.value
-                # frozenset({...}) / set({...}) -> unwrap the set literal
-                if (
-                    isinstance(value, ast.Call)
-                    and isinstance(value.func, ast.Name)
-                    and value.func.id in {"frozenset", "set"}
-                    and value.args
-                ):
-                    return ast.literal_eval(value.args[0])
-                return ast.literal_eval(value)
-    raise AssertionError(f"CommandHandler.{attr} not found in {HANDLER}")
+    Read through the module the fixture already imports, rather than parsed out of the
+    file: the add-in is importable under pytest, and a table is data whichever way it is
+    read.  This also removes the ``Assign``/``AnnAssign`` distinction the parser needed,
+    and reads a table built from a call the parser could not evaluate.
+    """
+    return handler_module.CommandHandler
 
 
 def _schema() -> dict:
@@ -76,9 +53,9 @@ def _schema() -> dict:
     raise AssertionError("add_joint schema missing from TOOLS")
 
 
-def test_joint_motion_setters_cover_every_schema_type():
+def test_joint_motion_setters_cover_every_schema_type(handler_class):
     """Every joint_type in the schema must map to a motion setter in the add-in."""
-    setters = _class_assign("_JOINT_MOTION_SETTERS")
+    setters = handler_class._JOINT_MOTION_SETTERS
     schema_types = set(_schema()["properties"]["joint_type"]["enum"])
 
     assert set(setters) == schema_types, (
@@ -94,14 +71,14 @@ def test_joint_motion_setters_cover_every_schema_type():
         )
 
 
-def test_motion_setter_arities_are_pinned():
+def test_motion_setter_arities_are_pinned(handler_class):
     """Pin the direction counts in _JOINT_MOTION_SETTERS against drift.
 
     A table read cannot prove Fusion accepts these arities: a wrong table would
     carry the same wrong numbers. All seven counts were confirmed by creating
     every joint type in Fusion, which raises TypeError on a wrong argument count.
     """
-    setters = _class_assign("_JOINT_MOTION_SETTERS")
+    setters = handler_class._JOINT_MOTION_SETTERS
 
     assert setters["rigid"][1] == 0
     assert setters["pin_slot"][1] == 2
@@ -112,30 +89,30 @@ def test_motion_setter_arities_are_pinned():
         )
 
 
-def test_the_world_axis_table_covers_the_joint_axes():
+def test_the_world_axis_table_covers_the_joint_axes(handler_class):
     """``_joint_direction`` indexes ``_WORLD_AXES`` with a key it checked against
     ``_JOINT_AXES``, so a fourth axis added to one and not the other would raise a
     bare ``KeyError`` instead of the "Use one of ..." refusal.
     """
-    assert set(_class_assign("_WORLD_AXES")) == set(_class_assign("_JOINT_AXES"))
+    assert set(handler_class._WORLD_AXES) == set(handler_class._JOINT_AXES)
 
 
-def test_direction_and_quadrant_enums_match_the_schema():
+def test_direction_and_quadrant_enums_match_the_schema(handler_class):
     """Schema enums must mirror the add-in's lookup tables."""
     props = _schema()["properties"]
 
-    axes = set(_class_assign("_JOINT_AXES"))
+    axes = set(handler_class._JOINT_AXES)
     assert set(props["axis"]["enum"]) == axes
     assert set(props["second_axis"]["enum"]) == axes
 
-    quadrants = set(_class_assign("_JOINT_QUADRANTS"))
+    quadrants = set(handler_class._JOINT_QUADRANTS)
     assert set(props["quadrant"]["enum"]) == quadrants
 
-    key_points = set(_class_assign("_JOINT_KEY_POINTS"))
+    key_points = set(handler_class._JOINT_KEY_POINTS)
     assert set(props["key_point"]["enum"]) == key_points
 
 
-def test_the_reversed_direction_arguments_are_the_two_measured_types():
+def test_the_reversed_direction_arguments_are_the_two_measured_types(handler_class):
     """Two joint types take their directions in the opposite order to `axis`.
 
     ball - Fusion takes (pitchDirection, yawDirection) and rejects a pitch
@@ -148,20 +125,20 @@ def test_the_reversed_direction_arguments_are_the_two_measured_types():
     behavioural half is
     tests/test_addon_joint_frame.py::test_pin_slot_slides_along_the_axis_asked_for.
     """
-    reversed_types = _class_assign("_JOINT_REVERSED_DIRECTION_ARGUMENTS")
+    reversed_types = handler_class._JOINT_REVERSED_DIRECTION_ARGUMENTS
     assert set(reversed_types) == {"ball", "pin_slot"}, (
         "exactly these two are measured to need reversed direction arguments, got "
         f"{reversed_types}"
     )
 
 
-def test_set_joint_value_covers_every_driveable_motion_type():
+def test_set_joint_value_covers_every_driveable_motion_type(handler_class):
     """Every non-rigid motion type maps to the attribute Fusion actually has.
 
     BallJointMotion exposes pitch/yaw/roll and no rotationValue; cylindrical,
     pin-slot and planar joints carry both an angle and slide values.
     """
-    attrs = _class_assign("_JOINT_VALUE_ATTRIBUTES")
+    attrs = handler_class._JOINT_VALUE_ATTRIBUTES
     expected = {
         "RevoluteJointMotion",
         "SliderJointMotion",
@@ -192,20 +169,20 @@ def test_set_joint_value_covers_every_driveable_motion_type():
     )
 
 
-def test_joint_angle_attributes_hold_no_lengths():
+def test_joint_angle_attributes_hold_no_lengths(handler_class):
     """Only angle attributes may be converted between degrees and radians.
 
     ``slideValue`` and the planar slides are lengths in Fusion's internal unit,
     centimetres, so converting them is wrong by a factor of 180/pi.
     """
-    angle_attrs = _class_assign("_JOINT_ANGLE_ATTRIBUTES")
+    angle_attrs = handler_class._JOINT_ANGLE_ATTRIBUTES
     assert "rotationValue" in angle_attrs
     assert "pitchValue" in angle_attrs
     assert "slideValue" not in angle_attrs
     assert "primarySlideValue" not in angle_attrs
     assert "secondarySlideValue" not in angle_attrs
 
-    attrs = _class_assign("_JOINT_VALUE_ATTRIBUTES")
+    attrs = handler_class._JOINT_VALUE_ATTRIBUTES
     mapped = {name for kinds in attrs.values() for name in kinds.values()}
     assert set(angle_attrs) <= mapped, (
         f"angle attributes that no motion maps to: {sorted(set(angle_attrs) - mapped)}"
