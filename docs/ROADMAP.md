@@ -72,6 +72,6 @@ compares `CommandHandler._COMMANDS` and `_MUTATION_COMMANDS` against `mock.py`'s
 `test_addon_joints.py` compares the joint tables against the schemas (through the
 imported `CommandHandler`, since the add-in became importable), and
 `test_addon_sources.py` reads the add-in's tokens because both PEP 758 spellings parse
-the same. Each is a property of the data rather than of running the code.
+the same. Each asserts on data rather than on behaviour.
 
 Nothing else is queued behind this section; sections 1 and 2 are both closed.

@@ -2,10 +2,11 @@
 
 The add-in's *tables* are read from the imported ``CommandHandler`` class, not parsed
 out of its source: the add-in is importable under pytest (see
-``tests/test_addon_importable.py``) and the tables are class attributes, so ``getattr``
-reads the very object the handler uses - including a table built from a call no parser
-could evaluate.  What this file asserts has not changed: a table is data, not
-behaviour, and a table asserting itself proves nothing.
+``tests/test_addon_importable.py``) and the tables are class attributes, so attribute
+access reads the very object the handler uses.  A table that a future change built from
+a call no parser could evaluate would now be read rather than missed.  What this file
+asserts has not changed: a table is data, not behaviour, and a table asserting itself
+proves nothing.
 
 **Every claim about behaviour has moved out.** It used to be the other way round:
 this file parsed the source to check that ``add_joint`` returned certain keys, did
@@ -24,7 +25,8 @@ can see the shape of a statement; it cannot see whether the code runs.
 What remains below is table-against-schema and table-against-literal. That cannot
 be behavioural by nature: the schema is data, and a table asserting itself proves
 nothing. Each test fails when the add-in's table and the published tool schema
-drift apart, which is the one thing only a source read can catch.
+drift apart - schema against data, which no behavioural test can catch because the
+schema is data too.
 """
 
 from __future__ import annotations
@@ -38,10 +40,12 @@ from fusion360_mcp.tools import TOOLS
 def handler_class(handler_module):
     """``CommandHandler`` itself: its tables are class attributes, not source text.
 
-    Read through the module the fixture already imports, rather than parsed out of the
+    Read through the module the fixture already imports rather than parsed out of the
     file: the add-in is importable under pytest, and a table is data whichever way it is
-    read.  This also removes the ``Assign``/``AnnAssign`` distinction the parser needed,
-    and reads a table built from a call the parser could not evaluate.
+    read. This also removes the ``Assign``/``AnnAssign`` distinction the parser needed.
+    The cost is real and worth stating: these seven tests now need the fake runtime and
+    a successful import, where a source read needed neither - so a red test in this
+    file no longer implies drift on its own.
     """
     return handler_module.CommandHandler
 
