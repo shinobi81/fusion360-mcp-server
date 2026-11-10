@@ -27,8 +27,20 @@ PYPROJECT = "pyproject.toml"
 
 
 def _pages(**overrides: str) -> dict[str, str]:
-    """The real documents, with any named one replaced by the given text."""
-    pages = {name: (ROOT / name).read_text(encoding="utf-8") for name, _ in READERS}
+    """Each real document with its figure rewritten to a constant.
+
+    Rewritten rather than read as-is: the only document a test replaces is the one it
+    is about, so reading the others live made every assertion depend on the tree's
+    current measurement - and they all failed the moment it moved from 61.44 to 61.47,
+    which is the drift this file exists to catch.  Rewriting keeps each document's own
+    spelling (the ``scripts`` module still has to find it), while removing the coupling.
+    """
+    pages = {}
+    for name, pattern in READERS:
+        text = (ROOT / name).read_text(encoding="utf-8")
+        pages[name] = pattern.sub(
+            lambda match: match.group(0).replace(match.group(1), "61.44"), text
+        )
     pages.update(overrides)
     return pages
 

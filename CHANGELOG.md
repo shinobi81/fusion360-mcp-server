@@ -7,6 +7,56 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.7.2] - 2026-11-10
+
+A lint-and-CI release with two add-in changes inside it. No tool, parameter or
+response field was removed and no documented parameter changed meaning, so this is a
+patch.
+
+**Both changes live in the add-in**, so pull and reload it (`reload_handler` over the
+socket, or Shift+S > Add-Ins > Run) to pick them up. Nothing breaks if you do not: the
+dimension path hands Fusion the same arguments it already did. The wire protocol is
+untouched, and the wheel carries only `src/`, so installing 0.7.2 on its own changes
+nothing in real mode.
+
+### Changed
+
+- **`execute_code`'s syntax-error refusal is rendered once.** The parse used to be
+  printed twice - in the message and again as the chained cause. The chained block is
+  suppressed, and the parser's own rendering - file, line, the offending line and its
+  caret - now travels in the message, which is what the agent reads, so suppressing the
+  block loses nothing. (#76)
+- **`add_dimension` narrows its entities where the lambda table reads them.** Seven
+  `reportAttributeAccessIssue` findings were narrowing-loss rather than noise: the
+  asserts that guarantee an entity is present are conditional on the type table, so the
+  merged type was `Any | None` again by the time the table read `.boundingBox` and
+  `.startSketchPoint`. The entities are narrowed into `first`/`second` inside each branch
+  that already knows the answer. The arguments Fusion receives are unchanged, verified
+  live on 2706 for a radial dimension and a distance between two lines. (#78)
+- **`ruff`'s selection is `["E", "F", "I", "RUF", "B", "SIM"]`, and the tree is clean.**
+  The 16 findings `B` and `SIM` reported are fixed in code: no `ignore`, no
+  `per-file-ignores` and no new `noqa`. `scripts/` was added to both the lint and the
+  format gate, which had covered four trees and skipped the directory the suite itself
+  imports. (#76, #80)
+- **CI checks that the coverage percentage the docs quote is the one the run measured.**
+  `scripts/check_coverage_figures.py` runs after pytest and fails naming `file:line`; a
+  document that stops quoting the figure fails as vacuous rather than passing nothing.
+  The figure moved three times inside the lint parcel - 60.73, 61.27, 61.44 - and no gate
+  saw it. (#77)
+
+### Testing
+
+- `tests/test_addon_joints.py` reads the joint tables from the imported `CommandHandler`
+  instead of parsing the add-in with `ast`: the reason for the parse (an add-in that
+  could not be imported) stopped being true when the lazy adapter landed. (#82)
+- `add_dimension`'s second point, its three orientation enums and `angular`'s argument
+  order are pinned, so a per-branch regression in the narrowed table cannot stay green.
+  (#81)
+- The bridge's failing-fire pin now proves the command still runs, and a second test pins
+  that a fire that never works surfaces as `TIMEOUT` rather than propagating. (#76)
+- The `execute_code` syntax-error test pins that the offending line and its caret reach
+  the agent. (#76)
+
 ## [0.7.1] - 2026-11-09
 
 The release where a dimension can name the curve it measures. No tool, parameter or
@@ -532,6 +582,7 @@ reporting a result it had only echoed back.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.7.2]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.6.4...v0.7.0
 [0.6.4]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.6.3...v0.6.4

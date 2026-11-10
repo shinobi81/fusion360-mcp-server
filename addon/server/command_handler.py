@@ -5260,9 +5260,19 @@ class CommandHandler:
         try:
             tree = ast.parse(code)
         except SyntaxError as exc:
-            # ``from None``: the message already carries the parser's text, so chaining
-            # would print the syntax error twice in the agent-facing traceback.
-            raise RuntimeError(f"SyntaxError: {exc}") from None
+            # ``from None`` so the parse is not rendered twice, and the parser's own
+            # rendering folded into the message instead: the caret-annotated source line
+            # appears nowhere else once the chained block is suppressed, and the message
+            # is what reaches the agent.
+            detail = "".join(traceback.format_exception_only(exc)).rstrip()
+            # Drop the rendering's own final "SyntaxError: ..." line: the prefix above
+            # already names it, and the agent should not read the same sentence twice.
+            annotated = "\n".join(
+                line
+                for line in detail.splitlines()
+                if not line.startswith("SyntaxError:")
+            )
+            raise RuntimeError(f"SyntaxError: {exc}\n{annotated}") from None
 
         last_expr_value = None
         last_expr = (
