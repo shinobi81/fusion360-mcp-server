@@ -53,16 +53,16 @@ line-length = 88
 # said 3.10 for four years after 3.10 was EOL.
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "RUF"]
+select = ["E", "F", "I", "RUF", "B", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Coverage is measured on every run so a regression is visible in the diff, and floored
 # just under the current number rather than at a round figure.  The measured total is
-# 60.73% over both packages, so the floor is 59: about 58 statements of slack, which
+# 61.44% over both packages, so the floor is 59: about 82 statements of slack, which
 # covers the permanent gaps below and any one deliberate dead branch.
 #
-# That total is dominated by the add-in: `addon/server` is 2566 statements at ~49%,
+# That total is dominated by the add-in: `addon/server` is 2612 statements at ~51%,
 # because CAM, export, view-sheet and viewport-render only run inside Fusion.  The add-in's
 # own floor is therefore low on purpose, and the server keeps its own gate - CI runs
 # `coverage report --include="src/fusion360_mcp/*" --fail-under=95` after pytest - so an

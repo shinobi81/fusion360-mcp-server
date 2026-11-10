@@ -291,7 +291,7 @@ def test_a_curved_edge_without_an_explicit_box_refuses_to_guess(bound_handler):
     """
     ring = FakeEdge((0.0, 0.0, 1.0), (0.0, 0.0, 1.0), curve_type="Circle3D")
     with pytest.raises(RuntimeError) as raised:
-        ring.boundingBox
+        _ = ring.boundingBox
     assert "needs an explicit bounding_box" in str(raised.value)
 
 

@@ -8,6 +8,7 @@ exists to prove the class is still wired to the bridge and still drains the queu
 
 from __future__ import annotations
 
+import threading
 import types
 
 import pytest
@@ -34,7 +35,7 @@ def _bridge_base():
             CustomEventHandler=FakeCustomEventHandler
         )
     elif added:
-        setattr(installed, "CustomEventHandler", FakeCustomEventHandler)
+        installed.CustomEventHandler = FakeCustomEventHandler
 
     yield
 
@@ -96,3 +97,63 @@ def test_the_factory_builds_a_subclass_of_the_base_it_is_given():
 
     instance.notify(None)
     assert bridge.drained == 1, "the handler reached the bridge it was given"
+
+
+def test_submit_survives_a_failing_fire_because_the_timer_retries():
+    """A dead ``fireCustomEvent`` must not fail the call: the timer picks it up.
+
+    ``submit``'s own fire raises; the 200 ms timer fires again, and this time the
+    faked application drains the queue the way Fusion's handler does on notify.  So
+    the command still runs - a nudge that fails is not a lost command, which is the
+    claim the ``suppress`` in ``submit`` exists to make.
+
+    Which fire raises is decided by the calling thread, not by arrival order: a fire
+    that happened to come from the timer first would put the raise inside
+    ``_timer_loop``'s own ``suppress`` and leave ``submit``'s swallowed one untested.
+    """
+    app = FakeApplication()
+    fires = []
+
+    def flaky(event_id):
+        fires.append(event_id)
+        if threading.current_thread() is threading.main_thread():
+            raise RuntimeError("no event")  # submit's own fire, always
+        bridge.drain_queue()  # the timer's retry, standing in for Fusion's notify
+
+    app.fireCustomEvent = flaky
+    bridge = event_bridge.EventBridge(app, Handler())
+
+    try:
+        result = bridge.submit({"type": "noop"}, timeout=5.0)
+    finally:
+        bridge.stop()
+
+    assert fires[0] == event_bridge.CUSTOM_EVENT_ID
+    assert len(fires) >= 2, "the timer never retried the fire"
+    assert result == {"ok": True, "ran": "noop"}
+
+
+def test_a_permanently_dead_fire_times_out_instead_of_raising():
+    """A nudge that never works is a timeout, not an exception at the caller.
+
+    The item can never be drained here - the only thing that would drain it is the
+    same ``fireCustomEvent``, and that raises every time - so ``timeout=0`` decides
+    the result deterministically.  This is the caller-facing half of the ``suppress``:
+    a dead nudge delays nothing, and what comes back is the envelope any unpicked-up
+    command gets.
+    """
+    app = FakeApplication()
+
+    def dead(_event_id):
+        raise RuntimeError("no event")
+
+    app.fireCustomEvent = dead
+    bridge = event_bridge.EventBridge(app, Handler())
+
+    try:
+        result = bridge.submit({"type": "noop"}, timeout=0)
+    finally:
+        bridge.stop()
+
+    assert result["status"] == "error"
+    assert result["error_kind"] == "TIMEOUT"

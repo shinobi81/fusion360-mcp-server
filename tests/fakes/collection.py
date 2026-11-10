@@ -57,7 +57,7 @@ class FakeCollection:
         # ``py/init-calls-subclass``, and a real footgun rather than a style point.
         self._items: list = list(items or [])
         for item in self._items:
-            setattr(item, "_collection", self)
+            item._collection = self
 
     @property
     def count(self) -> int:
@@ -73,7 +73,7 @@ class FakeCollection:
         returns nothing cannot model it.  Every other caller ignores the result.
         """
         self._items.append(item)
-        setattr(item, "_collection", self)
+        item._collection = self
         return item
 
     def remove(self, item) -> None:

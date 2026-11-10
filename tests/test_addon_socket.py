@@ -16,6 +16,8 @@ import sys
 import threading
 from contextlib import suppress
 
+import pytest
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -124,3 +126,23 @@ def test_execute_code_does_not_claim_a_closed_document_when_it_is_alive(bound_ha
 
     assert result["result"] == 2
     assert "document_closed" not in result
+
+
+def test_execute_code_reports_a_syntax_error_without_chaining_it(bound_handler):
+    """The message carries the syntax error; the cause must not repeat it.
+
+    ``execute_code`` turns a ``SyntaxError`` into a ``RuntimeError`` whose text is
+    the diagnostic the agent reads.  Raised bare inside the ``except``, Python also
+    attaches the original as ``__context__``, so the rendered traceback shows the
+    syntax error twice.
+    """
+    handler = bound_handler(FakeDesign())
+
+    with pytest.raises(RuntimeError) as raised:
+        handler.execute_code("def (")
+
+    assert str(raised.value).startswith("SyntaxError: ")
+    assert raised.value.__suppress_context__ is True
+    # ``from None`` and ``from exc`` both suppress the context; only the cause
+    # tells them apart, and ``from exc`` would re-print the parser's message.
+    assert raised.value.__cause__ is None

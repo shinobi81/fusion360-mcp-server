@@ -127,12 +127,16 @@ def mock_command(command_type: str, params: dict[str, Any] | None = None) -> dic
     result = handler(params)
     result.setdefault("ok", True)
     # A refusal carries no deltas: nothing changed, and the synthetic "body
-    # appeared" numbers would claim otherwise.
-    if result["ok"] and command_type in _MUTATION_MOCKS and "deltas" not in result:
-        # undo removes work; the synthetic "body appeared" deltas would read
-        # as a growth and are exactly what an agent must not be told.
-        if command_type != "undo":
-            result["deltas"] = dict(_MOCK_DELTAS)
+    # appeared" numbers would claim otherwise.  ``undo`` is the other exception —
+    # it removes work, so the synthetic "body appeared" deltas would read as a
+    # growth and are exactly what an agent must not be told.
+    if (
+        result["ok"]
+        and command_type in _MUTATION_MOCKS
+        and "deltas" not in result
+        and command_type != "undo"
+    ):
+        result["deltas"] = dict(_MOCK_DELTAS)
     result["mode"] = "mock"
     return result
 

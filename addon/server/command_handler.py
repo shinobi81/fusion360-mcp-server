@@ -5253,7 +5253,9 @@ class CommandHandler:
         try:
             tree = ast.parse(code)
         except SyntaxError as exc:
-            raise RuntimeError(f"SyntaxError: {exc}")
+            # ``from None``: the message already carries the parser's text, so chaining
+            # would print the syntax error twice in the agent-facing traceback.
+            raise RuntimeError(f"SyntaxError: {exc}") from None
 
         last_expr_value = None
         last_expr = (
@@ -5457,10 +5459,9 @@ class CommandHandler:
 
         try:
             if fit:
-                try:
+                with suppress(Exception):
+                    # fit() can fail on empty designs; keep going
                     viewport.fit()
-                except Exception:
-                    pass  # fit() can fail on empty designs; keep going
 
             # saveAsImageFile requires a real path; write to a tempfile.
             fd, path = tempfile.mkstemp(suffix=".png", prefix="fusion_render_")

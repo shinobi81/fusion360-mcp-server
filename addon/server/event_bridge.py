@@ -152,10 +152,8 @@ class EventBridge:
         self._queue.put(item)
 
         # Poke the main thread
-        try:
-            self._app.fireCustomEvent(CUSTOM_EVENT_ID)
-        except Exception:
-            pass  # timer will pick it up
+        with suppress(Exception):
+            self._app.fireCustomEvent(CUSTOM_EVENT_ID)  # the timer will pick it up
 
         if not item.done.wait(timeout=timeout):
             # The client has given up.  Cancel the item so drain_queue
