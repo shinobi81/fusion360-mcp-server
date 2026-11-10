@@ -12,8 +12,8 @@ that are almost always a mistake, and `SIM` (simplify) reports code that says at
 length what it could say at less. Both are in now, across the four trees the change
 touched (`src/`, `tests/`, `fuzz/`, `addon/`), and the tree is clean with no `ignore`,
 no `per-file-ignores` and no new `noqa`: a rule that is on everywhere either passes or
-gets fixed. `scripts/` joined the lint command afterwards, when a script arrived that
-the suite tests.
+gets fixed. `scripts/` joined both gates in a later change, once
+`scripts/check_coverage_figures.py` gave the directory a file the suite tests.
 
 The first pass was 16 findings, so it went in as one change rather than one per rule
 family. The dispositions are the whole story of it:
