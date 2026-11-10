@@ -101,22 +101,28 @@ def test_the_factory_builds_a_subclass_of_the_base_it_is_given():
 def test_submit_survives_a_failing_fire_because_the_timer_retries():
     """A dead ``fireCustomEvent`` must not fail the call: the timer picks it up.
 
-    Firing the event is only a nudge - ``_timer_loop`` is the backstop - so a
-    raising ``fireCustomEvent`` has to be swallowed rather than propagated to the
-    socket thread.  ``timeout=0`` keeps this out of the 200 ms timer's way: the
-    item is queued, then cancelled, and nothing from the fire can reach the caller.
+    The first fire raises; the 200 ms timer fires again, and this time the faked
+    application drains the queue the way Fusion's handler does on notify.  So the
+    command still runs - a nudge that fails is not a lost command, which is the
+    claim the ``suppress`` in ``submit`` exists to make.
     """
     app = FakeApplication()
+    fires = []
 
-    def boom(_event_id):
-        raise RuntimeError("no event")
+    def flaky(event_id):
+        fires.append(event_id)
+        if len(fires) == 1:
+            raise RuntimeError("no event")
+        bridge.drain_queue()  # stands in for Fusion calling notify
 
-    app.fireCustomEvent = boom
+    app.fireCustomEvent = flaky
     bridge = event_bridge.EventBridge(app, Handler())
 
     try:
-        result = bridge.submit({"type": "noop"}, timeout=0)
+        result = bridge.submit({"type": "noop"}, timeout=5.0)
     finally:
         bridge.stop()
 
-    assert result["error_kind"] == "TIMEOUT"
+    assert fires[0] == event_bridge.CUSTOM_EVENT_ID
+    assert len(fires) >= 2, "the timer never retried the fire"
+    assert result == {"ok": True, "ran": "noop"}
