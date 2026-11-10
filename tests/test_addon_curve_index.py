@@ -219,10 +219,37 @@ def test_a_valid_dimension_still_sets_its_value(bound_handler):
     assert method == "addDistanceDimension"
     curves = list(sketch.sketchCurves)
     assert args[0] is curves[1].startSketchPoint, "the curve the caller named"
+    assert args[1] is curves[3].startSketchPoint, "and the second one it named"
     written = sketch.sketchDimensions.last_dimension
     assert written is not None and written.parameter.value == 3.5, (
         "the caller's value reached the dimension's parameter"
     )
+
+
+@pytest.mark.parametrize(
+    ("dimension_type", "orientation"),
+    [
+        ("distance", "aligned"),
+        ("horizontal", "horizontal"),
+        ("vertical", "vertical"),
+    ],
+)
+def test_the_three_distance_shapes_ask_for_their_own_orientation(
+    bound_handler, dimension_type, orientation
+):
+    """They share one branch, so only the enum argument tells them apart.
+
+    A copy-paste that left the aligned orientation in the horizontal or vertical
+    entry would dimension the right curves the wrong way and stay green.
+    """
+    design, sketch = four_curve_design()
+    handler = bound_handler(design)
+
+    handler.add_dimension(dimension_type, 2.0, entity_one=0, entity_two=3)
+
+    method, args = sketch.sketchDimensions.calls[0]
+    assert method == "addDistanceDimension"
+    assert args[2] == orientation
 
 
 # ── mock parity: the checks that need no geometry ─────────────────────
@@ -299,6 +326,27 @@ def test_a_radial_dimension_needs_only_the_curve_it_measures(bound_handler):
     assert method == "addRadialDimension"
     assert args[0] is list(sketch.sketchCurves)[1], "the curve the caller named"
     assert result["dimension_type"] == "radial"
+
+
+def test_an_angular_dimension_gets_both_curves_in_the_order_named(bound_handler):
+    """``angular`` is the other two-entity type, and it takes the curves themselves.
+
+    ``distance`` hands over sketch points; ``angular`` hands over the curves, so
+    the ``first``/``second`` narrowing has to reach it unchanged as well.
+    """
+    design, sketch = four_curve_design()
+    handler = bound_handler(design)
+    curves = list(sketch.sketchCurves)
+
+    result = handler.add_dimension("angular", 30.0, entity_one=0, entity_two=3)
+
+    method, (first, second, _text_point) = sketch.sketchDimensions.calls[0]
+    assert method == "addAngularDimension"
+    assert first is curves[0], "the curve the caller named"
+    assert second is curves[3], "and the second one it named"
+    assert (result["sketch"], result["value"]) == ("Sketch1", 30.0), (
+        "the reply names the sketch and echoes the value"
+    )
 
 
 def test_a_diameter_dimension_needs_only_the_curve_it_measures(bound_handler):
