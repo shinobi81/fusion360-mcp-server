@@ -9,10 +9,11 @@ a known gap is visibly known rather than merely absent.
 `pyproject.toml` sets `select = ["E", "F", "I", "RUF", "B", "SIM"]`. The first four
 were a linter configuration rather than a strict one: `B` (bugbear) reports constructs
 that are almost always a mistake, and `SIM` (simplify) reports code that says at more
-length what it could say at less. Both are in now, across all four linted trees (`src/`,
-`tests/`, `fuzz/`, `addon/`), and the tree is clean with no `ignore`, no
-`per-file-ignores` and no new `noqa`: a rule that is on everywhere either passes or gets
-fixed.
+length what it could say at less. Both are in now, across the four trees the change
+touched (`src/`, `tests/`, `fuzz/`, `addon/`), and the tree is clean with no `ignore`,
+no `per-file-ignores` and no new `noqa`: a rule that is on everywhere either passes or
+gets fixed. `scripts/` joined the lint command afterwards, when a script arrived that
+the suite tests.
 
 The first pass was 16 findings, so it went in as one change rather than one per rule
 family. The dispositions are the whole story of it:

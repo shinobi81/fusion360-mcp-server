@@ -59,8 +59,8 @@ jobs:
       # `except` tuple.
       - name: Lint
         run: |
-          uv run ruff check src/ tests/ fuzz/ addon/
-          uv run ruff format --check src/ tests/ fuzz/
+          uv run ruff check src/ tests/ fuzz/ addon/ scripts/
+          uv run ruff format --check src/ tests/ fuzz/ scripts/
 
       - name: Test
         run: uv run pytest -v
