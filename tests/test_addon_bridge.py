@@ -8,6 +8,7 @@ exists to prove the class is still wired to the bridge and still drains the queu
 
 from __future__ import annotations
 
+import threading
 import types
 
 import pytest
@@ -101,19 +102,23 @@ def test_the_factory_builds_a_subclass_of_the_base_it_is_given():
 def test_submit_survives_a_failing_fire_because_the_timer_retries():
     """A dead ``fireCustomEvent`` must not fail the call: the timer picks it up.
 
-    The first fire raises; the 200 ms timer fires again, and this time the faked
-    application drains the queue the way Fusion's handler does on notify.  So the
-    command still runs - a nudge that fails is not a lost command, which is the
+    ``submit``'s own fire raises; the 200 ms timer fires again, and this time the
+    faked application drains the queue the way Fusion's handler does on notify.  So
+    the command still runs - a nudge that fails is not a lost command, which is the
     claim the ``suppress`` in ``submit`` exists to make.
+
+    Which fire raises is decided by the calling thread, not by arrival order: a fire
+    that happened to come from the timer first would put the raise inside
+    ``_timer_loop``'s own ``suppress`` and leave ``submit``'s swallowed one untested.
     """
     app = FakeApplication()
     fires = []
 
     def flaky(event_id):
         fires.append(event_id)
-        if len(fires) == 1:
-            raise RuntimeError("no event")
-        bridge.drain_queue()  # stands in for Fusion calling notify
+        if threading.current_thread() is threading.main_thread():
+            raise RuntimeError("no event")  # submit's own fire, always
+        bridge.drain_queue()  # the timer's retry, standing in for Fusion's notify
 
     app.fireCustomEvent = flaky
     bridge = event_bridge.EventBridge(app, Handler())
