@@ -67,10 +67,11 @@ source text rather than on behaviour. Three parcels, one PR each, all merged:
 the two conversion parcels above are deliberately not free, and a file that keeps its
 guards says why in its docstring.
 
-Three source reads stay, and none of them is a behavioural claim: `test_addon_sync.py`
+Three table reads stay, and none of them is a behavioural claim: `test_addon_sync.py`
 compares `CommandHandler._COMMANDS` and `_MUTATION_COMMANDS` against `mock.py`'s tables,
-`test_addon_joints.py` compares the joint tables against the schemas, and
+`test_addon_joints.py` compares the joint tables against the schemas (through the
+imported `CommandHandler`, since the add-in became importable), and
 `test_addon_sources.py` reads the add-in's tokens because both PEP 758 spellings parse
-the same. Each is a property of the source rather than of running it.
+the same. Each asserts on data rather than on behaviour.
 
 Nothing else is queued behind this section; sections 1 and 2 are both closed.
