@@ -4,17 +4,34 @@ What is likely to happen next, in the order it is likely to happen. This is not 
 and it carries no dates: it exists so a reader can see where the project is going, and so
 a known gap is visibly known rather than merely absent.
 
-## 1. A stricter lint selection
+## 1. A stricter lint selection - done
 
-`pyproject.toml` sets `select = ["E", "F", "I", "RUF"]`, which is a linter configuration
-rather than a strict one: `B` (bugbear) reports constructs that are almost always a
-mistake, and `SIM` (simplify) reports code that says at more length what it could say at
-less. Adding both is one line in the config - the work is triaging what they report over
-all four linted trees (`src/`, `tests/`, `fuzz/`, `addon/`), and if the first pass is
-large, one rule family per PR. `addon/` executes on Fusion's own interpreter, so a
-rewrite proposed there is judged against that rather than against CPython 3.14 alone.
+`pyproject.toml` sets `select = ["E", "F", "I", "RUF", "B", "SIM"]`. The first four
+were a linter configuration rather than a strict one: `B` (bugbear) reports constructs
+that are almost always a mistake, and `SIM` (simplify) reports code that says at more
+length what it could say at less. Both are in now, across all four linted trees (`src/`,
+`tests/`, `fuzz/`, `addon/`), and the tree is clean with no `ignore`, no
+`per-file-ignores` and no new `noqa`: a rule that is on everywhere either passes or gets
+fixed.
 
-Nothing else about the configuration changes. `line-length = 88` matches the prose gates,
+The first pass was 16 findings, so it went in as one change rather than one per rule
+family. The dispositions are the whole story of it:
+
+| Rule | n | Disposition |
+| --- | --- | --- |
+| `B010` | 5 | plain attribute assignment instead of `setattr` |
+| `B905` | 3 | `zip(..., strict=True)` |
+| `B018` | 3 | `_ = <expr>`: the access is the assertion, inside `pytest.raises` |
+| `SIM105` | 2 | `with contextlib.suppress(Exception):` |
+| `B904` | 1 | `raise ... from None`, so the message is not chained to the parser's |
+| `SIM102` | 1 | one condition instead of two nested `if`s |
+| `B033` | 1 | a stale duplicate set member |
+
+`addon/` executes on Fusion's own interpreter, so the two rewrites there were judged
+against that rather than against CPython 3.14 alone: both reach for `contextlib`, stdlib
+since 3.4, and neither changes the class of exception caught.
+
+Nothing else about the configuration changed. `line-length = 88` matches the prose gates,
 and `target-version` stays inferred from `requires-python`, so the support window is
 stated once.
 
@@ -55,4 +72,4 @@ compares `CommandHandler._COMMANDS` and `_MUTATION_COMMANDS` against `mock.py`'s
 `test_addon_sources.py` reads the add-in's tokens because both PEP 758 spellings parse
 the same. Each is a property of the source rather than of running it.
 
-Nothing else is queued behind this section; section 1 is what is left.
+Nothing else is queued behind this section; sections 1 and 2 are both closed.
