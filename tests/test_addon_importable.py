@@ -84,7 +84,7 @@ def test_a_package_level_function_resolves_as_itself(monkeypatch):
 def test_an_unknown_name_is_an_AttributeError():
     fusion_api.reset()
     with pytest.raises(AttributeError, match="no attribute"):
-        fusion_api.nonexistent
+        _ = fusion_api.nonexistent
 
 
 def test_reset_forgets_an_injected_name(monkeypatch):
@@ -199,7 +199,7 @@ def test_a_missing_adsk_raises_AttributeError(monkeypatch):
     fusion_api.reset()
 
     with pytest.raises(AttributeError, match="adsk is not importable"):
-        fusion_api.core
+        _ = fusion_api.core
 
 
 def test_the_fixture_installs_its_fakes_on_the_adapter():
