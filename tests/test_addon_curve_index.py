@@ -219,6 +219,7 @@ def test_a_valid_dimension_still_sets_its_value(bound_handler):
     assert method == "addDistanceDimension"
     curves = list(sketch.sketchCurves)
     assert args[0] is curves[1].startSketchPoint, "the curve the caller named"
+    assert args[1] is curves[3].startSketchPoint, "and the second one it named"
     written = sketch.sketchDimensions.last_dimension
     assert written is not None and written.parameter.value == 3.5, (
         "the caller's value reached the dimension's parameter"
