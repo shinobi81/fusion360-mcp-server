@@ -219,8 +219,8 @@ def test_ci_gates_the_formatter_as_well_as_the_linter():
     exclusion is ever lifted, lift it here too.
 
     The shape is pinned on purpose — one `Lint` step, one formatter command, the
-    three directories spelled out — because every looser form of this test was a
-    form that passed with the gate disarmed.
+    directories spelled out — because every looser form of this test was a form that
+    passed with the gate disarmed.
     """
     block = _ci_lint_step_lines()
     assert block, "ci.yml has no `- name: Lint` step"
@@ -239,8 +239,8 @@ def test_ci_gates_the_formatter_as_well_as_the_linter():
         f"the `test` job and its Lint step must not be conditional: {disarmed}"
     )
     commands = _ci_ruff_commands()
-    assert "uv run ruff check src/ tests/ fuzz/ addon/" in commands, (
-        f"the Lint step no longer lints all four directories in one gate: {commands}"
+    assert "uv run ruff check src/ tests/ fuzz/ addon/ scripts/" in commands, (
+        f"the Lint step no longer lints every directory in one gate: {commands}"
     )
     format_commands = [cmd for cmd in commands if "ruff format --check" in cmd]
     assert len(format_commands) == 1, (
@@ -254,8 +254,13 @@ def test_ci_gates_the_formatter_as_well_as_the_linter():
     assert command.startswith(prefix), (
         f"the formatter gate is not shaped like `{prefix}…`: {command}"
     )
-    assert command.removeprefix(prefix).split() == ["src/", "tests/", "fuzz/"], (
-        "the formatter gate must cover src/ tests/ fuzz/ and exclude addon/ "
+    assert command.removeprefix(prefix).split() == [
+        "src/",
+        "tests/",
+        "fuzz/",
+        "scripts/",
+    ], (
+        "the formatter gate must cover src/ tests/ fuzz/ scripts/ and exclude addon/ "
         "(Fusion's interpreter is not governed by requires-python): "
         f"{command}"
     )
