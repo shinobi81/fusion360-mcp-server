@@ -99,7 +99,9 @@ error that motivated it.
 
 ## Releasing
 
-1. Bump `version` in `pyproject.toml`, then `uv lock`.
+1. Bump `version` in `pyproject.toml`, then `uv lock` — and the same version in
+   `addon/Fusion360MCP.manifest`. The two ship together, and
+   `tests/test_packaging.py` fails if they disagree.
 2. PR it (`chore(release): x.y.z for <reason>`), merge as usual.
 3. Annotated tag on the merge commit: `git tag -a vX.Y.Z -m "…"`, then
    `git push origin vX.Y.Z`.

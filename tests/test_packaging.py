@@ -12,6 +12,7 @@ configurations describe.
 
 from __future__ import annotations
 
+import json
 import re
 import tomllib
 from pathlib import Path
@@ -263,4 +264,22 @@ def test_ci_gates_the_formatter_as_well_as_the_linter():
         "the formatter gate must cover src/ tests/ fuzz/ scripts/ and exclude addon/ "
         "(Fusion's interpreter is not governed by requires-python): "
         f"{command}"
+    )
+
+
+def test_the_add_in_manifest_declares_the_version_being_released():
+    """The manifest Fusion registers carries a version, and nothing read it.
+
+    The add-in and the server ship together - one changelog, one tag - so the manifest
+    is not free to lag behind ``pyproject.toml``.  It said 0.1.0 from the commit that
+    created it through seven releases, which is the same shape of stale claim the
+    coverage-figure check exists to stop.
+    """
+    manifest = REPO_ROOT / "addon" / "Fusion360MCP.manifest"
+    declared = json.loads(manifest.read_text(encoding="utf-8"))["version"]
+    packaged = _pyproject()["project"]["version"]
+
+    assert declared == packaged, (
+        f"addon/Fusion360MCP.manifest declares {declared}, pyproject.toml {packaged}; "
+        "bump both in the release PR (CONTRIBUTING.md, Releasing)"
     )
