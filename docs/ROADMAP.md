@@ -28,8 +28,8 @@ family. The dispositions are the whole story of it:
 | `B033` | 1 | a stale duplicate set member |
 
 `addon/` executes on Fusion's own interpreter, so the two rewrites there were judged
-against that rather than against CPython 3.14 alone: both reach for `contextlib`, stdlib
-since 3.4, and neither changes the class of exception caught.
+against that rather than against CPython 3.14 alone: both use the `contextlib.suppress`
+each module already imported, and neither changes the class of exception caught.
 
 Nothing else about the configuration changed. `line-length = 88` matches the prose gates,
 and `target-version` stays inferred from `requires-python`, so the support window is

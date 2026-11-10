@@ -143,3 +143,6 @@ def test_execute_code_reports_a_syntax_error_without_chaining_it(bound_handler):
 
     assert str(raised.value).startswith("SyntaxError: ")
     assert raised.value.__suppress_context__ is True
+    # ``from None`` and ``from exc`` both suppress the context; only the cause
+    # tells them apart, and ``from exc`` would re-print the parser's message.
+    assert raised.value.__cause__ is None
