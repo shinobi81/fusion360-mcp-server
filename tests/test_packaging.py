@@ -7,14 +7,16 @@ said 3.10 and 3.10 was already EOL.  These tests read the floor and fail the
 suite when any surface falls out of step with it, when a tool grows a second copy
 of the floor that can drift independently, when a document quotes a lint rule set
 the configuration no longer has, when CI stops running a gate those configurations
-describe, or when the add-in's Fusion manifest declares a version the release does
-not.
+describe, when the add-in's Fusion manifest declares a version the release does
+not, or when a documented install snippet pins a release older than the one being
+cut.
 """
 
 from __future__ import annotations
 
 import json
 import re
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -293,4 +295,57 @@ def test_the_add_in_manifest_declares_the_version_being_released():
     assert declared == packaged, (
         f"addon/Fusion360MCP.manifest declares {declared}, pyproject.toml {packaged}; "
         "bump both in the release PR (CONTRIBUTING.md, Releasing)"
+    )
+
+
+def _tracked_markdown(*, exclude: tuple[str, ...] = ()) -> list[str]:
+    """Every tracked ``*.md`` path, repo-relative.
+
+    ``git ls-files`` rather than a glob: the suite runs in the working tree, where a
+    glob would also sweep the venv, and the tracked set is what a reader can actually
+    reach on GitHub.
+    """
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--", "*.md"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return [p for p in listed.stdout.split("\0") if p and p not in exclude]
+
+
+def test_every_documented_install_pin_is_the_version_being_released():
+    """Readers copy the install snippets, so a stale pin installs a stale server.
+
+    ``README.md`` pinned ``@v0.3.1`` in five snippets from 0.4.0 until 0.7.2 - four
+    minors behind, in the one place a new user is guaranteed to look - and nothing read
+    it.  Same shape as the manifest version, same fix: the release PR moves the pin, and
+    this fails when it does not.
+
+    ``CONTRIBUTING.md`` shows ``@vX.Y.Z`` as a placeholder, which the pattern does not
+    match, and ``CHANGELOG.md`` is exempt because it records what past releases said
+    rather than telling anyone what to install.
+    """
+    release = _pyproject()["project"]["version"]
+    pattern = re.compile(
+        r"git\+https://github\.com/shinobi81/fusion360-mcp-server@v(?P<v>\d+\.\d+\.\d+)"
+    )
+    stale: list[str] = []
+    pins = 0
+    for relative in _tracked_markdown(exclude=("CHANGELOG.md",)):
+        text = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        for number, line in enumerate(text.splitlines(), start=1):
+            for match in pattern.finditer(line):
+                pins += 1
+                if match.group("v") != release:
+                    stale.append(f"{relative}:{number} pins v{match.group('v')}")
+
+    assert pins, (
+        "no tracked document pins an install version; this guard would pass vacuously "
+        "if the snippets were deleted instead of fixed"
+    )
+    assert not stale, (
+        f"documented install snippets must pin the release being cut (v{release}): "
+        + "; ".join(stale)
     )
