@@ -8,8 +8,9 @@ suite when any surface falls out of step with it, when a tool grows a second cop
 of the floor that can drift independently, when a document quotes a lint rule set
 the configuration no longer has, when CI stops running a gate those configurations
 describe, when the add-in's Fusion manifest declares a version the release does
-not, when it changes the id it declares, or when a documented install snippet pins a
-release other than the one being cut.
+not, when it changes the id it declares, when a documented install snippet pins a
+release other than the one being cut, or when a document names a lint command CI does
+not run.
 """
 
 from __future__ import annotations
@@ -467,4 +468,174 @@ def test_the_add_in_manifest_keeps_the_id_it_declares():
         f"{ADD_IN_INSTALL_ID!r}. No install can be checked from here, so this pin "
         "exists to make an id change deliberate: if the change is intended, update "
         "ADD_IN_INSTALL_ID and say why in the PR."
+    )
+
+
+GATE_DOCUMENTS = (
+    "README.md",
+    "CONTRIBUTING.md",
+    "AGENTS.md",
+    "docs/TESTING.md",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+)
+"""Documents that tell a contributor which lint command to run.
+
+The sweep reads every tracked document, so a new page that claims a gate is checked the
+moment it exists; this tuple is the other half - the pages that must keep saying it, so
+a reflow that drops the line cannot empty the check silently.
+"""
+
+RUFF_COMMAND = re.compile(r"uv run ruff\b(?P<args>[^`\n]*)")
+
+
+def _ruff_gate_claims(text: str, directories: set[str]) -> list[tuple[int, str]]:
+    """(line number, normalised command) for every gate-shaped ``uv run ruff`` line.
+
+    A gate claim names a verb and top-level directories only, which is how the documents
+    that say "what CI runs" spell it.  Anything else - a ``--select``, ``--fix``, a file
+    path into the package - demonstrates a targeted run, which is free to differ from
+    the gate, so it is not read here at all.
+    """
+    claims = []
+    for number, line in enumerate(text.splitlines(), start=1):
+        match = RUFF_COMMAND.search(line)
+        if match is None:
+            continue
+        # A trailing comment documents the command; it is not part of it.
+        tokens = re.split(r"\s{2,}", match.group("args").strip())[0].split()
+        if tokens[:2] == ["format", "--check"]:
+            command, named = "uv run ruff format --check", tokens[2:]
+        elif tokens[:1] in (["check"], ["format"]):
+            command, named = f"uv run ruff {tokens[0]}", tokens[1:]
+        else:
+            continue
+        if named and all(token in directories for token in named):
+            claims.append((number, " ".join([command, *named])))
+    return claims
+
+
+def _documented_ruff_findings(pages: dict[str, str], ci: list[str]) -> list[str]:
+    """One finding per documented gate command that is not a command CI runs.
+
+    The apply form (``ruff format`` without ``--check``) is allowed, because the
+    documents also tell a contributor how to fix what the gate reports - but only as
+    the gate command with ``--check`` removed, so the directories cannot drift apart.
+    """
+    directories = {
+        token for command in ci for token in command.split() if token.endswith("/")
+    }
+    allowed = set(ci) | {
+        command.replace(" format --check ", " format ") for command in ci
+    }
+    return [
+        f"{name}:{number} documents `{command}`, which CI does not run "
+        f"(the Lint step runs: {', '.join(f'`{each}`' for each in ci)})"
+        for name, text in pages.items()
+        for number, command in _ruff_gate_claims(text, directories)
+        if command not in allowed
+    ]
+
+
+def _undocumented_gate_commands(pages: dict[str, str], ci: list[str]) -> list[str]:
+    """One finding per gate document that does not name each command CI runs.
+
+    Both halves, not just "a command": a page that keeps the linter line and drops the
+    formatter line states the gate CI ran before #80, which is how four unformatted
+    files reached `main`.
+    """
+    directories = {
+        token for command in ci for token in command.split() if token.endswith("/")
+    }
+    findings: list[str] = []
+    for name in GATE_DOCUMENTS:
+        documented = {
+            command
+            for _, command in _ruff_gate_claims(pages.get(name, ""), directories)
+        }
+        findings.extend(
+            f"{name} no longer documents `{command}`"
+            for command in ci
+            if command not in documented
+        )
+    return findings
+
+
+CI_CHECK = "uv run ruff check src/ tests/ fuzz/ addon/ scripts/"
+CI_FORMAT = "uv run ruff format --check src/ tests/ fuzz/ scripts/"
+
+
+def test_a_documented_lint_command_missing_a_directory_is_a_finding():
+    pages = {"README.md": "install\nuv run ruff check src/ tests/ fuzz/ addon/\n"}
+
+    (finding,) = _documented_ruff_findings(pages, [CI_CHECK, CI_FORMAT])
+
+    assert "README.md:2" in finding
+    assert "scripts/" in finding
+
+
+def test_a_demonstration_command_is_not_read_as_the_gate():
+    pages = {"README.md": "uv run ruff check --select B010 src/ tests/\n"}
+
+    assert _documented_ruff_findings(pages, [CI_CHECK, CI_FORMAT]) == []
+
+
+def test_the_apply_form_must_be_the_gate_without_check():
+    apply_same = {"AGENTS.md": "uv run ruff format src/ tests/ fuzz/ scripts/\n"}
+    apply_narrower = {"AGENTS.md": "uv run ruff format src/ tests/\n"}
+
+    assert _documented_ruff_findings(apply_same, [CI_CHECK, CI_FORMAT]) == []
+    (finding,) = _documented_ruff_findings(apply_narrower, [CI_CHECK, CI_FORMAT])
+    assert "AGENTS.md:1" in finding
+
+
+def test_a_trailing_comment_is_not_part_of_the_command():
+    pages = {"AGENTS.md": "uv run ruff check src/ tests/ fuzz/ addon/ scripts/  # CI\n"}
+
+    assert _documented_ruff_findings(pages, [CI_CHECK, CI_FORMAT]) == []
+
+
+def test_every_gate_document_documents_both_halves_of_the_gate():
+    """A page naming only the linter states half a gate, which is the pre-#80 gate.
+
+    `ruff check` alone let four unformatted files reach `main`, so a document that stops
+    naming `format --check` teaches that half back - quieter than a wrong command, and
+    just as wrong.
+    """
+    pages = {name: "nothing here\n" for name in GATE_DOCUMENTS}
+    pages["README.md"] = f"{CI_CHECK}\n"
+    pages["CONTRIBUTING.md"] = f"{CI_CHECK}\n{CI_FORMAT}\n"
+
+    findings = _undocumented_gate_commands(pages, [CI_CHECK, CI_FORMAT])
+
+    assert any("README.md" in each and "format --check" in each for each in findings)
+    assert any("AGENTS.md" in each for each in findings)
+    assert not any("CONTRIBUTING.md" in each for each in findings)
+
+
+def test_every_documented_lint_command_is_the_one_ci_runs():
+    """Contributors copy the lint line, so a drifted one runs a gate CI does not.
+
+    #80's reviewer caught the drift by eye; nothing read these lines, so the next edit
+    could move any of the five documents back to a three-directory gate.  The sweep is
+    automatic over tracked markdown, and `GATE_DOCUMENTS` keeps the pages that must say
+    it from going quiet, which is the shape that let the README's install pins rot.
+    """
+    ci = _ci_ruff_commands()
+    assert ci, "ci.yml's Lint step runs no `uv run ruff` command"
+    pages = {
+        relative: (REPO_ROOT / relative).read_text(encoding="utf-8")
+        for relative in _tracked_markdown(exclude=HISTORY_DOCUMENTS)
+    }
+    findings = _documented_ruff_findings(pages, ci)
+    undocumented = _undocumented_gate_commands(pages, ci)
+
+    assert findings == [], (
+        "a document names a lint command CI does not run: "
+        + "; ".join(findings)
+        + ". A targeted or demonstration command is not read here, only the "
+        "gate-shaped one; the release notes in HISTORY_DOCUMENTS are exempt as history."
+    )
+    assert undocumented == [], (
+        "these documents no longer state every command the gate runs, so a contributor "
+        f"following them would not run the gate: {undocumented}"
     )
