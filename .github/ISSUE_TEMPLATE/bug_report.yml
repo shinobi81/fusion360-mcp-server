@@ -45,7 +45,7 @@ body:
     id: version
     attributes:
       label: Version installed
-      description: The tag you installed, e.g. v0.3.1 in the uvx command.
+      description: The tag you installed, e.g. vX.Y.Z in the uvx command.
     validations:
       required: true
 

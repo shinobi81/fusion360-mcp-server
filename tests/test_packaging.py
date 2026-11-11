@@ -8,7 +8,7 @@ suite when any surface falls out of step with it, when a tool grows a second cop
 of the floor that can drift independently, when a document quotes a lint rule set
 the configuration no longer has, when CI stops running a gate those configurations
 describe, when the add-in's Fusion manifest declares a version the release does
-not, or when a documented install snippet pins a release older than the one being
+not, or when a documented install snippet pins a release other than the one being
 cut.
 """
 
@@ -302,17 +302,54 @@ def _tracked_markdown(*, exclude: tuple[str, ...] = ()) -> list[str]:
     """Every tracked ``*.md`` path, repo-relative.
 
     ``git ls-files`` rather than a glob: the suite runs in the working tree, where a
-    glob would also sweep the venv, and the tracked set is what a reader can actually
-    reach on GitHub.
+    glob would also sweep the venv, and the tracked set is what a reader can reach on
+    GitHub.  Files that are not markdown are out of scope on purpose - the install
+    snippets live in prose - so a stale tag in an issue template still needs a human.
     """
     listed = subprocess.run(
         ["git", "ls-files", "-z", "--", "*.md"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
+    )
+    assert listed.returncode == 0, (
+        "git ls-files failed, so every documented pin went unread; this guard is the "
+        f"suite's only git dependency ({listed.returncode}): {listed.stderr.strip()}"
     )
     return [p for p in listed.stdout.split("\0") if p and p not in exclude]
+
+
+INSTALL_PIN = re.compile(
+    r"git\+https://github\.com/shinobi81/fusion360-mcp-server@v(?P<version>[0-9][\w.+-]*)"
+)
+"""A pinned install command: ``git+https://…@vX.Y.Z``.
+
+The captured version runs to the end of the token rather than to the third dot, so a
+prerelease such as ``0.8.0rc1`` compares whole instead of reading as ``0.8.0``.
+"""
+
+HISTORY_DOCUMENTS = ("CHANGELOG.md",)
+"""Documents that record what past releases said, rather than what to install now."""
+
+
+def _pinned_versions(text: str) -> list[tuple[int, str]]:
+    """Every (line number, pinned version) in one document, in file order."""
+    return [
+        (number, match.group("version"))
+        for number, line in enumerate(text.splitlines(), start=1)
+        for match in INSTALL_PIN.finditer(line)
+    ]
+
+
+def _stale_pin_findings(pages: dict[str, str], release: str) -> list[str]:
+    """One ``path:line pins vX`` finding per pin naming a version but *release*."""
+    return [
+        f"{name}:{number} pins v{version}"
+        for name, text in pages.items()
+        for number, version in _pinned_versions(text)
+        if version != release
+    ]
 
 
 def test_every_documented_install_pin_is_the_version_being_released():
@@ -324,28 +361,66 @@ def test_every_documented_install_pin_is_the_version_being_released():
     this fails when it does not.
 
     ``CONTRIBUTING.md`` shows ``@vX.Y.Z`` as a placeholder, which the pattern does not
-    match, and ``CHANGELOG.md`` is exempt because it records what past releases said
-    rather than telling anyone what to install.
+    match, and ``HISTORY_DOCUMENTS`` is exempt because it records what past releases
+    said rather than telling anyone what to install.
     """
     release = _pyproject()["project"]["version"]
-    pattern = re.compile(
-        r"git\+https://github\.com/shinobi81/fusion360-mcp-server@v(?P<v>\d+\.\d+\.\d+)"
-    )
-    stale: list[str] = []
-    pins = 0
-    for relative in _tracked_markdown(exclude=("CHANGELOG.md",)):
-        text = (REPO_ROOT / relative).read_text(encoding="utf-8")
-        for number, line in enumerate(text.splitlines(), start=1):
-            for match in pattern.finditer(line):
-                pins += 1
-                if match.group("v") != release:
-                    stale.append(f"{relative}:{number} pins v{match.group('v')}")
+    pages = {
+        relative: (REPO_ROOT / relative).read_text(encoding="utf-8")
+        for relative in _tracked_markdown(exclude=HISTORY_DOCUMENTS)
+    }
+    findings = _stale_pin_findings(pages, release)
 
-    assert pins, (
-        "no tracked document pins an install version; this guard would pass vacuously "
-        "if the snippets were deleted instead of fixed"
-    )
-    assert not stale, (
+    assert findings == [], (
         f"documented install snippets must pin the release being cut (v{release}): "
-        + "; ".join(stale)
+        + "; ".join(findings)
+        + ". A document that quotes a pin as history rather than as an instruction "
+        "belongs in HISTORY_DOCUMENTS, with a reason."
     )
+    assert _pinned_versions(pages.get("README.md", "")), (
+        "README.md pins no install version, so this guard would pass vacuously; if the "
+        "snippets moved, point this assertion at the page that carries them: "
+        + ", ".join(sorted(pages))
+    )
+
+
+def _install_snippet(version: str) -> str:
+    """The install command the README's snippets are built from."""
+    return (
+        "uvx --from "
+        f"'git+https://github.com/shinobi81/fusion360-mcp-server@v{version}' "
+        "fusion360-mcp-server --mode socket"
+    )
+
+
+def test_a_stale_install_pin_is_named_with_its_path_and_line():
+    pages = {"docs/INSTALL.md": f"intro\n{_install_snippet('0.3.1')}\n"}
+
+    assert _stale_pin_findings(pages, "0.7.2") == ["docs/INSTALL.md:2 pins v0.3.1"]
+
+
+def test_a_pin_at_the_release_is_not_a_finding():
+    pages = {"README.md": _install_snippet("0.7.2")}
+
+    assert _stale_pin_findings(pages, "0.7.2") == []
+
+
+def test_the_prerelease_suffix_is_compared_whole_not_truncated_to_the_numbers():
+    pages = {"README.md": _install_snippet("0.8.0rc1")}
+
+    assert _stale_pin_findings(pages, "0.8.0") == ["README.md:1 pins v0.8.0rc1"]
+    assert _stale_pin_findings(pages, "0.8.0rc1") == []
+
+
+def test_the_release_placeholder_is_not_a_pin_at_all():
+    assert _pinned_versions(_install_snippet("X.Y.Z")) == []
+
+
+def test_the_changelog_is_excluded_because_it_records_what_past_releases_said():
+    """A release note states what that release shipped; it must not be re-pinned."""
+    assert "CHANGELOG.md" in HISTORY_DOCUMENTS
+    assert "CHANGELOG.md" not in _tracked_markdown(exclude=HISTORY_DOCUMENTS)
+    # Exclusion is load-bearing, not luck: in the corpus it would be a stale pin.
+    history = {"CHANGELOG.md": _install_snippet("0.3.1")}
+
+    assert _stale_pin_findings(history, "0.7.2") == ["CHANGELOG.md:1 pins v0.3.1"]
