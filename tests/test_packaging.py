@@ -8,8 +8,8 @@ suite when any surface falls out of step with it, when a tool grows a second cop
 of the floor that can drift independently, when a document quotes a lint rule set
 the configuration no longer has, when CI stops running a gate those configurations
 describe, when the add-in's Fusion manifest declares a version the release does
-not, or when a documented install snippet pins a release other than the one being
-cut.
+not, when it changes the id it declares, or when a documented install snippet pins a
+release other than the one being cut.
 """
 
 from __future__ import annotations
@@ -270,6 +270,19 @@ def test_ci_gates_the_formatter_as_well_as_the_linter():
     )
 
 
+def _add_in_manifest() -> dict:
+    """The Fusion manifest as data.
+
+    Strict JSON, because Fusion parses it with the same rules: a comment or a trailing
+    comma makes the add-in unloadable, not merely this module red.
+    """
+    manifest = REPO_ROOT / "addon" / "Fusion360MCP.manifest"
+    assert manifest.exists(), (
+        "addon/Fusion360MCP.manifest is gone; these guards would pass vacuously"
+    )
+    return json.loads(manifest.read_text(encoding="utf-8"))
+
+
 def test_the_add_in_manifest_declares_the_version_being_released():
     """The manifest Fusion registers carries a version, and nothing read it.
 
@@ -277,15 +290,8 @@ def test_the_add_in_manifest_declares_the_version_being_released():
     is not free to lag behind ``pyproject.toml``.  It said 0.1.0 from the commit that
     created it until 0.7.2, sixteen tagged releases, which is the same shape of stale
     claim the coverage-figure check exists to stop.
-
-    The file has to stay strict JSON: Fusion parses it with the same rules, so a comment
-    or a trailing comma makes the add-in unloadable, not merely this test red.
     """
-    manifest = REPO_ROOT / "addon" / "Fusion360MCP.manifest"
-    assert manifest.exists(), (
-        "addon/Fusion360MCP.manifest is gone; this guard would pass vacuously"
-    )
-    facts = json.loads(manifest.read_text(encoding="utf-8"))
+    facts = _add_in_manifest()
     assert "version" in facts, (
         "addon/Fusion360MCP.manifest states no version; this guard would pass vacuously"
     )
@@ -424,3 +430,41 @@ def test_the_changelog_is_excluded_because_it_records_what_past_releases_said():
     history = {"CHANGELOG.md": _install_snippet("0.3.1")}
 
     assert _stale_pin_findings(history, "0.7.2") == ["CHANGELOG.md:1 pins v0.3.1"]
+
+
+ADD_IN_INSTALL_ID = "6b98393d-7998-4d19-a8e5-c8b5e3d7f4a2"
+"""The ``id`` the manifest declares, pinned so that changing it is a deliberate act.
+
+Nothing in this repository reads the value, and Fusion's own persisted registration
+record (``%APPDATA%/Autodesk/Autodesk Fusion 360/<install>/JSLoadedScriptsinfo``)
+keys an installed add-in on its name and the path of its entry module, not on this
+id - so there is no second copy to compare against and no install to check from here.
+The pin buys exactly one thing, and states it: an edit to the constant, in a review
+that has to say why, instead of a stray value in a manifest nobody reads.
+"""
+
+
+def test_the_add_in_manifest_keeps_the_id_it_declares():
+    """The add-in's ``id`` is unread, and unread is how the version beside it drifted.
+
+    So it is pinned as a change detector: it passes on the current tree by
+    construction, which is not evidence that it works, and it was falsified by mutating
+    the manifest - a different GUID, a non-GUID spelling, and the key deleted.  Any
+    textual change is deliberately not caught: the comparison normalises case and
+    surrounding braces, because a respelling that parses as the same GUID changes no
+    identity, and a guard that failed on one would be a guard failing for the wrong
+    reason.
+    """
+    facts = _add_in_manifest()
+
+    assert "id" in facts, (
+        "addon/Fusion360MCP.manifest declares no id; this guard would pass vacuously"
+    )
+    declared = str(facts["id"]).strip("{} ").lower()
+
+    assert declared == ADD_IN_INSTALL_ID, (
+        f"addon/Fusion360MCP.manifest declares the id {facts['id']!r}, not "
+        f"{ADD_IN_INSTALL_ID!r}. No install can be checked from here, so this pin "
+        "exists to make an id change deliberate: if the change is intended, update "
+        "ADD_IN_INSTALL_ID and say why in the PR."
+    )
