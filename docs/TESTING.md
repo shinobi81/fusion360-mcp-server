@@ -15,8 +15,10 @@ uv run ruff check src/ tests/ fuzz/ addon/ scripts/      # what CI runs
 uv run ruff format --check src/ tests/ fuzz/ scripts/    # what CI runs (addon/ is exempt)
 ```
 
-Nothing in the suite needs Fusion, a network, or a display. The socket tests bind
-`127.0.0.1` and close immediately.
+Nothing in the suite needs Fusion, a network, or a display. The packaging guards in
+`tests/test_packaging.py` shell out to `git ls-files` to read the tracked documents;
+that is the suite's only git dependency. The socket tests bind `127.0.0.1` and close
+immediately.
 
 ## The coverage floor
 

@@ -24,7 +24,7 @@ cd fusion360-mcp-server && ./scripts/install-addon.sh
 #    The TEXT COMMANDS window should show: [MCP] Server listening on 127.0.0.1:9876
 
 # 3. Point your MCP client at this server (stdio)
-claude mcp add fusion360 -- uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.3.1' fusion360-mcp-server --mode socket
+claude mcp add fusion360 -- uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.7.2' fusion360-mcp-server --mode socket
 ```
 
 Then call `ping` — `{"ok": true, "status": "pong"}` means you are connected.
@@ -85,7 +85,7 @@ port is there when your client connects.
 The server speaks stdio, so any client can launch it:
 
 ```bash
-uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.3.1' \
+uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.7.2' \
   fusion360-mcp-server --mode socket
 ```
 
@@ -93,7 +93,7 @@ uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.3.1' \
 <summary><strong>Claude Code</strong></summary>
 
 ```bash
-claude mcp add fusion360 -- uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.3.1' fusion360-mcp-server --mode socket
+claude mcp add fusion360 -- uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.7.2' fusion360-mcp-server --mode socket
 ```
 
 </details>
@@ -108,7 +108,7 @@ claude mcp add fusion360 -- uvx --from 'git+https://github.com/shinobi81/fusion3
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/shinobi81/fusion360-mcp-server@v0.3.1",
+        "git+https://github.com/shinobi81/fusion360-mcp-server@v0.7.2",
         "fusion360-mcp-server",
         "--mode",
         "socket"
@@ -131,7 +131,7 @@ claude mcp add fusion360 -- uvx --from 'git+https://github.com/shinobi81/fusion3
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/shinobi81/fusion360-mcp-server@v0.3.1",
+        "git+https://github.com/shinobi81/fusion360-mcp-server@v0.7.2",
         "fusion360-mcp-server",
         "--mode",
         "socket"
