@@ -24,6 +24,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+ADD_IN_MANIFEST = REPO_ROOT / "addon" / "Fusion360MCP.manifest"
+"""The add-in's manifest. Its filename is the add-in's name - see ``ADD_IN_NAME``."""
+
+ADD_IN_NAME = ADD_IN_MANIFEST.stem
 
 
 def _pyproject() -> dict:
@@ -277,7 +281,7 @@ def _add_in_manifest() -> dict:
     Strict JSON, because Fusion parses it with the same rules: a comment or a trailing
     comma makes the add-in unloadable, not merely this module red.
     """
-    manifest = REPO_ROOT / "addon" / "Fusion360MCP.manifest"
+    manifest = ADD_IN_MANIFEST
     assert manifest.exists(), (
         "addon/Fusion360MCP.manifest is gone; these guards would pass vacuously"
     )
@@ -748,26 +752,32 @@ def test_a_ci_command_the_classifier_cannot_read_is_reported_not_mirrored():
     assert "--output-format" in finding
 
 
-ADD_IN_MANIFEST = REPO_ROOT / "addon" / "Fusion360MCP.manifest"
-ADD_IN_NAME = ADD_IN_MANIFEST.stem
-
-# The two ways a document names the installed add-in: a path under Fusion's AddIns
+# The two ways prose names the installed add-in: a path under Fusion's AddIns
 # directory, and the entry in the Scripts and Add-Ins dialog.  `Add-Ins → Run`,
-# `Add-Ins → Stop` and `Add-Ins → Add` name the dialog's buttons instead of its
-# entries, so those words are skipped rather than reported as a wrong name.
+# `Add-Ins → Stop` and `Add-Ins → Add` name the dialog's buttons rather than its
+# entries, so those words are skipped; the set has its own test so it cannot be
+# widened silently.  The dialog arrow is written three ways in this repo - `→`, `->`
+# and `>` - and all three mean the same thing to a reader.
 ADD_INS_PATH = re.compile(r"AddIns[/\\](?P<name>[A-Za-z0-9_.-]+)")
-ADD_INS_DIALOG = re.compile(r"Add-Ins\s*→\s*(?P<name>[A-Za-z0-9_.-]+)")
-DIALOG_BUTTONS = frozenset({"Run", "Stop", "Add", "Add-Ins"})
+ADD_INS_DIALOG = re.compile(r"Add-Ins\s*(?:→|->|>)\s*(?P<name>[A-Za-z0-9_.-]+)")
+DIALOG_BUTTONS = frozenset({"Run", "Stop", "Add"})
 ADD_IN_DOCUMENTS = ("README.md", "devcontainer/README.md")
+ADD_IN_FILE_SUFFIXES = (".manifest", ".py")
 
 
 def _add_in_name_claims(text: str) -> list[tuple[int, str]]:
-    """(line number, name a document gives the add-in) for every mention in *text*."""
+    """(line number, name a document gives the add-in) for every mention in *text*.
+
+    A mention ending in `.manifest` or `.py` is naming the add-in's file, not a
+    differently-named add-in, so the suffix comes off before the comparison.
+    """
     claims = []
     for number, line in enumerate(text.splitlines(), start=1):
         for pattern in (ADD_INS_PATH, ADD_INS_DIALOG):
             for match in pattern.finditer(line):
                 name = match.group("name").rstrip(".")
+                for suffix in ADD_IN_FILE_SUFFIXES:
+                    name = name.removesuffix(suffix)
                 if name not in DIALOG_BUTTONS:
                     claims.append((number, name))
     return claims
@@ -783,13 +793,33 @@ def _add_in_name_findings(pages: dict[str, str], name: str) -> list[str]:
     ]
 
 
-def _documents_naming_the_add_in(pages: dict[str, str], name: str) -> list[str]:
-    """Documents that never name the add-in at all, in name order."""
+def _documents_naming_the_add_in(pages: dict[str, str]) -> list[str]:
+    """Documents that never name the add-in at all, in name order.
+
+    Presence only: a wrong name is `_add_in_name_findings`'s finding, and asking this
+    one for equality would report the same page twice.
+    """
     return sorted(
         page
         for page in ADD_IN_DOCUMENTS
         if not _add_in_name_claims(pages.get(page, ""))
     )
+
+
+INSTALL_TARGET = re.compile(
+    r"^\s*TARGET=[\"']?\$\{?ADDINS_DIR\}?/(?P<name>[^\"'\s]+)",
+    re.MULTILINE,
+)
+"""The folder an `install-addon.sh` assignment names, whatever its quoting.
+
+Anchored to the assignment, so a commented-out `TARGET=` is not read, and both
+`$ADDINS_DIR` and `${ADDINS_DIR}` are accepted because bash spells it both ways.
+"""
+
+
+def _install_targets(script: str) -> list[str]:
+    """Every folder name *script* sets TARGET to, in file order."""
+    return INSTALL_TARGET.findall(script)
 
 
 def test_the_entry_module_is_named_after_the_manifest():
@@ -802,17 +832,26 @@ def test_the_entry_module_is_named_after_the_manifest():
 
 
 def test_the_install_script_installs_under_the_add_ins_name():
-    script = (REPO_ROOT / "scripts" / "install-addon.sh").read_text(encoding="utf-8")
-    match = re.search(r'TARGET="\$ADDINS_DIR/(?P<name>[^"]+)"', script)
+    path = REPO_ROOT / "scripts" / "install-addon.sh"
+    assert path.exists(), (
+        "scripts/install-addon.sh is gone; this guard would pass vacuously"
+    )
+    script = path.read_text(encoding="utf-8")
+    targets = _install_targets(script)
 
-    assert match, (
-        "scripts/install-addon.sh no longer sets TARGET=$ADDINS_DIR/<name>; this guard "
+    assert targets, (
+        "scripts/install-addon.sh sets no TARGET=$ADDINS_DIR/<name>; this guard "
         "would pass vacuously"
     )
-    assert match.group("name") == ADD_IN_NAME, (
-        f"scripts/install-addon.sh installs into {match.group('name')!r}, but the "
+    assert set(targets) == {ADD_IN_NAME}, (
+        f"scripts/install-addon.sh installs into {sorted(set(targets))}, but the "
         f"add-in is {ADD_IN_NAME!r}. A rename that skips the script leaves the folder "
         "and the name disagreeing on every machine that installs afterwards."
+    )
+    assert f"'{ADD_IN_NAME}'" in script, (
+        f"scripts/install-addon.sh no longer prints {ADD_IN_NAME!r} in the "
+        "instructions it gives the user, so the line they follow and the folder it "
+        "installs into can disagree."
     )
 
 
@@ -834,19 +873,22 @@ def test_the_documents_that_install_the_add_in_still_name_it():
     pages = {name: "nothing here\n" for name in ADD_IN_DOCUMENTS}
     pages["README.md"] = "Shift+S → Add-Ins → Fusion360MCP → Run\n"
 
-    missing = _documents_naming_the_add_in(pages, ADD_IN_NAME)
+    missing = _documents_naming_the_add_in(pages)
 
     assert missing == ["devcontainer/README.md"]
 
 
 def test_every_document_naming_the_add_in_uses_its_name():
-    """The name lives in five places, and only one pair of them is functional.
+    """The copies of the name the suite can read, and only one of them is functional.
 
     Fusion loads ``<name>.py`` beside ``<name>.manifest``, so those two are one
-    identity; the install script's folder and the pages that say what to look for in
-    the dialog are the other three copies.  A rename that carries four of five leaves a
-    reader hunting a folder that is not there, and nothing else in the suite reads any
-    of them.
+    identity; the install script and the two pages are the copies a reader follows
+    afterwards.  A rename that carries four of five leaves someone hunting a folder
+    that is not there.
+
+    The script prints the name more often than this reads it - the ``TARGET`` it
+    installs into and the instruction it echoes are checked, its comments are not - so
+    the claim here is about the copies that are read, not every occurrence.
 
     The sweep reads tracked markdown, so a new page is covered the moment it exists, and
     README plus devcontainer/README.md must keep naming the add-in - otherwise a rename
@@ -857,7 +899,7 @@ def test_every_document_naming_the_add_in_uses_its_name():
         for relative in _tracked_markdown(exclude=HISTORY_DOCUMENTS)
     }
     findings = _add_in_name_findings(pages, ADD_IN_NAME)
-    missing = _documents_naming_the_add_in(pages, ADD_IN_NAME)
+    missing = _documents_naming_the_add_in(pages)
 
     assert findings == [], (
         "a document calls the add-in something other than its manifest name: "
@@ -868,3 +910,34 @@ def test_every_document_naming_the_add_in_uses_its_name():
         "these documents no longer name the add-in at all, so the check would pass "
         f"vacuously: {missing}"
     )
+
+
+def test_a_path_naming_the_manifest_file_still_calls_the_add_in_by_name():
+    """`AddIns/Fusion360MCP.manifest` names the add-in, not a differently-named one."""
+    text = "copy it to AddIns/Fusion360MCP.manifest, beside AddIns/Fusion360MCP.py\n"
+
+    assert _add_in_name_claims(text) == [(1, "Fusion360MCP"), (1, "Fusion360MCP")]
+
+
+def test_the_dialog_entry_is_read_through_ascii_arrows_too():
+    """The repo writes the same instruction with `>` in places; that is not a name."""
+    for arrow in ("→", "->", ">"):
+        assert _add_in_name_claims(f"Shift+S → Add-Ins {arrow} OtherTab\n") == [
+            (1, "OtherTab")
+        ]
+
+
+def test_the_install_target_is_read_whatever_its_quoting():
+    for line in (
+        'TARGET="$ADDINS_DIR/Name"',
+        "TARGET='$ADDINS_DIR/Name'",
+        'TARGET="${ADDINS_DIR}/Name"',
+        "TARGET=$ADDINS_DIR/Name",
+    ):
+        assert _install_targets(line) == ["Name"], line
+    assert _install_targets('# TARGET="$ADDINS_DIR/Old"\n') == []
+
+
+def test_the_dialog_button_skip_list_is_exactly_the_buttons():
+    """A wider skip list silences a name with no test noticing; pin it."""
+    assert {"Run", "Stop", "Add"} == DIALOG_BUTTONS
