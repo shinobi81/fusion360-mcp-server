@@ -894,8 +894,8 @@ def _run_installer(
     directories and the install is found by search.
     """
     root = tmp_path / "root"
-    (root / ADD_INS_TAIL).mkdir(parents=True)
-    (root / DARWIN_ADD_INS_TAIL).mkdir(parents=True)
+    (root / ADD_INS_TAIL).mkdir(parents=True, exist_ok=True)
+    (root / DARWIN_ADD_INS_TAIL).mkdir(parents=True, exist_ok=True)
     return subprocess.run(
         [_bash(), (repo / "scripts" / "install-addon.sh").as_posix()],
         env={**os.environ, "OSTYPE": ostype, "APPDATA": str(root), "HOME": str(root)},
@@ -985,6 +985,67 @@ def test_the_install_script_refuses_when_addon_holds_no_single_manifest(
     assert all(kids == [] for kids in _installed(tmp_path).values()), (
         "the script installed something anyway"
     )
+
+
+def test_the_install_script_refuses_a_manifest_that_is_not_a_file(
+    tmp_path: Path,
+) -> None:
+    """A directory called `*.manifest` matches the glob and would name the add-in.
+
+    The glob does not stat, so without this check a lone ``Bogus.manifest/`` counts as
+    the one manifest and installs under ``Bogus``, with no manifest for Fusion to read.
+    A dangling symlink escapes the same way; ``-f`` refuses both.
+    """
+    repo = _installer_tree(tmp_path)
+    (repo / "addon" / "Bogus.manifest").mkdir()
+
+    result = _run_installer(repo, tmp_path)
+
+    assert result.returncode != 0
+    assert "Bogus.manifest" in result.stderr, result.stderr
+    assert all(kids == [] for kids in _installed(tmp_path).values()), (
+        "the script installed under a name no manifest declared"
+    )
+
+
+def test_the_install_script_never_spells_the_add_ins_name() -> None:
+    """The name has one source: the manifest. A comment is a copy too.
+
+    The behavioural tests only read the script's output, so a hardcoded name in a
+    comment is invisible to them - which is how `line 2` survived the first fix. This
+    is the only assertion that closes that class, and it cannot see whether the script
+    runs, which is why it sits beside the tests that do.
+    """
+    script = (REPO_ROOT / "scripts" / "install-addon.sh").read_text(encoding="utf-8")
+
+    assert ADD_IN_NAME not in script, (
+        f"scripts/install-addon.sh spells {ADD_IN_NAME!r} again; the name must "
+        "come from the manifest, in the script and in its comments alike"
+    )
+
+
+def test_the_install_script_reinstalls_over_an_existing_install(tmp_path: Path) -> None:
+    """The second run must go through the removal path, not fail on an existing link.
+
+    That path is the only destructive line in the script, and a fresh ``tmp_path`` per
+    test never reached it. ``ln -s`` onto an existing entry fails, so a removed or
+    broken removal branch turns the second run red here rather than on a developer's
+    machine.
+    """
+    repo = _installer_tree(tmp_path, ADD_IN_NAME)
+    first = _run_installer(repo, tmp_path)
+    assert first.returncode == 0, first.stderr
+
+    second = _run_installer(repo, tmp_path)
+
+    assert second.returncode == 0, second.stderr
+    assert "Removing existing installation" in second.stdout, (
+        "the second run did not go through the removal path; this test would pass "
+        "without exercising the one destructive line in the script"
+    )
+    installed = {path: kids for path, kids in _installed(tmp_path).items() if kids}
+    assert len(installed) == 1, installed
+    assert list(installed.values()) == [[ADD_IN_NAME]]
 
 
 def test_a_document_naming_the_add_in_uses_its_name():

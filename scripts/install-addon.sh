@@ -25,16 +25,30 @@ fi
 # The count check below is not tidiness.  With no manifest in addon/, ADD_IN_NAME comes
 # out empty, TARGET becomes the AddIns directory itself, and the reinstall path runs
 # `rm -rf` on every add-in the user has installed.  With two, basename exits with
-# "extra operand", a message that never mentions manifests.
+# "extra operand", a message that never mentions manifests.  Names beginning with a
+# dot never match the glob, so a dot-prefixed manifest is refused as "found 0" rather
+# than counted.
 shopt -s nullglob
 ADD_IN_MANIFESTS=("$ADDON_SRC"/*.manifest)
 shopt -u nullglob
 
 if [ "${#ADD_IN_MANIFESTS[@]}" -ne 1 ]; then
     echo "addon/ must hold exactly one *.manifest; found ${#ADD_IN_MANIFESTS[@]}" >&2
-    for manifest in "${ADD_IN_MANIFESTS[@]}"; do
-        echo "  ${manifest##*/}" >&2
-    done
+    # Guarded because "${a[@]}" on an empty array is an unbound-variable error under
+    # `set -u` in bash before 4.4, which would abort before this message printed.
+    if [ "${#ADD_IN_MANIFESTS[@]}" -gt 0 ]; then
+        for manifest in "${ADD_IN_MANIFESTS[@]}"; do
+            echo "  ${manifest##*/}" >&2
+        done
+    fi
+    exit 1
+fi
+
+# The glob does not stat its matches, so a directory - or a dangling symlink - called
+# <something>.manifest counts as the one manifest and would name the add-in after a
+# file Fusion cannot load.
+if [ ! -f "${ADD_IN_MANIFESTS[0]}" ]; then
+    echo "addon/${ADD_IN_MANIFESTS[0]##*/} is not a regular file" >&2
     exit 1
 fi
 
