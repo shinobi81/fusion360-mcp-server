@@ -867,7 +867,7 @@ def _installer_tree(tmp_path: Path, *stems: str) -> Path:
 
     The script resolves ``addon/`` from its own location, so this copy is
     self-contained and the repository's ``addon/`` is never written to.  Variadic on
-    purpose: Task 2 needs a tree with none and with two.
+    purpose: the refusal test needs a tree with none and with two.
     """
     repo = tmp_path / "repo"
     (repo / "scripts").mkdir(parents=True)
@@ -878,20 +878,27 @@ def _installer_tree(tmp_path: Path, *stems: str) -> Path:
     return repo
 
 
-def _run_installer(repo: Path, tmp_path: Path) -> subprocess.CompletedProcess:
+def _run_installer(
+    repo: Path, tmp_path: Path, ostype: str = "msys"
+) -> subprocess.CompletedProcess:
     """Run the copied script against a throwaway add-ins root.
 
-    ``OSTYPE`` is forced so every CI leg drives one branch, and decoding is explicit
-    UTF-8: the script prints ``✓``, which cp1252 cannot hold.  Both roots the script
-    can read are redirected, and the script's path is passed POSIX-style, because a
-    literal ``C:\\...`` argument reaches bash with backslashes it does not resolve.
+    Decoding is explicit UTF-8: the script prints ``✓``, which cp1252 cannot hold.  Both
+    roots the script can read are redirected, and the script's path is passed
+    POSIX-style, because a literal ``C:\\...`` argument reaches bash with backslashes it
+    does not resolve.
+
+    ``ostype`` is a parameter rather than a constant so the success test can drive both
+    of the script's install branches.  Forcing it is not a claim of control: a bash may
+    overwrite an inherited ``OSTYPE``, which is why the fixture creates both add-ins
+    directories and the install is found by search.
     """
     root = tmp_path / "root"
     (root / ADD_INS_TAIL).mkdir(parents=True)
     (root / DARWIN_ADD_INS_TAIL).mkdir(parents=True)
     return subprocess.run(
         [_bash(), (repo / "scripts" / "install-addon.sh").as_posix()],
-        env={**os.environ, "OSTYPE": "msys", "APPDATA": str(root), "HOME": str(root)},
+        env={**os.environ, "OSTYPE": ostype, "APPDATA": str(root), "HOME": str(root)},
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -913,19 +920,24 @@ def _installed(tmp_path: Path) -> dict[Path, list[str]]:
     }
 
 
+@pytest.mark.parametrize("ostype", ["msys", "darwin"])
 @pytest.mark.parametrize("stem", [ADD_IN_NAME, "RenamedAddIn"])
 def test_the_install_script_installs_under_the_name_its_manifest_declares(
-    tmp_path: Path, stem: str
+    tmp_path: Path, stem: str, ostype: str
 ) -> None:
     """The installed folder follows the manifest's filename, whatever it is called.
 
     ``RenamedAddIn`` is the case that can fail: the script used to spell the name, so a
     manifest called anything else still installed as ``Fusion360MCP``.  The first
     parameter keeps a failure naming the real add-in instead of a fixture.
+
+    Both of the script's install branches are driven, because one of them existed with
+    nothing executing it: ``darwin`` installs under ``$HOME/Library/...`` and ``msys``
+    under ``$APPDATA``.
     """
     repo = _installer_tree(tmp_path, stem)
 
-    result = _run_installer(repo, tmp_path)
+    result = _run_installer(repo, tmp_path, ostype)
 
     assert result.returncode == 0, result.stderr
     installed = {path: kids for path, kids in _installed(tmp_path).items() if kids}
@@ -944,6 +956,10 @@ def test_the_install_script_installs_under_the_name_its_manifest_declares(
         f"the output still names {other!r} as well as {stem!r}; one of the lines the "
         "script prints has its own copy of the name again"
     )
+    assert result.stdout.count(stem) >= 3, (
+        "the banner, the Target line and the Add-Ins instruction each name the add-in "
+        f"by its derived name; only {result.stdout.count(stem)} still do"
+    )
 
 
 @pytest.mark.parametrize(
@@ -953,10 +969,12 @@ def test_the_install_script_installs_under_the_name_its_manifest_declares(
 def test_the_install_script_refuses_when_addon_holds_no_single_manifest(
     tmp_path: Path, stems: tuple[str, ...], expected: str
 ) -> None:
-    """Zero manifests reads as `*`, two crash with an "extra operand" - both refused.
+    """Zero manifests and two are both refused, with a message naming the problem.
 
-    Neither message would tell a developer what is actually wrong with ``addon/``, and
-    the zero case would install under a folder literally named ``*``.
+    Neither state is survivable: with none, ``ADD_IN_NAME`` comes out empty, so
+    ``TARGET`` is the add-ins directory itself and the script's ``rm -rf`` takes every
+    add-in in it; with two, ``basename`` exits "extra operand" and never mentions
+    manifests.
     """
     repo = _installer_tree(tmp_path, *stems)
 

@@ -20,16 +20,18 @@ fi
 
 # The add-in's name comes from its manifest: Fusion loads <name>.py beside
 # <name>.manifest, and this script links addon/ in as <name>.  One source, so the
-# folder installed and the instructions printed below cannot disagree.  Exactly one
-# manifest is required: none leaves the glob unexpanded (`basename` then answers `*`
-# and installs under a folder of that name), and two make `basename` exit with
-# "extra operand", which never mentions manifests.
+# folder installed and the instructions printed below cannot disagree.
+#
+# The count check below is not tidiness.  With no manifest in addon/, ADD_IN_NAME comes
+# out empty, TARGET becomes the AddIns directory itself, and the reinstall path runs
+# `rm -rf` on every add-in the user has installed.  With two, basename exits with
+# "extra operand", a message that never mentions manifests.
 shopt -s nullglob
 ADD_IN_MANIFESTS=("$ADDON_SRC"/*.manifest)
 shopt -u nullglob
 
 if [ "${#ADD_IN_MANIFESTS[@]}" -ne 1 ]; then
-    echo "addon/ must hold exactly one *.manifest; found ${#ADD_IN_MANIFESTS[@]}:" >&2
+    echo "addon/ must hold exactly one *.manifest; found ${#ADD_IN_MANIFESTS[@]}" >&2
     for manifest in "${ADD_IN_MANIFESTS[@]}"; do
         echo "  ${manifest##*/}" >&2
     done
