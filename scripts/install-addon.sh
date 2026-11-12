@@ -25,12 +25,14 @@ fi
 # <name>.manifest, and this script links addon/ in as <name>.  One source, so the
 # folder installed and the instructions printed below cannot disagree.
 #
-# The count check below is not tidiness.  With no manifest in addon/, ADD_IN_NAME comes
-# out empty, TARGET becomes the AddIns directory itself, and the reinstall path runs
-# `rm -rf` on every add-in the user has installed.  With two, basename exits with
-# "extra operand", a message that never mentions manifests.  Names beginning with a
-# dot never match the glob, so a dot-prefixed manifest is refused as "found 0" rather
-# than counted.
+# The two checks below are not tidiness.  Without them, an addon/ holding no manifest
+# would leave ADD_IN_NAME empty, TARGET the AddIns directory itself, and the reinstall
+# path running `rm -rf` on every installed add-in; two manifests would install
+# silently under whichever the glob lists first, naming the add-in after a manifest
+# nobody chose.  With the checks, both stop here: the count is reported on stderr, and
+# the matches are listed when there are any.  Names beginning with a dot never match
+# the glob, so a lone dot-prefixed manifest is refused as "found 0", and one beside a
+# real manifest is ignored.
 shopt -s nullglob
 ADD_IN_MANIFESTS=("$ADDON_SRC"/*.manifest)
 shopt -u nullglob
