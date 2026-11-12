@@ -7,6 +7,45 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.7.3] - 2026-11-12
+
+A documentation-and-tooling patch. No `src/` file changed and no add-in code
+changed — `git diff --stat v0.7.2..v0.7.3 -- src/ addon/` is one line, the
+manifest's version — so nothing a caller of the server or the add-in can observe is
+different. That is why this is a patch and not a minor: no tool, parameter, response
+field or `error_kind` moved, and the Python floor is unchanged.
+
+### Fixed
+
+- **The README's install snippets pointed at `v0.3.1`.** All five of them - the
+  `claude mcp add` line, the bare `uvx` invocation and three JSON configs - pinned a
+  release four minors old, so a reader who followed the README installed 0.3.1 while 0.7.2
+  was current. They now name the release being cut, and a test fails when a documented pin
+  stops matching `pyproject.toml`. (#85)
+- **`scripts/install-addon.sh` derives the add-in's name from its manifest** instead of
+  spelling it four times, so the folder it installs and the instructions it prints cannot
+  disagree. It also refuses an `addon/` holding no manifest - where it used to compute an
+  empty target and `rm -rf` the whole AddIns directory, taking every installed add-in with
+  it - two manifests (where `basename` failed with `extra operand`), and a match that is
+  not a regular file. Repo tooling only: `scripts/` is not in the sdist, verified with
+  `tar tzf` on the 0.7.2 build. (#89)
+
+### Changed
+
+- **`addon/Fusion360MCP.manifest` states the released version.** It said `0.1.0` from the
+  commit that created it until 0.7.2, sixteen tagged releases, and now tracks
+  `pyproject.toml`, with a test that fails when the two disagree. This tag is the first
+  whose tree carries the corrected value: the `v0.7.2` tag itself still says `0.1.0`.
+  Fusion reads the manifest, so the version shown in Scripts and Add-Ins changes; nothing
+  else about the add-in does. (#84)
+
+### Testing
+
+- Three drift guards joined the suite: the manifest's add-in id, so a GUID change is a
+  deliberate act; the lint and format commands the documents quote, so a documented command
+  cannot stop being the one CI runs; and the add-in's name across its five copies.
+  (#86, #87, #88)
+
 ## [0.7.2] - 2026-11-10
 
 A lint-and-CI release with two add-in changes inside it. No tool, parameter or

@@ -102,14 +102,15 @@ error that motivated it.
 1. Bump `version` in `pyproject.toml`, `addon/Fusion360MCP.manifest` and the install
    snippets in `README.md`, then `uv lock`. They ship together, and
    `tests/test_packaging.py` fails if any of them disagree.
-2. PR it (`chore(release): x.y.z for <reason>`), merge as usual.
-3. Annotated tag on the merge commit: `git tag -a vX.Y.Z -m "…"`, then
+2. Write the `CHANGELOG.md` entry in the same change, not after the tag: the note records
+   what a release changed, and it is written while the change is in hand. It goes in the
+   release PR, as 0.7.0, 0.7.1, 0.7.2 and 0.7.3 all did.
+3. PR it (`chore(release): x.y.z`), merge as usual.
+4. Annotated tag on the merge commit: `git tag -a vX.Y.Z -m "…"`, then
    `git push origin vX.Y.Z`.
-4. Verify the tag actually installs:
+5. Verify the tag actually installs:
 
    ```bash
    uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@vX.Y.Z' \
      fusion360-mcp-server --help
    ```
-
-5. Add a `CHANGELOG.md` entry.
