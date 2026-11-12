@@ -269,7 +269,7 @@ wheels = [
 
 [[package]]
 name = "fusion360-mcp-server"
-version = "0.7.2"
+version = "0.7.3"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },

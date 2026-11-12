@@ -7,6 +7,52 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.7.3] - 2026-11-12
+
+A documentation-and-tooling patch. Nothing in `src/` changed and no add-in code
+changed: the range touches one file under `src/` or `addon/`, the manifest's version.
+So nothing a caller of the server or the add-in can observe is different, which is
+why this is a patch and not a minor: no tool, parameter, response field or
+`error_kind` moved, and the Python floor is unchanged.
+
+### Fixed
+
+- **The README's install snippets pointed at `v0.3.1`.** All five of them — the two
+  `claude mcp add` lines, the bare `uvx` invocation, and the Cursor and VS Code JSON
+  configs — pinned a release four minors old, so a reader who followed the README
+  installed 0.3.1 while 0.7.2 was current. They now name the release being cut, and a test
+  fails when a documented pin stops matching `pyproject.toml`. (#85)
+- **`scripts/install-addon.sh` derives the add-in's name from its manifest** instead of
+  spelling it four times, so the folder it installs and the instructions it prints cannot
+  disagree. That substitution is also why the script now refuses three states it used to
+  pass through: with the name read from a glob, an `addon/` holding no manifest would
+  compute an empty target and `rm -rf` the whole AddIns directory, taking every installed
+  add-in with it; two manifests leave `basename` two operands and no name; and a match
+  that is not a regular file would name the add-in after a file Fusion cannot load. Repo
+  tooling only: `scripts/` is not in the sdist, verified with `tar tzf` on the 0.7.2
+  build. (#89)
+
+### Changed
+
+- **`addon/Fusion360MCP.manifest` states the released version.** It said `0.1.0` from the
+  commit that created it until 0.7.2, sixteen tagged releases, and now tracks
+  `pyproject.toml`, with a test that fails when the two disagree. This tag is the first
+  whose tree carries the corrected value: the `v0.7.2` tag itself still says `0.1.0`.
+  Fusion parses the manifest with strict JSON rules and does not validate the version, so
+  nothing about the add-in's behaviour changes — only what a reader of that field sees.
+  (#84)
+- **`CONTRIBUTING.md`'s release steps put the changelog entry in the release PR.** It used
+  to ask for the entry after the tag, which is not what 0.7.0 through 0.7.3 did — all four
+  entries went in with their release PR. The step order and the PR title example now match
+  the practice.
+
+### Testing
+
+- Three drift guards joined the suite: the manifest's add-in id, so a GUID change is a
+  deliberate act; the lint and format commands the documents quote, so a documented command
+  cannot stop being the one CI runs; and the add-in's name across its five copies.
+  (#86, #87, #88)
+
 ## [0.7.2] - 2026-11-10
 
 A lint-and-CI release with two add-in changes inside it. No tool, parameter or
@@ -582,6 +628,7 @@ reporting a result it had only echoed back.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.7.3]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.6.4...v0.7.0
