@@ -20,6 +20,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -841,11 +842,11 @@ this way that exercises the darwin branch instead of turning the macOS leg red.
 def _no_usable_bash(platform: str | None = None) -> None:
     """Never return: fail where bash is guaranteed, skip where it may be absent.
 
-    A skip is invisible in a green suite, and every install test below runs the real
-    script, so a missing shell on a platform that always ships one would quietly delete
-    the guard. POSIX always provides bash, so its absence there is a broken environment
-    and must be red. Windows may legitimately have only the WSL stub, so there it is a
-    reported skip.
+    A skip is invisible in a green suite, and every install test below that runs the
+    real script would lose its subject, so a missing shell on a platform that always
+    ships one would quietly delete the guard. POSIX always provides bash, so its
+    absence there is a broken environment and must be red. Windows may legitimately
+    have only the WSL stub, so there it is a reported skip.
 
     ``platform`` is a parameter so both outcomes can be tested here, on either platform.
     """
@@ -855,7 +856,7 @@ def _no_usable_bash(platform: str | None = None) -> None:
     pytest.fail(
         f"no usable bash on {actual}, where one is guaranteed; looked for `bash` on "
         "PATH and for Git for Windows' bash.exe — install bash or fix PATH, because "
-        "every install test below runs the real script through it"
+        "every install test below that runs the real script goes through it"
     )
 
 
@@ -987,25 +988,38 @@ def test_a_missing_bash_is_fatal_where_posix_guarantees_one() -> None:
 def test_bash_routes_an_absent_shell_through_the_policy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Pin the call site: an inline decision in ``_bash`` was the original defect.
+    """Pin the call: an inline copy of the policy in ``_bash`` was the original defect.
 
-    The test above pins the policy; this pins that ``_bash`` uses it, which is the half
-    that can silently regress. ``which`` is emptied and the two Windows candidates are
-    made not to exist, so the choice falls to the policy: Windows must then skip and
-    POSIX must fail. A hardcoded skip is caught on POSIX, a hardcoded fail on Windows.
+    The test above pins the policy for a platform argument; this pins that ``_bash``
+    hands the decision to it with **no** argument, so the default resolves ``os.name``.
+    A duplicated inline branch would satisfy a behaviour-only assertion — both platforms
+    raise the same thing either way — so the call itself is recorded.
     """
+    real_policy = _no_usable_bash
+    seen: list[str | None] = []
+
+    def _recording_policy(platform: str | None = None) -> None:
+        seen.append(platform)
+        real_policy(platform)
+
     real_exists = Path.exists
+    monkeypatch.setattr(sys.modules[__name__], "_no_usable_bash", _recording_policy)
     monkeypatch.setattr(shutil, "which", lambda _name: None)
     monkeypatch.setattr(
         Path,
         "exists",
-        lambda self: real_exists(self) if "Program Files" not in str(self) else False,
+        lambda self, **kw: (
+            False if str(self).startswith("C:") else real_exists(self, **kw)
+        ),
     )
     expected = pytest.skip.Exception if os.name == "nt" else pytest.fail.Exception
 
     with pytest.raises(BaseException) as stopped:
         _bash()
 
+    assert seen == [None], (
+        f"_bash passed {seen!r} to the policy; it must let the default read os.name"
+    )
     assert type(stopped.value) is expected, type(stopped.value).__name__
 
 
