@@ -981,17 +981,24 @@ def test_the_install_script_installs_under_the_name_its_manifest_declares(
 
 @pytest.mark.parametrize(
     ("stems", "expected"),
-    [((), "found 0"), (("Fusion360MCP", "Second"), "Second.manifest")],
+    [
+        ((), "found 0"),
+        ((".hidden",), "found 0"),
+        (("Fusion360MCP", "Second"), "Second.manifest"),
+    ],
 )
 def test_the_install_script_refuses_when_addon_holds_no_single_manifest(
     tmp_path: Path, stems: tuple[str, ...], expected: str
 ) -> None:
     """Zero manifests and two are both refused, with a message naming the problem.
 
-    Neither state is survivable: with none, ``ADD_IN_NAME`` comes out empty, so
-    ``TARGET`` is the add-ins directory itself and the script's ``rm -rf`` takes every
-    add-in in it; with two, ``basename`` exits "extra operand" and never mentions
-    manifests.
+    Neither state is survivable: with none, ``ADD_IN_NAME`` would come out empty, so
+    ``TARGET`` would be the add-ins directory itself and the script's ``rm -rf`` would
+    take every add-in in it; with two, the script would install silently under whichever
+    manifest the glob lists first. The count check refuses both — drop it and two
+    manifests install silently, while the empty case is still refused by the
+    regular-file check, because ``-f ""`` is false — so only losing both reaches the
+    ``rm -rf``.
     """
     repo = _installer_tree(tmp_path, *stems)
     _seed_a_neighbour(tmp_path)
@@ -1027,6 +1034,29 @@ def test_the_install_script_refuses_a_manifest_that_is_not_a_file(
 
     assert result.returncode != 0
     assert "Bogus.manifest" in result.stderr, result.stderr
+
+
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="making a symlink on Windows needs a privilege the CI account lacks",
+)
+def test_the_install_script_refuses_a_dangling_manifest_symlink(
+    tmp_path: Path,
+) -> None:
+    """A symlink to nowhere is not a regular file, so ``-f`` refuses it by name.
+
+    The glob does not stat, so a ``Ghost.manifest`` pointing at a missing path counts as
+    the one manifest until the check below the count refuses it. This is the half of the
+    docstring above that runs on POSIX only.
+    """
+    repo = _installer_tree(tmp_path)
+    _seed_a_neighbour(tmp_path)
+    (repo / "addon" / "Ghost.manifest").symlink_to(repo / "gone")
+
+    result = _run_installer(repo, tmp_path)
+
+    assert result.returncode != 0
+    assert "Ghost.manifest" in result.stderr, result.stderr
     kids = _installed(tmp_path)
     assert len(kids) == 2, kids
     assert all(names == [NEIGHBOUR] for names in kids.values()), (
