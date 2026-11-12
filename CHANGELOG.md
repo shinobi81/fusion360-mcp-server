@@ -17,18 +17,20 @@ field or `error_kind` moved, and the Python floor is unchanged.
 
 ### Fixed
 
-- **The README's install snippets pointed at `v0.3.1`.** All five of them - the
-  `claude mcp add` line, the bare `uvx` invocation and three JSON configs - pinned a
-  release four minors old, so a reader who followed the README installed 0.3.1 while 0.7.2
-  was current. They now name the release being cut, and a test fails when a documented pin
-  stops matching `pyproject.toml`. (#85)
+- **The README's install snippets pointed at `v0.3.1`.** All five of them - the two
+  `claude mcp add` lines, the bare `uvx` invocation, and the Cursor and VS Code JSON
+  configs - pinned a release four minors old, so a reader who followed the README
+  installed 0.3.1 while 0.7.2 was current. They now name the release being cut, and a test
+  fails when a documented pin stops matching `pyproject.toml`. (#85)
 - **`scripts/install-addon.sh` derives the add-in's name from its manifest** instead of
   spelling it four times, so the folder it installs and the instructions it prints cannot
-  disagree. It also refuses an `addon/` holding no manifest - where it used to compute an
-  empty target and `rm -rf` the whole AddIns directory, taking every installed add-in with
-  it - two manifests (where `basename` failed with `extra operand`), and a match that is
-  not a regular file. Repo tooling only: `scripts/` is not in the sdist, verified with
-  `tar tzf` on the 0.7.2 build. (#89)
+  disagree. That substitution is also why the script now refuses three states it used to
+  pass through: with the name read from a glob, an `addon/` holding no manifest would
+  compute an empty target and `rm -rf` the whole AddIns directory, taking every installed
+  add-in with it; two manifests make `basename` report `extra operand`; and a match that
+  is not a regular file would name the add-in after a file Fusion cannot load. Repo
+  tooling only: `scripts/` is not in the sdist, verified with `tar tzf` on the 0.7.2
+  build. (#89)
 
 ### Changed
 
@@ -36,8 +38,13 @@ field or `error_kind` moved, and the Python floor is unchanged.
   commit that created it until 0.7.2, sixteen tagged releases, and now tracks
   `pyproject.toml`, with a test that fails when the two disagree. This tag is the first
   whose tree carries the corrected value: the `v0.7.2` tag itself still says `0.1.0`.
-  Fusion reads the manifest, so the version shown in Scripts and Add-Ins changes; nothing
-  else about the add-in does. (#84)
+  Fusion parses the manifest with strict JSON rules and does not validate the version, so
+  nothing about the add-in's behaviour changes — only what a reader of that field sees.
+  (#84)
+- **`CONTRIBUTING.md`'s release steps put the changelog entry in the release PR.** It used
+  to ask for the entry after the tag, which is not what 0.7.0 through 0.7.2 did — all four
+  entries went in with their release PR. The step order and the PR title example now match
+  the practice.
 
 ### Testing
 
@@ -621,6 +628,7 @@ reporting a result it had only echoed back.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.7.3]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.6.4...v0.7.0
