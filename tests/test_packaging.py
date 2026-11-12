@@ -828,6 +828,15 @@ the branch this bash appears to take would leave the other one able to reach the
 Fusion install - where the script's ``rm -rf "$TARGET"`` would delete it.
 """
 
+DARWIN_ADD_INS_TAIL = Path("Library/Application Support") / ADD_INS_TAIL
+"""The same place under ``$HOME``, where the script installs when ``OSTYPE`` is darwin.
+
+Both tails are created, so the test passes whichever branch the platform's bash takes
+and finds the install by search rather than by assuming one.  Forcing ``OSTYPE`` is
+then belt and braces: bash 3.2 on macOS may overwrite an inherited ``OSTYPE``, and
+this way that exercises the darwin branch instead of turning the macOS leg red.
+"""
+
 
 def _bash() -> str:
     """A bash that is not Windows' WSL stub, or a skip.
@@ -879,6 +888,7 @@ def _run_installer(repo: Path, tmp_path: Path) -> subprocess.CompletedProcess:
     """
     root = tmp_path / "root"
     (root / ADD_INS_TAIL).mkdir(parents=True)
+    (root / DARWIN_ADD_INS_TAIL).mkdir(parents=True)
     return subprocess.run(
         [_bash(), (repo / "scripts" / "install-addon.sh").as_posix()],
         env={**os.environ, "OSTYPE": "msys", "APPDATA": str(root), "HOME": str(root)},
@@ -888,6 +898,19 @@ def _run_installer(repo: Path, tmp_path: Path) -> subprocess.CompletedProcess:
         errors="replace",
         check=False,
     )
+
+
+def _installed(tmp_path: Path) -> dict[Path, list[str]]:
+    """Every add-ins directory under the redirected roots, and what landed in each.
+
+    Found by search, so the test never assumes which of the script's two branches ran:
+    the one directory it installed into is the non-empty one.
+    """
+    return {
+        path: [child.name for child in path.iterdir()]
+        for path in (tmp_path / "root").rglob("AddIns")
+        if path.is_dir()
+    }
 
 
 @pytest.mark.parametrize("stem", [ADD_IN_NAME, "RenamedAddIn"])
@@ -905,12 +928,10 @@ def test_the_install_script_installs_under_the_name_its_manifest_declares(
     result = _run_installer(repo, tmp_path)
 
     assert result.returncode == 0, result.stderr
-    add_ins_dirs = [
-        path for path in (tmp_path / "root").rglob("AddIns") if path.is_dir()
-    ]
-    assert len(add_ins_dirs) == 1, add_ins_dirs
-    add_ins = add_ins_dirs[0]
-    assert [path.name for path in add_ins.iterdir()] == [stem]
+    installed = {path: kids for path, kids in _installed(tmp_path).items() if kids}
+    assert len(installed) == 1, installed
+    (add_ins,) = installed
+    assert installed[add_ins] == [stem]
     assert (add_ins / stem / f"{stem}.manifest").exists(), (
         "the installed entry is not the add-in's own directory"
     )
@@ -943,11 +964,7 @@ def test_the_install_script_refuses_when_addon_holds_no_single_manifest(
 
     assert result.returncode != 0
     assert expected in result.stderr
-    add_ins_dirs = [
-        path for path in (tmp_path / "root").rglob("AddIns") if path.is_dir()
-    ]
-    assert len(add_ins_dirs) == 1, add_ins_dirs
-    assert list(add_ins_dirs[0].iterdir()) == [], (
+    assert all(kids == [] for kids in _installed(tmp_path).values()), (
         "the script installed something anyway"
     )
 

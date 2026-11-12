@@ -1,5 +1,5 @@
 #!/bin/bash
-# Install/reinstall the Fusion360MCP add-in via symlink (for development)
+# Install/reinstall the add-in via symlink (for development)
 # Usage: ./scripts/install-addon.sh
 
 set -e
