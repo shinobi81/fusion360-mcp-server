@@ -9,17 +9,17 @@ and published; they are the fork history.
 
 ## [0.7.3] - 2026-11-12
 
-A documentation-and-tooling patch. No `src/` file changed and no add-in code
-changed — `git diff --stat v0.7.2..v0.7.3 -- src/ addon/` is one line, the
-manifest's version — so nothing a caller of the server or the add-in can observe is
-different. That is why this is a patch and not a minor: no tool, parameter, response
-field or `error_kind` moved, and the Python floor is unchanged.
+A documentation-and-tooling patch. Nothing in `src/` changed and no add-in code
+changed: the range touches one file under `src/` or `addon/`, the manifest's version.
+So nothing a caller of the server or the add-in can observe is different, which is
+why this is a patch and not a minor: no tool, parameter, response field or
+`error_kind` moved, and the Python floor is unchanged.
 
 ### Fixed
 
-- **The README's install snippets pointed at `v0.3.1`.** All five of them - the two
+- **The README's install snippets pointed at `v0.3.1`.** All five of them — the two
   `claude mcp add` lines, the bare `uvx` invocation, and the Cursor and VS Code JSON
-  configs - pinned a release four minors old, so a reader who followed the README
+  configs — pinned a release four minors old, so a reader who followed the README
   installed 0.3.1 while 0.7.2 was current. They now name the release being cut, and a test
   fails when a documented pin stops matching `pyproject.toml`. (#85)
 - **`scripts/install-addon.sh` derives the add-in's name from its manifest** instead of
@@ -27,8 +27,8 @@ field or `error_kind` moved, and the Python floor is unchanged.
   disagree. That substitution is also why the script now refuses three states it used to
   pass through: with the name read from a glob, an `addon/` holding no manifest would
   compute an empty target and `rm -rf` the whole AddIns directory, taking every installed
-  add-in with it; two manifests make `basename` report `extra operand`; and a match that
-  is not a regular file would name the add-in after a file Fusion cannot load. Repo
+  add-in with it; two manifests leave `basename` two operands and no name; and a match
+  that is not a regular file would name the add-in after a file Fusion cannot load. Repo
   tooling only: `scripts/` is not in the sdist, verified with `tar tzf` on the 0.7.2
   build. (#89)
 
@@ -42,7 +42,7 @@ field or `error_kind` moved, and the Python floor is unchanged.
   nothing about the add-in's behaviour changes — only what a reader of that field sees.
   (#84)
 - **`CONTRIBUTING.md`'s release steps put the changelog entry in the release PR.** It used
-  to ask for the entry after the tag, which is not what 0.7.0 through 0.7.2 did — all four
+  to ask for the entry after the tag, which is not what 0.7.0 through 0.7.3 did — all four
   entries went in with their release PR. The step order and the PR title example now match
   the practice.
 
