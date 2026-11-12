@@ -918,6 +918,11 @@ def test_the_install_script_installs_under_the_name_its_manifest_declares(
         "the instructions printed to the user name a different add-in than the folder "
         "that was installed"
     )
+    other = "RenamedAddIn" if stem == ADD_IN_NAME else ADD_IN_NAME
+    assert other not in result.stdout, (
+        f"the output still names {other!r} as well as {stem!r}; one of the lines the "
+        "script prints has its own copy of the name again"
+    )
 
 
 @pytest.mark.parametrize(
