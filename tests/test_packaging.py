@@ -920,6 +920,33 @@ def test_the_install_script_installs_under_the_name_its_manifest_declares(
     )
 
 
+@pytest.mark.parametrize(
+    ("stems", "expected"),
+    [((), "found 0"), (("Fusion360MCP", "Second"), "Second.manifest")],
+)
+def test_the_install_script_refuses_when_addon_holds_no_single_manifest(
+    tmp_path: Path, stems: tuple[str, ...], expected: str
+) -> None:
+    """Zero manifests reads as `*`, two crash with an "extra operand" - both refused.
+
+    Neither message would tell a developer what is actually wrong with ``addon/``, and
+    the zero case would install under a folder literally named ``*``.
+    """
+    repo = _installer_tree(tmp_path, *stems)
+
+    result = _run_installer(repo, tmp_path)
+
+    assert result.returncode != 0
+    assert expected in result.stderr
+    add_ins_dirs = [
+        path for path in (tmp_path / "root").rglob("AddIns") if path.is_dir()
+    ]
+    assert len(add_ins_dirs) == 1, add_ins_dirs
+    assert list(add_ins_dirs[0].iterdir()) == [], (
+        "the script installed something anyway"
+    )
+
+
 def test_a_document_naming_the_add_in_uses_its_name():
     pages = {
         "README.md": "Shift+S → Add-Ins → WrongName → Run\n"
