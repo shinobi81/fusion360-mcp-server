@@ -3,6 +3,9 @@
 # Usage: ./scripts/install-addon.sh
 
 set -e
+# No `set -u` here on purpose: before bash 4.4, expanding an empty array's elements is
+# an unbound-variable error under nounset, and `addon/` may legitimately hold none while
+# the count check below is deciding to refuse. `set -e` is the only mode this relies on.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
@@ -34,13 +37,9 @@ shopt -u nullglob
 
 if [ "${#ADD_IN_MANIFESTS[@]}" -ne 1 ]; then
     echo "addon/ must hold exactly one *.manifest; found ${#ADD_IN_MANIFESTS[@]}" >&2
-    # Guarded because "${a[@]}" on an empty array is an unbound-variable error under
-    # `set -u` in bash before 4.4, which would abort before this message printed.
-    if [ "${#ADD_IN_MANIFESTS[@]}" -gt 0 ]; then
-        for manifest in "${ADD_IN_MANIFESTS[@]}"; do
-            echo "  ${manifest##*/}" >&2
-        done
-    fi
+    for manifest in "${ADD_IN_MANIFESTS[@]}"; do
+        echo "  ${manifest##*/}" >&2
+    done
     exit 1
 fi
 

@@ -907,6 +907,23 @@ def _run_installer(
     )
 
 
+NEIGHBOUR = "NeighbourAddIn"
+"""Somebody else's add-in, put in the add-ins directories before the script runs.
+
+The script's ``rm -rf`` removes ``$TARGET``, which becomes the whole add-ins directory
+when ``ADD_IN_NAME`` comes out empty. "Nothing was installed" cannot see that: an
+emptied directory is an empty list. A neighbour can. Both tails get one, so no test
+depends on which of the script's two branches the platform's bash takes.
+"""
+
+
+def _seed_a_neighbour(tmp_path: Path) -> None:
+    """Create ``NEIGHBOUR`` inside both add-ins directories, as Fusion would have."""
+    root = tmp_path / "root"
+    for tail in (ADD_INS_TAIL, DARWIN_ADD_INS_TAIL):
+        (root / tail / NEIGHBOUR).mkdir(parents=True, exist_ok=True)
+
+
 def _installed(tmp_path: Path) -> dict[Path, list[str]]:
     """Every add-ins directory under the redirected roots, and what landed in each.
 
@@ -977,13 +994,19 @@ def test_the_install_script_refuses_when_addon_holds_no_single_manifest(
     manifests.
     """
     repo = _installer_tree(tmp_path, *stems)
+    _seed_a_neighbour(tmp_path)
 
     result = _run_installer(repo, tmp_path)
 
     assert result.returncode != 0
     assert expected in result.stderr
-    assert all(kids == [] for kids in _installed(tmp_path).values()), (
-        "the script installed something anyway"
+    kids = _installed(tmp_path)
+    assert len(kids) == 2, (
+        f"the fixture's two add-ins directories should both still exist, found {kids}; "
+        "a deleted directory would make the next assertion vacuous"
+    )
+    assert all(names == [NEIGHBOUR] for names in kids.values()), (
+        "the script installed something, or removed the add-ins that were already there"
     )
 
 
@@ -998,14 +1021,31 @@ def test_the_install_script_refuses_a_manifest_that_is_not_a_file(
     """
     repo = _installer_tree(tmp_path)
     (repo / "addon" / "Bogus.manifest").mkdir()
+    _seed_a_neighbour(tmp_path)
 
     result = _run_installer(repo, tmp_path)
 
     assert result.returncode != 0
     assert "Bogus.manifest" in result.stderr, result.stderr
-    assert all(kids == [] for kids in _installed(tmp_path).values()), (
+    kids = _installed(tmp_path)
+    assert len(kids) == 2, kids
+    assert all(names == [NEIGHBOUR] for names in kids.values()), (
         "the script installed under a name no manifest declared"
     )
+
+
+def _unmarked_mentions(text: str) -> list[str]:
+    """Lines of *text* that spell the add-in's name without saying they meant to.
+
+    ``name-ok:`` is the escape hatch for a mention that is deliberately not a copy of
+    the name - a migration note, a path, a URL - so closing the class does not mean
+    deleting information to get a suite green.
+    """
+    return [
+        line
+        for line in text.splitlines()
+        if ADD_IN_NAME in line and "name-ok:" not in line
+    ]
 
 
 def test_the_install_script_never_spells_the_add_ins_name() -> None:
@@ -1018,10 +1058,13 @@ def test_the_install_script_never_spells_the_add_ins_name() -> None:
     """
     script = (REPO_ROOT / "scripts" / "install-addon.sh").read_text(encoding="utf-8")
 
-    assert ADD_IN_NAME not in script, (
-        f"scripts/install-addon.sh spells {ADD_IN_NAME!r} again; the name must "
-        "come from the manifest, in the script and in its comments alike"
+    assert _unmarked_mentions(script) == [], (
+        f"scripts/install-addon.sh spells {ADD_IN_NAME!r} again on "
+        f"{_unmarked_mentions(script)!r}; the name must come from the manifest. A "
+        "deliberate mention is marked `name-ok:` on its own line."
     )
+    assert _unmarked_mentions(f"# name-ok: moved from {ADD_IN_NAME}\n") == []
+    assert _unmarked_mentions(f"# installing into {ADD_IN_NAME}\n") != []
 
 
 def test_the_install_script_reinstalls_over_an_existing_install(tmp_path: Path) -> None:
@@ -1033,6 +1076,7 @@ def test_the_install_script_reinstalls_over_an_existing_install(tmp_path: Path) 
     machine.
     """
     repo = _installer_tree(tmp_path, ADD_IN_NAME)
+    _seed_a_neighbour(tmp_path)
     first = _run_installer(repo, tmp_path)
     assert first.returncode == 0, first.stderr
 
@@ -1043,9 +1087,50 @@ def test_the_install_script_reinstalls_over_an_existing_install(tmp_path: Path) 
         "the second run did not go through the removal path; this test would pass "
         "without exercising the one destructive line in the script"
     )
-    installed = {path: kids for path, kids in _installed(tmp_path).items() if kids}
+    kids = _installed(tmp_path)
+    assert len(kids) == 2, kids
+    assert all(NEIGHBOUR in names for names in kids.values()), (
+        "the removal took an add-in that was already there, so it removed more than "
+        "the install it was replacing"
+    )
+    installed = {
+        path: sorted(set(names) - {NEIGHBOUR})
+        for path, names in kids.items()
+        if set(names) - {NEIGHBOUR}
+    }
     assert len(installed) == 1, installed
-    assert list(installed.values()) == [[ADD_IN_NAME]]
+    (add_ins,) = installed
+    assert installed[add_ins] == [ADD_IN_NAME]
+    assert (add_ins / ADD_IN_NAME / f"{ADD_IN_NAME}.manifest").exists(), (
+        "the entry is not a link to the add-in's own directory"
+    )
+
+
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Git Bash copies instead of linking, so there is no dangling link to make",
+)
+def test_the_install_script_replaces_a_link_whose_target_is_gone(
+    tmp_path: Path,
+) -> None:
+    """`[ -L "$TARGET" ]` is the only half of the removal test that a live link misses.
+
+    A developer who moves or renames the checkout leaves exactly this: a symlink in
+    AddIns pointing at a path that no longer exists. `[ -e ]` is false for it, so
+    without the `-L` half the script skips the removal and `ln` then dies with "File
+    exists".
+    """
+    repo = _installer_tree(tmp_path, ADD_IN_NAME)
+    root = tmp_path / "root"
+    for tail in (ADD_INS_TAIL, DARWIN_ADD_INS_TAIL):
+        target = root / tail / ADD_IN_NAME
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.symlink_to(tmp_path / "moved-away")
+
+    result = _run_installer(repo, tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert "Removing existing installation" in result.stdout
 
 
 def test_a_document_naming_the_add_in_uses_its_name():
@@ -1080,8 +1165,10 @@ def test_every_document_naming_the_add_in_uses_its_name():
     that is not there.
 
     The script prints the name more often than this reads it - the ``TARGET`` it
-    installs into and the instruction it echoes are checked, its comments are not - so
-    the claim here is about the copies that are read, not every occurrence.
+    installs into and the instruction it echoes are checked here, and
+    ``test_the_install_script_never_spells_the_add_ins_name`` covers a mention in the
+    script's own text - so the claim here is about the copies a reader follows, not
+    every occurrence.
 
     The sweep reads tracked markdown, so a new page is covered the moment it exists, and
     README plus devcontainer/README.md must keep naming the add-in - otherwise a rename
