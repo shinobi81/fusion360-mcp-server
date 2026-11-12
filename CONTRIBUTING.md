@@ -105,6 +105,11 @@ error that motivated it.
 2. Write the `CHANGELOG.md` entry in the same change, not after the tag: the note records
    what a release changed, and it is written while the change is in hand. It goes in the
    release PR, as 0.7.0, 0.7.1, 0.7.2 and 0.7.3 all did.
+
+   A published entry that states something false is corrected by annotating it in place
+   on `main`, named as a post-release correction, citing the PR and — where a later change
+   made the corrected claim true — that change. The tag's tree is never rewritten, so the
+   tag's copy keeps the original sentence.
 3. PR it (`chore(release): x.y.z`), merge as usual.
 4. Annotated tag on the merge commit: `git tag -a vX.Y.Z -m "…"`, then
    `git push origin vX.Y.Z`.

@@ -32,6 +32,12 @@ why this is a patch and not a minor: no tool, parameter, response field or
   tooling only: `scripts/` is not in the sdist, verified with `tar tzf` on the 0.7.2
   build. (#89)
 
+  **Corrected after release (#92).** The middle clause above is wrong: `basename`
+  receives the first match and its suffix, so it does produce a name, and two manifests
+  are not an error — without the count check the script installs silently under whichever
+  manifest the glob lists first. The script's own comment said the same, and was fixed in
+  #91.
+
 ### Changed
 
 - **`addon/Fusion360MCP.manifest` states the released version.** It said `0.1.0` from the
