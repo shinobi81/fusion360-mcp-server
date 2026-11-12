@@ -32,10 +32,11 @@ why this is a patch and not a minor: no tool, parameter, response field or
   tooling only: `scripts/` is not in the sdist, verified with `tar tzf` on the 0.7.2
   build. (#89)
 
-  *(Corrected after release in #91: `basename` is called with one operand, so two
-  manifests do not produce `extra operand` — without the count check the script installs
-  silently under whichever manifest the glob lists first. The script's own comment said
-  the same, and was corrected in the same PR.)*
+  **Corrected after release (#92).** The sentence above is wrong on both counts:
+  `basename` receives the first match and its suffix, so it does produce a name, and two
+  manifests are not an error — without the count check the script installs silently under
+  whichever manifest the glob lists first. The script's own comment said the same, and was
+  fixed in #91.
 
 ### Changed
 
