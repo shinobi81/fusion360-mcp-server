@@ -841,11 +841,11 @@ this way that exercises the darwin branch instead of turning the macOS leg red.
 def _no_usable_bash(platform: str | None = None) -> None:
     """Never return: fail where bash is guaranteed, skip where it may be absent.
 
-    A skip is invisible in a green suite, and six tests below run the real script, so a
-    missing shell on a platform that always ships one would quietly delete the guard.
-    POSIX always provides bash, so its absence there is a broken environment and must be
-    red. Windows may legitimately have only the WSL stub, so there it is a reported
-    skip.
+    A skip is invisible in a green suite, and every install test below runs the real
+    script, so a missing shell on a platform that always ships one would quietly delete
+    the guard. POSIX always provides bash, so its absence there is a broken environment
+    and must be red. Windows may legitimately have only the WSL stub, so there it is a
+    reported skip.
 
     ``platform`` is a parameter so both outcomes can be tested here, on either platform.
     """
@@ -853,8 +853,9 @@ def _no_usable_bash(platform: str | None = None) -> None:
     if actual == "nt":
         pytest.skip("no usable bash: only Windows' WSL stub was found")
     pytest.fail(
-        f"no usable bash on {actual}, where one is guaranteed; every candidate was "
-        "missing, so the install tests would have skipped instead of running"
+        f"no usable bash on {actual}, where one is guaranteed; looked for `bash` on "
+        "PATH and for Git for Windows' bash.exe — install bash or fix PATH, because "
+        "every install test below runs the real script through it"
     )
 
 
@@ -958,7 +959,8 @@ def _installed(tmp_path: Path) -> dict[Path, list[str]]:
 
 
 def test_a_missing_bash_is_fatal_where_posix_guarantees_one() -> None:
-    """Six tests run the real script, and a skip would delete them from a green run.
+    """Every install test runs the real script; a skip would delete them from a green
+    run.
 
     So the absence of a shell is a failure on a platform that always ships one, and a
     reported skip only on Windows, where it may legitimately have nothing but the WSL
@@ -967,18 +969,44 @@ def test_a_missing_bash_is_fatal_where_posix_guarantees_one() -> None:
     ``pytest.raises`` cannot do this alone: ``Skipped`` does not match ``Failed``, so an
     unexpected skip would propagate and mark *this* test skipped — green, and the guard
     gone. The exception is caught as ``BaseException`` (which is what pytest's outcome
-    exceptions derive from) and its type is asserted.
+    exceptions derive from) and its exact type is asserted, so the ``XFailed`` subclass
+    of ``Failed`` cannot stand in for a failure either.
     """
     with pytest.raises(BaseException) as on_posix:
         _no_usable_bash("posix")
-    assert isinstance(on_posix.value, pytest.fail.Exception), (
+    assert type(on_posix.value) is pytest.fail.Exception, (
         f"a POSIX platform must fail, not {type(on_posix.value).__name__}: a skip "
         "would delete the install tests from a green run"
     )
 
     with pytest.raises(BaseException) as on_windows:
         _no_usable_bash("nt")
-    assert isinstance(on_windows.value, pytest.skip.Exception)
+    assert type(on_windows.value) is pytest.skip.Exception
+
+
+def test_bash_routes_an_absent_shell_through_the_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pin the call site: an inline decision in ``_bash`` was the original defect.
+
+    The test above pins the policy; this pins that ``_bash`` uses it, which is the half
+    that can silently regress. ``which`` is emptied and the two Windows candidates are
+    made not to exist, so the choice falls to the policy: Windows must then skip and
+    POSIX must fail. A hardcoded skip is caught on POSIX, a hardcoded fail on Windows.
+    """
+    real_exists = Path.exists
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+    monkeypatch.setattr(
+        Path,
+        "exists",
+        lambda self: real_exists(self) if "Program Files" not in str(self) else False,
+    )
+    expected = pytest.skip.Exception if os.name == "nt" else pytest.fail.Exception
+
+    with pytest.raises(BaseException) as stopped:
+        _bash()
+
+    assert type(stopped.value) is expected, type(stopped.value).__name__
 
 
 @pytest.mark.parametrize("ostype", ["msys", "darwin"])
@@ -1216,7 +1244,8 @@ def test_the_install_is_a_live_link_to_the_add_on_directory(tmp_path: Path) -> N
     resolves to the add-on directory it was made from.
     """
     repo = _installer_tree(tmp_path, ADD_IN_NAME)
-    assert _run_installer(repo, tmp_path).returncode == 0
+    result = _run_installer(repo, tmp_path)
+    assert result.returncode == 0, result.stderr
 
     installed = {path: kids for path, kids in _installed(tmp_path).items() if kids}
     (add_ins,) = installed
@@ -1239,7 +1268,8 @@ def test_the_install_is_a_copy_on_windows(tmp_path: Path) -> None:
     skipping — which is what this test failing would tell you.
     """
     repo = _installer_tree(tmp_path, ADD_IN_NAME)
-    assert _run_installer(repo, tmp_path).returncode == 0
+    result = _run_installer(repo, tmp_path)
+    assert result.returncode == 0, result.stderr
 
     installed = {path: kids for path, kids in _installed(tmp_path).items() if kids}
     (add_ins,) = installed
@@ -1248,6 +1278,10 @@ def test_the_install_is_a_copy_on_windows(tmp_path: Path) -> None:
     assert not entry.is_symlink(), (
         "Git Bash created a real link, so the -L branch of the removal path is "
         "reachable on this platform and its test should stop skipping"
+    )
+    assert not os.path.isjunction(entry), (
+        "the entry is a junction, which reports as neither a symlink nor a copy; the "
+        "-L branch is reachable through it"
     )
     assert entry.is_dir()
 
