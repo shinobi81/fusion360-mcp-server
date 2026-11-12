@@ -16,10 +16,14 @@ being cut, or when a document names a lint command CI does not run.
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
 import subprocess
 import tomllib
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
@@ -806,22 +810,6 @@ def _documents_naming_the_add_in(pages: dict[str, str]) -> list[str]:
     )
 
 
-INSTALL_TARGET = re.compile(
-    r"^\s*TARGET=[\"']?\$\{?ADDINS_DIR\}?/(?P<name>[^\"'\s]+)",
-    re.MULTILINE,
-)
-"""The folder an `install-addon.sh` assignment names, whatever its quoting.
-
-Anchored to the assignment, so a commented-out `TARGET=` is not read, and both
-`$ADDINS_DIR` and `${ADDINS_DIR}` are accepted because bash spells it both ways.
-"""
-
-
-def _install_targets(script: str) -> list[str]:
-    """Every folder name *script* sets TARGET to, in file order."""
-    return INSTALL_TARGET.findall(script)
-
-
 def test_the_entry_module_is_named_after_the_manifest():
     entry = ADD_IN_MANIFEST.with_suffix(".py")
 
@@ -831,27 +819,104 @@ def test_the_entry_module_is_named_after_the_manifest():
     )
 
 
-def test_the_install_script_installs_under_the_add_ins_name():
-    path = REPO_ROOT / "scripts" / "install-addon.sh"
-    assert path.exists(), (
-        "scripts/install-addon.sh is gone; this guard would pass vacuously"
-    )
-    script = path.read_text(encoding="utf-8")
-    targets = _install_targets(script)
+ADD_INS_TAIL = Path("Autodesk/Autodesk Fusion 360/API/AddIns")
+"""Where the script puts the add-in, relative to whichever root it reads.
 
-    assert targets, (
-        "scripts/install-addon.sh sets no TARGET=$ADDINS_DIR/<name>; this guard "
-        "would pass vacuously"
+It reads ``$APPDATA`` on msys/cygwin and ``$HOME`` on darwin, and *both* are redirected
+into the test's own directory.  ``OSTYPE`` is a bash shell variable, so redirecting only
+the branch this bash appears to take would leave the other one able to reach the real
+Fusion install - where the script's ``rm -rf "$TARGET"`` would delete it.
+"""
+
+
+def _bash() -> str:
+    """A bash that is not Windows' WSL stub, or a skip.
+
+    ``C:\\Windows\\System32\\bash.exe`` sits on PATH on every Windows runner and exits
+    with "no installed distributions", so resolving ``bash`` by name alone can hand this
+    test a shell that never runs the script.
+    """
+    candidates = [
+        shutil.which("bash"),
+        r"C:\Program Files\Git\bin\bash.exe",
+        r"C:\Program Files\Git\usr\bin\bash.exe",
+    ]
+    usable = [
+        candidate
+        for candidate in candidates
+        if candidate
+        and "system32" not in candidate.lower()
+        and Path(candidate).exists()
+    ]
+    if not usable:
+        pytest.skip("no usable bash: only Windows' WSL stub was found")
+    return usable[0]
+
+
+def _installer_tree(tmp_path: Path, *stems: str) -> Path:
+    """A throwaway repo holding only what the script reads: itself and its manifests.
+
+    The script resolves ``addon/`` from its own location, so this copy is
+    self-contained and the repository's ``addon/`` is never written to.  Variadic on
+    purpose: Task 2 needs a tree with none and with two.
+    """
+    repo = tmp_path / "repo"
+    (repo / "scripts").mkdir(parents=True)
+    (repo / "addon").mkdir()
+    shutil.copy2(REPO_ROOT / "scripts" / "install-addon.sh", repo / "scripts")
+    for stem in stems:
+        shutil.copy2(ADD_IN_MANIFEST, repo / "addon" / f"{stem}.manifest")
+    return repo
+
+
+def _run_installer(repo: Path, tmp_path: Path) -> subprocess.CompletedProcess:
+    """Run the copied script against a throwaway add-ins root.
+
+    ``OSTYPE`` is forced so every CI leg drives one branch, and decoding is explicit
+    UTF-8: the script prints ``✓``, which cp1252 cannot hold.  Both roots the script
+    can read are redirected, and the script's path is passed POSIX-style, because a
+    literal ``C:\\...`` argument reaches bash with backslashes it does not resolve.
+    """
+    root = tmp_path / "root"
+    (root / ADD_INS_TAIL).mkdir(parents=True)
+    return subprocess.run(
+        [_bash(), (repo / "scripts" / "install-addon.sh").as_posix()],
+        env={**os.environ, "OSTYPE": "msys", "APPDATA": str(root), "HOME": str(root)},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
     )
-    assert set(targets) == {ADD_IN_NAME}, (
-        f"scripts/install-addon.sh installs into {sorted(set(targets))}, but the "
-        f"add-in is {ADD_IN_NAME!r}. A rename that skips the script leaves the folder "
-        "and the name disagreeing on every machine that installs afterwards."
+
+
+@pytest.mark.parametrize("stem", [ADD_IN_NAME, "RenamedAddIn"])
+def test_the_install_script_installs_under_the_name_its_manifest_declares(
+    tmp_path: Path, stem: str
+) -> None:
+    """The installed folder follows the manifest's filename, whatever it is called.
+
+    ``RenamedAddIn`` is the case that can fail: the script used to spell the name, so a
+    manifest called anything else still installed as ``Fusion360MCP``.  The first
+    parameter keeps a failure naming the real add-in instead of a fixture.
+    """
+    repo = _installer_tree(tmp_path, stem)
+
+    result = _run_installer(repo, tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    add_ins_dirs = [
+        path for path in (tmp_path / "root").rglob("AddIns") if path.is_dir()
+    ]
+    assert len(add_ins_dirs) == 1, add_ins_dirs
+    add_ins = add_ins_dirs[0]
+    assert [path.name for path in add_ins.iterdir()] == [stem]
+    assert (add_ins / stem / f"{stem}.manifest").exists(), (
+        "the installed entry is not the add-in's own directory"
     )
-    assert f"'{ADD_IN_NAME}'" in script, (
-        f"scripts/install-addon.sh no longer prints {ADD_IN_NAME!r} in the "
-        "instructions it gives the user, so the line they follow and the folder it "
-        "installs into can disagree."
+    assert f"'{stem}'" in result.stdout, (
+        "the instructions printed to the user name a different add-in than the folder "
+        "that was installed"
     )
 
 
@@ -925,17 +990,6 @@ def test_the_dialog_entry_is_read_through_ascii_arrows_too():
         assert _add_in_name_claims(f"Shift+S → Add-Ins {arrow} OtherTab\n") == [
             (1, "OtherTab")
         ]
-
-
-def test_the_install_target_is_read_whatever_its_quoting():
-    for line in (
-        'TARGET="$ADDINS_DIR/Name"',
-        "TARGET='$ADDINS_DIR/Name'",
-        'TARGET="${ADDINS_DIR}/Name"',
-        "TARGET=$ADDINS_DIR/Name",
-    ):
-        assert _install_targets(line) == ["Name"], line
-    assert _install_targets('# TARGET="$ADDINS_DIR/Old"\n') == []
 
 
 def test_the_dialog_button_skip_list_is_exactly_the_buttons():

@@ -18,9 +18,14 @@ else
     exit 1
 fi
 
-TARGET="$ADDINS_DIR/Fusion360MCP"
+# The add-in's name comes from its manifest: Fusion loads <name>.py beside
+# <name>.manifest, and this script links addon/ in as <name>.  One source, so the
+# folder installed and the instructions printed below cannot disagree.
+ADD_IN_NAME="$(basename "$ADDON_SRC"/*.manifest .manifest)"
 
-echo "Installing Fusion360MCP add-in..."
+TARGET="$ADDINS_DIR/$ADD_IN_NAME"
+
+echo "Installing $ADD_IN_NAME add-in..."
 echo "  Source: $ADDON_SRC"
 echo "  Target: $TARGET"
 
@@ -38,7 +43,7 @@ echo ""
 echo "Next steps:"
 echo "  1. Open Fusion 360"
 echo "  2. Press Shift+S to open Scripts and Add-Ins"
-echo "  3. Find 'Fusion360MCP' in the Add-Ins tab"
+echo "  3. Find '$ADD_IN_NAME' in the Add-Ins tab"
 echo "  4. Click 'Run' to start the add-in"
 echo ""
 echo "The add-in will listen on localhost:9876"
