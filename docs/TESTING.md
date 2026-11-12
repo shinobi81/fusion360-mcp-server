@@ -17,8 +17,11 @@ uv run ruff format --check src/ tests/ fuzz/ scripts/    # what CI runs (addon/ 
 
 Nothing in the suite needs Fusion, a network, or a display. The packaging guards in
 `tests/test_packaging.py` shell out to `git ls-files` to read the tracked documents;
-that is the suite's only git dependency. The socket tests bind `127.0.0.1` and close
-immediately.
+that is the suite's only git dependency. The install tests drive
+`scripts/install-addon.sh` through `bash`: POSIX always provides one, and the suite
+fails rather than skips without it — the install tests that run the script would
+otherwise vanish from a green run — while Windows skips those tests with the reason when
+only the WSL stub is found. The socket tests bind `127.0.0.1` and close immediately.
 
 ## The coverage floor
 
