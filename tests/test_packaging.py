@@ -16,10 +16,14 @@ being cut, or when a document names a lint command CI does not run.
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
 import subprocess
 import tomllib
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
@@ -806,22 +810,6 @@ def _documents_naming_the_add_in(pages: dict[str, str]) -> list[str]:
     )
 
 
-INSTALL_TARGET = re.compile(
-    r"^\s*TARGET=[\"']?\$\{?ADDINS_DIR\}?/(?P<name>[^\"'\s]+)",
-    re.MULTILINE,
-)
-"""The folder an `install-addon.sh` assignment names, whatever its quoting.
-
-Anchored to the assignment, so a commented-out `TARGET=` is not read, and both
-`$ADDINS_DIR` and `${ADDINS_DIR}` are accepted because bash spells it both ways.
-"""
-
-
-def _install_targets(script: str) -> list[str]:
-    """Every folder name *script* sets TARGET to, in file order."""
-    return INSTALL_TARGET.findall(script)
-
-
 def test_the_entry_module_is_named_after_the_manifest():
     entry = ADD_IN_MANIFEST.with_suffix(".py")
 
@@ -831,28 +819,318 @@ def test_the_entry_module_is_named_after_the_manifest():
     )
 
 
-def test_the_install_script_installs_under_the_add_ins_name():
-    path = REPO_ROOT / "scripts" / "install-addon.sh"
-    assert path.exists(), (
-        "scripts/install-addon.sh is gone; this guard would pass vacuously"
-    )
-    script = path.read_text(encoding="utf-8")
-    targets = _install_targets(script)
+ADD_INS_TAIL = Path("Autodesk/Autodesk Fusion 360/API/AddIns")
+"""Where the script puts the add-in, relative to whichever root it reads.
 
-    assert targets, (
-        "scripts/install-addon.sh sets no TARGET=$ADDINS_DIR/<name>; this guard "
-        "would pass vacuously"
+It reads ``$APPDATA`` on msys/cygwin and ``$HOME`` on darwin, and *both* are redirected
+into the test's own directory.  ``OSTYPE`` is a bash shell variable, so redirecting only
+the branch this bash appears to take would leave the other one able to reach the real
+Fusion install - where the script's ``rm -rf "$TARGET"`` would delete it.
+"""
+
+DARWIN_ADD_INS_TAIL = Path("Library/Application Support") / ADD_INS_TAIL
+"""The same place under ``$HOME``, where the script installs when ``OSTYPE`` is darwin.
+
+Both tails are created, so the test passes whichever branch the platform's bash takes
+and finds the install by search rather than by assuming one.  Forcing ``OSTYPE`` is
+then belt and braces: bash 3.2 on macOS may overwrite an inherited ``OSTYPE``, and
+this way that exercises the darwin branch instead of turning the macOS leg red.
+"""
+
+
+def _bash() -> str:
+    """A bash that is not Windows' WSL stub, or a skip.
+
+    ``C:\\Windows\\System32\\bash.exe`` sits on PATH on every Windows runner and exits
+    with "no installed distributions", so resolving ``bash`` by name alone can hand this
+    test a shell that never runs the script.
+    """
+    candidates = [
+        shutil.which("bash"),
+        r"C:\Program Files\Git\bin\bash.exe",
+        r"C:\Program Files\Git\usr\bin\bash.exe",
+    ]
+    usable = [
+        candidate
+        for candidate in candidates
+        if candidate
+        and "system32" not in candidate.lower()
+        and Path(candidate).exists()
+    ]
+    if not usable:
+        pytest.skip("no usable bash: only Windows' WSL stub was found")
+    return usable[0]
+
+
+def _installer_tree(tmp_path: Path, *stems: str) -> Path:
+    """A throwaway repo holding only what the script reads: itself and its manifests.
+
+    The script resolves ``addon/`` from its own location, so this copy is
+    self-contained and the repository's ``addon/`` is never written to.  Variadic on
+    purpose: the refusal test needs a tree with none and with two.
+    """
+    repo = tmp_path / "repo"
+    (repo / "scripts").mkdir(parents=True)
+    (repo / "addon").mkdir()
+    shutil.copy2(REPO_ROOT / "scripts" / "install-addon.sh", repo / "scripts")
+    for stem in stems:
+        shutil.copy2(ADD_IN_MANIFEST, repo / "addon" / f"{stem}.manifest")
+    return repo
+
+
+def _run_installer(
+    repo: Path, tmp_path: Path, ostype: str = "msys"
+) -> subprocess.CompletedProcess:
+    """Run the copied script against a throwaway add-ins root.
+
+    Decoding is explicit UTF-8: the script prints ``✓``, which cp1252 cannot hold.  Both
+    roots the script can read are redirected, and the script's path is passed
+    POSIX-style, because a literal ``C:\\...`` argument reaches bash with backslashes it
+    does not resolve.
+
+    ``ostype`` is a parameter rather than a constant so the success test can drive both
+    of the script's install branches.  Forcing it is not a claim of control: a bash may
+    overwrite an inherited ``OSTYPE``, which is why the fixture creates both add-ins
+    directories and the install is found by search.
+    """
+    root = tmp_path / "root"
+    (root / ADD_INS_TAIL).mkdir(parents=True, exist_ok=True)
+    (root / DARWIN_ADD_INS_TAIL).mkdir(parents=True, exist_ok=True)
+    return subprocess.run(
+        [_bash(), (repo / "scripts" / "install-addon.sh").as_posix()],
+        env={**os.environ, "OSTYPE": ostype, "APPDATA": str(root), "HOME": str(root)},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
     )
-    assert set(targets) == {ADD_IN_NAME}, (
-        f"scripts/install-addon.sh installs into {sorted(set(targets))}, but the "
-        f"add-in is {ADD_IN_NAME!r}. A rename that skips the script leaves the folder "
-        "and the name disagreeing on every machine that installs afterwards."
+
+
+NEIGHBOUR = "NeighbourAddIn"
+"""Somebody else's add-in, put in the add-ins directories before the script runs.
+
+The script's ``rm -rf`` removes ``$TARGET``, which becomes the whole add-ins directory
+when ``ADD_IN_NAME`` comes out empty. "Nothing was installed" cannot see that: an
+emptied directory is an empty list. A neighbour can. Both tails get one, so no test
+depends on which of the script's two branches the platform's bash takes.
+"""
+
+
+def _seed_a_neighbour(tmp_path: Path) -> None:
+    """Create ``NEIGHBOUR`` inside both add-ins directories, as Fusion would have."""
+    root = tmp_path / "root"
+    for tail in (ADD_INS_TAIL, DARWIN_ADD_INS_TAIL):
+        (root / tail / NEIGHBOUR).mkdir(parents=True, exist_ok=True)
+
+
+def _installed(tmp_path: Path) -> dict[Path, list[str]]:
+    """Every add-ins directory under the redirected roots, and what landed in each.
+
+    Found by search, so the test never assumes which of the script's two branches ran:
+    the one directory it installed into is the non-empty one.
+    """
+    return {
+        path: [child.name for child in path.iterdir()]
+        for path in (tmp_path / "root").rglob("AddIns")
+        if path.is_dir()
+    }
+
+
+@pytest.mark.parametrize("ostype", ["msys", "darwin"])
+@pytest.mark.parametrize("stem", [ADD_IN_NAME, "RenamedAddIn"])
+def test_the_install_script_installs_under_the_name_its_manifest_declares(
+    tmp_path: Path, stem: str, ostype: str
+) -> None:
+    """The installed folder follows the manifest's filename, whatever it is called.
+
+    ``RenamedAddIn`` is the case that can fail: the script used to spell the name, so a
+    manifest called anything else still installed as ``Fusion360MCP``.  The first
+    parameter keeps a failure naming the real add-in instead of a fixture.
+
+    Both of the script's install branches are driven, because one of them existed with
+    nothing executing it: ``darwin`` installs under ``$HOME/Library/...`` and ``msys``
+    under ``$APPDATA``.
+    """
+    repo = _installer_tree(tmp_path, stem)
+
+    result = _run_installer(repo, tmp_path, ostype)
+
+    assert result.returncode == 0, result.stderr
+    installed = {path: kids for path, kids in _installed(tmp_path).items() if kids}
+    assert len(installed) == 1, installed
+    (add_ins,) = installed
+    assert installed[add_ins] == [stem]
+    assert (add_ins / stem / f"{stem}.manifest").exists(), (
+        "the installed entry is not the add-in's own directory"
     )
-    assert f"'{ADD_IN_NAME}'" in script, (
-        f"scripts/install-addon.sh no longer prints {ADD_IN_NAME!r} in the "
-        "instructions it gives the user, so the line they follow and the folder it "
-        "installs into can disagree."
+    assert f"'{stem}'" in result.stdout, (
+        "the instructions printed to the user name a different add-in than the folder "
+        "that was installed"
     )
+    other = "RenamedAddIn" if stem == ADD_IN_NAME else ADD_IN_NAME
+    assert other not in result.stdout, (
+        f"the output still names {other!r} as well as {stem!r}; one of the lines the "
+        "script prints has its own copy of the name again"
+    )
+    assert result.stdout.count(stem) >= 3, (
+        "the banner, the Target line and the Add-Ins instruction each name the add-in "
+        f"by its derived name; only {result.stdout.count(stem)} still do"
+    )
+
+
+@pytest.mark.parametrize(
+    ("stems", "expected"),
+    [((), "found 0"), (("Fusion360MCP", "Second"), "Second.manifest")],
+)
+def test_the_install_script_refuses_when_addon_holds_no_single_manifest(
+    tmp_path: Path, stems: tuple[str, ...], expected: str
+) -> None:
+    """Zero manifests and two are both refused, with a message naming the problem.
+
+    Neither state is survivable: with none, ``ADD_IN_NAME`` comes out empty, so
+    ``TARGET`` is the add-ins directory itself and the script's ``rm -rf`` takes every
+    add-in in it; with two, ``basename`` exits "extra operand" and never mentions
+    manifests.
+    """
+    repo = _installer_tree(tmp_path, *stems)
+    _seed_a_neighbour(tmp_path)
+
+    result = _run_installer(repo, tmp_path)
+
+    assert result.returncode != 0
+    assert expected in result.stderr
+    kids = _installed(tmp_path)
+    assert len(kids) == 2, (
+        f"the fixture's two add-ins directories should both still exist, found {kids}; "
+        "a deleted directory would make the next assertion vacuous"
+    )
+    assert all(names == [NEIGHBOUR] for names in kids.values()), (
+        "the script installed something, or removed the add-ins that were already there"
+    )
+
+
+def test_the_install_script_refuses_a_manifest_that_is_not_a_file(
+    tmp_path: Path,
+) -> None:
+    """A directory called `*.manifest` matches the glob and would name the add-in.
+
+    The glob does not stat, so without this check a lone ``Bogus.manifest/`` counts as
+    the one manifest and installs under ``Bogus``, with no manifest for Fusion to read.
+    A dangling symlink escapes the same way; ``-f`` refuses both.
+    """
+    repo = _installer_tree(tmp_path)
+    (repo / "addon" / "Bogus.manifest").mkdir()
+    _seed_a_neighbour(tmp_path)
+
+    result = _run_installer(repo, tmp_path)
+
+    assert result.returncode != 0
+    assert "Bogus.manifest" in result.stderr, result.stderr
+    kids = _installed(tmp_path)
+    assert len(kids) == 2, kids
+    assert all(names == [NEIGHBOUR] for names in kids.values()), (
+        "the script installed under a name no manifest declared"
+    )
+
+
+def _unmarked_mentions(text: str) -> list[str]:
+    """Lines of *text* that spell the add-in's name without saying they meant to.
+
+    ``name-ok:`` is the escape hatch for a mention that is deliberately not a copy of
+    the name - a migration note, a path, a URL - so closing the class does not mean
+    deleting information to get a suite green.
+    """
+    return [
+        line
+        for line in text.splitlines()
+        if ADD_IN_NAME in line and "name-ok:" not in line
+    ]
+
+
+def test_the_install_script_never_spells_the_add_ins_name() -> None:
+    """The name has one source: the manifest. A comment is a copy too.
+
+    The behavioural tests only read the script's output, so a hardcoded name in a
+    comment is invisible to them - which is how `line 2` survived the first fix. This
+    is the only assertion that closes that class, and it cannot see whether the script
+    runs, which is why it sits beside the tests that do.
+    """
+    script = (REPO_ROOT / "scripts" / "install-addon.sh").read_text(encoding="utf-8")
+
+    assert _unmarked_mentions(script) == [], (
+        f"scripts/install-addon.sh spells {ADD_IN_NAME!r} again on "
+        f"{_unmarked_mentions(script)!r}; the name must come from the manifest. A "
+        "deliberate mention is marked `name-ok:` on its own line."
+    )
+    assert _unmarked_mentions(f"# name-ok: moved from {ADD_IN_NAME}\n") == []
+    assert _unmarked_mentions(f"# installing into {ADD_IN_NAME}\n") != []
+
+
+def test_the_install_script_reinstalls_over_an_existing_install(tmp_path: Path) -> None:
+    """The second run must go through the removal path, not fail on an existing link.
+
+    That path is the only destructive line in the script, and a fresh ``tmp_path`` per
+    test never reached it. ``ln -s`` onto an existing entry fails, so a removed or
+    broken removal branch turns the second run red here rather than on a developer's
+    machine.
+    """
+    repo = _installer_tree(tmp_path, ADD_IN_NAME)
+    _seed_a_neighbour(tmp_path)
+    first = _run_installer(repo, tmp_path)
+    assert first.returncode == 0, first.stderr
+
+    second = _run_installer(repo, tmp_path)
+
+    assert second.returncode == 0, second.stderr
+    assert "Removing existing installation" in second.stdout, (
+        "the second run did not go through the removal path; this test would pass "
+        "without exercising the one destructive line in the script"
+    )
+    kids = _installed(tmp_path)
+    assert len(kids) == 2, kids
+    assert all(NEIGHBOUR in names for names in kids.values()), (
+        "the removal took an add-in that was already there, so it removed more than "
+        "the install it was replacing"
+    )
+    installed = {
+        path: sorted(set(names) - {NEIGHBOUR})
+        for path, names in kids.items()
+        if set(names) - {NEIGHBOUR}
+    }
+    assert len(installed) == 1, installed
+    (add_ins,) = installed
+    assert installed[add_ins] == [ADD_IN_NAME]
+    assert (add_ins / ADD_IN_NAME / f"{ADD_IN_NAME}.manifest").exists(), (
+        "the entry is not a link to the add-in's own directory"
+    )
+
+
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Git Bash copies instead of linking, so there is no dangling link to make",
+)
+def test_the_install_script_replaces_a_link_whose_target_is_gone(
+    tmp_path: Path,
+) -> None:
+    """`[ -L "$TARGET" ]` is the only half of the removal test that a live link misses.
+
+    A developer who moves or renames the checkout leaves exactly this: a symlink in
+    AddIns pointing at a path that no longer exists. `[ -e ]` is false for it, so
+    without the `-L` half the script skips the removal and `ln` then dies with "File
+    exists".
+    """
+    repo = _installer_tree(tmp_path, ADD_IN_NAME)
+    root = tmp_path / "root"
+    for tail in (ADD_INS_TAIL, DARWIN_ADD_INS_TAIL):
+        target = root / tail / ADD_IN_NAME
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.symlink_to(tmp_path / "moved-away")
+
+    result = _run_installer(repo, tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert "Removing existing installation" in result.stdout
 
 
 def test_a_document_naming_the_add_in_uses_its_name():
@@ -887,8 +1165,10 @@ def test_every_document_naming_the_add_in_uses_its_name():
     that is not there.
 
     The script prints the name more often than this reads it - the ``TARGET`` it
-    installs into and the instruction it echoes are checked, its comments are not - so
-    the claim here is about the copies that are read, not every occurrence.
+    installs into and the instruction it echoes are checked here, and
+    ``test_the_install_script_never_spells_the_add_ins_name`` covers a mention in the
+    script's own text - so the claim here is about the copies a reader follows, not
+    every occurrence.
 
     The sweep reads tracked markdown, so a new page is covered the moment it exists, and
     README plus devcontainer/README.md must keep naming the add-in - otherwise a rename
@@ -925,17 +1205,6 @@ def test_the_dialog_entry_is_read_through_ascii_arrows_too():
         assert _add_in_name_claims(f"Shift+S → Add-Ins {arrow} OtherTab\n") == [
             (1, "OtherTab")
         ]
-
-
-def test_the_install_target_is_read_whatever_its_quoting():
-    for line in (
-        'TARGET="$ADDINS_DIR/Name"',
-        "TARGET='$ADDINS_DIR/Name'",
-        'TARGET="${ADDINS_DIR}/Name"',
-        "TARGET=$ADDINS_DIR/Name",
-    ):
-        assert _install_targets(line) == ["Name"], line
-    assert _install_targets('# TARGET="$ADDINS_DIR/Old"\n') == []
 
 
 def test_the_dialog_button_skip_list_is_exactly_the_buttons():

@@ -1,8 +1,11 @@
 #!/bin/bash
-# Install/reinstall the Fusion360MCP add-in via symlink (for development)
+# Install/reinstall the add-in via symlink (for development)
 # Usage: ./scripts/install-addon.sh
 
 set -e
+# No `set -u` here on purpose: before bash 4.4, expanding an empty array's elements is
+# an unbound-variable error under nounset, and `addon/` may legitimately hold none while
+# the count check below is deciding to refuse. `set -e` is the only mode this relies on.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
@@ -18,9 +21,41 @@ else
     exit 1
 fi
 
-TARGET="$ADDINS_DIR/Fusion360MCP"
+# The add-in's name comes from its manifest: Fusion loads <name>.py beside
+# <name>.manifest, and this script links addon/ in as <name>.  One source, so the
+# folder installed and the instructions printed below cannot disagree.
+#
+# The count check below is not tidiness.  With no manifest in addon/, ADD_IN_NAME comes
+# out empty, TARGET becomes the AddIns directory itself, and the reinstall path runs
+# `rm -rf` on every add-in the user has installed.  With two, basename exits with
+# "extra operand", a message that never mentions manifests.  Names beginning with a
+# dot never match the glob, so a dot-prefixed manifest is refused as "found 0" rather
+# than counted.
+shopt -s nullglob
+ADD_IN_MANIFESTS=("$ADDON_SRC"/*.manifest)
+shopt -u nullglob
 
-echo "Installing Fusion360MCP add-in..."
+if [ "${#ADD_IN_MANIFESTS[@]}" -ne 1 ]; then
+    echo "addon/ must hold exactly one *.manifest; found ${#ADD_IN_MANIFESTS[@]}" >&2
+    for manifest in "${ADD_IN_MANIFESTS[@]}"; do
+        echo "  ${manifest##*/}" >&2
+    done
+    exit 1
+fi
+
+# The glob does not stat its matches, so a directory - or a dangling symlink - called
+# <something>.manifest counts as the one manifest and would name the add-in after a
+# file Fusion cannot load.
+if [ ! -f "${ADD_IN_MANIFESTS[0]}" ]; then
+    echo "addon/${ADD_IN_MANIFESTS[0]##*/} is not a regular file" >&2
+    exit 1
+fi
+
+ADD_IN_NAME="$(basename "${ADD_IN_MANIFESTS[0]}" .manifest)"
+
+TARGET="$ADDINS_DIR/$ADD_IN_NAME"
+
+echo "Installing $ADD_IN_NAME add-in..."
 echo "  Source: $ADDON_SRC"
 echo "  Target: $TARGET"
 
@@ -38,7 +73,7 @@ echo ""
 echo "Next steps:"
 echo "  1. Open Fusion 360"
 echo "  2. Press Shift+S to open Scripts and Add-Ins"
-echo "  3. Find 'Fusion360MCP' in the Add-Ins tab"
+echo "  3. Find '$ADD_IN_NAME' in the Add-Ins tab"
 echo "  4. Click 'Run' to start the add-in"
 echo ""
 echo "The add-in will listen on localhost:9876"
