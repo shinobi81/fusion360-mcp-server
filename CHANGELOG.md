@@ -20,17 +20,19 @@ the version in its manifest moved.
   `src/fusion360_mcp/*` and its dist-info, and the sdist held `tests/` but not `addon/`,
   so a tag install could not reach Fusion without a clone: `uvx --from ...@vX.Y.Z`
   installed a server and left the user to run `scripts/install-addon.sh` from a
-  checkout. Both artifacts now carry the ten tracked files under `addon/` as
-  `fusion360_mcp/addon/`, and the repository still keeps one copy. (#94)
+  checkout. Both artifacts now carry the ten tracked files under `addon/` - the wheel as
+  `fusion360_mcp/addon/`, the sdist under its distribution directory - and the
+  repository still keeps one copy. (#94)
 - **`fusion360-mcp-server --install-addon [--addin-dir PATH]`** copies them into
   Fusion's AddIns folder and exits before any MCP work. `API/AddIns` is created when
   Fusion's own data folder exists. It refuses, with one stderr line and exit 1: a source
-  checkout, an `addon/` with no manifest, two manifests, or a manifest that is not a
+  checkout; an `addon/` with no manifest, two manifests, or a manifest that is not a
   regular file; a manifest that is not JSON, or whose `version` is missing, empty or not
-  a string; a missing Fusion data folder, or one that cannot be written to; a target
-  that is a symlink **or a Windows junction**; a target that is a regular file; and a
-  copy that did not land complete. A symlinked development install must be removed
-  first, because re-running `scripts/install-addon.sh` recreates the link. (#94)
+  a string; a missing Fusion data folder, or one that cannot be written to; a platform
+  that is neither Windows nor macOS; a target that is a symlink **or a Windows
+  junction**; a target that is a regular file; and a copy that did not land complete. A
+  symlinked development install must be removed first, because re-running
+  `scripts/install-addon.sh` recreates the link. (#94)
 - **A pre-publish check that the artifacts really carry it.**
   `scripts/check_artifacts_ship_addon.py` reads the `.whl` and the `.tar.gz` back,
   compares `addon/**` byte-for-byte with `git ls-files addon`, applies the same copy
