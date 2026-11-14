@@ -18,7 +18,11 @@ would only be found by whoever installed from a tarball.
 An argument may name a directory instead of a file, and the artifacts inside it are
 what gets read: the documented local command points at `dist`, because a shell that
 does not expand `dist/*.whl` - PowerShell and cmd, on this project's primary OS - would
-otherwise hand the literal glob to the check and get "cannot be read" instead.
+otherwise hand the literal glob to the check and get "cannot be read" instead.  A
+directory stands for one build output, and the release publishes both artifacts, so a
+directory holding only one of them is cannot check: checking the half that is there
+would pass a release whose other half was never built.  A file argument is a
+maintainer naming one artifact to read, and that stays one artifact.
 
 Stdlib only, and 3.12-compatible syntax: the release job runs it on the runner's own
 Python, which is not this package's floor.
@@ -52,6 +56,10 @@ PACKAGE_PREFIX = "fusion360_mcp/addon/"
 
 _WHEEL_SUFFIX = ".whl"
 _SDIST_SUFFIX = ".tar.gz"
+
+# What a build output carries.  A directory argument is expanded over these rather than
+# over "whatever it holds", so notes or an SBOM beside the artifacts are not read.
+_ARTIFACT_SUFFIXES: tuple[str, ...] = (_WHEEL_SUFFIX, _SDIST_SUFFIX)
 
 
 def shipped_findings(shipped: dict[str, bytes], tracked: dict[str, bytes]) -> list[str]:
@@ -110,18 +118,34 @@ def expand_argument(path: Path) -> list[Path]:
     The expansion happens here rather than in the shell that runs the command, because
     the documented shell is not the one every maintainer has.  Only the two artifact
     suffixes are picked up, so a `dist/` holding notes or a signature beside them
-    reads as the artifacts alone.  A directory holding neither is cannot check, not a
-    clean run: an empty `dist/` would otherwise report success over nothing.
+    reads as the artifacts alone.
+
+    A directory is a build output rather than a list of files, so it has to hold both
+    kinds.  One kind alone is cannot check, not a clean run: an empty `dist/` would
+    otherwise report success over nothing, and a `uv build` that produced only a wheel
+    would otherwise pass the gate and publish without the sdist.
     """
     if not path.is_dir():
         return [path]
     found = sorted(
         candidate
-        for suffix in (_WHEEL_SUFFIX, _SDIST_SUFFIX)
+        for suffix in _ARTIFACT_SUFFIXES
         for candidate in path.glob(f"*{suffix}")
     )
-    if not found:
+    present = [
+        suffix
+        for suffix in _ARTIFACT_SUFFIXES
+        if any(candidate.name.endswith(suffix) for candidate in found)
+    ]
+    missing = [suffix for suffix in _ARTIFACT_SUFFIXES if suffix not in present]
+    if len(missing) == len(_ARTIFACT_SUFFIXES):
         _refuse(f"{path}: holds no {_WHEEL_SUFFIX} or {_SDIST_SUFFIX} to check")
+    if missing:
+        (held,) = present
+        _refuse(
+            f"{path}: holds a {held} but no {missing[0]} to check: a directory is a "
+            "single build output, and both artifacts are published"
+        )
     return found
 
 

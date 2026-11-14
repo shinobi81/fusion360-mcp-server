@@ -122,8 +122,10 @@ error that motivated it.
    ```
 
    The argument is the directory, not `dist/*.whl dist/*.tar.gz`: the check expands it
-   itself, so the same line works in bash, PowerShell and cmd. Unpiped on purpose: a
-   status read through a pipe is the pipe's, not the check's.
+   itself, so the same line works in bash, PowerShell and cmd. A directory is one build
+   output and has to hold both artifacts — one alone is a cannot-check failure, not a
+   pass over the half that was built. Unpiped on purpose: a status read through a pipe
+   is the pipe's, not the check's.
 5. Annotated tag on the merge commit: `git tag -a vX.Y.Z -m "…"`, then
    `git push origin vX.Y.Z`.
 6. Verify the tag actually installs:

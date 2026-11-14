@@ -156,7 +156,8 @@ def test_a_directory_argument_is_expanded_to_the_artifacts_it_holds(
 
     The documented command names the directory for exactly this reason: a literal glob
     reaching `read_artifact` would be refused rather than checked.  The order is the
-    directory's, sorted - `clean.tar.gz` before `clean.whl` - not wheels first.
+    directory's, sorted - `clean.tar.gz` before `clean.whl` - not wheels first.  A
+    directory is a build output, so both artifacts have to be in it.
     """
     tracked = CHECK.tracked_add_on(REPO_ROOT)
     wheel = _wheel(tmp_path / "clean.whl", tracked)
@@ -188,7 +189,7 @@ def test_a_directory_holding_no_artifact_is_cannot_check_and_names_itself(
 
 
 def test_a_directory_picks_up_only_the_two_artifact_suffixes(tmp_path: Path, capsys):
-    """`dist/` also collects signatures and notes; only the artifacts are read.
+    """`dist/` also collects signatures, notes and an SBOM; only artifacts are read.
 
     Pinned as ignoring them rather than refusing: a directory is the build output a
     maintainer points at, not a list of files to check one by one, so anything the
@@ -196,13 +197,61 @@ def test_a_directory_picks_up_only_the_two_artifact_suffixes(tmp_path: Path, cap
     """
     tracked = CHECK.tracked_add_on(REPO_ROOT)
     wheel = _wheel(tmp_path / "clean.whl", tracked)
-    (tmp_path / "notes.txt").write_text("not an artifact\n", encoding="utf-8")
+    sdist = _sdist(tmp_path / "clean.tar.gz", tracked)
+    (tmp_path / "sbom.cdx.json").write_text("{}\n", encoding="utf-8")
 
     assert CHECK.main([str(tmp_path)]) == 0
 
+    matched = f"{len(tracked)} add-on files match addon/"
     out = capsys.readouterr().out
-    assert out.splitlines() == [f"{wheel}: {len(tracked)} add-on files match addon/"]
-    assert "notes.txt" not in out
+    assert out.splitlines() == [f"{sdist}: {matched}", f"{wheel}: {matched}"]
+    assert "sbom.cdx.json" not in out
+
+
+def test_a_directory_holding_only_a_wheel_is_cannot_check(tmp_path: Path, capsys):
+    """`uv build` producing one artifact must fail the gate, not pass over the half
+    that exists: the release publishes both, and a missing sdist would go unnoticed."""
+    tracked = CHECK.tracked_add_on(REPO_ROOT)
+    _wheel(tmp_path / "clean.whl", tracked)
+
+    with pytest.raises(SystemExit) as refused:
+        CHECK.main([str(tmp_path)])
+
+    assert refused.value.code == 2
+    stderr = capsys.readouterr().err
+    assert str(tmp_path) in stderr
+    assert ".tar.gz" in stderr
+    assert len(stderr.strip().splitlines()) == 1, stderr
+
+
+def test_a_directory_holding_only_an_sdist_is_cannot_check(tmp_path: Path, capsys):
+    tracked = CHECK.tracked_add_on(REPO_ROOT)
+    _sdist(tmp_path / "clean.tar.gz", tracked)
+
+    with pytest.raises(SystemExit) as refused:
+        CHECK.main([str(tmp_path)])
+
+    assert refused.value.code == 2
+    stderr = capsys.readouterr().err
+    assert str(tmp_path) in stderr
+    assert ".whl" in stderr
+    assert len(stderr.strip().splitlines()) == 1, stderr
+
+
+def test_a_file_argument_is_checked_alone(tmp_path: Path, capsys):
+    """A maintainer naming one artifact asked for that one, not for a build output."""
+    tracked = CHECK.tracked_add_on(REPO_ROOT)
+    wheel = _wheel(tmp_path / "clean.whl", tracked)
+    sdist = _sdist(tmp_path / "clean.tar.gz", tracked)
+
+    assert CHECK.main([str(wheel)]) == 0
+    assert CHECK.main([str(sdist)]) == 0
+
+    matched = f"{len(tracked)} add-on files match addon/"
+    assert capsys.readouterr().out.splitlines() == [
+        f"{wheel}: {matched}",
+        f"{sdist}: {matched}",
+    ]
 
 
 def test_a_path_that_is_neither_a_file_nor_a_directory_is_still_cannot_check(
