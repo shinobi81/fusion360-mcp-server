@@ -286,6 +286,21 @@ def test_a_path_that_is_neither_a_file_nor_a_directory_is_still_cannot_check(
     assert refused.value.code == 2
 
 
+def test_a_refusal_message_is_one_stderr_line_whatever_it_is_handed(capsys):
+    """`_refuse` promises one line, and a tracked file's own name now reaches it.
+
+    A name containing a newline is legal on POSIX and arrives here through
+    `tracked_add_on`, so collapsing in the one place that prints a refusal makes the
+    promise the caller's to hold rather than each message's.
+    """
+    with pytest.raises(SystemExit) as refused:
+        CHECK._refuse("addon/a\nb.py: cannot be read")
+
+    assert refused.value.code == 2
+    stderr = capsys.readouterr().err
+    assert stderr.strip().splitlines() == ["addon/a b.py: cannot be read"]
+
+
 def test_the_repository_tracks_ten_add_on_files():
     tracked = CHECK.tracked_add_on(REPO_ROOT)
 
