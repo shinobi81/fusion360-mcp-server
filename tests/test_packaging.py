@@ -10,7 +10,8 @@ the configuration no longer has, when CI stops running a gate those configuratio
 describe, when the add-in's Fusion manifest declares a version the release does
 not, when it changes the id it declares, when that add-in is renamed in one place and
 not the others, when a documented install snippet pins a release other than the one
-being cut, or when a document names a lint command CI does not run.
+being cut, when a document names a lint command CI does not run, or when the release
+stops checking that both artifacts carry the add-in.
 """
 
 from __future__ import annotations
@@ -440,6 +441,36 @@ def test_the_changelog_is_excluded_because_it_records_what_past_releases_said():
     history = {"CHANGELOG.md": _install_snippet("0.3.1")}
 
     assert _stale_pin_findings(history, "0.7.2") == ["CHANGELOG.md:1 pins v0.3.1"]
+
+
+def test_the_quick_start_installs_the_add_in_from_the_release():
+    """The parcel's whole point: a reader who installs the tag gets a working add-in.
+
+    The pin guard keeps the version honest; this keeps the *command* there, and keeps
+    it the release form.  A README that reverts to "clone, then run the flag from a
+    checkout" still mentions ``--install-addon`` before the catalogue, so the shape of
+    the command is what this asserts: ``uvx --from`` of a pinned tag, and no clone-only
+    script anywhere in the quick start.
+    """
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    quick_start = readme.split("## What it can do", 1)[0]
+    commands = [line for line in quick_start.splitlines() if "--install-addon" in line]
+
+    assert commands, "the quick start must show --install-addon"
+    assert all("uvx --from" in line for line in commands), (
+        "step 1 must install from the release with uvx --from, not from a checkout: "
+        + " | ".join(commands)
+    )
+    assert all(INSTALL_PIN.search(line) for line in commands), (
+        "step 1 must pin @vX.Y.Z, so the command cannot install a moving target: "
+        + " | ".join(commands)
+    )
+    assert "scripts/install-addon.sh" not in quick_start, (
+        "the clone path belongs in *Working on the add-in*, not in the quick start"
+    )
+    assert "scripts/install-addon.sh" in readme, (
+        "the development path must still be documented, in its own section"
+    )
 
 
 ADD_IN_INSTALL_ID = "6b98393d-7998-4d19-a8e5-c8b5e3d7f4a2"
@@ -1377,3 +1408,101 @@ def test_the_dialog_entry_is_read_through_ascii_arrows_too():
 def test_the_dialog_button_skip_list_is_exactly_the_buttons():
     """A wider skip list silences a name with no test noticing; pin it."""
     assert {"Run", "Stop", "Add"} == DIALOG_BUTTONS
+
+
+def test_the_build_maps_the_add_on_into_the_package():
+    """The wheel ships the add-in, so a tag install can put it into Fusion.
+
+    `addon/` lives outside `src/`, so a plain `packages.find` never sees it: the two
+    `package-dir` entries are what put its files in the wheel, and dropping either
+    ships a wheel whose `--install-addon` refuses as "a checkout".
+    """
+    tool = _pyproject()["tool"]["setuptools"]
+
+    assert tool["package-dir"]["fusion360_mcp.addon"] == "addon"
+    assert tool["package-dir"]["fusion360_mcp.addon.server"] == "addon/server"
+    assert "fusion360_mcp.addon" in tool["packages"]
+    assert "fusion360_mcp.addon.server" in tool["packages"]
+    assert tool["package-data"]["fusion360_mcp.addon"] == ["*.manifest"]
+
+
+def test_every_package_under_src_is_listed_explicitly():
+    """`packages` replaced `packages.find`, so a new top-level package ships nothing
+    until it is listed here - a silent omission, not a build error."""
+    listed = set(_pyproject()["tool"]["setuptools"]["packages"])
+    under_src = {
+        ".".join(path.parent.relative_to(REPO_ROOT / "src").parts)
+        for path in (REPO_ROOT / "src").rglob("__init__.py")
+    }
+
+    assert under_src - listed == set(), (
+        "these packages exist under src/ but are not in [tool.setuptools] packages, so "
+        "they would ship in no artifact"
+    )
+
+
+def _add_on_packages() -> set[str]:
+    """Every package under `addon/`, named as setuptools sees it in the wheel.
+
+    A package is a directory holding an `__init__.py`; the add-on's root holds none,
+    which is why `pyproject.toml` maps it for data rather than listing it as one.  The
+    tree decides, so renaming `server/` fails here instead of only at build time.
+    """
+    root = REPO_ROOT / "addon"
+    return {
+        "fusion360_mcp.addon." + ".".join(init.parent.relative_to(root).parts)
+        for init in root.rglob("__init__.py")
+        if init.parent != root
+    }
+
+
+def test_the_add_on_subpackages_are_the_ones_on_disk():
+    """`fusion360_mcp.addon` has no `__init__.py`; every directory that has one is a
+    package, and a package the build never sees ships in no artifact."""
+    listed = set(_pyproject()["tool"]["setuptools"]["packages"])
+    mapped = {name for name in listed if name.startswith("fusion360_mcp.addon.")}
+
+    assert mapped == _add_on_packages(), (
+        "the packages under addon/ are the ones holding an __init__.py, and each must "
+        "be in [tool.setuptools] packages"
+    )
+    assert not (REPO_ROOT / "addon" / "__init__.py").exists(), (
+        "the add-on root is mapped for package-data, not as a package, because it has "
+        "no __init__.py; adding one changes what the wheel ships"
+    )
+
+
+def test_include_package_data_is_not_set():
+    """Turning it on changes what ships, from a setting nobody re-reads; the two
+    package-dir entries are the whole claim about the add-in's files."""
+    tool = _pyproject()["tool"]["setuptools"]
+
+    assert "include-package-data" not in tool
+
+
+RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
+
+RELEASE_CHECK = "uv run --no-project python scripts/check_artifacts_ship_addon.py dist"
+"""The exact command the release runs, and the one CONTRIBUTING.md must spell.
+
+One line, so the comparison is text against text: a command wrapped across two lines
+reads as undocumented, which is why the document carries it unbroken.  It names the
+``dist`` directory rather than ``dist/*.whl dist/*.tar.gz``, because a shell that does
+not expand the glob - PowerShell and cmd on this project's primary OS - would hand the
+literal pattern to the check and have it refused.
+"""
+
+
+def test_the_release_checks_that_both_artifacts_ship_the_add_in():
+    """The wheel's add-in copy is the parcel; a release that ships without it looks
+    identical from the outside, so the check runs before publish and is documented."""
+    workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    contributing = (REPO_ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+
+    assert RELEASE_CHECK in workflow
+    assert RELEASE_CHECK in contributing, (
+        "CONTRIBUTING must name the exact command release.yml runs, so a maintainer "
+        "can check a local build with it"
+    )
+    build = workflow.index("uv build")
+    assert build < workflow.index(RELEASE_CHECK) < workflow.index("gh release create")

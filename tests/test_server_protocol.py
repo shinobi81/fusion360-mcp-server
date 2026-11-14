@@ -390,9 +390,17 @@ class TestCliSurface:
         assert seen == [("mock", "1.2.3.4", 5555)]
 
     def test_the_options_are_unchanged(self):
+        """`--install-addon` and `--addin-dir` are the install path; the three before
+        them are the server's, and their order is what `--help` shows."""
         assert isinstance(server_module.main, click.Command)
         flags = [opt for param in server_module.main.params for opt in param.opts]
-        assert flags == ["--mode", "--host", "--port"]
+        assert flags == [
+            "--mode",
+            "--host",
+            "--port",
+            "--install-addon",
+            "--addin-dir",
+        ]
 
     def test_host_and_port_defaults_read_the_environment(self, monkeypatch):
         monkeypatch.setenv("FUSION_MCP_HOST", "10.0.0.9")

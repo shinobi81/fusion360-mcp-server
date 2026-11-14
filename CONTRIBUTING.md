@@ -111,9 +111,24 @@ error that motivated it.
    made the corrected claim true — that change. The tag's tree is never rewritten, so the
    tag's copy keeps the original sentence.
 3. PR it (`chore(release): x.y.z`), merge as usual.
-4. Annotated tag on the merge commit: `git tag -a vX.Y.Z -m "…"`, then
+4. Check that the artifacts ship the add-in, unpiped, in the same tree you tag —
+   `release.yml` runs this before it publishes, so a build that loses `addon/` fails
+   here rather than in a user's install. It reads both the wheel and the sdist back
+   and compares them with `git ls-files addon`:
+
+   ```bash
+   uv build
+   uv run --no-project python scripts/check_artifacts_ship_addon.py dist
+   ```
+
+   The argument is the directory, not `dist/*.whl dist/*.tar.gz`: the check expands it
+   itself, so the same line works in bash, PowerShell and cmd. A directory is one build
+   output and has to hold both artifacts — one alone is a cannot-check failure, not a
+   pass over the half that was built. Unpiped on purpose: a status read through a pipe
+   is the pipe's, not the check's.
+5. Annotated tag on the merge commit: `git tag -a vX.Y.Z -m "…"`, then
    `git push origin vX.Y.Z`.
-5. Verify the tag actually installs:
+6. Verify the tag actually installs:
 
    ```bash
    uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@vX.Y.Z' \
