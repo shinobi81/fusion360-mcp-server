@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import subprocess
 import tarfile
 import zipfile
 from pathlib import Path
@@ -137,6 +138,27 @@ def test_absent_git_is_cannot_check_not_a_finding(monkeypatch, tmp_path: Path):
     assert exc.value.code == 2
 
 
+def test_a_tracked_file_gone_from_the_tree_is_cannot_check(
+    monkeypatch, tmp_path: Path, capsys
+):
+    """`git ls-files` names the index, not the working tree, so a file deleted after
+    being tracked is listed and cannot be read.  That is cannot check - the same
+    answer absent git and an unreadable artifact get - not a finding, and not a
+    traceback that exits 1 as if it were one."""
+    listed = subprocess.CompletedProcess(
+        args=[], returncode=0, stdout=b"addon/gone.py\0", stderr=b""
+    )
+    monkeypatch.setattr(CHECK.subprocess, "run", lambda *_args, **_kwargs: listed)
+
+    with pytest.raises(SystemExit) as refused:
+        CHECK.tracked_add_on(tmp_path)
+
+    assert refused.value.code == 2
+    stderr = capsys.readouterr().err
+    assert "gone.py" in stderr
+    assert len(stderr.strip().splitlines()) == 1, stderr
+
+
 def test_main_names_the_artifact_a_finding_came_from(tmp_path: Path, capsys):
     tracked = CHECK.tracked_add_on(REPO_ROOT)
     clean = _wheel(tmp_path / "clean.whl", tracked)
@@ -262,6 +284,21 @@ def test_a_path_that_is_neither_a_file_nor_a_directory_is_still_cannot_check(
         CHECK.main([str(tmp_path / "absent.whl")])
 
     assert refused.value.code == 2
+
+
+def test_a_refusal_message_is_one_stderr_line_whatever_it_is_handed(capsys):
+    """`_refuse` promises one line, and a tracked file's own name now reaches it.
+
+    A name containing a newline is legal on POSIX and arrives here through
+    `tracked_add_on`, so collapsing in the one place that prints a refusal makes the
+    promise the caller's to hold rather than each message's.
+    """
+    with pytest.raises(SystemExit) as refused:
+        CHECK._refuse("addon/a\nb.py: cannot be read")
+
+    assert refused.value.code == 2
+    stderr = capsys.readouterr().err
+    assert stderr.strip().splitlines() == ["addon/a b.py: cannot be read"]
 
 
 def test_the_repository_tracks_ten_add_on_files():

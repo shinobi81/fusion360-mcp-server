@@ -102,8 +102,13 @@ def installable(path: str) -> bool:
 
 
 def _refuse(message: str) -> NoReturn:
-    """One line on stderr and exit 2: cannot check, which is not a finding."""
-    print(message, file=sys.stderr)
+    """One line on stderr and exit 2: cannot check, which is not a finding.
+
+    The collapse is here rather than only at the call sites, because a message built
+    from a path is one line only if the path is: a tracked file's name is the caller's
+    input, and a newline in it is legal on POSIX.
+    """
+    print(_one_line(message), file=sys.stderr)
     raise SystemExit(2)
 
 
@@ -206,8 +211,16 @@ def tracked_add_on(root: Path) -> dict[str, bytes]:
     prefix = f"{ADD_ON_DIR}/"
     files: dict[str, bytes] = {}
     for entry in completed.stdout.decode("utf-8", "replace").split("\0"):
-        if entry.startswith(prefix):
-            files[entry.removeprefix(prefix)] = (root / entry).read_bytes()
+        if not entry.startswith(prefix):
+            continue
+        path = root / entry
+        try:
+            files[entry.removeprefix(prefix)] = path.read_bytes()
+        except OSError as error:
+            # The index names files the working tree no longer has, so a tracked file
+            # deleted without `git rm` lands here.  Unreadable is cannot check - the
+            # answer absent git gets - and a traceback would exit 1 as a finding.
+            _refuse(f"{path}: tracked but cannot be read: {_one_line(str(error))}")
     return files
 
 
@@ -226,7 +239,7 @@ def main(argv: list[str] | None = None) -> int:
         for artifact in expand_argument(Path(argument))
     ]
     tracked = tracked_add_on(ROOT)
-    findings = []
+    findings: list[str] = []
     for artifact in artifacts:
         artifact_findings = shipped_findings(read_artifact(artifact), tracked)
         findings.extend(f"{artifact}: {finding}" for finding in artifact_findings)

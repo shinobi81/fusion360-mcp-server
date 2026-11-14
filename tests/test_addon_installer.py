@@ -152,6 +152,47 @@ def test_two_manifests_are_refused_and_listed(tmp_path: Path):
     assert "Other.manifest" in str(exc.value)
 
 
+def test_a_dot_prefixed_manifest_does_not_name_the_add_in(tmp_path: Path):
+    """`install-addon.sh`'s glob never matches a dot-prefixed name, so a lone
+    `.Hidden.manifest` is refused there as "found 0".  pathlib's glob does match it,
+    and both paths have to agree on which name gets installed."""
+    source = tmp_path / "addon"
+    source.mkdir()
+    (source / ".Hidden.manifest").write_text(MANIFEST, encoding="utf-8")
+
+    with pytest.raises(InstallRefused) as exc:
+        manifest_for(source)
+
+    assert "found 0" in str(exc.value)
+
+
+def test_a_dot_prefixed_manifest_beside_a_real_one_is_ignored(tmp_path: Path):
+    source = _add_on_tree(tmp_path)
+    (source / ".Hidden.manifest").write_text(MANIFEST, encoding="utf-8")
+
+    assert manifest_for(source).name == "Fusion360MCP.manifest"
+
+
+@pytest.mark.skipif(
+    os.name != "nt", reason="POSIX globs are case-sensitive, so the case never arises"
+)
+def test_a_case_variant_manifest_does_not_name_the_add_in(tmp_path: Path):
+    """Windows globs ignore case where bash's and the copy rule's suffix test do not.
+
+    So `X.MANIFEST` alone was a candidate here and nothing to the shell, while
+    `_installable` answers False for it - an install named `X` whose `X.manifest` is
+    never copied, so Fusion is handed an add-in it cannot load.  Both paths refuse.
+    """
+    source = tmp_path / "addon"
+    source.mkdir()
+    (source / "X.MANIFEST").write_text(MANIFEST, encoding="utf-8")
+
+    with pytest.raises(InstallRefused) as exc:
+        manifest_for(source)
+
+    assert "found 0" in str(exc.value)
+
+
 def test_a_manifest_that_is_not_a_regular_file_is_refused(tmp_path: Path):
     source = tmp_path / "addon"
     (source / "Bogus.manifest").mkdir(parents=True)
