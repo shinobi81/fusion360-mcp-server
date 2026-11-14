@@ -66,7 +66,7 @@ select = ["E", "F", "I", "RUF", "B", "SIM"]
 testpaths = ["tests"]
 # Coverage is measured on every run so a regression is visible in the diff, and floored
 # just under the current number rather than at a round figure.  The measured total is
-# 62.80% over both packages, so the floor is 59: about 132 statements of slack, which
+# 62.84% over both packages, so the floor is 59: about 134 statements of slack, which
 # covers the permanent gaps below and any one deliberate dead branch.
 #
 # That total is dominated by the add-in: `addon/server` is 2612 statements at ~51%,
