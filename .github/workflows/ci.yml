@@ -44,7 +44,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --dev --frozen --python ${{ matrix.python-version }}
+        run: uv sync --dev --locked --python ${{ matrix.python-version }}
 
       # Both halves of the lint gate belong here.  `ruff check` alone left four
       # test files unformatted on `main` across two changes: nothing ran the
@@ -90,7 +90,7 @@ jobs:
         run: uv python install 3.15
 
       - name: Install dependencies
-        run: uv sync --dev --frozen --python 3.15
+        run: uv sync --dev --locked --python 3.15
 
       - name: Test
         run: uv run pytest -q
@@ -110,7 +110,7 @@ jobs:
         run: uv python install 3.15
 
       - name: Install dependencies
-        run: uv sync --dev --frozen --python 3.15
+        run: uv sync --dev --locked --python 3.15
 
       - name: Test
         run: uv run pytest -q

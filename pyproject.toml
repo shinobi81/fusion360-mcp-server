@@ -129,7 +129,8 @@ dev = [
 # time — which is the behaviour you want.  It is not a silent no-op, and the
 # group is only "empty" on non-Linux platforms, where the marker's
 # `sys_platform == 'linux'` half excludes it.  Sync it with
-# `uv sync --only-group fuzz --python 3.14`, or a target stops at
+# `uv sync --locked --only-group fuzz --python 3.14`, or a target
+# stops at
 # `import atheris` with nothing to say why.  Do not hardcode a `< 3.15` cap: it
 # goes stale the day a cp315 wheel lands.
 fuzz = [
