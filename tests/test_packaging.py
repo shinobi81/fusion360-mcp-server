@@ -1377,3 +1377,51 @@ def test_the_dialog_entry_is_read_through_ascii_arrows_too():
 def test_the_dialog_button_skip_list_is_exactly_the_buttons():
     """A wider skip list silences a name with no test noticing; pin it."""
     assert {"Run", "Stop", "Add"} == DIALOG_BUTTONS
+
+
+def test_the_build_maps_the_add_on_into_the_package():
+    """The wheel ships the add-in, so a tag install can put it into Fusion.
+
+    `addon/` lives outside `src/`, so a plain `packages.find` never sees it: the two
+    `package-dir` entries are what put its files in the wheel, and dropping either
+    ships a wheel whose `--install-addon` refuses as "a checkout".
+    """
+    tool = _pyproject()["tool"]["setuptools"]
+
+    assert tool["package-dir"]["fusion360_mcp.addon"] == "addon"
+    assert tool["package-dir"]["fusion360_mcp.addon.server"] == "addon/server"
+    assert "fusion360_mcp.addon" in tool["packages"]
+    assert "fusion360_mcp.addon.server" in tool["packages"]
+    assert tool["package-data"]["fusion360_mcp.addon"] == ["*.manifest"]
+
+
+def test_every_package_under_src_is_listed_explicitly():
+    """`packages` replaced `packages.find`, so a new top-level package ships nothing
+    until it is listed here - a silent omission, not a build error."""
+    listed = set(_pyproject()["tool"]["setuptools"]["packages"])
+    under_src = {
+        ".".join(path.parent.relative_to(REPO_ROOT / "src").parts)
+        for path in (REPO_ROOT / "src").rglob("__init__.py")
+    }
+
+    assert under_src - listed == set(), (
+        "these packages exist under src/ but are not in [tool.setuptools] packages, so "
+        "they would ship in no artifact"
+    )
+
+
+def test_the_add_on_subpackages_are_the_ones_on_disk():
+    """`fusion360_mcp.addon` has no `__init__.py`; only `server/` is a real package.
+    A second one appearing there must be mapped, not silently left out of the wheel."""
+    listed = set(_pyproject()["tool"]["setuptools"]["packages"])
+    mapped = {name for name in listed if name.startswith("fusion360_mcp.addon.")}
+
+    assert mapped == {"fusion360_mcp.addon.server"}
+
+
+def test_include_package_data_is_not_set():
+    """Turning it on changes what ships, from a setting nobody re-reads; the two
+    package-dir entries are the whole claim about the add-in's files."""
+    tool = _pyproject()["tool"]["setuptools"]
+
+    assert "include-package-data" not in tool

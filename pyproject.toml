@@ -37,10 +37,17 @@ Upstream = "https://github.com/faust-machines/fusion360-mcp-server"
 fusion360-mcp-server = "fusion360_mcp:main"
 
 [tool.setuptools]
-package-dir = { "" = "src" }
+# `addon/` is outside `src/`, so `packages.find` never sees it. These two mappings are
+# what put the add-in's files into the wheel as `fusion360_mcp/addon/`, which is what
+# `fusion360-mcp-server --install-addon` copies into Fusion. `packages` is explicit
+# because a find directive and an explicit list cannot coexist; a new package under
+# `src/` must be listed here, and a test fails when one is not.
+package-dir = { "" = "src", "fusion360_mcp.addon" = "addon", "fusion360_mcp.addon.server" = "addon/server" }
+packages = ["fusion360_mcp", "fusion360_mcp.addon", "fusion360_mcp.addon.server"]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools.package-data]
+# Only the manifest is data by suffix; the `.py` files are copied as package modules.
+"fusion360_mcp.addon" = ["*.manifest"]
 
 [build-system]
 requires = ["setuptools>=84.2.1"]
