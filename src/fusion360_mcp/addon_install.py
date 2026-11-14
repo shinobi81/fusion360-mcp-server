@@ -55,9 +55,15 @@ def manifest_for(source: Path) -> Path:
     Shallow on purpose: Fusion loads `<name>.py` beside `<name>.manifest`, so a
     nested manifest is data the copy skips and must not name the install.  The two
     checks and their wording mirror `scripts/install-addon.sh`, which is the
-    development path — both refuse rather than pick a name nobody chose.
+    development path — both refuse rather than pick a name nobody chose.  A
+    dot-prefixed name is not a candidate: the shell's glob never matches one and
+    pathlib's does, so filtering here is what keeps both paths naming the same file.
     """
-    manifests = sorted(source.glob("*.manifest"))
+    manifests = sorted(
+        manifest
+        for manifest in source.glob("*.manifest")
+        if not manifest.name.startswith(".")
+    )
     if len(manifests) != 1:
         listed = "".join(f"\n  {manifest.name}" for manifest in manifests)
         raise InstallRefused(
