@@ -140,6 +140,10 @@ def add_ins_dir(
     Fusion is not installed here and a directory tree invented under it would be an
     install nobody can find.
 
+    A folder that cannot be created — Fusion's root is there but not writable, say — is
+    refused as a line like every other refusal, rather than escaping as the
+    ``PermissionError`` the caller has no handler for.
+
     *environ* and *system* are seams — the environment and the platform name are read
     rather than guessed, so a test can hand over either one.
     """
@@ -159,7 +163,10 @@ def add_ins_dir(
             f"{fusion_root} does not exist: is Fusion 360 installed, and has it been "
             f"started once so it creates its AddIns folder?"
         )
-    path.mkdir(parents=True, exist_ok=True)
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise InstallRefused(f"cannot create {path}: {exc}") from exc
     return path
 
 
@@ -235,9 +242,11 @@ def install_addon(addin_dir: Path | None = None, source: Path | None = None) -> 
     and the folder Fusion reads on this machine.  A refusal is reported, not raised,
     because the only caller is a CLI whose exit code is the answer.
 
-    Nothing is written until every refusal has had its turn, and the first of them is
-    the link: a development install is a link to a checkout, so a copy through it
-    would overwrite the sources rather than install them.
+    No add-in file is written until every refusal has had its turn, and the first of
+    them is the link: a development install is a link to a checkout, so a copy through
+    it would overwrite the sources rather than install them.  The one thing that can
+    appear first is Fusion's own empty ``API/AddIns`` folder, which *add_ins_dir*
+    creates because Fusion is installed and the folder is missing.
     """
     try:
         source = _add_on_dir(source or add_on_source())

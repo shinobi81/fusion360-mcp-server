@@ -197,6 +197,23 @@ def test_both_layouts_are_spelled_out_verbatim():
     )
 
 
+def test_the_install_script_spells_the_same_two_tails():
+    """The other side of the pair above: the bash script is the development path and
+    resolves the same two folders.  Comparing the constants with the script's literals
+    is the only place the two spellings meet, so a component edited on one side fails
+    here rather than installing a link Fusion never loads."""
+    script = (REPO_ROOT / "scripts" / "install-addon.sh").read_text(encoding="utf-8")
+
+    assert f'"$APPDATA/{ADD_INS_TAIL}"' in script, (
+        "scripts/install-addon.sh no longer builds Windows' AddIns path from "
+        f"addon_install.ADD_INS_TAIL ({ADD_INS_TAIL})"
+    )
+    assert f'"$HOME/{DARWIN_TAIL}"' in script, (
+        "scripts/install-addon.sh no longer builds macOS' AddIns path from "
+        f"addon_install.DARWIN_TAIL ({DARWIN_TAIL})"
+    )
+
+
 def test_windows_without_appdata_is_refused_not_guessed():
     with pytest.raises(InstallRefused) as exc:
         add_ins_dir(environ={}, system="windows")
@@ -240,6 +257,32 @@ def test_the_add_ins_directory_is_created_under_an_existing_fusion_root(tmp_path
     path = add_ins_dir(environ={"APPDATA": str(tmp_path)}, system="windows")
 
     assert path.is_dir()
+
+
+def test_a_read_only_fusion_root_is_refused_as_a_line(
+    tmp_path: Path, monkeypatch, capsys
+):
+    """Fusion installed but its tree not writable: the ``mkdir`` that creates
+    ``API/AddIns`` raises ``PermissionError``, which is an ``OSError`` and not an
+    ``InstallRefused``.  Left unhandled it would escape as a traceback from a CLI whose
+    only answer is an exit code.
+    """
+    source = _add_on_tree(tmp_path)
+    (tmp_path / "Autodesk" / "Autodesk Fusion 360").mkdir(parents=True)
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setattr(addon_install, "_current_system", lambda: "windows")
+
+    def read_only(path, *args, **kwargs):
+        raise PermissionError(f"{path} is read-only")
+
+    monkeypatch.setattr(Path, "mkdir", read_only)
+
+    code = install_addon(source=source)
+    err = capsys.readouterr().err
+
+    assert code == 1
+    assert "cannot create" in err
+    assert not (tmp_path / "Autodesk" / "Autodesk Fusion 360" / "API").exists()
 
 
 def test_a_missing_fusion_root_is_refused_and_nothing_is_created(tmp_path: Path):
