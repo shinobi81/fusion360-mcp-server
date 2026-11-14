@@ -118,10 +118,12 @@ error that motivated it.
 
    ```bash
    uv build
-   uv run --no-project python scripts/check_artifacts_ship_addon.py dist/*.whl dist/*.tar.gz
+   uv run --no-project python scripts/check_artifacts_ship_addon.py dist
    ```
 
-   Unpiped on purpose: a status read through a pipe is the pipe's, not the check's.
+   The argument is the directory, not `dist/*.whl dist/*.tar.gz`: the check expands it
+   itself, so the same line works in bash, PowerShell and cmd. Unpiped on purpose: a
+   status read through a pipe is the pipe's, not the check's.
 5. Annotated tag on the merge commit: `git tag -a vX.Y.Z -m "…"`, then
    `git push origin vX.Y.Z`.
 6. Verify the tag actually installs:

@@ -15,6 +15,11 @@ Both artifacts are checked because both are published: `uvx --from ...@vX.Y.Z.ta
 builds a wheel through this same mapping, so an sdist that quietly lacked the add-in
 would only be found by whoever installed from a tarball.
 
+An argument may name a directory instead of a file, and the artifacts inside it are
+what gets read: the documented local command points at `dist`, because a shell that
+does not expand `dist/*.whl` - PowerShell and cmd, on this project's primary OS - would
+otherwise hand the literal glob to the check and get "cannot be read" instead.
+
 Stdlib only, and 3.12-compatible syntax: the release job runs it on the runner's own
 Python, which is not this package's floor.
 """
@@ -99,6 +104,27 @@ def _one_line(text: str) -> str:
     return " ".join(text.split())
 
 
+def expand_argument(path: Path) -> list[Path]:
+    """The artifacts to read for *path*: itself, or the ones a directory holds.
+
+    The expansion happens here rather than in the shell that runs the command, because
+    the documented shell is not the one every maintainer has.  Only the two artifact
+    suffixes are picked up, so a `dist/` holding notes or a signature beside them
+    reads as the artifacts alone.  A directory holding neither is cannot check, not a
+    clean run: an empty `dist/` would otherwise report success over nothing.
+    """
+    if not path.is_dir():
+        return [path]
+    found = sorted(
+        candidate
+        for suffix in (_WHEEL_SUFFIX, _SDIST_SUFFIX)
+        for candidate in path.glob(f"*{suffix}")
+    )
+    if not found:
+        _refuse(f"{path}: holds no {_WHEEL_SUFFIX} or {_SDIST_SUFFIX} to check")
+    return found
+
+
 def read_artifact(path: Path) -> dict[str, bytes]:
     """The artifact's add-in files, keyed by their path relative to `addon/`."""
     try:
@@ -164,13 +190,17 @@ def tracked_add_on(root: Path) -> dict[str, bytes]:
 def main(argv: list[str] | None = None) -> int:
     """Exit 0 when every artifact matches `addon/`, 1 on a finding, 2 if uncheckable."""
     arguments = sys.argv[1:] if argv is None else argv
-    artifacts = [Path(argument) for argument in arguments]
-    if not artifacts:
+    if not arguments:
         print(
-            f"usage: {Path(__file__).name} <artifact.whl|artifact.tar.gz> ...",
+            f"usage: {Path(__file__).name} <artifact.whl|artifact.tar.gz|dir> ...",
             file=sys.stderr,
         )
         return 2
+    artifacts = [
+        artifact
+        for argument in arguments
+        for artifact in expand_argument(Path(argument))
+    ]
     tracked = tracked_add_on(ROOT)
     findings = []
     for artifact in artifacts:

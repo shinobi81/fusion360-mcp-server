@@ -1482,14 +1482,14 @@ def test_include_package_data_is_not_set():
 
 RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 
-RELEASE_CHECK = (
-    "uv run --no-project python scripts/check_artifacts_ship_addon.py "
-    "dist/*.whl dist/*.tar.gz"
-)
+RELEASE_CHECK = "uv run --no-project python scripts/check_artifacts_ship_addon.py dist"
 """The exact command the release runs, and the one CONTRIBUTING.md must spell.
 
 One line, so the comparison is text against text: a command wrapped across two lines
-reads as undocumented, which is why the document carries it unbroken.
+reads as undocumented, which is why the document carries it unbroken.  It names the
+``dist`` directory rather than ``dist/*.whl dist/*.tar.gz``, because a shell that does
+not expand the glob - PowerShell and cmd on this project's primary OS - would hand the
+literal pattern to the check and have it refused.
 """
 
 

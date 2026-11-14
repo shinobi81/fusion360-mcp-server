@@ -149,6 +149,72 @@ def test_main_names_the_artifact_a_finding_came_from(tmp_path: Path, capsys):
     assert f"{clean}:" not in stderr
 
 
+def test_a_directory_argument_is_expanded_to_the_artifacts_it_holds(
+    tmp_path: Path, capsys
+):
+    """PowerShell and cmd do not expand `dist/*.whl`, so the check expands it.
+
+    The documented command names the directory for exactly this reason: a literal glob
+    reaching `read_artifact` would be refused rather than checked.  The order is the
+    directory's, sorted - `clean.tar.gz` before `clean.whl` - not wheels first.
+    """
+    tracked = CHECK.tracked_add_on(REPO_ROOT)
+    wheel = _wheel(tmp_path / "clean.whl", tracked)
+    sdist = _sdist(tmp_path / "clean.tar.gz", tracked)
+
+    assert CHECK.main([str(tmp_path)]) == 0
+
+    matched = f"{len(tracked)} add-on files match addon/"
+    assert capsys.readouterr().out.splitlines() == [
+        f"{sdist}: {matched}",
+        f"{wheel}: {matched}",
+    ]
+
+
+def test_a_directory_holding_no_artifact_is_cannot_check_and_names_itself(
+    tmp_path: Path, capsys
+):
+    """Checking nothing must not read as a clean run - an unbuilt `dist/` is common."""
+    empty = tmp_path / "dist"
+    empty.mkdir()
+
+    with pytest.raises(SystemExit) as refused:
+        CHECK.main([str(empty)])
+
+    assert refused.value.code == 2
+    stderr = capsys.readouterr().err
+    assert str(empty) in stderr
+    assert len(stderr.strip().splitlines()) == 1, stderr
+
+
+def test_a_directory_picks_up_only_the_two_artifact_suffixes(tmp_path: Path, capsys):
+    """`dist/` also collects signatures and notes; only the artifacts are read.
+
+    Pinned as ignoring them rather than refusing: a directory is the build output a
+    maintainer points at, not a list of files to check one by one, so anything the
+    release would publish beside the artifacts must not fail the check.
+    """
+    tracked = CHECK.tracked_add_on(REPO_ROOT)
+    wheel = _wheel(tmp_path / "clean.whl", tracked)
+    (tmp_path / "notes.txt").write_text("not an artifact\n", encoding="utf-8")
+
+    assert CHECK.main([str(tmp_path)]) == 0
+
+    out = capsys.readouterr().out
+    assert out.splitlines() == [f"{wheel}: {len(tracked)} add-on files match addon/"]
+    assert "notes.txt" not in out
+
+
+def test_a_path_that_is_neither_a_file_nor_a_directory_is_still_cannot_check(
+    tmp_path: Path,
+):
+    """Expanding directories must not turn a missing artifact into a clean run."""
+    with pytest.raises(SystemExit) as refused:
+        CHECK.main([str(tmp_path / "absent.whl")])
+
+    assert refused.value.code == 2
+
+
 def test_the_repository_tracks_ten_add_on_files():
     tracked = CHECK.tracked_add_on(REPO_ROOT)
 

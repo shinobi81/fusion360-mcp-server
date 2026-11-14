@@ -31,7 +31,7 @@ jobs:
       # add-in out of it.  A build that loses `addon/` still publishes, and nothing
       # outside a manual run would notice, so the check runs before the release.
       - name: Check the artifacts ship the add-in
-        run: uv run --no-project python scripts/check_artifacts_ship_addon.py dist/*.whl dist/*.tar.gz
+        run: uv run --no-project python scripts/check_artifacts_ship_addon.py dist
 
       # Scorecard's SBOM check looks for an SBOM among the release assets, so it
       # is generated from the exact dependency set the wheel resolves.
