@@ -10,15 +10,21 @@ two from drifting apart silently.
 from __future__ import annotations
 
 import importlib.util
+import os
+import sys
 from pathlib import Path
 
 import pytest
 
 from fusion360_mcp import addon_install
 from fusion360_mcp.addon_install import (
+    ADD_INS_TAIL,
+    DARWIN_TAIL,
     InstallRefused,
+    add_ins_dir,
     add_on_source,
     copy_add_on,
+    install_addon,
     manifest_for,
 )
 
@@ -168,6 +174,130 @@ def test_a_source_checkout_is_named_as_the_development_path(tmp_path: Path):
     with pytest.raises(InstallRefused) as exc:
         copy_add_on(source, tmp_path / "out")
     assert "install-addon.sh" in str(exc.value)
+
+
+def test_windows_reads_appdata(tmp_path: Path):
+    (tmp_path / "Autodesk" / "Autodesk Fusion 360").mkdir(parents=True)
+
+    path = add_ins_dir(environ={"APPDATA": str(tmp_path)}, system="windows")
+
+    assert path == tmp_path / "Autodesk" / "Autodesk Fusion 360" / "API" / "AddIns"
+
+
+def test_both_layouts_are_spelled_out_verbatim():
+    """The two tails are the interface: `scripts/install-addon.sh` resolves the same
+    folders, and a component edited here without editing there splits the two."""
+    assert ADD_INS_TAIL == "Autodesk/Autodesk Fusion 360/API/AddIns"
+    assert DARWIN_TAIL == (
+        "Library/Application Support/Autodesk/Autodesk Fusion 360/API/AddIns"
+    )
+
+
+def test_windows_without_appdata_is_refused_not_guessed():
+    with pytest.raises(InstallRefused) as exc:
+        add_ins_dir(environ={}, system="windows")
+
+    assert "APPDATA" in str(exc.value)
+
+
+def test_macos_reads_home(tmp_path: Path):
+    (tmp_path / "Library" / "Application Support" / "Autodesk").mkdir(parents=True)
+    (
+        tmp_path
+        / "Library"
+        / "Application Support"
+        / "Autodesk"
+        / "Autodesk Fusion 360"
+    ).mkdir()
+
+    path = add_ins_dir(environ={"HOME": str(tmp_path)}, system="darwin")
+
+    assert path == (
+        tmp_path
+        / "Library"
+        / "Application Support"
+        / "Autodesk"
+        / "Autodesk Fusion 360"
+        / "API"
+        / "AddIns"
+    )
+
+
+def test_an_unsupported_os_is_refused():
+    with pytest.raises(InstallRefused) as exc:
+        add_ins_dir(environ={"HOME": "/tmp"}, system="linux")
+
+    assert "Fusion" in str(exc.value)
+
+
+def test_the_add_ins_directory_is_created_under_an_existing_fusion_root(tmp_path: Path):
+    (tmp_path / "Autodesk" / "Autodesk Fusion 360").mkdir(parents=True)
+
+    path = add_ins_dir(environ={"APPDATA": str(tmp_path)}, system="windows")
+
+    assert path.is_dir()
+
+
+def test_a_missing_fusion_root_is_refused_and_nothing_is_created(tmp_path: Path):
+    with pytest.raises(InstallRefused) as exc:
+        add_ins_dir(environ={"APPDATA": str(tmp_path)}, system="windows")
+
+    assert "Fusion 360" in str(exc.value)
+    assert not (tmp_path / "Autodesk").exists()
+
+
+def test_the_environment_defaults_to_this_process(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    (tmp_path / "Autodesk" / "Autodesk Fusion 360").mkdir(parents=True)
+
+    assert add_ins_dir(system="windows") == tmp_path / ADD_INS_TAIL
+
+
+def test_the_system_defaults_to_this_machine():
+    """`system=None` reads the interpreter: Windows gets a name of its own, and macOS
+    is already `sys.platform`'s `darwin`.  Anything else survives unchanged, which is
+    what `add_ins_dir` refuses."""
+    derived = addon_install._current_system()
+
+    assert derived == ("windows" if os.name == "nt" else sys.platform)
+
+
+def test_install_add_on_reports_success_and_copies(tmp_path: Path, capsys):
+    source = _add_on_tree(tmp_path)
+    target_root = tmp_path / "AddIns"
+
+    code = install_addon(addin_dir=target_root, source=source)
+
+    assert code == 0
+    assert (target_root / "Fusion360MCP" / "server" / "hints.py").is_file()
+    assert "0.7.3" in capsys.readouterr().out
+
+
+def test_the_reported_version_comes_from_the_manifest(tmp_path: Path, capsys):
+    """One version source: the number printed is the manifest's, not a literal here."""
+    source = _add_on_tree(
+        tmp_path, extra={"Fusion360MCP.manifest": '{"version": "9.9.9"}'}
+    )
+
+    assert install_addon(addin_dir=tmp_path / "AddIns", source=source) == 0
+    assert "9.9.9" in capsys.readouterr().out
+
+
+def test_install_add_on_reports_a_refusal_without_raising(tmp_path: Path, capsys):
+    code = install_addon(addin_dir=tmp_path / "AddIns", source=tmp_path / "missing")
+
+    assert code == 1
+    assert "install-addon.sh" in capsys.readouterr().err
+
+
+def test_a_path_with_spaces_and_non_ascii_characters_still_installs(tmp_path: Path):
+    awkward = tmp_path / "Jane Doe" / "Jörg"
+    source = _add_on_tree(awkward)
+
+    code = install_addon(addin_dir=awkward / "AddIns", source=source)
+
+    assert code == 0
+    assert (awkward / "AddIns" / "Fusion360MCP" / "Fusion360MCP.py").is_file()
 
 
 def test_the_copy_rule_matches_the_release_check():
