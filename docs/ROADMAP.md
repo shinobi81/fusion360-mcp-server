@@ -12,9 +12,9 @@ that are almost always a mistake, and `SIM` (simplify) reports code that says at
 length what it could say at less. Both are in now, across the four trees the change
 touched (`src/`, `tests/`, `fuzz/`, `addon/`), and the tree is clean with no `ignore`,
 no `per-file-ignores` and no new `noqa`: a rule that is on everywhere either passes or
-gets fixed. `scripts/` joined both gates in a later change, and stays because the suite
-drives its files: the add-in installer and the artifact check are both exercised by
-tests.
+gets fixed. `scripts/` joined both gates in a later change, and stays: the add-in
+installer and the artifact check are exercised by tests, and `check_review_threads.py` by
+the `threads` CI job.
 
 The first pass was 16 findings, so it went in as one change rather than one per rule
 family. The dispositions are the whole story of it:

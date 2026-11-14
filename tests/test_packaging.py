@@ -300,7 +300,7 @@ def test_the_add_in_manifest_declares_the_version_being_released():
     The add-in and the server ship together - one changelog, one tag - so the manifest
     is not free to lag behind ``pyproject.toml``.  It said 0.1.0 from the commit that
     created it until 0.7.2, sixteen tagged releases, which is the same shape of stale
-    claim the coverage-figure check exists to stop.
+    claim this module exists to stop.
     """
     facts = _add_in_manifest()
     assert "version" in facts, (
