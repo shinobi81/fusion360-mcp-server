@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
 
 import anyio
 import click
@@ -16,6 +17,7 @@ import mcp.types as types
 from mcp.server.lowlevel import Server
 from pydantic import AnyUrl
 
+from . import addon_install
 from .connection import (
     _DEFAULT_HOST,
     _DEFAULT_PORT,
@@ -481,8 +483,31 @@ def build_server(mode: str, host: str, port: int) -> Server:
     default=lambda: int(os.environ.get("FUSION_MCP_PORT", "9876")),
     help="TCP port the Fusion 360 add-in listens on (env: FUSION_MCP_PORT)",
 )
-def main(mode: str, host: str, port: int) -> int:
+@click.option(
+    "--install-addon",
+    is_flag=True,
+    help="Copy the add-in into Fusion's AddIns folder, then exit.",
+)
+@click.option(
+    "--addin-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Override the AddIns directory.",
+)
+@click.pass_context
+def main(
+    ctx: click.Context,
+    install_addon: bool,
+    addin_dir: Path | None,
+    mode: str,
+    host: str,
+    port: int,
+) -> int:
     """Fusion360 MCP Server — connects MCP clients to Fusion 360."""
+    # `ctx.exit`, not `return`: a standalone command's return value is not its exit
+    # status, and the install's answer is the exit status the shell reads.
+    if install_addon:
+        ctx.exit(addon_install.install_addon(addin_dir=addin_dir))
     app = build_server(mode, host, port)
 
     # ── run ──────────────────────────────────────────────────────────

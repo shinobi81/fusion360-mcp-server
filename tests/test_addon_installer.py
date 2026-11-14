@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
 from fusion360_mcp import addon_install
 from fusion360_mcp.addon_install import (
@@ -29,6 +30,7 @@ from fusion360_mcp.addon_install import (
     manifest_for,
     target_for,
 )
+from fusion360_mcp.server import main
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -481,3 +483,40 @@ def test_the_copy_rule_matches_the_release_check():
         "the copy rule lives in two different files and they disagree:\n"
         + "\n".join(disagreed)
     )
+
+
+def test_the_flag_installs_and_exits_without_starting_a_server(
+    tmp_path: Path, monkeypatch
+):
+    source = _add_on_tree(tmp_path)
+    add_ins = tmp_path / "AddIns"
+    monkeypatch.setattr(addon_install, "add_on_source", lambda: source)
+
+    result = CliRunner().invoke(main, ["--install-addon", "--addin-dir", str(add_ins)])
+
+    assert result.exit_code == 0, result.stderr
+    assert (add_ins / "Fusion360MCP" / "Fusion360MCP.py").is_file()
+    assert "files copied" in result.stdout
+    assert "Fusion360MCP" in result.stdout
+
+
+def test_the_flag_sets_a_failing_exit_status_on_refusal(tmp_path: Path, monkeypatch):
+    """The refusal is the exit status, and it is set before `anyio.run`: a standalone
+    command's `return 1` would leave the status at 0 and the shell would not see it.
+    """
+    monkeypatch.setattr(addon_install, "add_on_source", lambda: tmp_path / "absent")
+
+    result = CliRunner().invoke(
+        main, ["--install-addon", "--addin-dir", str(tmp_path / "AddIns")]
+    )
+
+    assert result.exit_code == 1
+    assert "install-addon.sh" in result.stderr
+
+
+def test_the_server_path_is_unchanged_without_the_flag():
+    result = CliRunner().invoke(main, ["--help"])
+
+    assert result.exit_code == 0
+    assert "--install-addon" in result.stdout
+    assert "--mode" in result.stdout

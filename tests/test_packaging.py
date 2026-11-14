@@ -10,7 +10,8 @@ the configuration no longer has, when CI stops running a gate those configuratio
 describe, when the add-in's Fusion manifest declares a version the release does
 not, when it changes the id it declares, when that add-in is renamed in one place and
 not the others, when a documented install snippet pins a release other than the one
-being cut, or when a document names a lint command CI does not run.
+being cut, when a document names a lint command CI does not run, or when the release
+stops checking that both artifacts carry the add-in.
 """
 
 from __future__ import annotations
@@ -1425,3 +1426,31 @@ def test_include_package_data_is_not_set():
     tool = _pyproject()["tool"]["setuptools"]
 
     assert "include-package-data" not in tool
+
+
+RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
+
+RELEASE_CHECK = (
+    "uv run --no-project python scripts/check_artifacts_ship_addon.py "
+    "dist/*.whl dist/*.tar.gz"
+)
+"""The exact command the release runs, and the one CONTRIBUTING.md must spell.
+
+One line, so the comparison is text against text: a command wrapped across two lines
+reads as undocumented, which is why the document carries it unbroken.
+"""
+
+
+def test_the_release_checks_that_both_artifacts_ship_the_add_in():
+    """The wheel's add-in copy is the parcel; a release that ships without it looks
+    identical from the outside, so the check runs before publish and is documented."""
+    workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    contributing = (REPO_ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+
+    assert RELEASE_CHECK in workflow
+    assert RELEASE_CHECK in contributing, (
+        "CONTRIBUTING must name the exact command release.yml runs, so a maintainer "
+        "can check a local build with it"
+    )
+    build = workflow.index("uv build")
+    assert build < workflow.index(RELEASE_CHECK) < workflow.index("gh release create")
