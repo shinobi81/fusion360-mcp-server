@@ -446,13 +446,28 @@ def test_the_changelog_is_excluded_because_it_records_what_past_releases_said():
 def test_the_quick_start_installs_the_add_in_from_the_release():
     """The parcel's whole point: a reader who installs the tag gets a working add-in.
 
-    The pin guard keeps the version honest; this keeps the *command* there, because a
-    README that reverts to "clone and run a script" is the gap the change closed.
+    The pin guard keeps the version honest; this keeps the *command* there, and keeps
+    it the release form.  A README that reverts to "clone, then run the flag from a
+    checkout" still mentions ``--install-addon`` before the catalogue, so the shape of
+    the command is what this asserts: ``uvx --from`` of a pinned tag, and no clone-only
+    script anywhere in the quick start.
     """
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     quick_start = readme.split("## What it can do", 1)[0]
+    commands = [line for line in quick_start.splitlines() if "--install-addon" in line]
 
-    assert "--install-addon" in quick_start
+    assert commands, "the quick start must show --install-addon"
+    assert all("uvx --from" in line for line in commands), (
+        "step 1 must install from the release with uvx --from, not from a checkout: "
+        + " | ".join(commands)
+    )
+    assert all(INSTALL_PIN.search(line) for line in commands), (
+        "step 1 must pin @vX.Y.Z, so the command cannot install a moving target: "
+        + " | ".join(commands)
+    )
+    assert "scripts/install-addon.sh" not in quick_start, (
+        "the clone path belongs in *Working on the add-in*, not in the quick start"
+    )
     assert "scripts/install-addon.sh" in readme, (
         "the development path must still be documented, in its own section"
     )
@@ -1426,13 +1441,35 @@ def test_every_package_under_src_is_listed_explicitly():
     )
 
 
+def _add_on_packages() -> set[str]:
+    """Every package under `addon/`, named as setuptools sees it in the wheel.
+
+    A package is a directory holding an `__init__.py`; the add-on's root holds none,
+    which is why `pyproject.toml` maps it for data rather than listing it as one.  The
+    tree decides, so renaming `server/` fails here instead of only at build time.
+    """
+    root = REPO_ROOT / "addon"
+    return {
+        "fusion360_mcp.addon." + ".".join(init.parent.relative_to(root).parts)
+        for init in root.rglob("__init__.py")
+        if init.parent != root
+    }
+
+
 def test_the_add_on_subpackages_are_the_ones_on_disk():
-    """`fusion360_mcp.addon` has no `__init__.py`; only `server/` is a real package.
-    A second one appearing there must be mapped, not silently left out of the wheel."""
+    """`fusion360_mcp.addon` has no `__init__.py`; every directory that has one is a
+    package, and a package the build never sees ships in no artifact."""
     listed = set(_pyproject()["tool"]["setuptools"]["packages"])
     mapped = {name for name in listed if name.startswith("fusion360_mcp.addon.")}
 
-    assert mapped == {"fusion360_mcp.addon.server"}
+    assert mapped == _add_on_packages(), (
+        "the packages under addon/ are the ones holding an __init__.py, and each must "
+        "be in [tool.setuptools] packages"
+    )
+    assert not (REPO_ROOT / "addon" / "__init__.py").exists(), (
+        "the add-on root is mapped for package-data, not as a package, because it has "
+        "no __init__.py; adding one changes what the wheel ships"
+    )
 
 
 def test_include_package_data_is_not_set():

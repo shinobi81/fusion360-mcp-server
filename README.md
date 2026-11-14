@@ -71,10 +71,10 @@ AddIns folder; pass `--addin-dir PATH` to install it somewhere else. Start it wi
 when your client connects.
 
 **Working on the add-in.** From a clone, `./scripts/install-addon.sh` symlinks `addon/`
-into Fusion's AddIns directory, so edits are picked up on the next add-in restart; a
-symlinked install must be removed, or restored with that script, before the release's
-`--install-addon` will replace it — it refuses rather than copy through the link. To
-copy by hand instead of linking:
+into Fusion's AddIns directory, so edits are picked up on the next add-in restart. A
+symlinked install must be removed before the release's `--install-addon` will replace
+it — it refuses rather than copy through the link; re-run `./scripts/install-addon.sh`
+only to put the development link back. To copy by hand instead of linking:
 
 ```bash
 # macOS
