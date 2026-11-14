@@ -1,4 +1,6 @@
+import errno
 import pathlib
+import socket
 import struct
 import sys
 
@@ -112,6 +114,44 @@ def test_a_non_finite_coordinate_is_not_asserted_against():
 
 def test_an_http_request_dispatches_nothing():
     check_frames(b'GET / HTTP/1.1\r\nHost: x\r\n\r\n{"type": "execute_code"}\n')
+
+
+def test_a_peer_that_closed_first_is_still_end_of_input(monkeypatch):
+    """macOS answers ENOTCONN when the peer closed before we signal EOF.
+
+    Reported by CI: the HTTP payload makes the handler reply and close its end at
+    once, and on darwin `shutdown(SHUT_WR)` then raised
+    `OSError: [Errno 57] Socket is not connected` out of the target. The macOS job
+    for one commit failed and passed on a rerun of it - `80691cc`, the head of the
+    sibling PR that was open at the time; this branch is cut from `main` @ 83bffb7.
+    Windows returns quietly from the same call (measured), so no run here reaches
+    it without being told what the other platform does.
+
+    A peer that is already gone has already ended the stream, which is the only
+    thing shutdown was for, so the error is end-of-input rather than a finding: the
+    target owes a verdict, not a traceback. The verdict is still asserted, because
+    `check_frames` *is* `check` - the reply the handler sent before closing is read
+    out of the buffer afterwards.
+    """
+    real_shutdown = socket.socket.shutdown
+    signalled: list[int] = []
+
+    def enotconn(sock, how):
+        # Only the end-of-input signal is redone; the force-out path after
+        # `join` keeps its real shutdown, so this test cannot mask it.
+        if how != socket.SHUT_WR:
+            return real_shutdown(sock, how)
+        signalled.append(how)
+        raise OSError(errno.ENOTCONN, "Socket is not connected")
+
+    monkeypatch.setattr(socket.socket, "shutdown", enotconn)
+
+    check_frames(b'GET / HTTP/1.1\r\nHost: x\r\n\r\n{"type": "execute_code"}\n')
+
+    # Without this the test would keep passing if the target stopped signalling
+    # end-of-input altogether - a green run proving nothing, since the stub would
+    # simply never fire.
+    assert signalled == [socket.SHUT_WR]
 
 
 def test_a_partial_frame_that_parses_is_dispatched_once():
