@@ -16,9 +16,8 @@ failures returned as structured data instead of exceptions.
 ## Quick start
 
 ```bash
-# 1. Install the add-in into Fusion (symlink — re-run after editing addon/)
-git clone https://github.com/shinobi81/fusion360-mcp-server
-cd fusion360-mcp-server && ./scripts/install-addon.sh
+# 1. Copy the add-in into Fusion's AddIns folder — from the release, no clone
+uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.7.3' fusion360-mcp-server --install-addon
 
 # 2. In Fusion: Shift+S → Add-Ins → Fusion360MCP → Run
 #    The TEXT COMMANDS window should show: [MCP] Server listening on 127.0.0.1:9876
@@ -66,8 +65,16 @@ thread finishes. That is why one operation per tool call is a rule, not a prefer
 
 ### The add-in
 
-`./scripts/install-addon.sh` symlinks `addon/` into Fusion's AddIns directory, so edits
-are picked up on the next add-in restart. To copy instead:
+Step 1 of the Quick start copies the add-in out of the release's wheel into Fusion's
+AddIns folder; pass `--addin-dir PATH` to install it somewhere else. Start it with
+**Shift+S → Add-Ins → Fusion360MCP → Run**. Set it to run at startup so the port is there
+when your client connects.
+
+**Working on the add-in.** From a clone, `./scripts/install-addon.sh` symlinks `addon/`
+into Fusion's AddIns directory, so edits are picked up on the next add-in restart; a
+symlinked install must be removed, or restored with that script, before the release's
+`--install-addon` will replace it — it refuses rather than copy through the link. To
+copy by hand instead of linking:
 
 ```bash
 # macOS
@@ -76,9 +83,6 @@ cp -r addon ~/Library/Application\ Support/Autodesk/Autodesk\ Fusion\ 360/API/Ad
 # Windows (PowerShell)
 Copy-Item -Recurse addon "$env:APPDATA\Autodesk\Autodesk Fusion 360\API\AddIns\Fusion360MCP"
 ```
-
-Start it with **Shift+S → Add-Ins → Fusion360MCP → Run**. Set it to run at startup so the
-port is there when your client connects.
 
 ### Your MCP client
 

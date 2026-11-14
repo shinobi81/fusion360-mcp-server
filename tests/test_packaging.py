@@ -443,6 +443,21 @@ def test_the_changelog_is_excluded_because_it_records_what_past_releases_said():
     assert _stale_pin_findings(history, "0.7.2") == ["CHANGELOG.md:1 pins v0.3.1"]
 
 
+def test_the_quick_start_installs_the_add_in_from_the_release():
+    """The parcel's whole point: a reader who installs the tag gets a working add-in.
+
+    The pin guard keeps the version honest; this keeps the *command* there, because a
+    README that reverts to "clone and run a script" is the gap the change closed.
+    """
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    quick_start = readme.split("## What it can do", 1)[0]
+
+    assert "--install-addon" in quick_start
+    assert "scripts/install-addon.sh" in readme, (
+        "the development path must still be documented, in its own section"
+    )
+
+
 ADD_IN_INSTALL_ID = "6b98393d-7998-4d19-a8e5-c8b5e3d7f4a2"
 """The ``id`` the manifest declares, pinned so that changing it is a deliberate act.
 
