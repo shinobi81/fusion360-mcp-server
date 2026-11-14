@@ -7,6 +7,57 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.8.0] - 2026-11-14
+
+A minor release, because two user-visible surfaces are added: both artifacts now carry
+the Fusion add-in, and `fusion360-mcp-server` gains two options. No tool, parameter,
+response field or `error_kind` changed, and no line of the add-in's code changed; only
+the version in its manifest moved.
+
+### Added
+
+- **The release ships the add-in.** Before this, the wheel held only
+  `src/fusion360_mcp/*` and its dist-info, and the sdist held `tests/` but not `addon/`,
+  so a tag install could not reach Fusion without a clone: `uvx --from ...@vX.Y.Z`
+  installed a server and left the user to run `scripts/install-addon.sh` from a
+  checkout. Both artifacts now carry the ten tracked files under `addon/` - the wheel as
+  `fusion360_mcp/addon/`, the sdist as `addon/` under its distribution directory - and
+  the repository still keeps one copy. (#94)
+- **`fusion360-mcp-server --install-addon [--addin-dir PATH]`** copies them into
+  Fusion's AddIns folder and exits before any MCP work. `API/AddIns` is created when
+  Fusion's own data folder exists. It refuses each of these, with a message on stderr
+  and exit status 1: a source checkout; an `addon/` with no manifest, two manifests, or
+  a manifest that is not a regular file; a manifest that is not JSON, or whose `version`
+  is missing, empty or not a string; a missing Fusion data folder, or one that cannot be
+  written to; a platform that is neither Windows nor macOS; a target that is a symlink
+  **or a Windows junction**; a target that is a regular file; and a copy that did not
+  land complete. A symlinked development install must be removed first, because
+  re-running `scripts/install-addon.sh` recreates the link. (#94)
+- **A pre-publish check that the artifacts really carry it.**
+  `scripts/check_artifacts_ship_addon.py` reads the `.whl` and the `.tar.gz` back,
+  compares `addon/**` byte-for-byte with `git ls-files addon`, applies the same copy
+  rule the installer uses, and exits 0 clean / 1 finding / 2 cannot check. `release.yml`
+  runs it after `uv build` and before the SBOM, the attestation and the publish; a
+  directory argument expands itself, so the same command works on bash, PowerShell and
+  cmd. (#94)
+- **README Quick start installs from the release.** The clone and
+  `./scripts/install-addon.sh` symlink path moved, unchanged in substance, to *Working
+  on the add-in*. (#94)
+
+### Changed
+
+- `pyproject.toml` maps `addon/` into the package with `package-dir` entries and
+  `package-data` for `*.manifest`, and lists `packages` explicitly: a find directive and
+  an explicit list cannot coexist, so a new top-level package under `src/` ships in no
+  artifact until it is listed, and a test derives the expected list from the tree. (#94)
+- **No document states the measured coverage total any more.** It changed three times
+  while #94 was built (61.47 -> 62.80 -> 62.84 -> 62.89), each change needing a
+  full-suite run and edits to `docs/TESTING.md` and the `addopts` comment; the figure
+  and `scripts/check_coverage_figures.py` are deleted together, along with the CI step
+  that ran it and `scripts/__init__.py`, whose only importer was the deleted test. The
+  floors (59 combined, 95 for `src/`) are enforced by the tools that read them, and
+  nothing machine-checks a stale figure in prose any more. (#95)
+
 ## [0.7.3] - 2026-11-12
 
 A documentation-and-tooling patch. Nothing in `src/` changed and no add-in code
@@ -634,6 +685,7 @@ reporting a result it had only echoed back.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.8.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.3...v0.8.0
 [0.7.3]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.0...v0.7.1

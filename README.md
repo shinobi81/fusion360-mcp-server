@@ -17,13 +17,13 @@ failures returned as structured data instead of exceptions.
 
 ```bash
 # 1. Copy the add-in into Fusion's AddIns folder — from the release, no clone
-uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.7.3' fusion360-mcp-server --install-addon
+uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.8.0' fusion360-mcp-server --install-addon
 
 # 2. In Fusion: Shift+S → Add-Ins → Fusion360MCP → Run
 #    The TEXT COMMANDS window should show: [MCP] Server listening on 127.0.0.1:9876
 
 # 3. Point your MCP client at this server (stdio)
-claude mcp add fusion360 -- uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.7.3' fusion360-mcp-server --mode socket
+claude mcp add fusion360 -- uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.8.0' fusion360-mcp-server --mode socket
 ```
 
 Then call `ping` — `{"ok": true, "status": "pong"}` means you are connected.
@@ -89,7 +89,7 @@ Copy-Item -Recurse addon "$env:APPDATA\Autodesk\Autodesk Fusion 360\API\AddIns\F
 The server speaks stdio, so any client can launch it:
 
 ```bash
-uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.7.3' \
+uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.8.0' \
   fusion360-mcp-server --mode socket
 ```
 
@@ -97,7 +97,7 @@ uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.7.3' \
 <summary><strong>Claude Code</strong></summary>
 
 ```bash
-claude mcp add fusion360 -- uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.7.3' fusion360-mcp-server --mode socket
+claude mcp add fusion360 -- uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@v0.8.0' fusion360-mcp-server --mode socket
 ```
 
 </details>
@@ -112,7 +112,7 @@ claude mcp add fusion360 -- uvx --from 'git+https://github.com/shinobi81/fusion3
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/shinobi81/fusion360-mcp-server@v0.7.3",
+        "git+https://github.com/shinobi81/fusion360-mcp-server@v0.8.0",
         "fusion360-mcp-server",
         "--mode",
         "socket"
@@ -135,7 +135,7 @@ claude mcp add fusion360 -- uvx --from 'git+https://github.com/shinobi81/fusion3
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/shinobi81/fusion360-mcp-server@v0.7.3",
+        "git+https://github.com/shinobi81/fusion360-mcp-server@v0.8.0",
         "fusion360-mcp-server",
         "--mode",
         "socket"
