@@ -30,9 +30,8 @@ recorded there. The floor is **two gates**, because one number cannot hold two v
 different populations:
 
 - **59** for the whole suite, which now measures `src/fusion360_mcp` **and**
-  `addon/server`. The measured total is 62.89%; the add-in's CAM, export, view-sheet and
-  viewport-render paths only run inside Fusion, and they account for almost all of the
-  gap.
+  `addon/server`. The add-in's CAM, export, view-sheet and viewport-render paths only
+  run inside Fusion, and they account for almost all of the uncovered statements.
 - **95** for the server alone, enforced separately in CI:
   `uv run coverage report --include="src/fusion360_mcp/*" --fail-under=95`. Without it,
   an add-in regression would buy slack for `src/`.
@@ -41,12 +40,11 @@ Both live in `addopts`/CI rather than in one file's scope, so a subset is run wi
 `--no-cov`. The statements that are uncovered on purpose are listed in the comment above
 `addopts`.
 
-The figure quoted above, and the one in that comment, are checked against the run
-by `scripts/check_coverage_figures.py`, in CI immediately after the test step. It
-cannot be an assertion inside the suite, because the measured total is the thing
-being measured and exists only once pytest has written `.coverage`. `CHANGELOG.md`
-is deliberately not read: its percentages describe releases, and stay true of the
-release they describe.
+The measured total is deliberately not written down in any document that describes the
+current tree: it moves whenever a test reaches new lines, so a quoted figure is a claim
+that has to be re-edited rather than a fact anyone acts on. The test job prints it, and
+the floors above are what the tools enforce. `CHANGELOG.md` still quotes the totals of
+past releases, which are true of the releases they describe.
 
 ## The fake runtime
 
