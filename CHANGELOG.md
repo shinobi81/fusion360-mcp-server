@@ -7,6 +7,45 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.8.1] - 2026-11-14
+
+A patch release for refusal and output behaviour. No tool, parameter, response field or
+`error_kind` changed, and the add-in's own code is untouched: what moved is what
+`--install-addon` refuses, how the installer and the artifact check print, and the exit
+code the check answers when it cannot check.
+
+### Fixed
+
+- **`--install-addon` no longer installs an add-in Fusion cannot load.** It named the
+  install from a `*.manifest` the shell installer would never have chosen: a dot-prefixed
+  name (`AddIns/.Hidden`, a hidden folder whose `.Hidden.py` entry module does not exist)
+  and, on Windows, a name whose suffix is only case-variant, which the case-sensitive copy
+  rule then refused to copy. Both are refused now, as the development path already does.
+  (#97)
+- **A blank `version` is refused.** The check was truthiness, so `" "` passed and printed
+  an empty `Version:` line from an install that went ahead anyway — the outcome that
+  refusal exists to prevent. It is now "no non-whitespace character". (#99)
+- **One printed value cannot become two lines.** Refusals, the success banner and the
+  artifact check's findings all embed names, paths or the manifest's `version`; and a
+  newline is legal in a POSIX filename, while a manifest's `version` is JSON text that
+  may carry one. A single crafted manifest installed successfully and split the banner,
+  and a tracked path carrying a newline split one finding into two. Each value is
+  collapsed to one line, while the two-manifest refusal keeps its deliberate
+  one-candidate-per-line listing. (#99)
+- **`scripts/check_artifacts_ship_addon.py` answers a tracked-but-deleted add-on file
+  with exit 2, not 1.** `git ls-files` names the index rather than the working tree, so
+  deleting a tracked file without `git rm` produced a traceback and the exit code a real
+  finding uses. It is cannot-check now, one line on stderr, as absent git and an
+  unreadable artifact already were. (#97)
+
+### Testing
+
+- **`tests/test_addon_socket.py` and `fuzz/fuzz_socket_framing.py` tolerate a peer that
+  closed first**, with `tests/test_fuzz_targets.py` and the socket test pinning each
+  site. On darwin, `shutdown(SHUT_WR)` after the handler replied and closed raised
+  `ENOTCONN`, which surfaced through both, so the `macos` job could fail on timing
+  alone. Tests only, no shipped behaviour changed. (#98)
+
 ## [0.8.0] - 2026-11-14
 
 A minor release, because two user-visible surfaces are added: both artifacts now carry
@@ -685,6 +724,7 @@ reporting a result it had only echoed back.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.8.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.3...v0.8.0
 [0.7.3]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.1...v0.7.2
