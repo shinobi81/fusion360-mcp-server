@@ -108,7 +108,13 @@ def check(data: bytes) -> None:
             ours.sendall(data)
         # End of input: the handler's recv returns b"" and it exits. Nothing
         # would close the connection otherwise, so the read below is bounded.
-        ours.shutdown(socket.SHUT_WR)
+        # A peer that already closed has ended the stream too, which is all this
+        # call was for, and the reply it sent is already in the buffer to be
+        # read - so the error belongs with the peer's close rather than in a
+        # traceback out of the target. macOS reports it as ENOTCONN where Windows
+        # does not (measured); the Linux CI has never reported one.
+        with suppress(OSError):
+            ours.shutdown(socket.SHUT_WR)
         buffer = b""
         with suppress(socket.timeout):
             while True:
