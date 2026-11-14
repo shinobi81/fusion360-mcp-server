@@ -245,7 +245,9 @@ def main(argv: list[str] | None = None) -> int:
         findings.extend(f"{artifact}: {finding}" for finding in artifact_findings)
     if findings:
         for finding in findings:
-            print(finding, file=sys.stderr)
+            # One line per finding: the name inside one is input this script does not
+            # choose, and a newline in a filename is legal on POSIX.
+            print(_one_line(finding), file=sys.stderr)
         return 1
     copied = sum(1 for path in tracked if installable(path))
     for artifact in artifacts:
