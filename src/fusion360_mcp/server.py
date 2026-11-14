@@ -504,6 +504,13 @@ def main(
     port: int,
 ) -> int:
     """Fusion360 MCP Server — connects MCP clients to Fusion 360."""
+    # Refused rather than ignored: a server that starts after discarding the path looks
+    # like an install that happened somewhere else.
+    if addin_dir is not None and not install_addon:
+        raise click.UsageError(
+            "--addin-dir is only used by --install-addon: drop it to start the server, "
+            "or pass --install-addon to copy the add-in into that folder"
+        )
     # `ctx.exit`, not `return`: a standalone command's return value is not its exit
     # status, and the install's answer is the exit status the shell reads.
     if install_addon:

@@ -133,12 +133,12 @@ def target_for(add_ins: Path, stem: str) -> Path:
 def add_ins_dir(
     environ: Mapping[str, str] | None = None, system: str | None = None
 ) -> Path:
-    """Fusion's ``AddIns`` directory, created if Fusion is installed and it is missing.
+    """Fusion's ``AddIns`` directory, created when Fusion's own folder is there.
 
     ``mkdir(parents=True)`` makes ``API`` as well as ``AddIns``, and nothing above
-    ``Autodesk Fusion 360``: Fusion makes that folder on install, so its absence means
-    Fusion is not installed here and a directory tree invented under it would be an
-    install nobody can find.
+    ``Autodesk Fusion 360``: that folder is Fusion's own rather than this install's, so
+    its absence means Fusion is not installed here — and a directory tree invented
+    under it would be an install nobody can find.
 
     A folder that cannot be created — Fusion's root is there but not writable, say — is
     refused as a line like every other refusal, rather than escaping as the
@@ -160,8 +160,9 @@ def add_ins_dir(
     fusion_root = path.parents[1]
     if not fusion_root.is_dir():
         raise InstallRefused(
-            f"{fusion_root} does not exist: is Fusion 360 installed, and has it been "
-            f"started once so it creates its AddIns folder?"
+            f"{fusion_root} does not exist: that folder is Fusion 360's own, so Fusion "
+            f"is not installed here, and an AddIns folder invented beneath it would be "
+            f"an install Fusion never looks at"
         )
     try:
         path.mkdir(parents=True, exist_ok=True)
@@ -201,13 +202,21 @@ def _manifest_version(manifest: Path) -> str:
     at the end of an install that had already replaced the folder on disk.  One clause
     covers an unreadable file, bytes that are not UTF-8 and text that is not JSON —
     all three mean the same thing to the caller, which is that no version was read.
+
+    The key's *value* is part of the contract, not just its presence: ``null`` and
+    ``""`` would otherwise pass ``str`` and print ``Version: None`` or an empty line
+    from an install that went ahead anyway, so anything but a non-empty string is the
+    same refusal as a missing key.
     """
     try:
-        return str(json.loads(manifest.read_text(encoding="utf-8"))["version"])
+        version = json.loads(manifest.read_text(encoding="utf-8"))["version"]
     except (OSError, ValueError) as exc:
         raise InstallRefused(f"{manifest.name} cannot be read as JSON: {exc}") from exc
     except KeyError, TypeError:
         raise InstallRefused(f"{manifest.name} has no version") from None
+    if not isinstance(version, str) or not version:
+        raise InstallRefused(f"{manifest.name} has no version")
+    return version
 
 
 def _fresh_copy(target: Path, source: Path) -> list[str]:

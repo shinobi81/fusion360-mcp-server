@@ -484,6 +484,31 @@ def test_a_manifest_without_a_version_is_refused_as_a_line(tmp_path: Path, capsy
     assert not (tmp_path / "AddIns" / "Fusion360MCP").exists()
 
 
+def test_a_null_version_is_refused_as_a_line(tmp_path: Path, capsys):
+    """`json` reads `null` as `None`, and `str(None)` follows: the key being present
+    was never the contract, its value is."""
+    source = _add_on_tree(
+        tmp_path, extra={"Fusion360MCP.manifest": '{"type": "addin", "version": null}'}
+    )
+
+    code = install_addon(addin_dir=tmp_path / "AddIns", source=source)
+
+    assert code == 1
+    assert "no version" in capsys.readouterr().err
+    assert not (tmp_path / "AddIns" / "Fusion360MCP").exists()
+
+
+def test_an_empty_version_is_refused_as_a_line(tmp_path: Path, capsys):
+    """An empty string would install and print an empty ``Version:`` line."""
+    source = _add_on_tree(tmp_path, extra={"Fusion360MCP.manifest": '{"version": ""}'})
+
+    code = install_addon(addin_dir=tmp_path / "AddIns", source=source)
+
+    assert code == 1
+    assert "no version" in capsys.readouterr().err
+    assert not (tmp_path / "AddIns" / "Fusion360MCP").exists()
+
+
 def test_an_unset_system_is_derived_from_this_machine(tmp_path: Path, monkeypatch):
     """`system=None` is the only value that dispatches to this machine.  A set-but-empty
     system is an unknown one, which `add_ins_dir` refuses rather than overrides."""
@@ -555,6 +580,17 @@ def test_the_flag_sets_a_failing_exit_status_on_refusal(tmp_path: Path, monkeypa
 
     assert result.exit_code == 1
     assert "install-addon.sh" in result.stderr
+
+
+def test_addin_dir_without_install_addon_is_refused(tmp_path: Path):
+    """`--addin-dir` on its own used to start the server and discard the path, which
+    reads as an install that landed somewhere else."""
+    result = CliRunner().invoke(main, ["--addin-dir", str(tmp_path)])
+
+    assert result.exit_code != 0
+    assert "--addin-dir" in result.stderr
+    assert "--install-addon" in result.stderr
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_the_server_path_is_unchanged_without_the_flag():
