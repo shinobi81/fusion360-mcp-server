@@ -44,7 +44,7 @@ jobs:
       # the `dev` group are both skipped. That is sound here because every
       # target imports the standard library plus `addon.server`, nothing more.
       - name: Install the fuzz group
-        run: uv sync --frozen --only-group fuzz --python 3.14
+        run: uv sync --locked --only-group fuzz --python 3.14
 
       # No PYTHONOPTIMIZE in this job, ever. The targets' invariants are bare
       # `assert`s, and `-O` compiles them out — a fuzzer that reports clean

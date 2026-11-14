@@ -4,8 +4,8 @@
 
 | Version | Supported |
 | ------- | --------- |
-| 0.3.x   | Yes       |
-| < 0.3   | No        |
+| 0.8.x   | Yes       |
+| < 0.8   | No        |
 
 This project is pre-1.0: fixes land on `main` and are released as tags. Install from a
 tag rather than PyPI — the published 0.1.0 pins `mcp>=1.0` with no upper bound and

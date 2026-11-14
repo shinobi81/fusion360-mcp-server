@@ -19,7 +19,7 @@ A change usually touches both, plus a mock handler and tests.
 ```bash
 git clone https://github.com/shinobi81/fusion360-mcp-server
 cd fusion360-mcp-server
-uv sync                        # python deps into .venv
+uv sync --locked               # python deps into .venv; refuses a stale lock
 uv run pytest -q               # suite runs without Fusion
 uv run ruff check src/ tests/ fuzz/ addon/ scripts/  # what CI runs
 uv run ruff format --check src/ tests/ fuzz/ scripts/  # what CI runs (addon/ is exempt)
@@ -101,7 +101,9 @@ error that motivated it.
 
 1. Bump `version` in `pyproject.toml`, `addon/Fusion360MCP.manifest` and the install
    snippets in `README.md`, then `uv lock`. They ship together, and
-   `tests/test_packaging.py` fails if any of them disagree.
+   `tests/test_packaging.py` fails if any of them disagree. On a **minor** bump it also
+   fails until **both** rows of `SECURITY.md`'s supported-versions table move with it -
+   the new `0.9.x | Yes` and the `< 0.9 | No` beneath it.
 2. Write the `CHANGELOG.md` entry in the same change, not after the tag: the note records
    what a release changed, and it is written while the change is in hand. It goes in the
    release PR, as 0.7.0, 0.7.1, 0.7.2 and 0.7.3 all did.

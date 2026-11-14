@@ -10,8 +10,12 @@ the configuration no longer has, when CI stops running a gate those configuratio
 describe, when the add-in's Fusion manifest declares a version the release does
 not, when it changes the id it declares, when that add-in is renamed in one place and
 not the others, when a documented install snippet pins a release other than the one
-being cut, when a document names a lint command CI does not run, or when the release
-stops checking that both artifacts carry the add-in.
+being cut, when a document names a lint command CI does not run, when the release
+stops checking that both artifacts carry the add-in, when `SECURITY.md` answers the
+supported-versions question with a series nobody is on, when a workflow or a documented
+command syncs from a lock nobody checks - or when `SECURITY.md`, `AGENTS.md`,
+`CONTRIBUTING.md`, `README.md` or `docs/TESTING.md` stops showing that command - or when
+the changelog opens at a release other than the one being cut.
 """
 
 from __future__ import annotations
@@ -1506,3 +1510,239 @@ def test_the_release_checks_that_both_artifacts_ship_the_add_in():
     )
     build = workflow.index("uv build")
     assert build < workflow.index(RELEASE_CHECK) < workflow.index("gh release create")
+
+
+SECURITY_POLICY = REPO_ROOT / "SECURITY.md"
+CHANGELOG = REPO_ROOT / "CHANGELOG.md"
+WORKFLOWS = REPO_ROOT / ".github" / "workflows"
+
+SYNC_DOCUMENTS = ("AGENTS.md", "CONTRIBUTING.md", "README.md", "docs/TESTING.md")
+"""Markdown documents that tell someone to run `uv sync`, so each is read by name.
+
+by name, not only by discovery, for the reason `GATE_DOCUMENTS` gives: a page that
+stopped showing the command would otherwise leave the check with nothing to read.
+"""
+
+SYNC_LINE = re.compile(r"^\s*(?:-\s+)?(?:run:\s+)?uv sync\b")
+"""A line that *invokes* `uv sync` - not one that names it in a table or sentence.
+
+Anchored at the line's start, so prose survives: `README.md`'s "os error 32 during
+`uv sync`" table cell and `AGENTS.md`'s "do not run `uv sync` while an MCP server is
+running" are mentions, not instructions.  A *prefixed* invocation (`uv lock && uv
+sync`) is deliberately out of scope; it would read as a mention and, if the page lost
+its plain line, would be reported as no longer showing the command.
+"""
+
+DATED_HEADING = r"^## \[{release}\] - \d{{4}}-\d{{2}}-\d{{2}}$"
+"""The shape every changelog entry uses: the version and an ISO date, on one line."""
+
+
+def _workflow_names() -> list[str]:
+    """The workflow files, relative to the repository root."""
+    return [
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in sorted(WORKFLOWS.glob("*.y*ml"))
+    ]
+
+
+def _sync_lines(text: str) -> list[tuple[int, str]]:
+    """The `(line number, line)` pairs of *text* that invoke `uv sync`."""
+    return [
+        (number, line.strip())
+        for number, line in enumerate(text.splitlines(), 1)
+        if SYNC_LINE.match(line)
+    ]
+
+
+def _sync_offenders(text: str) -> list[tuple[int, str]]:
+    """The syncs in *text* that do not assert the lock.
+
+    The flags are read as *tokens*, after the comment is cut off: `run: uv sync --dev  #
+    add --locked later` invokes an unlocked sync, and a substring test would let the
+    comment satisfy it.
+    """
+    offenders = []
+    for number, line in _sync_lines(text):
+        command = line.split("#", 1)[0]
+        arguments = command.split("uv sync", 1)[1].split()
+        if "--locked" not in arguments or "--frozen" in arguments:
+            offenders.append((number, line))
+    return offenders
+
+
+def _supported_versions(text: str | None = None) -> list[tuple[str, str]]:
+    """The `(version, supported)` rows of `SECURITY.md`'s table, in file order."""
+    if text is None:
+        text = SECURITY_POLICY.read_text(encoding="utf-8")
+    rows = re.findall(
+        r"^\|\s*([^|]+?)\s*\|\s*(Yes|No)\s*\|\s*$",
+        text,
+        re.MULTILINE,
+    )
+    assert rows, "SECURITY.md has no '| version | Yes/No |' table to read"
+    return rows
+
+
+def test_the_supported_version_table_names_the_release_being_cut():
+    """`SECURITY.md` answers "is my version supported?" for every reader who asks.
+
+    It said `0.3.x` from 0.4.0 until 0.8.1 - five minors - so every reader of the
+    current release was told their own version was unsupported, and `llms.txt` routes
+    that question here.  Same shape as the README pins: the release moves it, and this
+    fails when it does not.
+
+    Both rows are read: the cases an assertion on the Yes row alone would miss are a
+    *gap* - a table supporting `0.8.x` while refusing everything below `0.7`, which
+    leaves 0.7 unaddressed - and an over-refusal, `0.8.x` with `< 0.9`.
+
+    The `major.minor` formula encodes this project's pre-1.0 semantics, where a 0.x
+    minor is where breaks land, so exactly one series is supported and a
+    patch-granular policy (`< 0.8.1`) is refused on purpose.  At 1.0.0 the formula would
+    demand `1.0.x` where `1.x` is the conventional answer, and both rows should be
+    changed deliberately then rather than discovered here.
+    """
+    series = ".".join(_pyproject()["project"]["version"].split(".")[:2])
+    answers = _supported_versions()
+    supported = [version for version, answer in answers if answer == "Yes"]
+    refused = [version for version, answer in answers if answer == "No"]
+
+    assert supported == [f"{series}.x"], (
+        f"SECURITY.md must support {series}.x and nothing else, but its Yes row reads "
+        f"{supported}; the tag being cut is the version a report is about"
+    )
+    assert refused == [f"< {series}"], (
+        f"SECURITY.md must refuse everything below {series}, but its No row reads "
+        f"{refused}; a version in neither row is one the policy does not answer for"
+    )
+
+
+def test_every_sync_asserts_the_lock_is_current():
+    """`--frozen` installs whatever the lock says; `--locked` fails when it is stale.
+
+    The release PR moves `pyproject.toml` and `uv.lock`, and nothing compares the two:
+    a lock left at the previous version installs cleanly and every job stays green.  So
+    the sync is the guard, and it has to be the asserting flag.
+
+    Every tracked markdown page is swept as well as every workflow, because a new page
+    saying `uv sync --frozen` must be read the moment it exists - the sweep the ruff,
+    pin and add-in-name guards all use.  `SYNC_DOCUMENTS` is the other half: these four
+    pages must still *show* the command, or the check has nothing to read and passing
+    over nothing is not passing.
+    """
+    documents = {
+        relative: (REPO_ROOT / relative).read_text(encoding="utf-8")
+        for relative in _tracked_markdown(exclude=HISTORY_DOCUMENTS)
+    }
+    workflows = {
+        relative: (REPO_ROOT / relative).read_text(encoding="utf-8")
+        for relative in _workflow_names()
+    }
+
+    silent = [
+        relative for relative in SYNC_DOCUMENTS if not _sync_lines(documents[relative])
+    ]
+    assert not silent, (
+        "these documents no longer show a `uv sync` command, so this guard would pass "
+        "over them silently: " + ", ".join(silent)
+    )
+    assert any(_sync_lines(text) for text in workflows.values()), (
+        "no workflow runs `uv sync` any more, so nothing in CI asserts the lock"
+    )
+    offenders = [
+        f"{relative}:{number}: {line}"
+        for relative, text in {**workflows, **documents}.items()
+        for number, line in _sync_offenders(text)
+    ]
+    assert not offenders, (
+        "every sync must pass --locked (asserting the lock matches pyproject.toml) "
+        "and not --frozen (which installs from a stale lock happily): "
+        + "; ".join(offenders)
+    )
+
+
+def test_the_changelog_opens_at_the_version_being_released():
+    """Nothing read `CHANGELOG.md`'s content, so a wrong heading passed every gate.
+
+    The test references to the file exist to *skip* it as history; the notes in it are
+    never read back.  A release entry is immutable once tagged, so the version it claims
+    has to be the one being cut, and it needs a date in the shape the file uses
+    everywhere else.
+
+    The date's *value* cannot be checked from here and is not claimed to be.  This file
+    does not use an `## [Unreleased]` section, and adding one would fail the heading
+    assertion rather than being tolerated silently.  The compare link is checked for its
+    presence, not for its target.
+    """
+    release = _pyproject()["project"]["version"]
+    headings = re.findall(
+        r"^## \[([^\]]+)\]", CHANGELOG.read_text(encoding="utf-8"), re.MULTILINE
+    )
+
+    assert headings, "CHANGELOG.md has no '## [x.y.z]' headings"
+    assert headings[0] == release, (
+        f"CHANGELOG.md opens at {headings[0]} while pyproject says {release}; "
+        "the entry being written is the release being cut"
+    )
+    dated = re.compile(DATED_HEADING.format(release=re.escape(release)), re.MULTILINE)
+    assert dated.search(CHANGELOG.read_text(encoding="utf-8")), (
+        f"CHANGELOG.md's {release} heading carries no '- YYYY-MM-DD' date in the shape "
+        "every other entry uses"
+    )
+    assert f"[{release}]: " in CHANGELOG.read_text(encoding="utf-8"), (
+        f"CHANGELOG.md has no compare link for {release}, so the entry points nowhere"
+    )
+
+
+def test_the_supported_rows_reader_takes_only_the_answer_column():
+    """Hand-written rows, so a later edit to `SECURITY.md`'s table cannot change shape.
+
+    The live file is read by the guard above; these fixtures pin what the reader takes
+    from it - the two data rows, trimmed, and not the header or the rule beneath it.
+    """
+    table = (
+        "| Version | Supported |\n"
+        "| ------- | --------- |\n"
+        "| 0.8.x   | Yes       |\n"
+        "| < 0.8   | No        |\n"
+    )
+
+    assert _supported_versions(table) == [("0.8.x", "Yes"), ("< 0.8", "No")]
+
+
+def test_a_mention_of_the_sync_is_not_an_invocation():
+    """`README.md` says "os error 32 during `uv sync`" - prose, not a command.
+
+    Both shapes are in the repository, so the anchor is pinned here rather than trusted:
+    a table cell and a sentence stay out, and only the line that starts with the command
+    comes back.
+    """
+    page = (
+        "| `os error 32` during `uv sync` | stop the server first |\n"
+        "- Never run `uv sync` while an MCP server is running.\n"
+        "uv sync --dev --locked    # deps\n"
+    )
+
+    assert _sync_lines(page) == [(3, "uv sync --dev --locked    # deps")]
+
+
+def test_a_comment_cannot_satisfy_the_flag():
+    """`--locked` has to be an argument of the command, not a note on the same line."""
+    assert _sync_offenders("run: uv sync --dev  # add --locked later\n"), (
+        "a trailing comment satisfied the flag"
+    )
+    assert _sync_offenders("run: uv sync --dev --locked\n") == []
+    assert _sync_offenders("run: uv sync --dev --locked --frozen\n"), (
+        "--frozen must be an offender even beside --locked"
+    )
+
+
+def test_the_dated_heading_accepts_only_the_shape_every_entry_uses():
+    """The date is checked for its shape; its value cannot be checked from here."""
+    pattern = re.compile(DATED_HEADING.format(release=re.escape("0.8.1")), re.MULTILINE)
+
+    assert pattern.search("## [0.8.1] - 2026-11-14")
+    assert not pattern.search("## [0.8.1] - 14/11/2026")
+    assert not pattern.search("## [0.8.1] - 2026-11-14 "), (
+        "a trailing character must not slip past the end anchor"
+    )
+    assert not pattern.search("## [0.8.2] - 2026-11-14")

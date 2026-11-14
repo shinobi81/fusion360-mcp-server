@@ -7,7 +7,8 @@ pull request merges. Why the fakes exist and what they model is in
 ## Running it
 
 ```bash
-uv sync --dev                            # deps into .venv, no Fusion needed
+uv sync --dev --locked                   # deps into .venv, no Fusion needed
+uv lock                                  # only if you changed pyproject.toml
 uv run pytest -q                         # the whole suite, ~16s
 uv run pytest -q --no-cov tests/test_tools.py   # one file, without the coverage floor
 uv run pytest -q -k revolve              # by name
@@ -87,7 +88,7 @@ a marker that keeps it empty everywhere else. Run them from the repository root,
 mode:
 
 ```bash
-uv sync --frozen --only-group fuzz --python 3.14
+uv sync --locked --only-group fuzz --python 3.14
 uv run --no-sync python -m fuzz.fuzz_hints_classify -max_total_time=60 -rss_limit_mb=2048
 ```
 

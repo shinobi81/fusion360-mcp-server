@@ -25,7 +25,7 @@ calls to the main thread. Socket threads submit work items and block on a per-it
 ## Commands
 
 ```bash
-uv sync                        # install deps into .venv
+uv sync --locked               # install deps into .venv; refuses a stale lock
 uv run pytest -q               # suite runs without Fusion
 uv run pytest -q --no-cov tests/test_tools.py   # subset: the coverage floor
                                                 # applies to the whole suite

@@ -207,7 +207,7 @@ call is safe.
 ## Development
 
 ```bash
-uv sync --dev                    # deps
+uv sync --dev --locked          # deps; refuses a stale lock
 uv run pytest -q                 # full suite, no Fusion needed
 uv run ruff check src/ tests/ fuzz/ addon/ scripts/    # lint (what CI runs)
 uv run ruff format --check src/ tests/ fuzz/ scripts/  # format gate (what CI runs)
