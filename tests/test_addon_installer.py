@@ -193,6 +193,109 @@ def test_a_case_variant_manifest_does_not_name_the_add_in(tmp_path: Path):
     assert "found 0" in str(exc.value)
 
 
+@pytest.mark.skipif(
+    os.name == "nt", reason="a newline in a filename is illegal on Windows"
+)
+def test_a_name_in_a_refusal_cannot_add_a_line(tmp_path: Path):
+    """A manifest's name is the one part of a refusal this code did not choose.
+
+    The listing puts each candidate on its own line on purpose, which is what the
+    shell installer prints too - so a name carrying a newline (legal on POSIX) would
+    read as a candidate that is not there, or as a line that is not a candidate.
+    """
+    source = _add_on_tree(tmp_path)
+    (source / "Other.manifest").write_text(MANIFEST, encoding="utf-8")
+    (source / "Odd\nname.manifest").write_text(MANIFEST, encoding="utf-8")
+
+    with pytest.raises(InstallRefused) as exc:
+        manifest_for(source)
+
+    message = str(exc.value)
+    listed = [line for line in message.splitlines() if line.startswith("  ")]
+    assert listed == [
+        "  Fusion360MCP.manifest",
+        "  Odd name.manifest",
+        "  Other.manifest",
+    ]
+    assert "found 3" in message
+
+
+def test_each_refusal_built_from_a_path_stays_one_line(tmp_path: Path):
+    """The listing is not the only site: every refusal collapses its own value.
+
+    None of these three needs a *file whose name* contains the newline - that is what
+    makes the guard reachable on every platform, including the one where such a name
+    cannot exist.  `_manifest_version` does read, and fails, which is the `OSError`
+    branch being pinned; the other two stat and resolve.
+    """
+    refusals = (
+        lambda: addon_install._add_on_dir(tmp_path / "a\nb"),
+        lambda: addon_install.target_for(tmp_path / "Add\nIns", ".."),
+        lambda: addon_install._manifest_version(tmp_path / "Odd\nname.manifest"),
+    )
+
+    for build in refusals:
+        with pytest.raises(InstallRefused) as exc:
+            build()
+        assert len(str(exc.value).splitlines()) == 1, str(exc.value)
+
+
+@pytest.mark.skipif(
+    os.name == "nt", reason="a newline in a filename is illegal on Windows"
+)
+def test_the_banner_stays_one_line_per_item(tmp_path: Path, capsys):
+    """The success banner is the more reachable half, so it gets its own guard.
+
+    One crafted tree - a parent directory and a manifest both carrying a newline -
+    reaches `source`, `target` and the stem printed twice, and a single odd manifest
+    installs *successfully*, where a refusal needs two.  POSIX only, for the same
+    reason as the listing test: Windows cannot create the name.
+    """
+    source = _add_on_tree(tmp_path / "Odd\nroot")
+    (source / "Fusion360MCP.manifest").unlink()
+    (source / "Odd\nname.manifest").write_text(MANIFEST, encoding="utf-8")
+
+    code = install_addon(addin_dir=tmp_path / "AddIns", source=source)
+
+    assert code == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert [line for line in lines if line.startswith("Installing")] == [
+        "Installing Odd name add-in..."
+    ]
+    (target_line,) = [line for line in lines if line.startswith("  Target: ")]
+    assert target_line.endswith("AddIns" + os.sep + "Odd name")
+    (source_line,) = [line for line in lines if line.startswith("  Source: ")]
+    assert source_line.endswith(os.sep.join(["Odd root", "addon"]))
+    assert [line for line in lines if "Find '" in line] == [
+        "  3. Find 'Odd name' in the Add-Ins tab"
+    ]
+
+
+def test_a_version_carrying_a_line_break_prints_as_one_line(tmp_path: Path, capsys):
+    """The banner takes the manifest's `version`, which is content, not a filename.
+
+    JSON accepts a newline in the string, so one installed add-in would otherwise be
+    two lines of banner - under text it did not write, printed by its own installer.
+    """
+    source = _add_on_tree(
+        tmp_path,
+        extra={"Fusion360MCP.manifest": '{"version": "0.8.0\\nnot a banner line"}'},
+    )
+
+    code = install_addon(addin_dir=tmp_path / "AddIns", source=source)
+
+    assert code == 0
+    versions = [
+        line for line in capsys.readouterr().out.splitlines() if "Version:" in line
+    ]
+    assert versions == ["  Version: 0.8.0 not a banner line"]
+
+
+def test_the_collapse_keeps_the_words_and_loses_the_breaks():
+    assert addon_install._one_line("a\nb\t\tc  d") == "a b c d"
+    assert addon_install._one_line("plain") == "plain"
+
+
 def test_a_manifest_that_is_not_a_regular_file_is_refused(tmp_path: Path):
     source = tmp_path / "addon"
     (source / "Bogus.manifest").mkdir(parents=True)
@@ -542,6 +645,21 @@ def test_a_null_version_is_refused_as_a_line(tmp_path: Path, capsys):
 def test_an_empty_version_is_refused_as_a_line(tmp_path: Path, capsys):
     """An empty string would install and print an empty ``Version:`` line."""
     source = _add_on_tree(tmp_path, extra={"Fusion360MCP.manifest": '{"version": ""}'})
+
+    code = install_addon(addin_dir=tmp_path / "AddIns", source=source)
+
+    assert code == 1
+    assert "no version" in capsys.readouterr().err
+    assert not (tmp_path / "AddIns" / "Fusion360MCP").exists()
+
+
+def test_a_whitespace_only_version_is_refused_as_a_line(tmp_path: Path, capsys):
+    """`" "` used to install and print the empty ``Version:`` line `_one_line` folds to.
+
+    The emptiness check was truthiness, and a space is truthy - so the collapse turned
+    it into exactly the outcome `_manifest_version` says it exists to prevent.
+    """
+    source = _add_on_tree(tmp_path, extra={"Fusion360MCP.manifest": '{"version": " "}'})
 
     code = install_addon(addin_dir=tmp_path / "AddIns", source=source)
 

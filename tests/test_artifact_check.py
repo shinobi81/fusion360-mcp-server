@@ -301,6 +301,27 @@ def test_a_refusal_message_is_one_stderr_line_whatever_it_is_handed(capsys):
     assert stderr.strip().splitlines() == ["addon/a b.py: cannot be read"]
 
 
+def test_a_finding_naming_an_awkward_file_stays_one_line(
+    monkeypatch, tmp_path: Path, capsys
+):
+    """`shipped_findings` embeds a tracked path, and a newline in one is legal on POSIX.
+
+    Findings are a list, so a name must not turn one finding into two lines - the same
+    reason `_refuse` collapses its message.
+    """
+    monkeypatch.setattr(CHECK, "tracked_add_on", lambda _root: {"gone\nfile.py": b"x"})
+    monkeypatch.setattr(CHECK, "read_artifact", lambda _path: {})
+    wheel = tmp_path / "clean.whl"
+    wheel.write_bytes(b"")
+
+    assert CHECK.main([str(wheel)]) == 1
+
+    stderr = capsys.readouterr().err
+    assert stderr.strip().splitlines() == [
+        f"{wheel}: gone file.py is missing from the artifact"
+    ]
+
+
 def test_the_repository_tracks_ten_add_on_files():
     tracked = CHECK.tracked_add_on(REPO_ROOT)
 

@@ -40,6 +40,29 @@ class InstallRefused(Exception):
     """A state the install must not touch; the message is what the CLI prints."""
 
 
+def _one_line(text: object) -> str:
+    """*text* with every run of whitespace collapsed to a single space.
+
+    The install prints files it did not choose - a manifest someone dropped into
+    `addon/`, its `version` string, a path under Fusion's data folder - and a name
+    containing a newline is legal on POSIX.  Every value the install did not choose
+    goes through here, so one installed add-in is one banner and one refusal is one
+    line.  Values it did choose - the file count, the literal `APPDATA`/`HOME` name,
+    and `{system!r}`, whose repr escapes separators - are printed as they are.
+
+    The two-manifest refusal lists its candidates one per line on purpose, matching
+    `scripts/install-addon.sh`, so what gets collapsed is the *name*: one candidate
+    stays one line, and the listing is not flattened into a paragraph.
+
+    Folding rather than escaping is deliberate and matches `_refuse` in
+    `scripts/check_artifacts_ship_addon.py`: a name with two spaces prints with one,
+    which is a smaller lie than a name that cannot be read at all.  The same trade-off
+    reaches the banner's `Source:`/`Target:` lines, where the printed path is one a
+    reader may copy - a directory named `Jane  Doe` prints as `Jane Doe`.
+    """
+    return " ".join(str(text).split())
+
+
 def add_on_source(package: Path | None = None) -> Path:
     """The add-in's directory inside the installed package.
 
@@ -67,7 +90,7 @@ def manifest_for(source: Path) -> Path:
         if manifest.name.endswith(".manifest") and not manifest.name.startswith(".")
     )
     if len(manifests) != 1:
-        listed = "".join(f"\n  {manifest.name}" for manifest in manifests)
+        listed = "".join(f"\n  {_one_line(manifest.name)}" for manifest in manifests)
         raise InstallRefused(
             f"addon/ must hold exactly one *.manifest; found {len(manifests)}{listed}"
         )
@@ -76,7 +99,7 @@ def manifest_for(source: Path) -> Path:
     # counts as the one manifest and would name the add-in after a file Fusion cannot
     # load.
     if not manifest.is_file():
-        raise InstallRefused(f"{manifest.name} is not a regular file")
+        raise InstallRefused(f"{_one_line(manifest.name)} is not a regular file")
     return manifest
 
 
@@ -119,8 +142,9 @@ def _add_on_dir(source: Path) -> Path:
     """
     if not source.is_dir():
         raise InstallRefused(
-            f"{source} is not a directory: this installs the add-in packaged in the "
-            f"wheel, and a source checkout installs with scripts/install-addon.sh"
+            f"{_one_line(source)} is not a directory: this installs the add-in "
+            f"packaged in the wheel, and a source checkout installs with "
+            f"scripts/install-addon.sh"
         )
     return source
 
@@ -134,7 +158,7 @@ def target_for(add_ins: Path, stem: str) -> Path:
     """
     target = add_ins / stem
     if target.resolve().parent != add_ins.resolve():
-        raise InstallRefused(f"{stem} resolves outside {add_ins}")
+        raise InstallRefused(f"{_one_line(stem)} resolves outside {_one_line(add_ins)}")
     return target
 
 
@@ -168,14 +192,16 @@ def add_ins_dir(
     fusion_root = path.parents[1]
     if not fusion_root.is_dir():
         raise InstallRefused(
-            f"{fusion_root} does not exist: that folder is Fusion 360's own, so Fusion "
-            f"is not installed here, and an AddIns folder invented beneath it would be "
-            f"an install Fusion never looks at"
+            f"{_one_line(fusion_root)} does not exist: that folder is Fusion 360's "
+            f"own, so Fusion is not installed here, and an AddIns folder invented "
+            f"beneath it would be an install Fusion never looks at"
         )
     try:
         path.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        raise InstallRefused(f"cannot create {path}: {exc}") from exc
+        raise InstallRefused(
+            f"cannot create {_one_line(path)}: {_one_line(exc)}"
+        ) from exc
     return path
 
 
@@ -213,17 +239,20 @@ def _manifest_version(manifest: Path) -> str:
 
     The key's *value* is part of the contract, not just its presence: ``null`` and
     ``""`` would otherwise pass ``str`` and print ``Version: None`` or an empty line
-    from an install that went ahead anyway, so anything but a non-empty string is the
-    same refusal as a missing key.
+    from an install that went ahead anyway - and so would ``" "``, which is why the
+    test is for a non-whitespace character rather than for truthiness.  Anything but a
+    string with one is the same refusal as a missing key.
     """
     try:
         version = json.loads(manifest.read_text(encoding="utf-8"))["version"]
     except (OSError, ValueError) as exc:
-        raise InstallRefused(f"{manifest.name} cannot be read as JSON: {exc}") from exc
+        raise InstallRefused(
+            f"{_one_line(manifest.name)} cannot be read as JSON: {_one_line(exc)}"
+        ) from exc
     except KeyError, TypeError:
-        raise InstallRefused(f"{manifest.name} has no version") from None
-    if not isinstance(version, str) or not version:
-        raise InstallRefused(f"{manifest.name} has no version")
+        raise InstallRefused(f"{_one_line(manifest.name)} has no version") from None
+    if not isinstance(version, str) or not version.strip():
+        raise InstallRefused(f"{_one_line(manifest.name)} has no version")
     return version
 
 
@@ -240,7 +269,9 @@ def _fresh_copy(target: Path, source: Path) -> list[str]:
             shutil.rmtree(target)
         copied = copy_add_on(source, target)
     except OSError as exc:
-        raise InstallRefused(f"cannot write to {target}: {exc}") from exc
+        raise InstallRefused(
+            f"cannot write to {_one_line(target)}: {_one_line(exc)}"
+        ) from exc
     written = {
         path.relative_to(target).as_posix()
         for path in target.rglob("*")
@@ -248,7 +279,9 @@ def _fresh_copy(target: Path, source: Path) -> list[str]:
     }
     missing = written ^ set(copied)
     if missing:
-        raise InstallRefused(f"copy incomplete: {', '.join(sorted(missing))}")
+        raise InstallRefused(
+            f"copy incomplete: {', '.join(_one_line(name) for name in sorted(missing))}"
+        )
     return copied
 
 
@@ -275,24 +308,25 @@ def install_addon(addin_dir: Path | None = None, source: Path | None = None) -> 
         target = target_root / manifest.stem
         if target.is_symlink() or os.path.isjunction(target):
             raise InstallRefused(
-                f"{target} is a symlink or junction; it is a development install. "
-                f"Run scripts/install-addon.sh to restore it, or remove it first."
+                f"{_one_line(target)} is a symlink or junction; it is a development "
+                f"install. Run scripts/install-addon.sh to restore it, or remove it "
+                f"first."
             )
         target = target_for(target_root, manifest.stem)
         if target.exists() and not target.is_dir():
-            raise InstallRefused(f"{target} exists and is not a directory")
+            raise InstallRefused(f"{_one_line(target)} exists and is not a directory")
         version = _manifest_version(manifest)
         copied = _fresh_copy(target, source)
-        print(f"Installing {manifest.stem} add-in...")
-        print(f"  Source: {source}")
-        print(f"  Target: {target}")
+        print(f"Installing {_one_line(manifest.stem)} add-in...")
+        print(f"  Source: {_one_line(source)}")
+        print(f"  Target: {_one_line(target)}")
         print(f"  {len(copied)} files copied")
-        print(f"  Version: {version}")
+        print(f"  Version: {_one_line(version)}")
         print()
         print("Next steps:")
         print("  1. Open Fusion 360")
         print("  2. Press Shift+S to open Scripts and Add-Ins")
-        print(f"  3. Find '{manifest.stem}' in the Add-Ins tab")
+        print(f"  3. Find '{_one_line(manifest.stem)}' in the Add-Ins tab")
         print("  4. Click 'Run' to start the add-in")
         return 0
     except InstallRefused as exc:
