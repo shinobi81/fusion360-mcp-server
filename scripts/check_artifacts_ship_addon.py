@@ -26,6 +26,7 @@ import sys
 import tarfile
 import zipfile
 from pathlib import Path, PurePosixPath
+from typing import NoReturn
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,6 +34,10 @@ ROOT = Path(__file__).resolve().parents[1]
 # check decides what the artifact may carry, so a tracked file outside the two of them
 # is a finding rather than an omission.
 WHITELIST: tuple[str, ...] = (".py", ".manifest")
+
+# Below the add-on's root the copy takes `.py` only: Fusion reads the manifest beside
+# the add-in's entry module, so a nested one is data the installer skips.
+NESTED_WHITELIST: tuple[str, ...] = (".py",)
 
 ADD_ON_DIR = "addon"
 
@@ -53,7 +58,7 @@ def shipped_findings(shipped: dict[str, bytes], tracked: dict[str, bytes]) -> li
     findings = [
         f"{path} is missing from the artifact"
         for path in sorted(tracked)
-        if _installable(path) and path not in shipped
+        if installable(path) and path not in shipped
     ]
     findings += [
         f"{path} is extra: not tracked in addon/"
@@ -68,32 +73,48 @@ def shipped_findings(shipped: dict[str, bytes], tracked: dict[str, bytes]) -> li
     findings += [
         f"{path} is tracked but the installer would not copy it"
         for path in sorted(tracked)
-        if not _installable(path)
+        if not installable(path)
     ]
     return findings
 
 
-def _installable(path: str) -> bool:
-    """Whether the installer's whitelist would copy *path* out of `addon/`."""
-    return PurePosixPath(path).suffix in WHITELIST
+def installable(path: str) -> bool:
+    """Whether the installer's copy would take *path* out of `addon/`.
+
+    The copy rule has two depths - `.py` anywhere, `.manifest` only at the root - so a
+    suffix test alone would call a nested manifest copyable when nothing copies it.
+    """
+    suffixes = NESTED_WHITELIST if "/" in path else WHITELIST
+    return PurePosixPath(path).suffix in suffixes
+
+
+def _refuse(message: str) -> NoReturn:
+    """One line on stderr and exit 2: cannot check, which is not a finding."""
+    print(message, file=sys.stderr)
+    raise SystemExit(2)
+
+
+def _one_line(text: str) -> str:
+    """*text* with its whitespace collapsed, so a refusal stays one stderr line."""
+    return " ".join(text.split())
 
 
 def read_artifact(path: Path) -> dict[str, bytes]:
     """The artifact's add-in files, keyed by their path relative to `addon/`."""
-    if path.name.endswith(_WHEEL_SUFFIX):
-        with zipfile.ZipFile(path) as wheel:
-            return {
-                name.removeprefix(PACKAGE_PREFIX): wheel.read(name)
-                for name in wheel.namelist()
-                if name.startswith(PACKAGE_PREFIX) and not name.endswith("/")
-            }
-    if path.name.endswith(_SDIST_SUFFIX):
-        return _read_sdist(path)
-    print(
-        f"{path}: neither a .whl nor a .tar.gz, so there is no add-in copy to read",
-        file=sys.stderr,
-    )
-    raise SystemExit(2)
+    try:
+        if path.name.endswith(_WHEEL_SUFFIX):
+            with zipfile.ZipFile(path) as wheel:
+                return {
+                    name.removeprefix(PACKAGE_PREFIX): wheel.read(name)
+                    for name in wheel.namelist()
+                    if name.startswith(PACKAGE_PREFIX) and not name.endswith("/")
+                }
+        if path.name.endswith(_SDIST_SUFFIX):
+            return _read_sdist(path)
+    except (OSError, zipfile.BadZipFile, tarfile.ReadError) as error:
+        # `tarfile` names every compression it tried, one per line, so collapse it.
+        _refuse(f"{path}: cannot be read as an artifact: {_one_line(str(error))}")
+    _refuse(f"{path}: neither a .whl nor a .tar.gz, so there is no add-in copy to read")
 
 
 def _read_sdist(path: Path) -> dict[str, bytes]:
@@ -119,18 +140,19 @@ def _read_sdist(path: Path) -> dict[str, bytes]:
 
 def tracked_add_on(root: Path) -> dict[str, bytes]:
     """The add-on files git tracks under *root*, keyed and read the same way."""
-    completed = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-z", "--", ADD_ON_DIR],
-        capture_output=True,
-        check=False,
-    )
-    if completed.returncode != 0:
-        print(
-            f"git ls-files failed in {root}: "
-            f"{completed.stderr.decode('utf-8', 'replace').strip()}",
-            file=sys.stderr,
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z", "--", ADD_ON_DIR],
+            capture_output=True,
+            check=False,
         )
-        raise SystemExit(2)
+    except OSError as error:
+        _refuse(f"cannot run git in {root}: {_one_line(str(error))}")
+    if completed.returncode != 0:
+        _refuse(
+            f"git ls-files failed in {root}: "
+            f"{_one_line(completed.stderr.decode('utf-8', 'replace'))}"
+        )
     prefix = f"{ADD_ON_DIR}/"
     files: dict[str, bytes] = {}
     for entry in completed.stdout.decode("utf-8", "replace").split("\0"):
@@ -152,13 +174,15 @@ def main(argv: list[str] | None = None) -> int:
     tracked = tracked_add_on(ROOT)
     findings = []
     for artifact in artifacts:
-        findings.extend(shipped_findings(read_artifact(artifact), tracked))
+        artifact_findings = shipped_findings(read_artifact(artifact), tracked)
+        findings.extend(f"{artifact}: {finding}" for finding in artifact_findings)
     if findings:
         for finding in findings:
             print(finding, file=sys.stderr)
         return 1
+    copied = sum(1 for path in tracked if installable(path))
     for artifact in artifacts:
-        print(f"{artifact}: {len(tracked)} add-on files match addon/")
+        print(f"{artifact}: {copied} add-on files match addon/")
     return 0
 
 
