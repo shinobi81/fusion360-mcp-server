@@ -102,8 +102,13 @@ def installable(path: str) -> bool:
 
 
 def _refuse(message: str) -> NoReturn:
-    """One line on stderr and exit 2: cannot check, which is not a finding."""
-    print(message, file=sys.stderr)
+    """One line on stderr and exit 2: cannot check, which is not a finding.
+
+    The collapse is here rather than only at the call sites, because a message built
+    from a path is one line only if the path is: a tracked file's name is the caller's
+    input, and a newline in it is legal on POSIX.
+    """
+    print(_one_line(message), file=sys.stderr)
     raise SystemExit(2)
 
 
