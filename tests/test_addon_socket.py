@@ -9,6 +9,7 @@ that path.
 ``socket_server.py`` imports no ``adsk``, so this runs in CI.
 """
 
+import errno
 import json
 import pathlib
 import socket
@@ -48,7 +49,11 @@ def _exchange(payload: bytes, timeout: float = 5.0):
     thread.start()
 
     client_end.sendall(payload)
-    client_end.shutdown(socket.SHUT_WR)
+    # A peer that answered and closed at once has already ended the stream, which
+    # is all this was for; darwin calls that ENOTCONN where Windows returns
+    # quietly (measured on the sibling fuzz target's identical call).
+    with suppress(OSError):
+        client_end.shutdown(socket.SHUT_WR)
 
     replies = b""
     client_end.settimeout(timeout)
@@ -62,6 +67,14 @@ def _exchange(payload: bytes, timeout: float = 5.0):
     finally:
         client_end.close()
         thread.join(timeout)
+
+    # Reached only when nothing above raised, so this cannot mask a real failure.
+    # It is weaker than it looks: the `close` above also unblocks the handler, so
+    # what this catches is a handler still running after both - not one that was
+    # merely never told about end of input. The fuzz twin counts the call instead,
+    # and the test below counts its stub, which is where the signal itself is
+    # pinned.
+    assert not thread.is_alive(), "the handler outlived its peer and a close"
 
     return bridge, [json.loads(line) for line in replies.splitlines() if line.strip()]
 
@@ -83,6 +96,37 @@ def test_http_post_body_is_not_dispatched():
         "an HTTP request must not be parsed into a command - that was the "
         "drive-by code-execution path from a web page"
     )
+    assert replies and replies[0]["message"] == "Invalid JSON"
+
+
+def test_an_exchange_survives_a_peer_that_closed_first(monkeypatch):
+    """The refusal path replies and closes at once, so the client races that close.
+
+    macOS answers the client's ``shutdown(SHUT_WR)`` with ``ENOTCONN`` when the
+    handler's close landed first; Windows returns quietly (measured), which is why
+    no run here reaches it unaided. A peer already gone has ended the stream, which
+    is what the call was for - the exchange still owes the reply it already read.
+    """
+    real_shutdown = socket.socket.shutdown
+    signalled: list[int] = []
+
+    def enotconn(sock, how):
+        if how != socket.SHUT_WR:
+            return real_shutdown(sock, how)
+        signalled.append(how)
+        raise OSError(errno.ENOTCONN, "Socket is not connected")
+
+    monkeypatch.setattr(socket.socket, "shutdown", enotconn)
+
+    bridge, replies = _exchange(
+        b'POST /x HTTP/1.1\r\nHost: 127.0.0.1:9876\r\n\r\n{"type": "ping"}\n'
+    )
+
+    # The stub firing is the precondition: without this the test would stay green
+    # if `_exchange` stopped signalling end-of-input at all, and prove nothing
+    # about the darwin path it exists for.
+    assert signalled == [socket.SHUT_WR]
+    assert bridge.commands == []
     assert replies and replies[0]["message"] == "Invalid JSON"
 
 
