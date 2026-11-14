@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -26,6 +27,7 @@ from fusion360_mcp.addon_install import (
     copy_add_on,
     install_addon,
     manifest_for,
+    target_for,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -298,6 +300,161 @@ def test_a_path_with_spaces_and_non_ascii_characters_still_installs(tmp_path: Pa
 
     assert code == 0
     assert (awkward / "AddIns" / "Fusion360MCP" / "Fusion360MCP.py").is_file()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="a POSIX symlink needs no privilege")
+def test_a_symlinked_target_is_refused_and_the_repo_is_untouched(
+    tmp_path: Path, capsys
+):
+    """Assert the phrase, not the word: pytest names this test's temporary directory
+    after the test, so a bare ``symlink`` also matches the path in the message the
+    containment refusal prints — an assertion that cannot fail.
+    """
+    checkout = _add_on_tree(tmp_path)
+    add_ins = tmp_path / "AddIns"
+    add_ins.mkdir()
+    (add_ins / "Fusion360MCP").symlink_to(checkout, target_is_directory=True)
+
+    code = install_addon(addin_dir=add_ins, source=checkout)
+    err = capsys.readouterr().err
+
+    assert code == 1
+    assert "is a symlink or junction" in err
+    assert (checkout / "Fusion360MCP.py").read_text(encoding="utf-8") == "import os\n"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="junctions exist only on Windows")
+def test_a_junction_target_is_refused_and_the_repo_is_untouched(tmp_path: Path, capsys):
+    """A junction needs no privilege, so unlike the POSIX symlink this half runs on
+    Windows — and it is the half the falsification measured: with the link check
+    replaced by `False` the bare word ``junction`` still matched the temporary
+    directory's name, `test_a_junction_target_is_refu0`, in the containment refusal's
+    path, so the test passed for the wrong reason.
+    """
+    checkout = _add_on_tree(tmp_path)
+    add_ins = tmp_path / "AddIns"
+    add_ins.mkdir()
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(add_ins / "Fusion360MCP"), str(checkout)],
+        check=True,
+        capture_output=True,
+    )
+
+    code = install_addon(addin_dir=add_ins, source=checkout)
+    err = capsys.readouterr().err
+
+    assert code == 1
+    assert "is a symlink or junction" in err
+    assert (checkout / "Fusion360MCP.py").read_text(encoding="utf-8") == "import os\n"
+
+
+def test_a_target_that_is_a_regular_file_is_refused(tmp_path: Path, capsys):
+    source = _add_on_tree(tmp_path)
+    add_ins = tmp_path / "AddIns" / "Fusion360MCP"
+    add_ins.parent.mkdir()
+    add_ins.write_text("not a directory", encoding="utf-8")
+
+    code = install_addon(addin_dir=add_ins.parent, source=source)
+
+    assert code == 1
+    assert "not a directory" in capsys.readouterr().err
+
+
+def test_a_stale_install_is_replaced(tmp_path: Path):
+    source = _add_on_tree(tmp_path)
+    add_ins = tmp_path / "AddIns"
+    stale = add_ins / "Fusion360MCP"
+    stale.mkdir(parents=True)
+    (stale / "gone.py").write_text("", encoding="utf-8")
+
+    assert install_addon(addin_dir=add_ins, source=source) == 0
+
+    assert not (stale / "gone.py").exists()
+    assert (stale / "Fusion360MCP.py").is_file()
+
+
+def test_a_stem_that_escapes_the_add_ins_directory_is_refused(tmp_path: Path):
+    """A manifest stem is a path segment. `Path.stem` cannot produce `..` from a
+    `*.manifest` glob, so the refusal is pinned at the helper that takes a stem,
+    rather than through a filename that cannot exist."""
+    with pytest.raises(InstallRefused) as exc:
+        target_for(tmp_path / "AddIns", "..")
+
+    assert "AddIns" in str(exc.value)
+
+
+def test_a_copy_that_drops_a_file_is_reported(tmp_path: Path, monkeypatch, capsys):
+    source = _add_on_tree(tmp_path)
+    real = addon_install.copy_add_on
+
+    def lossy(src: Path, dst: Path) -> list[str]:
+        copied = real(src, dst)
+        Path(dst / "server" / "hints.py").unlink()
+        return copied
+
+    monkeypatch.setattr(addon_install, "copy_add_on", lossy)
+
+    code = install_addon(addin_dir=tmp_path / "AddIns", source=source)
+
+    assert code == 1
+    assert "server/hints.py" in capsys.readouterr().err
+
+
+def test_a_write_that_fails_is_reported_as_a_line(tmp_path: Path, monkeypatch, capsys):
+    """The last line of defence: whatever a filesystem refuses, the CLI answers with
+    an exit code rather than a traceback."""
+    source = _add_on_tree(tmp_path)
+    add_ins = tmp_path / "AddIns"
+    (add_ins / "Fusion360MCP").mkdir(parents=True)
+
+    def read_only(path, *args, **kwargs):
+        raise PermissionError(f"{path} is read-only")
+
+    monkeypatch.setattr(addon_install.shutil, "rmtree", read_only)
+
+    code = install_addon(addin_dir=add_ins, source=source)
+
+    assert code == 1
+    assert "cannot write to" in capsys.readouterr().err
+
+
+def test_a_manifest_that_is_not_json_is_refused_as_a_line(tmp_path: Path, capsys):
+    source = _add_on_tree(tmp_path, extra={"Fusion360MCP.manifest": "not json"})
+
+    code = install_addon(addin_dir=tmp_path / "AddIns", source=source)
+
+    assert code == 1
+    assert "cannot be read as JSON" in capsys.readouterr().err
+
+
+def test_a_manifest_without_a_version_is_refused_as_a_line(tmp_path: Path, capsys):
+    source = _add_on_tree(
+        tmp_path, extra={"Fusion360MCP.manifest": '{"type": "addin"}'}
+    )
+
+    code = install_addon(addin_dir=tmp_path / "AddIns", source=source)
+
+    assert code == 1
+    assert "no version" in capsys.readouterr().err
+    assert not (tmp_path / "AddIns" / "Fusion360MCP").exists()
+
+
+def test_an_unset_system_is_derived_from_this_machine(tmp_path: Path, monkeypatch):
+    """`system=None` is the only value that dispatches to this machine.  A set-but-empty
+    system is an unknown one, which `add_ins_dir` refuses rather than overrides."""
+    monkeypatch.setattr(addon_install, "_current_system", lambda: "windows")
+    (tmp_path / "Autodesk" / "Autodesk Fusion 360").mkdir(parents=True)
+
+    path = add_ins_dir(environ={"APPDATA": str(tmp_path)}, system=None)
+
+    assert path == tmp_path / ADD_INS_TAIL
+
+
+def test_an_empty_system_is_refused_not_replaced_by_this_machine():
+    with pytest.raises(InstallRefused) as exc:
+        add_ins_dir(environ={"HOME": "/tmp"}, system="")
+
+    assert "Fusion 360 runs on Windows and macOS only" in str(exc.value)
 
 
 def test_the_copy_rule_matches_the_release_check():

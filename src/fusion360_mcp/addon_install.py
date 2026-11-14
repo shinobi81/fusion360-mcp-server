@@ -117,20 +117,34 @@ def _add_on_dir(source: Path) -> Path:
     return source
 
 
+def target_for(add_ins: Path, stem: str) -> Path:
+    """The add-in's directory under *add_ins*, refused when *stem* points out of it.
+
+    *stem* is the manifest's name read as a path segment, so it is the one piece of the
+    install the package does not spell.  ``..`` is the case that matters: it would put
+    the copy beside ``AddIns`` instead of in it, where Fusion never looks.
+    """
+    target = add_ins / stem
+    if target.resolve().parent != add_ins.resolve():
+        raise InstallRefused(f"{stem} resolves outside {add_ins}")
+    return target
+
+
 def add_ins_dir(
     environ: Mapping[str, str] | None = None, system: str | None = None
 ) -> Path:
     """Fusion's ``AddIns`` directory, created if Fusion is installed and it is missing.
 
-    Only the last folder is ever created: Fusion makes ``Autodesk Fusion 360`` on
-    install, so its absence means Fusion is not installed here and a directory tree
-    invented under it would be an install nobody can find.
+    ``mkdir(parents=True)`` makes ``API`` as well as ``AddIns``, and nothing above
+    ``Autodesk Fusion 360``: Fusion makes that folder on install, so its absence means
+    Fusion is not installed here and a directory tree invented under it would be an
+    install nobody can find.
 
     *environ* and *system* are seams — the environment and the platform name are read
     rather than guessed, so a test can hand over either one.
     """
     env = os.environ if environ is None else environ
-    system = system or _current_system()
+    system = _current_system() if system is None else system
     if system == "windows":
         path = _required_dir(env, "APPDATA") / ADD_INS_TAIL
     elif system == "darwin":
@@ -172,20 +186,77 @@ def _required_dir(environ: Mapping[str, str], name: str) -> Path:
     return Path(value)
 
 
+def _manifest_version(manifest: Path) -> str:
+    """The manifest's ``version``, refused as a line when it cannot be read.
+
+    The manifest is the one file the install reads rather than copies, and it is read
+    before anything is written: raising ``JSONDecodeError`` here would be a traceback
+    at the end of an install that had already replaced the folder on disk.  One clause
+    covers an unreadable file, bytes that are not UTF-8 and text that is not JSON —
+    all three mean the same thing to the caller, which is that no version was read.
+    """
+    try:
+        return str(json.loads(manifest.read_text(encoding="utf-8"))["version"])
+    except (OSError, ValueError) as exc:
+        raise InstallRefused(f"{manifest.name} cannot be read as JSON: {exc}") from exc
+    except KeyError, TypeError:
+        raise InstallRefused(f"{manifest.name} has no version") from None
+
+
+def _fresh_copy(target: Path, source: Path) -> list[str]:
+    """Make *target* hold exactly the copy of *source*, and check that it does.
+
+    A stale directory is removed rather than merged: a merge keeps files the copy no
+    longer ships, so a module deleted from the add-on would go on running.  The copied
+    set *copy_add_on* reports is then compared with the files that are actually there,
+    because that list is a claim about the disk and the disk is what Fusion reads.
+    """
+    try:
+        if target.is_dir():
+            shutil.rmtree(target)
+        copied = copy_add_on(source, target)
+    except OSError as exc:
+        raise InstallRefused(f"cannot write to {target}: {exc}") from exc
+    written = {
+        path.relative_to(target).as_posix()
+        for path in target.rglob("*")
+        if path.is_file()
+    }
+    missing = written ^ set(copied)
+    if missing:
+        raise InstallRefused(f"copy incomplete: {', '.join(sorted(missing))}")
+    return copied
+
+
 def install_addon(addin_dir: Path | None = None, source: Path | None = None) -> int:
     """Copy the packaged add-in into Fusion's AddIns folder; 0 installed, 1 refused.
 
     Both arguments are seams: the defaults are the add-in inside the installed package
     and the folder Fusion reads on this machine.  A refusal is reported, not raised,
     because the only caller is a CLI whose exit code is the answer.
+
+    Nothing is written until every refusal has had its turn, and the first of them is
+    the link: a development install is a link to a checkout, so a copy through it
+    would overwrite the sources rather than install them.
     """
     try:
         source = _add_on_dir(source or add_on_source())
         target_root = addin_dir or add_ins_dir()
         manifest = manifest_for(source)
+        # The link check comes before `target_for`, which resolves: a link out of
+        # `AddIns` would be reported there as an install outside the folder, and a
+        # junction to a checkout is the state this must name rather than copy into.
         target = target_root / manifest.stem
-        copied = copy_add_on(source, target)
-        version = json.loads(manifest.read_text(encoding="utf-8"))["version"]
+        if target.is_symlink() or os.path.isjunction(target):
+            raise InstallRefused(
+                f"{target} is a symlink or junction; it is a development install. "
+                f"Run scripts/install-addon.sh to restore it, or remove it first."
+            )
+        target = target_for(target_root, manifest.stem)
+        if target.exists() and not target.is_dir():
+            raise InstallRefused(f"{target} exists and is not a directory")
+        version = _manifest_version(manifest)
+        copied = _fresh_copy(target, source)
         print(f"Installing {manifest.stem} add-in...")
         print(f"  Source: {source}")
         print(f"  Target: {target}")
