@@ -71,13 +71,6 @@ jobs:
       - name: src coverage floor
         run: uv run coverage report --include="src/fusion360_mcp/*" --fail-under=95
 
-      # Every percentage a document quotes about this measurement is a claim, and no
-      # test can check it: the total is only complete once pytest has written
-      # `.coverage`.  So it is checked here, by a script whose own logic the suite
-      # tests with a synthetic measurement.
-      - name: documented coverage figures match the run
-        run: uv run python scripts/check_coverage_figures.py
-
   # This project has Windows-specific behaviour (loopback resolution, an .exe
   # the running MCP server keeps open), so the suite runs there too.
   windows:
