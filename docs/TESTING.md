@@ -31,8 +31,7 @@ different populations:
 
 - **59** for the whole suite, which now measures `src/fusion360_mcp` **and**
   `addon/server`. The add-in's CAM, export, view-sheet and viewport-render paths only
-  run inside Fusion, and they account for almost all of the distance between the floor
-  and the measured total.
+  run inside Fusion, and they account for almost all of the uncovered statements.
 - **95** for the server alone, enforced separately in CI:
   `uv run coverage report --include="src/fusion360_mcp/*" --fail-under=95`. Without it,
   an add-in regression would buy slack for `src/`.

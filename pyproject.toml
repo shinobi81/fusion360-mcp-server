@@ -70,7 +70,8 @@ testpaths = ["tests"]
 # written down: the test job prints it, and a quoted figure would need re-editing every
 # time a test reached new lines.
 #
-# That total is dominated by the add-in: `addon/server` is 2612 statements at ~51%,
+# That total is dominated by the add-in: `addon/server` is roughly 2,600 statements with
+# about half of them covered,
 # because CAM, export, view-sheet and viewport-render only run inside Fusion.  The add-in's
 # own floor is therefore low on purpose, and the server keeps its own gate - CI runs
 # `coverage report --include="src/fusion360_mcp/*" --fail-under=95` after pytest - so an
