@@ -30,10 +30,11 @@ user's design or machine are prioritised.
   process can call any tool, including `execute_code`, which runs arbitrary Python
   inside Fusion. That is a deliberate local-trust model, documented in `AGENTS.md`. It
   *is* a vulnerability if the port is reachable from another machine
-  (`FUSION_MCP_HOST` set to a LAN address) — report that deployment, not the design. -
-  **`export_*` and `import_mesh` accept arbitrary paths**, so a caller can write
+  (`FUSION_MCP_HOST` set to a LAN address) — report that deployment, not the design.
+- **`export_*` and `import_mesh` accept arbitrary paths**, so a caller can write
   outside the project directory. Same reasoning: the caller is already trusted to run
-  code. - **`execute_code` is marked destructive** for exactly this reason; permission
+  code.
+- **`execute_code` is marked destructive** for exactly this reason; permission
   prompts for MCP tools are the client's control, not the server's.
 
 ## Scope
