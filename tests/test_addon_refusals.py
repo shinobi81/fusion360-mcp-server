@@ -79,7 +79,10 @@ def test_the_kind_a_refusal_carries_wins_over_the_table():
 
 # ── the wire contract: a converted message classifies as it did ───────
 
-#: The six messages converted to ``Refusal``, verbatim from ``command_handler``.
+#: The seven messages converted to ``Refusal``, verbatim from ``command_handler``.
+#: The seven handler tests below compare the message they catch against these
+#: entries, so a message edited in the handler fails here instead of silently
+#: re-routing to another rule's hints.
 CONVERTED = [
     "Pass only one of edge_indices and edge_points — they name the same edges "
     "two ways, so one would be ignored",
@@ -120,7 +123,10 @@ def test_a_fusion_message_still_comes_from_the_table():
         ("NOT_A_DOCUMENTED_KIND", "boom", ()),
         # The refusal carries its own hints, which win over every rule.
         ("AXIS_OUT_OF_PLANE", "axis leaves the sketch", ("pick a coplanar axis",)),
-        # No rule matches, so the first one of that kind supplies the hints.
+        # No rule matches, so the first one of that kind supplies the hints.  This
+        # variant is here to run the mirror's copy of that branch; what it returns
+        # is pinned on the canonical module by
+        # test_a_refusal_whose_message_matches_no_rule_takes_its_kind_first_hints.
         ("BODY_NOT_FOUND", "nothing to match here", ()),
         # A rule matches the message, and its hints are the ones returned.
         ("INVALID_INPUT", "3 : invalid free edge", ()),
@@ -137,6 +143,26 @@ def test_the_generated_mirror_refuses_identically(kind, message, hints):
     assert mirror.classify(mirror.Refusal(kind, message, hints)) == expected
 
 
+def test_a_refusal_whose_message_matches_no_rule_takes_its_kind_first_hints():
+    """The fourth step of the fallback, which no other test can see.
+
+    The kind is documented and the message matches no rule, so the advice comes from
+    the first entry of that kind.  Asserted on the literal inf/nan hints rather than
+    on a lookup into ``_RULES``, which would agree with itself by construction: the
+    other 30 ``INVALID_INPUT`` entries carry different advice, so returning any of
+    them fails here.
+    """
+    kind, hints = addon_hints.classify(
+        addon_hints.Refusal("INVALID_INPUT", "nothing in the table reads like this")
+    )
+    assert kind == "INVALID_INPUT"
+    assert hints == [
+        "inf, -inf and nan are not numbers Fusion can store; nothing was written.",
+        "Send a finite number, or set the real value later with set_parameter.",
+    ]
+    assert hints != addon_hints._GENERIC_HINTS
+
+
 # ── the converted call sites ─────────────────────────────────────────
 
 
@@ -151,7 +177,7 @@ def test_two_edge_selectors_at_once_is_refused_as_a_refusal(plate):
     with pytest.raises(addon_hints.Refusal) as raised:
         handler._select_edges(body, "all", indices=[0], points=[[0.0, 0.0, 0.0]])
     assert raised.value.error_kind == "INVALID_INPUT"
-    assert "Pass only one of edge_indices and edge_points" in str(raised.value)
+    assert str(raised.value) == CONVERTED[0]
 
 
 def test_a_named_selection_beside_an_index_selector_is_refused_as_a_refusal(plate):
@@ -159,7 +185,7 @@ def test_a_named_selection_beside_an_index_selector_is_refused_as_a_refusal(plat
     with pytest.raises(addon_hints.Refusal) as raised:
         handler._select_edges(body, "top", indices=[0])
     assert raised.value.error_kind == "INVALID_INPUT"
-    assert "cannot be combined with edge_indices or edge_points" in str(raised.value)
+    assert str(raised.value) == CONVERTED[1]
 
 
 def test_an_empty_index_list_is_refused_as_a_refusal(plate):
@@ -167,7 +193,7 @@ def test_an_empty_index_list_is_refused_as_a_refusal(plate):
     with pytest.raises(addon_hints.Refusal) as raised:
         handler._select_edges(body, "all", indices=[])
     assert raised.value.error_kind == "INVALID_INPUT"
-    assert "edge_indices was empty" in str(raised.value)
+    assert str(raised.value) == CONVERTED[2]
 
 
 def test_an_empty_point_list_is_refused_as_a_refusal(plate):
@@ -175,7 +201,7 @@ def test_an_empty_point_list_is_refused_as_a_refusal(plate):
     with pytest.raises(addon_hints.Refusal) as raised:
         handler._select_edges(body, "all", points=[])
     assert raised.value.error_kind == "INVALID_INPUT"
-    assert "edge_points was empty" in str(raised.value)
+    assert str(raised.value) == CONVERTED[3]
 
 
 def test_an_unknown_edge_selection_is_refused_as_a_refusal(plate):
@@ -183,7 +209,7 @@ def test_an_unknown_edge_selection_is_refused_as_a_refusal(plate):
     with pytest.raises(addon_hints.Refusal) as raised:
         handler._select_edges(body, "diagonal")
     assert raised.value.error_kind == "INVALID_INPUT"
-    assert "all/top/bottom/vertical" in str(raised.value)
+    assert str(raised.value) == CONVERTED[4]
 
 
 def test_target_body_on_a_new_body_is_refused_as_a_refusal(bound_handler):
@@ -191,7 +217,7 @@ def test_target_body_on_a_new_body_is_refused_as_a_refusal(bound_handler):
     with pytest.raises(addon_hints.Refusal) as raised:
         handler._resolve_target_body("Body1", "new_body")
     assert raised.value.error_kind == "INVALID_INPUT"
-    assert "target_body applies only to" in str(raised.value)
+    assert str(raised.value) == CONVERTED[5]
 
 
 def test_an_unknown_rule_type_is_refused_as_a_refusal(bound_handler):
@@ -206,4 +232,4 @@ def test_an_unknown_rule_type_is_refused_as_a_refusal(bound_handler):
     with pytest.raises(addon_hints.Refusal) as raised:
         handler.ruled_surface("Body1", edge_index=0, rule_type="Tangent")
     assert raised.value.error_kind == "INVALID_INPUT"
-    assert "normal" in str(raised.value) and "tangent" in str(raised.value)
+    assert str(raised.value) == CONVERTED[6]
