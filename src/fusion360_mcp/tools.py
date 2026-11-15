@@ -207,9 +207,9 @@ def _tool(
     and no property is re-ordered: ``**properties`` preserves call order.
 
     The three positionals carry a leading underscore because tools have
-    properties called ``name``, ``title`` and ``description``; a plain parameter
-    of that name would be shadowed by the ``**properties`` entry and raise
-    "got multiple values for argument".
+    properties called ``name`` and ``title`` (and ``description``, should one ever
+    be added); a plain parameter of that name would be shadowed by the
+    ``**properties`` entry and raise "got multiple values for argument".
     """
     schema: dict = {"type": "object"}
     if required:
