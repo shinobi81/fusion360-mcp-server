@@ -9,8 +9,11 @@
 # requested.
 * @shinobi81
 
-# The wire protocol and the error envelope are the contract other agents code
-# against; changes there deserve a second look even if the rest looks routine.
+# The wire protocol, the error envelope and the add-in's command surface are the
+# contract other agents code against; changes there deserve a second look even if
+# the rest looks routine.  `/addon/server/` rather than the command modules by name:
+# the surface is spread across one module per domain, and a list of them here would
+# go stale exactly as the one-module rule did.
 /src/fusion360_mcp/tools.py        @shinobi81
 /src/fusion360_mcp/hints.py        @shinobi81
-/addon/server/command_handler.py   @shinobi81
+/addon/server/                     @shinobi81

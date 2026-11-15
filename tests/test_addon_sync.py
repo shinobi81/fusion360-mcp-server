@@ -7,8 +7,8 @@ import from this package, so a couple of tables are duplicated:
   ``src/fusion360_mcp/_rules.py`` are generated from the add-in's files by
   ``scripts/sync_mirrors.py``; ``test_no_mirror_is_stale`` runs it with ``--check``,
   and the header check reads that script's ``MIRRORS`` so a fourth entry is covered.
-* ``CommandHandler._COMMAND_NAMES``  ↔  ``tools.py``'s tool names
-* ``tools.VIEW_PRESETS``  ↔  ``CommandHandler._VIEW_DIRS``
+* ``HandlerBase._COMMAND_NAMES``  ↔  ``tools.py``'s tool names
+* ``tools.VIEW_PRESETS``  ↔  ``HandlerBase._VIEW_DIRS``
 
 If they drift, agents see different error envelopes / delta payloads / enums
 depending on whether they're running against Fusion or mock mode.  These
@@ -27,7 +27,10 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-COMMAND_HANDLER = REPO_ROOT / "addon" / "server" / "command_handler.py"
+#: The tables are read from the base, not from ``command_handler.py``: the split
+#: left the three class attribute tables on ``HandlerBase`` and put only commands in
+#: the domain modules, so emptying ``command_handler.py`` must not move this path.
+HANDLER_BASE = REPO_ROOT / "addon" / "server" / "handler_base.py"
 MUTATION_COMMANDS = REPO_ROOT / "addon" / "server" / "mutation_commands.py"
 
 
@@ -104,8 +107,8 @@ def _extract_module_attr_set(path: Path, attr: str) -> set[str]:
 
 
 def _view_dirs() -> set[str]:
-    """The camera presets ``CommandHandler._VIEW_DIRS`` declares."""
-    return _extract_class_attr_set(COMMAND_HANDLER, "CommandHandler", "_VIEW_DIRS")
+    """The camera presets ``HandlerBase._VIEW_DIRS`` declares."""
+    return _extract_class_attr_set(HANDLER_BASE, "HandlerBase", "_VIEW_DIRS")
 
 
 @pytest.mark.parametrize("mirror", _declared_mirrors(), ids=str)
@@ -153,9 +156,7 @@ def test_every_mutation_command_is_a_command():
     It would still reach `mock_command` through the alias, so mock mode would report
     deltas for a command the add-in answers with UNKNOWN_COMMAND.
     """
-    commands = _extract_class_attr_set(
-        COMMAND_HANDLER, "CommandHandler", "_COMMAND_NAMES"
-    )
+    commands = _extract_class_attr_set(HANDLER_BASE, "HandlerBase", "_COMMAND_NAMES")
     mutations = _extract_module_attr_set(MUTATION_COMMANDS, "MUTATION_COMMANDS")
 
     assert mutations <= commands, f"not commands: {sorted(mutations - commands)}"
@@ -261,11 +262,9 @@ def test_tools_match_addon_dispatch():
     from fusion360_mcp.tools import TOOLS
 
     tool_names = {t["name"] for t in TOOLS}
-    dispatch = _extract_class_attr_set(
-        COMMAND_HANDLER, "CommandHandler", "_COMMAND_NAMES"
-    )
+    dispatch = _extract_class_attr_set(HANDLER_BASE, "HandlerBase", "_COMMAND_NAMES")
     assert tool_names == dispatch, (
-        f"tools.py and CommandHandler._COMMAND_NAMES have drifted.\n"
+        f"tools.py and HandlerBase._COMMAND_NAMES have drifted.\n"
         f"  tools without handler: {sorted(tool_names - dispatch)}\n"
         f"  handlers without tool: {sorted(dispatch - tool_names)}"
     )

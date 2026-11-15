@@ -18,7 +18,7 @@ stdio  ──────────▶  src/fusion360_mcp/server.py
                         │  submit(command) → blocks on threading.Event
                         ▼
                     addon/server/event_bridge.py   ──CustomEvent──▶  Fusion main thread
-                                                                      command_handler.py
+                                                     command_handler.py = base + mixins
 ```
 
 Fusion's API is not thread-safe. Everything that touches it therefore runs on the main
@@ -45,7 +45,9 @@ explains most of the system's design:
 | `src/fusion360_mcp/mock.py` | `--mode mock` responses, so the envelope is testable without Fusion |
 | `addon/server/socket_server.py` | listener, per-client threads, framing, malformed-input handling |
 | `addon/server/event_bridge.py` | CustomEvent bridge and the work queue |
-| `addon/server/command_handler.py` | every command, executing on the main thread |
+| `addon/server/command_handler.py` | the composed `CommandHandler`: `HandlerBase` plus one class per domain, declaring no command itself |
+| `addon/server/handler_base.py` | dispatch (`__init__`, `execute_command`), the attribute tables, and every helper two domains call |
+| `addon/server/handler_*.py` | one module per domain — the list is `COMMAND_MODULES` in `event_bridge.py` — holding its commands and the helpers only they call |
 
 `addon/` and `src/` are separate installables: the add-in is copied into Fusion's AddIns
 directory and cannot import from the package, which is why the hint table, the mutation
