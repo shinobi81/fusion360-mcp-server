@@ -116,9 +116,9 @@ class FakeTemporaryBRepManager:
     Each returns a transient, face-less body whose *box* is right, so a test reads
     where the solid actually landed rather than trusting the arguments it was
     asked for.  ``createBox`` computes real volume and area as well; the other
-    three model the box only, and say so, because nothing reads their volume - a
-    fabricated one would be a measurement nobody took.  Face counts are not
-    modelled for any of them.
+    three leave ``FakeBody``'s placeholders (volume 1.0, area 6.0), which are *not*
+    the solid's values - nothing reads them, and inventing real ones would be a
+    measurement nobody took.  Face counts are not modelled for any of them.
     """
 
     @staticmethod

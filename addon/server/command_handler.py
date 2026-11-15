@@ -2499,8 +2499,11 @@ class CommandHandler:
     def _set_suppressed(self, feature_name: str, suppressed: bool) -> dict:
         """Flip one timeline entry's ``isSuppressed``, by feature name.
 
-        ``hasattr`` is not enough on its own: a direct design has no timeline at
-        all, and an item can wrap no entity, which is why both are tested.
+        The entity check is the only guard here: an item can wrap no entity, and
+        ``item.entity.name`` would raise.  A direct design has no timeline at all,
+        and Fusion's own "this is not a parametric design" refusal is surfaced
+        from ``design.timeline`` rather than swallowed - the caller needs to see
+        that a suppress on a direct design is meaningless, not a silent no-op.
         """
         design = self._design()
         for i in range(design.timeline.count):
