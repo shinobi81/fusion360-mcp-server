@@ -364,7 +364,11 @@ class FakeFace:
         area: float = 1.0,
         point_on_face: tuple[float, float, float] | None = None,
         planar: bool = True,
+        radius: float | None = None,
     ):
+        # ``radius`` makes a non-planar face a *measured* cylinder rather than a
+        # shape-less one: ``create_thread`` reads its diameter to decide whether the
+        # requested designation matches the body.
         self.boundingBox = bounding_box or FakeBoundingBox()
         box = self.boundingBox
         centre = (
@@ -380,7 +384,7 @@ class FakeFace:
         self.geometry = (
             FakePlane(self.pointOnFace.coords(), normal)
             if planar
-            else FakeCylinderGeometry()
+            else FakeCylinderGeometry(1.0 if radius is None else radius)
         )
         self.joint_frame = joint_frame or {
             "origin": (-2.0, 0.0, 5.0),

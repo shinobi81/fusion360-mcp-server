@@ -409,3 +409,16 @@ class TestLiveRefusalsFromFusion:
 
         assert kind == "INVALID_INPUT"
         assert any("free edge" in hint for hint in hints), hints
+
+
+class TestThreadSizeRefusal:
+    """``create_thread`` refuses a designation that does not match the face."""
+
+    def test_the_refusal_reaches_the_caller_as_invalid_input(self):
+        kind, hints = classify(
+            "The face is 20.00 mm across but M6x1 is 5.88 mm: Fusion would resize "
+            "the body to match the thread. M20x2.5 (6g) matches that diameter."
+        )
+
+        assert kind == "INVALID_INPUT"
+        assert any("allow_resize" in hint for hint in hints), hints

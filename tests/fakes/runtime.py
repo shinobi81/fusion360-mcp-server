@@ -85,10 +85,19 @@ class FakePlane:
 class FakeCylinderGeometry:
     """A non-planar ``Face.geometry``: enough for ``Plane.cast`` to refuse it.
 
-    Nothing in the handler reads a cylinder's parameters — only that it is not a
-    plane — so this deliberately carries no geometry rather than a fabricated
-    one.
+    It carries a **radius** because ``create_thread`` now reads one: the diameter a
+    thread must match is ``2 * geometry.radius``, and a thread face without a
+    diameter would make the size check untestable.  Measured on 2706 - a Ø20 shaft's
+    side face reports ``radius = 1.0``.
     """
+
+    def __init__(self, radius: float = 1.0):
+        self.radius = float(radius)
+
+    @staticmethod
+    def cast(geometry):
+        """``Cylinder.cast``: the geometry for a cylinder, ``None`` otherwise."""
+        return geometry if isinstance(geometry, FakeCylinderGeometry) else None
 
 
 class FakeObjectCollection:
@@ -334,6 +343,7 @@ def install() -> None:
         Point3D=FakePoint3D,
         Vector3D=FakeVector3D,
         Plane=FakePlane,
+        Cylinder=FakeCylinderGeometry,
         ObjectCollection=FakeObjectCollection,
         ValueInput=FakeValueInput,
         OrientedBoundingBox3D=_primitives().FakeOrientedBoundingBox3D,
@@ -351,6 +361,9 @@ def install() -> None:
         DimensionOrientations=_dimension_orientations(),
         RuledSurfaceTypes=_ruled_surface_types(),
         ThreadInfo=importlib.import_module("tests.fakes.features").FakeThreadInfo,
+        ThreadDataQuery=importlib.import_module(
+            "tests.fakes.features"
+        ).FakeThreadDataQuery,
         MeshRefinementSettings=_mesh_refinement_settings(),
         TemporaryBRepManager=_primitives().FakeTemporaryBRepManager,
     )

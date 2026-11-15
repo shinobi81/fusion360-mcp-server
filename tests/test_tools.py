@@ -217,7 +217,7 @@ _TOOL_ARGUMENT_COUNTS = {
     "offset_curve": 5,
     "trim_curve": 4,
     "extend_curve": 4,
-    "create_thread": 9,
+    "create_thread": 10,
     "draft_faces": 5,
     "split_body": 4,
     "split_face": 4,
