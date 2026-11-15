@@ -1628,8 +1628,8 @@ def test_every_sync_asserts_the_lock_is_current():
 
     Every tracked markdown page is swept as well as every workflow, because a new page
     saying `uv sync --frozen` must be read the moment it exists - the sweep the ruff,
-    pin and add-in-name guards all use.  `SYNC_DOCUMENTS` is the other half: these pages
-    must still *show* the command, or the check has nothing to read and passing
+    pin and add-in-name guards all use.  `SYNC_DOCUMENTS` is the other half: the pages
+    it names must still *show* the command, or the check has nothing to read and passing
     over nothing is not passing.
     """
     documents = {
