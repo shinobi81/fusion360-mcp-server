@@ -247,8 +247,9 @@ class EventBridge:
         from . import hole_geometry as hole_mod
         from . import mutation_commands as mutation_mod
         from . import parameter_units as units_mod
+        from . import rules as rules_mod
 
-        for mod in (hints_mod, hole_mod, units_mod, mutation_mod, ch_mod):
+        for mod in (hints_mod, rules_mod, hole_mod, units_mod, mutation_mod, ch_mod):
             importlib.reload(mod)
         # A fresh instance builds its own dispatch table, so a reloaded handler
         # cannot answer from the previous one's bound methods.

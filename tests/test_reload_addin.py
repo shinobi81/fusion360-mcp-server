@@ -177,7 +177,7 @@ def test_main_says_what_a_reload_does_not_cover(monkeypatch, capsys):
 
     out = capsys.readouterr().out
     assert (
-        "reloaded: hints, hole_geometry, parameter_units, "
+        "reloaded: hints, rules, hole_geometry, parameter_units, "
         "mutation_commands, command_handler"
     ) in out
     assert "not reloaded: event_bridge, socket_server" in out

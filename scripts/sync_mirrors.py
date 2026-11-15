@@ -53,6 +53,17 @@ _MUTATION_HEADER = (
     "\n"
 )
 
+_RULES_HEADER = (
+    '"""Validation the add-in and mock mode share — GENERATED, do not edit.\n'
+    "\n"
+    "Rendered by ``scripts/sync_mirrors.py`` from ``addon/server/rules.py``: the\n"
+    "add-in is installed into Fusion's AddIns folder and cannot import this\n"
+    "package, so its copy is canonical.  Edit that file and run\n"
+    "``uv run python scripts/sync_mirrors.py``; hand edits here are overwritten.\n"
+    '"""\n'
+    "\n"
+)
+
 # (canonical, mirror, header).  Paths are relative to the repository root; the header
 # is the whole module docstring of the generated file.
 MIRRORS: tuple[tuple[Path, Path, str], ...] = (
@@ -65,6 +76,11 @@ MIRRORS: tuple[tuple[Path, Path, str], ...] = (
         Path("addon/server/mutation_commands.py"),
         Path("src/fusion360_mcp/_mutation_commands.py"),
         _MUTATION_HEADER,
+    ),
+    (
+        Path("addon/server/rules.py"),
+        Path("src/fusion360_mcp/_rules.py"),
+        _RULES_HEADER,
     ),
 )
 

@@ -54,7 +54,7 @@ and the atheris targets: `docs/TESTING.md`.
 3. Mock handler in `src/fusion360_mcp/mock.py` + `_DISPATCH` entry
 4. Mutations also go in `addon/server/mutation_commands.py`, the one canonical set, then
    `uv run python scripts/sync_mirrors.py` regenerates the `src/` mirror that mock mode
-   and the connection read; `tests/test_addon_sync.py` fails while either mirror is stale
+   and the connection read; `tests/test_addon_sync.py` fails while any mirror is stale
 5. Annotations: `readOnlyHint`, `destructiveHint`, `idempotentHint`
 6. A row in `docs/TOOLS.md` and the name in the index in this file — the index is
    guarded, the description is not
@@ -71,6 +71,9 @@ The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
 - Errors are data (`ok: false`, `error_kind`, `hints`), never raised across the wire. A
   new failure mode gets a rule in `addon/server/hints.py` — the canonical table — then
   `uv run python scripts/sync_mirrors.py` regenerates `src/fusion360_mcp/hints.py`.
+- A parameter the add-in can refuse from the parameters alone belongs in
+  `addon/server/rules.py`, which the handler raises from and mock mode answers with: one
+  message, one `error_kind`, both sides. `tests/test_rules.py` compares the two answers.
 - Every tool has a mock handler, so `--mode mock` works without Fusion.
 
 ## Boundaries

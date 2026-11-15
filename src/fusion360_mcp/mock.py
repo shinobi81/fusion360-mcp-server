@@ -17,8 +17,9 @@ import math
 from typing import Any
 
 from ._mutation_commands import MUTATION_COMMANDS
+from ._rules import edge_selector_refusal, sketch_plane_z_note, target_body_refusal
+from .hints import Refusal
 from .hints import classify as _classify
-from .tools import EDGE_SELECTIONS
 
 # Mutation commands that get a synthetic deltas payload in mock mode.  The set is
 # the add-in's, mirrored into this package, so mock mode cannot attach deltas to a
@@ -37,21 +38,36 @@ _MOCK_DELTAS = {
 }
 
 
+def _error_envelope(error_kind: str, hints: list[str], message: str) -> dict:
+    """The envelope the addon returns when a command fails."""
+    return {
+        "ok": False,
+        "error_kind": error_kind,
+        "error_message": message,
+        "hints": hints,
+        "traceback": f"MockError: {message}",
+        "mode": "mock",
+    }
+
+
 def _mock_error(message: str) -> dict:
-    """The envelope the addon returns when a command fails.
+    """The envelope for a failure mock mode reports by its message.
 
     ``error_kind`` and ``hints`` come from the same rules the addon classifies
     with, so mock mode reports a failure the way real mode would.
     """
-    kind, hint_list = _classify(message)
-    return {
-        "ok": False,
-        "error_kind": kind,
-        "error_message": message,
-        "hints": hint_list,
-        "traceback": f"MockError: {message}",
-        "mode": "mock",
-    }
+    error_kind, hints = _classify(message)
+    return _error_envelope(error_kind, hints, message)
+
+
+def _refusal_error(refusal: Refusal) -> dict:
+    """The envelope for a refusal ``rules`` already named.
+
+    ``classify`` reads the kind off the refusal rather than matching its message
+    again, so mock mode reports what the add-in decided instead of a guess at it.
+    """
+    error_kind, hints = _classify(refusal)
+    return _error_envelope(error_kind, hints, str(refusal))
 
 
 def _non_finite_error(value: Any) -> dict | None:
@@ -193,11 +209,7 @@ def _sketch_plane_fields(z_values: list) -> dict:
         return {}
     return {
         "ignored_z": dropped[0] if len(dropped) == 1 else dropped,
-        "note": (
-            "Sketch curves lie in the sketch plane, so the z component was "
-            "dropped instead of being added to the plane's own offset. "
-            "Use create_sketch(z_offset=...) to move the plane itself."
-        ),
+        "note": sketch_plane_z_note(),
     }
 
 
@@ -238,19 +250,12 @@ def _draw_line(p: dict) -> dict:
 def _target_body_error(p: dict) -> dict | None:
     """The add-in's refusal of ``target_body`` on a new body, or None.
 
-    Mirrors ``CommandHandler._resolve_target_body``, wording included, because
+    ``target_body_refusal`` is the handler's own check, wording included, because
     the hint rule matches on it.  An unknown body name is *not* refused here:
     mock mode has no design to look it up in.
     """
-    if p.get("target_body") is None:
-        return None
-    if p.get("operation", "new_body") == "new_body":
-        return _mock_error(
-            "Invalid input: target_body applies only to cut, join or "
-            "intersect \u2014 new_body builds a body of its own, so there is "
-            "nothing to target"
-        )
-    return None
+    refusal = target_body_refusal(p, p.get("operation", "new_body"))
+    return None if refusal is None else _refusal_error(refusal)
 
 
 def _extrude(p: dict) -> dict:
@@ -289,52 +294,17 @@ def _edge_selector_error(p: dict) -> dict | None:
 
     Mock mode cannot search a body, so it cannot tell which edges a selection
     matches — but the *combination* rules, the element types and the enum are pure
-    parameter checks that ``_select_edges`` makes before it examines an edge.
-    Echoing an accepted call here would teach a sequence Fusion refuses.
+    parameter checks that ``_select_edges`` makes before it examines an edge, and
+    ``edge_selector_refusal`` is where both sides make them.  Echoing an accepted
+    call here would teach a sequence Fusion refuses.
 
     These fire inside ``_select_edges``, not before the body lookup: ``fillet``
     resolves ``body_name`` first, so a call with both a bad body and a bad selector
     answers ``BODY_NOT_FOUND`` in real mode and ``INVALID_INPUT`` here.  Mock mode
     has no bodies to look up, so that difference cannot be removed.
     """
-    indices = p.get("edge_indices")
-    points = p.get("edge_points")
-    selection = p.get("edge_selection", "all")
-
-    if indices is not None and points is not None:
-        return _mock_error(
-            "Pass only one of edge_indices and edge_points — they name the "
-            "same edges two ways, so one would be ignored"
-        )
-    if (indices is not None or points is not None) and selection != "all":
-        return _mock_error(
-            f"edge_selection '{selection}' cannot be combined with "
-            "edge_indices or edge_points — pass one selector, not two"
-        )
-    if indices is not None and not indices:
-        return _mock_error(
-            "edge_indices was empty — name at least one edge, or omit it to "
-            "use edge_selection"
-        )
-    if points is not None and not points:
-        return _mock_error(
-            "edge_points was empty — name at least one point, or omit it to "
-            "use edge_selection"
-        )
-    for index in indices or []:
-        if isinstance(index, bool) or not isinstance(index, int):
-            return _mock_error(
-                f"Edge index {index!r} is out of range — indices are whole "
-                "numbers from list_edges"
-            )
-    for point in points or []:
-        if not isinstance(point, (list, tuple)) or len(point) != 3:
-            return _mock_error("edge point needs three coordinates")
-    if selection not in EDGE_SELECTIONS:
-        return _mock_error(
-            f"Unknown edge_selection '{selection}' — use all/top/bottom/vertical"
-        )
-    return None
+    refusal = edge_selector_refusal(p)
+    return None if refusal is None else _refusal_error(refusal)
 
 
 def _selected_edge_count(p: dict) -> int:

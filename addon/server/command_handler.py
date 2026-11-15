@@ -24,6 +24,7 @@ from . import get_logger
 from . import hints as _hints
 from . import hole_geometry as _hole_geom
 from . import parameter_units as _param_units
+from . import rules as _rules
 from .mutation_commands import MUTATION_COMMANDS
 
 log = get_logger("handler")
@@ -495,16 +496,15 @@ class CommandHandler:
         Fusion 2706: a loft whose sections spanned the seam between two touching
         blocks cut *both* of them, and a caller had no way to cut one.  Resolution
         happens before any geometry is created, so a refusal leaves nothing behind.
+
+        The target-body refusal is ``rules``': mock mode answers a ``target_body``
+        beside a new body with the same sentence and the same kind.
         """
+        refusal = _rules.target_body_refusal({"target_body": target_body}, operation)
+        if refusal is not None:
+            raise refusal
         if target_body is None:
             return None
-        if operation == "new_body":
-            raise _hints.Refusal(
-                "INVALID_INPUT",
-                "Invalid input: target_body applies only to cut, join or "
-                "intersect — new_body builds a body of its own, so there is "
-                "nothing to target",
-            )
         return self._body_by_name(target_body)
 
     @staticmethod
@@ -543,19 +543,18 @@ class CommandHandler:
         decided, and guessing would round whatever the other selector happened to
         match.  Only "all" is compatible with a silence, because "all" is the
         default and so means "unset".
+
+        The parameters are judged before the body is read, by ``rules`` — the module
+        mock mode refuses with too, so one call fails the same way on both sides.
         """
-        if indices is not None and points is not None:
-            raise _hints.Refusal(
-                "INVALID_INPUT",
-                "Pass only one of edge_indices and edge_points — they name the "
-                "same edges two ways, so one would be ignored",
-            )
-        if (indices is not None or points is not None) and selection != "all":
-            raise _hints.Refusal(
-                "INVALID_INPUT",
-                f"edge_selection '{selection}' cannot be combined with "
-                "edge_indices or edge_points — pass one selector, not two",
-            )
+        if refusal := _rules.edge_selector_refusal(
+            {
+                "edge_selection": selection,
+                "edge_indices": indices,
+                "edge_points": points,
+            }
+        ):
+            raise refusal
 
         coll = adsk.core.ObjectCollection.create()
 
@@ -587,10 +586,11 @@ class CommandHandler:
         elif selection in ("top", "bottom"):
             for edge in self._edges_in_extreme_plane(body, selection):
                 coll.add(edge)
-        elif selection == "vertical":
-            # The edge's own box, not its two ends: an end-to-end test calls every
-            # closed edge vertical, because a Circle3D's two vertices are the same
-            # point (measured on Fusion 2706).
+        else:
+            # "vertical", the last of the four the validator accepts — so this is not
+            # a guess.  The edge's own box, not its two ends: an end-to-end test calls
+            # every closed edge vertical, because a Circle3D's two vertices are the
+            # same point (measured on Fusion 2706).
             for edge in roundable:
                 box = edge.boundingBox
                 if (
@@ -598,11 +598,6 @@ class CommandHandler:
                     and abs(box.maxPoint.y - box.minPoint.y) <= self._EDGE_PLANE_EPSILON
                 ):
                     coll.add(edge)
-        else:
-            raise _hints.Refusal(
-                "INVALID_INPUT",
-                f"Unknown edge_selection '{selection}' — use all/top/bottom/vertical",
-            )
 
         if coll.count == 0:
             raise RuntimeError(f"No edges matched selection '{selection}'")
@@ -690,16 +685,13 @@ class CommandHandler:
         body changes.  A stale index that is merely in range would round the wrong
         edge and report success, which is why only the out-of-range case can be
         caught here — and why ``list_edges`` is the intended way to get them.
+
+        ``rules.edge_selector_refusal`` has already refused a non-integer index and an
+        empty list, so the range is what is left to check.
         """
         count = body.edges.count
         wanted: list[int] = []
-        for raw in indices:
-            if isinstance(raw, bool) or not isinstance(raw, int):
-                raise RuntimeError(
-                    f"Edge index {raw!r} is out of range — indices are whole "
-                    "numbers from list_edges"
-                )
-            index = raw
+        for index in indices:
             if not 0 <= index < count:
                 valid = (
                     f"the valid indices run 0..{count - 1}"
@@ -712,12 +704,6 @@ class CommandHandler:
                 )
             if index not in wanted:
                 wanted.append(index)
-        if not wanted:
-            raise _hints.Refusal(
-                "INVALID_INPUT",
-                "edge_indices was empty — name at least one edge, or omit it to "
-                "use edge_selection",
-            )
         return [body.edges.item(index) for index in wanted]
 
     def _edges_by_points(self, body, points, tolerance: float) -> list:
@@ -769,10 +755,6 @@ class CommandHandler:
             )
 
         for point in points:
-            if len(point) != 3:
-                raise RuntimeError(
-                    f"Each edge point needs three coordinates, got {len(point)}"
-                )
             x, y, z = (_param_units.require_finite(c) for c in point)
             target = adsk.core.Point3D.create(x, y, z)
             best = None
@@ -1119,11 +1101,7 @@ class CommandHandler:
         dropped = [z for z in z_values if z]
         if dropped:
             result["ignored_z"] = dropped[0] if len(dropped) == 1 else dropped
-            result["note"] = (
-                "Sketch curves lie in the sketch plane, so the z component was "
-                "dropped instead of being added to the plane's own offset. "
-                "Use create_sketch(z_offset=...) to move the plane itself."
-            )
+            result["note"] = _rules.sketch_plane_z_note()
         return result
 
     def create_sketch(self, plane: str = "xy", z_offset: float | None = None):

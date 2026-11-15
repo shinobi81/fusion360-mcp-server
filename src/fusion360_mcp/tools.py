@@ -7,6 +7,10 @@ JSON Schema that the MCP SDK validates before forwarding arguments.
 
 import mcp.types as types
 
+# The add-in's validator owns the accepted edge selectors, so the schema advertises its
+# set instead of restating it: a fifth value cannot land in one place only.
+from ._rules import EDGE_SELECTIONS
+
 # Sketch curves are planar: Fusion interprets their points in the sketch's own
 # frame, so a z here adds to the plane's offset instead of replacing it.
 _SKETCH_PLANE_Z = (
@@ -24,10 +28,6 @@ _POINT3 = {
     "minItems": 3,
     "maxItems": 3,
 }
-
-# The four edge selectors fillet and chamfer accept.  ``mock.py`` refuses an unknown
-# one against this same tuple, so a fifth value cannot land in one place only.
-EDGE_SELECTIONS = ("all", "top", "bottom", "vertical")
 
 # ``render_view``'s camera presets: "current" (leave the camera where it is) plus every
 # key of the add-in's ``CommandHandler._VIEW_DIRS``, in that order.

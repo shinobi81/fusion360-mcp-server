@@ -3,8 +3,9 @@
 The Fusion add-in is installed into Fusion's AddIns folder and cannot
 import from this package, so a couple of tables are duplicated:
 
-* ``src/fusion360_mcp/hints.py`` and ``src/fusion360_mcp/_mutation_commands.py``
-  are generated from the add-in's files by ``scripts/sync_mirrors.py``;
+* ``src/fusion360_mcp/hints.py``, ``src/fusion360_mcp/_mutation_commands.py`` and
+  ``src/fusion360_mcp/_rules.py`` are generated from the add-in's files by
+  ``scripts/sync_mirrors.py``;
   ``test_the_mirrors_are_generated`` runs it with ``--check``.
 * ``CommandHandler._COMMAND_NAMES``  ↔  ``tools.py``'s tool names
 * ``tools.VIEW_PRESETS``  ↔  ``CommandHandler._VIEW_DIRS``
@@ -95,8 +96,8 @@ def _view_dirs() -> set[str]:
 
 
 def test_the_mirrors_are_generated():
-    """Both mirrors carry the generated header, and neither is stale."""
-    for mirror in ("hints.py", "_mutation_commands.py"):
+    """Every mirror carries the generated header, and none is stale."""
+    for mirror in ("hints.py", "_mutation_commands.py", "_rules.py"):
         path = REPO_ROOT / "src" / "fusion360_mcp" / mirror
         text = path.read_text(encoding="utf-8")
         assert "GENERATED, do not edit" in text.split("\n\n")[0], mirror

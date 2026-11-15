@@ -15,7 +15,7 @@ as the checkout is visible rather than assumed.
     uv run python scripts/reload_addin.py            # reload, then verify
     uv run python scripts/reload_addin.py --check    # verify only, change nothing
 
-``reload_handler`` reloads ``hints``, ``hole_geometry``, ``parameter_units``,
+``reload_handler`` reloads ``hints``, ``rules``, ``hole_geometry``, ``parameter_units``,
 ``mutation_commands`` and ``command_handler``.  It does **not** reload ``event_bridge``
 or ``socket_server``: a change in either still needs the add-in stopped and started.
 """
@@ -131,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"reload refused: {reply}", file=sys.stderr)
                 return 1
             print(
-                "reloaded: hints, hole_geometry, parameter_units, "
+                "reloaded: hints, rules, hole_geometry, parameter_units, "
                 "mutation_commands, command_handler"
             )
             print("  not reloaded: event_bridge, socket_server")

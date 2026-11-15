@@ -36,6 +36,16 @@ HEADER = '"""A generated mirror."""\n\n'
 
 MARKER = "GENERATED, do not edit"
 
+#: Every mirror the tree ships, as ``MIRRORS`` must declare it.
+EXPECTED_MIRRORS = [
+    (Path("addon/server/hints.py"), Path("src/fusion360_mcp/hints.py")),
+    (
+        Path("addon/server/mutation_commands.py"),
+        Path("src/fusion360_mcp/_mutation_commands.py"),
+    ),
+    (Path("addon/server/rules.py"), Path("src/fusion360_mcp/_rules.py")),
+]
+
 
 def test_the_preamble_docstring_never_reaches_the_mirror(tmp_path):
     """The docstring is dropped by design, so editing it cannot drift the mirror."""
@@ -105,11 +115,12 @@ def test_a_canonical_file_without_an_import_line_is_refused(tmp_path):
         SYNC.render(canonical, HEADER)
 
 
-def test_the_hint_table_is_one_of_the_mirrors():
-    """An emptied MIRRORS would make every other check here vacuous."""
+@pytest.mark.parametrize(("canonical", "mirror"), EXPECTED_MIRRORS)
+def test_every_mirror_the_tree_has_is_declared(canonical, mirror):
+    """An emptied or typo'd MIRRORS would make every other check here vacuous."""
     pairs = {(canonical, mirror) for canonical, mirror, _ in SYNC.MIRRORS}
 
-    assert (Path("addon/server/hints.py"), Path("src/fusion360_mcp/hints.py")) in pairs
+    assert (canonical, mirror) in pairs
 
 
 def test_writing_creates_a_mirror_that_does_not_exist_yet(tmp_path, monkeypatch):
