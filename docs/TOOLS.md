@@ -86,7 +86,7 @@ at all is refused instead — `INVALID_INPUT`, where Fusion's own message is
 | `create_hole`         | Hole feature on a body face           |
 | `rectangular_pattern` | Pattern in rows and columns           |
 | `circular_pattern`    | Pattern around an axis                |
-| `create_thread`       | Add threads (cosmetic or modeled)     |
+| `create_thread`       | Add threads (cosmetic or modeled). Fusion resizes the cylinder/hole to the designation's diameter, so `M6x1` on a 20 mm shaft leaves a 6 mm one. `thread_class` defaults to 6H internal / 6g external (ISO 965) |
 | `draft_faces`         | Draft/taper faces for mold release    |
 | `split_body`          | Split a body using a plane            |
 | `split_face`          | Split faces of a body                 |
@@ -145,7 +145,7 @@ what a selection returns.
 | `patch_surface`   | Create a patch surface from boundary edges |
 | `stitch_surfaces` | Stitch surface bodies into one             |
 | `thicken_surface` | Thicken a surface into a solid             |
-| `ruled_surface`   | Ruled surface from an edge                 |
+| `ruled_surface`   | Ruled surface from a **free** edge — a sheet body's boundary. A solid's edge is shared by two faces and Fusion refuses it (`invalid free edge`); patch or stitch to a surface body first |
 | `trim_surface`    | Trim a surface with another body           |
 
 ## Sheet Metal

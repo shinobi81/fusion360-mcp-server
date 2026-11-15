@@ -394,3 +394,18 @@ class TestFusionRefusals:
 
         assert kind == "INVALID_INPUT"
         assert any("cm" in hint for hint in hints)
+
+
+class TestLiveRefusalsFromFusion:
+    """Two refusals found by running the merged code against Fusion 2706."""
+
+    def test_a_ruled_surface_needs_a_free_edge(self):
+        """Every edge of a solid is shared by two faces; a ruled surface is not.
+
+        Live: `createBRepEdgeProfile` answers "3 : invalid free edge" for a box
+        edge.  Before the rule it reached the caller as UNKNOWN with no hints.
+        """
+        kind, hints = classify("3 : invalid free edge")
+
+        assert kind == "INVALID_INPUT"
+        assert any("free edge" in hint for hint in hints), hints

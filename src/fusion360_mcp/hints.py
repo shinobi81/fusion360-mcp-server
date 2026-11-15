@@ -288,6 +288,21 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # Found live on 2706: a ruled surface needs a FREE (open) edge, and every
+        # edge of a solid is shared by two faces, so Fusion answers "3 : invalid
+        # free edge". Unclassified it reached the caller as UNKNOWN with no hints.
+        r"invalid free edge",
+        "INVALID_INPUT",
+        [
+            # One literal per hint, never two adjacent ones: CodeQL reads the
+            # latter as a possibly missing comma, and it cannot tell a wrapped
+            # sentence from a bug.
+            "A ruled surface extends a free edge, not a solid's shared one.",
+            "A sheet body's boundary edge is free; patch or stitch first.",
+            "Then rule one of its boundary edges with that edge_index.",
+        ],
+    ),
+    (
         # Fusion's own refusal when a cut reaches no body — found live on a sweep
         # whose profile sat outside every block. It classified as UNKNOWN with no
         # hints, so the caller learned nothing about why nothing was cut.

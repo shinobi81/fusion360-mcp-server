@@ -1425,7 +1425,11 @@ TOOLS: list[dict] = [
     _tool(
         "create_thread",
         "Create Thread",
-        ("Add threads to a cylindrical face (cosmetic or modeled)"),
+        (
+            "Add threads to a cylindrical face (cosmetic or modeled). "
+            "Fusion sizes the cylinder or hole to the designation's diameter, "
+            "so a M6x1 thread on a 20 mm shaft leaves a 6 mm one."
+        ),
         required=["body_name", "face_index"],
         body_name={"type": "string"},
         face_index={
@@ -2036,7 +2040,12 @@ TOOLS: list[dict] = [
     _tool(
         "ruled_surface",
         "Ruled Surface",
-        ("Create a ruled surface from an edge or sketch curve"),
+        (
+            "Create a ruled surface from a free edge: a sheet body's boundary, "
+            "not a solid's edge (two faces share every edge of a solid, and "
+            'Fusion refuses it with "invalid free edge"). distance extends '
+            "it in cm."
+        ),
         required=["body_name", "edge_index"],
         body_name={"type": "string"},
         edge_index={
