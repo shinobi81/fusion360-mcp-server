@@ -34,6 +34,7 @@ COMMAND_MODULES = (
     "handler_sketch",
     "handler_features",
     "handler_primitives",
+    "handler_scene",
     "command_handler",
 )
 

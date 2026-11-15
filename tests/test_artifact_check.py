@@ -322,7 +322,7 @@ def test_a_finding_naming_an_awkward_file_stays_one_line(
     ]
 
 
-def test_the_repository_tracks_sixteen_add_on_files():
+def test_the_repository_tracks_seventeen_add_on_files():
     tracked = CHECK.tracked_add_on(REPO_ROOT)
 
     assert set(tracked) == {
@@ -335,6 +335,7 @@ def test_the_repository_tracks_sixteen_add_on_files():
         "server/handler_base.py",
         "server/handler_features.py",
         "server/handler_primitives.py",
+        "server/handler_scene.py",
         "server/handler_sketch.py",
         "server/hints.py",
         "server/hole_geometry.py",
