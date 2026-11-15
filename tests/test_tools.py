@@ -272,14 +272,29 @@ def test_each_tool_declares_the_number_of_arguments_it_does_today():
     assert current == _TOOL_ARGUMENT_COUNTS
 
 
-def test_render_view_offers_every_preset_the_handler_handles():
-    """The four isometric diagonals the handler has always handled were unadvertised."""
-    schema = get_tool_by_name("render_view")
+def test_export_view_sheet_lists_every_preset_but_current():
+    """Its enum, in order, is the wire contract: these ten and no "current".
+
+    The tuple is derived from ``VIEW_PRESETS``, so a comparison against the derived
+    value would pass on any derivation.  This pins what a client validates against,
+    including the order the sheet renders in; ``export_view_sheet`` refuses
+    "current", which is why it is absent.
+    """
+    schema = get_tool_by_name("export_view_sheet")
     assert schema is not None
 
-    assert set(schema["inputSchema"]["properties"]["view"]["enum"]) == set(
-        tools.VIEW_PRESETS
-    )
+    assert schema["inputSchema"]["properties"]["views"]["items"]["enum"] == [
+        "iso",
+        "iso_ne",
+        "iso_nw",
+        "iso_sw",
+        "front",
+        "back",
+        "top",
+        "bottom",
+        "right",
+        "left",
+    ]
 
 
 def test_every_edge_selector_schema_advertises_one_tuple():

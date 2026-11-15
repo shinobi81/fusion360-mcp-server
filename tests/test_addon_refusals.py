@@ -83,17 +83,18 @@ def test_the_kind_a_refusal_carries_wins_over_the_table():
 #: and ``command_handler`` (``rule_type``, the one still raised in the handler).  The
 #: seven handler tests below compare the message they catch against these entries, so
 #: a message edited at its source fails here instead of silently re-routing to another
-#: rule's hints.
+#: rule's hints.  Each entry is one string: the wrapped ones are joined with ``+`` so
+#: a continuation cannot read as a missing comma.
 CONVERTED = [
     "Pass only one of edge_indices and edge_points — they name the same edges "
-    "two ways, so one would be ignored",
+    + "two ways, so one would be ignored",
     "edge_selection 'top' cannot be combined with edge_indices or edge_points — "
-    "pass one selector, not two",
+    + "pass one selector, not two",
     "edge_indices was empty — name at least one edge, or omit it to use edge_selection",
     "edge_points was empty — name at least one point, or omit it to use edge_selection",
     "Unknown edge_selection 'diagonal' — use all/top/bottom/vertical",
     "Invalid input: target_body applies only to cut, join or intersect — "
-    "new_body builds a body of its own, so there is nothing to target",
+    + "new_body builds a body of its own, so there is nothing to target",
     "Unknown rule_type 'Tangent' - use 'normal' or 'tangent'",
 ]
 

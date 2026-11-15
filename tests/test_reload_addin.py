@@ -226,10 +226,17 @@ def test_dispatch_is_built_once_per_instance(handler_module):
     depend on a line that reset it.  Building it in ``__init__`` removes both the
     reset and the window where an instance answers from a table built from another
     instance's bound methods.
+
+    The identity check alone passes on an empty table, so this also asserts the table
+    has entries and that each one is the method of the name it is filed under: an
+    emptied ``_COMMAND_NAMES`` builds an empty table and dispatches nothing.
     """
     handler = handler_module.CommandHandler()
+    other = handler_module.CommandHandler()
 
-    assert handler._commands == {
-        name: getattr(handler, name) for name in handler._COMMAND_NAMES
-    }
+    assert handler._commands, "an empty dispatch table answers no command"
+    assert other._commands is not handler._commands
+    for name, method in handler._commands.items():
+        assert method.__self__ is handler, name
+        assert method == getattr(handler, name), name
     assert not hasattr(type(handler), "_COMMANDS"), "the lazy class table is gone"

@@ -46,6 +46,10 @@ VIEW_PRESETS = (
     "left",
 )
 
+# ``export_view_sheet``'s presets: ``VIEW_PRESETS`` without "current", because there is
+# no view to render where the camera already is — the handler refuses it.
+VIEW_SHEET_VIEWS = tuple(view for view in VIEW_PRESETS if view != "current")
+
 # fillet and chamfer take the same four edge selectors; only the size argument
 # differs (a radius or a distance).
 _EDGE_SELECTOR = {
@@ -906,18 +910,7 @@ TOOLS: list[dict] = [
             "type": "array",
             "items": {
                 "type": "string",
-                "enum": [
-                    "iso",
-                    "iso_ne",
-                    "iso_nw",
-                    "iso_sw",
-                    "front",
-                    "back",
-                    "top",
-                    "bottom",
-                    "right",
-                    "left",
-                ],
+                "enum": list(VIEW_SHEET_VIEWS),
             },
             "description": (
                 "Ordered list of views to render (default: iso, front, top, right)."

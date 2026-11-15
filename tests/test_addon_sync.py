@@ -161,15 +161,80 @@ def test_every_mutation_command_is_a_command():
     assert mutations <= commands, f"not commands: {sorted(mutations - commands)}"
 
 
-def test_the_advertised_view_presets_are_the_ones_the_handler_handles():
-    """``render_view``'s enum, ``_VIEW_DIRS`` and ``VIEW_PRESETS`` are one set.
+#: The mutation set as a contract, not a count: a lost name and a gained name are
+#: different failures.  A name dropped from ``MUTATION_COMMANDS`` stops that command
+#: reporting deltas, and every iterating test above still passes on the shorter set;
+#: a name added without this list changing means someone widened what counts as a
+#: mutation, which is a decision and not an edit.
+_MUTATION_CONTRACT = {
+    "auto_constrain",
+    "boolean_operation",
+    "chamfer",
+    "circular_pattern",
+    "create_bend",
+    "create_box",
+    "create_cylinder",
+    "create_flange",
+    "create_hole",
+    "create_sphere",
+    "create_thread",
+    "create_torus",
+    "create_ucs",
+    "delete_all",
+    "draft_faces",
+    "execute_code",
+    "extrude",
+    "fillet",
+    "flat_pattern",
+    "loft",
+    "mirror",
+    "move_body",
+    "offset_faces",
+    "patch_surface",
+    "rectangular_pattern",
+    "revolve",
+    "ruled_surface",
+    "scale_body",
+    "set_color",
+    "set_parameter",
+    "shell",
+    "split_body",
+    "split_face",
+    "stitch_surfaces",
+    "suppress_feature",
+    "sweep",
+    "thicken_surface",
+    "trim_surface",
+    "undo",
+    "unfold",
+    "unsuppress_feature",
+}
 
-    The four isometric diagonals were handled and unadvertised, so a caller that
-    asked for ``iso_ne`` was refused by the schema and understood by the handler.
+
+def test_the_mutation_set_is_exactly_these_commands():
+    """Pinned by name; see ``_MUTATION_CONTRACT`` for why a count is not enough."""
+    assert (
+        _extract_module_attr_set(MUTATION_COMMANDS, "MUTATION_COMMANDS")
+        == _MUTATION_CONTRACT
+    )
+
+
+def test_the_advertised_view_presets_are_the_ones_the_handler_handles():
+    """``render_view``'s enum and ``VIEW_PRESETS`` are both ``_VIEW_DIRS``' keys.
+
+    Read from the add-in source rather than from ``VIEW_PRESETS``, which the schema is
+    built from: comparing the two would pass on an empty tuple.  The four isometric
+    diagonals were handled and unadvertised, so a caller that asked for ``iso_ne`` was
+    refused by the schema and understood by the handler.
     """
     from fusion360_mcp import tools
 
+    advertised = tools.get_tool_by_name("render_view")
+    assert advertised is not None
+    enum = advertised["inputSchema"]["properties"]["view"]["enum"]
+
     assert set(tools.VIEW_PRESETS) == _view_dirs() | {"current"}
+    assert set(enum) == _view_dirs() | {"current"}
 
 
 def test_export_view_sheet_offers_the_presets_without_current():

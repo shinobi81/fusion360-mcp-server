@@ -544,8 +544,8 @@ class CommandHandler:
         match.  Only "all" is compatible with a silence, because "all" is the
         default and so means "unset".
 
-        The parameters are judged before the body is read, by ``rules`` — the module
-        mock mode refuses with too, so one call fails the same way on both sides.
+        The parameters are judged from the parameters alone, by ``rules``; the body is
+        resolved first, so a bad body still wins.
         """
         if refusal := _rules.edge_selector_refusal(
             {
@@ -2364,13 +2364,13 @@ class CommandHandler:
     def _thread_fits(face_diameter: float, thread_diameter: float) -> bool:
         """Whether the face is the size the designation describes, near enough.
 
-        A *relative* band alone is wrong, and the first version of this shipped one.
-        Callers model the nominal diameter while Fusion reports the middle of the
-        tolerance band, and the gap between the two is roughly constant in absolute
-        terms - 0.073 mm on an M3, 0.116 mm on an M6, 0.209 mm on an M20 - so a
-        percentage gate tightens as the thread shrinks and refused Ø3.00 mm stock
-        against M3x0.5, the canonical small-thread call. The floor keeps that
-        accepted; Ø20 against M6 is 14.1 cm apart and still refused.
+        A *relative* band alone is wrong: callers model the nominal diameter while
+        Fusion reports the middle of the tolerance band, and the gap between the two
+        is roughly constant in absolute terms - 0.073 mm on an M3, 0.116 mm on an M6,
+        0.209 mm on an M20 - so a percentage gate tightens as the thread shrinks and
+        would refuse Ø3.00 mm stock against M3x0.5, the canonical small-thread call.
+        The floor keeps that accepted; Ø20 against M6 is 14.1 cm apart and still
+        refused.
         """
         return abs(face_diameter - thread_diameter) <= max(
             0.02 * thread_diameter, 0.012
@@ -2386,11 +2386,11 @@ class CommandHandler:
     ) -> str:
         """What to tell a caller whose face and designation disagree.
 
-        Three things a first version got wrong: it could recommend the designation it
-        had just refused (the recommendation is the nearest standard thread, which on
-        nominal-sized stock *is* the one asked for), it never considered that
-        ``is_internal`` might be the wrong flag rather than the designation, and it
-        said nothing about which diameter it had measured.
+        The message names the diameter it measured, so the answer says what was seen
+        rather than only what was expected.  It does not recommend the designation it
+        has just refused: the recommendation is the nearest standard thread, which on
+        nominal-sized stock *is* the one asked for.  And ``is_internal`` may be the
+        wrong flag rather than the designation, which is a different repair.
         """
         parts = [
             f"The face is {face_diameter * 10:.2f} mm across but {designation} is "
@@ -3911,9 +3911,9 @@ class CommandHandler:
         is then told ``axis_world`` is ``[0, 0, 0]`` and the joint is built around
         whichever ``JointDirections`` member the tie happened to produce.  Only the
         member reaches Fusion; the vector is what the response reports.
-        Measured shape of the failure before this guard: a frame whose secondary
-        axis was ``[0, 0, 0]`` answered ``axis_world`` ``[0, 0, 0]`` for
-        ``axis="y"`` and picked an axis the geometry never had.
+        Measured failure without this guard: a frame whose secondary axis was
+        ``[0, 0, 0]`` answered ``axis_world`` ``[0, 0, 0]`` for ``axis="y"`` and
+        picked an axis the geometry never had.
         """
         frame = {
             "x": _vector(geometry.secondaryAxisVector),
