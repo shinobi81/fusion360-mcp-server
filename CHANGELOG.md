@@ -7,6 +7,50 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.8.2] - 2026-11-15
+
+A patch release whose payload is documentation and the guards that keep it honest. No
+tool, parameter, response field or `error_kind` changed, no line of the add-in's code
+changed, and the wheel and sdist carry exactly what 0.8.1's did: the only code that
+moved is in `tests/`, and the only shipped text that moved is in the repository's own
+pages.
+
+### Fixed
+
+- **`SECURITY.md` answered "is my version supported?" with a series nobody was on.** It
+  said `0.3.x` from 0.4.0 through 0.8.1 - five minors of telling every reader of the
+  current release that their own version was unsupported, in the file `llms.txt` routes
+  that question to. It says `0.8.x` now, and a test reads both rows against the series
+  `pyproject.toml` states, so the Yes row must be that series and the No row everything
+  below it. (#101)
+
+- **`SECURITY.md`'s three design notes rendered as one bullet.** The `-` markers sat
+  inside the paragraph - the shape the file had since it arrived in #5 - and
+  markdownlint parses that as a single well-formed item, so no gate saw it. Three
+  bullets again. (#102)
+
+### Changed
+
+- **Every command-shaped `uv sync` passes `--locked`** - four in CI (`ci.yml` three
+  times, `fuzz.yml`'s group-only one) and five in the documents that tell someone to run
+  it (`AGENTS.md`, `CONTRIBUTING.md`, `README.md`, `docs/TESTING.md` twice), plus the
+  comment beside `pyproject.toml`'s dependency groups. `--frozen` installs whatever the
+  lock says and never compares it with `pyproject.toml`, so a release PR that moved the
+  version and forgot `uv lock` would have installed cleanly and stayed green. (#101)
+
+- **`tests/test_packaging.py`'s docstring names the claims it guards again** - the four
+  build-shape tests #94 added (the add-in's mapping into the wheel, `src/`'s package
+  list, the add-on subpackages, `include-package-data`) and the quick-start half of the
+  pin claim. (#102)
+
+### Testing
+
+- **Three records that could drift from the release are now read**: `SECURITY.md`'s
+  supported-versions rows, the sync flag on every documented command, and the
+  changelog's first heading, its date shape and its compare link. Each is a sweep of
+  every tracked markdown page plus every workflow, and a named list that must keep
+  showing the thing, so a reflow cannot empty the check. (#101)
+
 ## [0.8.1] - 2026-11-14
 
 A patch release for refusal and output behaviour. No tool, parameter, response field or
@@ -724,6 +768,7 @@ reporting a result it had only echoed back.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.8.2]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.3...v0.8.0
 [0.7.3]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.2...v0.7.3
