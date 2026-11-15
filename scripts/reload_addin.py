@@ -156,7 +156,10 @@ def loaded_class(connection: Fusion360Connection) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
+    # A literal, not the module docstring's first line: under ``python -OO``
+    # ``__doc__`` is ``None``, and ``(None or "").splitlines()[0]`` raises IndexError
+    # before the script reaches the add-in.  ``main`` needs no help text from it.
+    parser = argparse.ArgumentParser(description="Reload the add-in and verify it.")
     parser.add_argument(
         "--check",
         action="store_true",

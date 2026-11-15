@@ -16,7 +16,10 @@ add-in.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -114,6 +117,56 @@ def test_a_command_module_the_tuple_forgets_is_reported(monkeypatch):
 
     with pytest.raises(SystemExit, match="handler_sketch"):
         module.declared_methods(sources)
+
+
+def test_every_file_declaring_a_command_class_is_named_in_the_tuple():
+    """The other direction: a module the tuple never names is invisible to both halves.
+
+    ``declared_methods`` reports a name it cannot read and a module that declares no
+    command class, and ``main`` compares that set with the running class - so a module
+    that declares commands and appears in neither list gives the comparison nothing to
+    disagree about.  Edits to it never reach Fusion (``event_bridge`` reloads only
+    ``RELOAD_ORDER``) and the check still says ok.  The files come from the directory,
+    not from the tuple: the directory is the list that grows by itself.
+    """
+    module = _script()
+    server = REPO_ROOT / "addon" / "server"
+    declaring = {
+        path.name
+        for path in [*server.glob("handler_*.py"), server / "command_handler.py"]
+        if any(
+            isinstance(node, ast.ClassDef) and module._is_command_class(node.name)
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        )
+    }
+    named = {f"{stem}.py" for stem in module.COMMAND_MODULES}
+
+    unregistered = sorted(declaring - named)
+    assert unregistered == [], (
+        f"not in COMMAND_MODULES: {', '.join(unregistered)} - each declares a command "
+        "class, so reload_handler never re-executes it and its edits never reach "
+        "Fusion"
+    )
+    unreadable = sorted(named - declaring)
+    assert unreadable == [], (
+        f"named in COMMAND_MODULES, declaring no command class: "
+        f"{', '.join(unreadable)} - the comparison would be vacuous for each of them"
+    )
+
+
+def test_the_command_modules_are_reloaded_base_first_and_command_handler_last():
+    """The order is load-bearing, and both copies of the tuple say so in a comment.
+
+    ``reload_handler`` re-executes each module in turn.  A module re-executed *after*
+    its importer leaves the importer holding the old class object, so the base has to
+    be built before the domains that inherit from it and ``command_handler`` - the
+    module that imports all of them - has to be last.  Reordered, the reload succeeds
+    and Fusion keeps serving a class assembled from the previous load.
+    """
+    module = _script()
+
+    assert module.COMMAND_MODULES[0] == "handler_base"
+    assert module.COMMAND_MODULES[-1] == "command_handler"
 
 
 def test_a_method_the_file_declares_is_missing_from_the_running_class():
@@ -262,6 +315,35 @@ def test_the_sibling_modules_are_named_in_the_reload_order():
         *module.COMMAND_MODULES,
     )
     assert expected == module.RELOAD_ORDER
+
+
+def test_the_command_line_survives_an_interpreter_that_strips_docstrings():
+    """``-OO`` empties ``__doc__``, and ``main`` used to subscript its first line.
+
+    ``(None or "").splitlines()`` is ``[]``, so ``[0]`` raised IndexError before the
+    script did anything: a traceback instead of a usage line, for a description that
+    does not need to come from the docstring.  ``--help`` because it exits inside
+    ``argparse``: the real command line stops at "not connected", so it would never
+    reach the description, and on a machine running Fusion it would reload the add-in.
+    """
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-OO",
+            str(REPO_ROOT / "scripts" / "reload_addin.py"),
+            "--help",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+
+    assert result.returncode == 0, (
+        "`python -OO scripts/reload_addin.py --help` must exit 0: -OO empties "
+        f"__doc__; stderr={result.stderr!r}"
+    )
 
 
 def test_a_fused_addin_is_reported_not_raised(monkeypatch, capsys):
