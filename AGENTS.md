@@ -78,7 +78,10 @@ by hand, and what the job needs, is in `docs/TESTING.md`.
    fails if the two lists drift
 4. Mutation commands go in `_MUTATION_COMMANDS` (add-in) and `_MUTATION_MOCKS` (mock)
 5. Annotations: `readOnlyHint`, `destructiveHint`, `idempotentHint`
-6. Update `tests/test_tools.py` expectations and add a mock test
+6. A row in `docs/TOOLS.md` and the name in the index above — the index is guarded,
+   the description is not
+7. Add a behavioural mock test (`tests/test_mock.py`); the tool count and each
+   tool's argument count are pinned in `tests/test_tools.py`
 
 The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
 
@@ -132,187 +135,30 @@ record why not — in the thread — before merging.
 
 ## Available tools (97)
 
-### Document
+Grouped by area (the grouping and order differ from `docs/TOOLS.md`, which has the
+argument-level description of each tool; the schema is `src/fusion360_mcp/tools.py`).
+A name that is not in this table is not a tool: list_tools returns exactly these and
+the add-in dispatches on the same strings.
 
-| Tool              | Description                                                                      |
-| ----------------- | -------------------------------------------------------------------------------- |
-| `new_document`    | Create a design document and make it active (the way in from a cold start)       |
-| `get_design_type` | Whether the design is parametric or direct, to catch accidental mode switches    |
-| `set_design_type` | Switch between parametric and direct, e.g. to recover after an accidental switch |
-
-### Scene & Query
-
-| Tool               | Description                                                                 |
-| ------------------ | --------------------------------------------------------------------------- |
-| `ping`             | Health check (no Fusion API, instant)                                       |
-| `get_scene_info`   | Design name, bodies, sketches, features, camera                             |
-| `get_object_info`  | Detailed info about a named body or sketch                                  |
-| `list_edges`       | Every edge of a body with its index, for the `edge_indices` selectors       |
-| `list_components`  | List all components in the design                                           |
-| `get_bounding_box` | Axis-aligned bounding box for a body or component (min/max/size/center, cm) |
-
-### Sketching
-
-| Tool               | Description                                                                      |
-| ------------------ | -------------------------------------------------------------------------------- |
-| `create_sketch`    | New sketch on xy/yz/xz, optional offset                                          |
-| `draw_rectangle`   | Rectangle in most recent sketch, or in `sketch_name`                             |
-| `draw_circle`      | Circle in most recent sketch, or in `sketch_name`                                |
-| `draw_line`        | Line in most recent sketch, or in `sketch_name`                                  |
-| `draw_arc`         | Arc (center + start + sweep angle)                                               |
-| `draw_spline`      | Fit-point or control-point spline                                                |
-| `create_polygon`   | Regular polygon (3–64 sides)                                                     |
-| `draw_circles`     | Several equally spaced circles in one solve (bulk, far faster than one per call) |
-| `add_constraint`   | Geometric constraint (coincident, parallel, tangent, etc.)                       |
-| `auto_constrain`   | Auto-constrain a sketch (Fusion 2026+ AutoConstrain API)                         |
-| `add_dimension`    | Driving dimension (distance, angle, radial, diameter)                            |
-| `offset_curve`     | Offset connected sketch curves                                                   |
-| `trim_curve`       | Trim at intersections                                                            |
-| `extend_curve`     | Extend to nearest intersection                                                   |
-| `project_geometry` | Project edges/bodies onto sketch plane                                           |
-
-### Features
-
-| Tool                  | Description                           |
-| --------------------- | ------------------------------------- |
-| `extrude`             | Extrude a sketch profile; `target_body` limits a cut/join/intersect |
-| `revolve`             | Revolve a profile around an axis; `target_body` limits a cut/join/intersect |
-| `sweep`               | Sweep a profile along a path; `target_body` limits a cut/join/intersect |
-| `loft`                | Loft between two or more profiles; `target_body` limits a cut/join/intersect |
-| `fillet`              | Round edges: all/top/bottom/vertical, or `edge_indices` / `edge_points` |
-| `chamfer`             | Chamfer edges: same three selectors as `fillet` |
-| `shell`               | Hollow out a body; `face_selection` (top/bottom) is the face left **open** |
-| `mirror`              | Mirror a body across a plane          |
-| `create_hole`         | Hole feature on a body face           |
-| `rectangular_pattern` | Pattern in rows and columns           |
-| `circular_pattern`    | Pattern around an axis                |
-| `create_thread`       | Threads (cosmetic or modeled)         |
-| `draft_faces`         | Draft/taper for mold release          |
-| `split_body`          | Split a body using a plane            |
-| `split_face`          | Split faces of a body                 |
-| `offset_faces`        | Push/pull faces by a distance         |
-| `scale_body`          | Scale uniformly or non-uniformly      |
-| `suppress_feature`    | Suppress a timeline feature           |
-| `unsuppress_feature`  | Re-enable a suppressed feature        |
-
-### Body Operations
-
-| Tool                | Description                                      |
-| ------------------- | ------------------------------------------------ |
-| `move_body`         | Translate a body by (x, y, z)                    |
-| `rename_body`       | Rename a body (searches root and all components) |
-| `boolean_operation` | Join/cut/intersect two bodies; `keep_tool` keeps the tool |
-| `delete_all`        | Clear the design                                 |
-| `undo`              | Step back one operation; see the note below      |
-
-### Direct Primitives
-
-| Tool                    | Description                                                          |
-| ----------------------- | -------------------------------------------------------------------- |
-| `create_box`            | Box (via TemporaryBRepManager), centred on `center_x`/`center_y`/`center_z` |
-| `create_cylinder`       | Cylinder                                                             |
-| `create_sphere`         | Sphere                                                               |
-| `create_torus`          | Torus                                                                |
-| `create_box_parametric` | History-based box (sketch rectangle + extrude), driven by parameters |
-
-### Surface Operations
-
-| Tool              | Description                       |
-| ----------------- | --------------------------------- |
-| `patch_surface`   | Patch surface from boundary edges |
-| `stitch_surfaces` | Stitch surface bodies into one    |
-| `thicken_surface` | Thicken a surface into a solid    |
-| `ruled_surface`   | Ruled surface from an edge        |
-| `trim_surface`    | Trim a surface with another body  |
-
-### Sheet Metal
-
-| Tool            | Description                |
-| --------------- | -------------------------- |
-| `create_flange` | Create a flange on an edge |
-| `create_bend`   | Add a bend                 |
-| `flat_pattern`  | Create flat pattern        |
-| `unfold`        | Unfold specific bends      |
-
-### Construction Geometry
-
-| Tool                        | Description                                                               |
-| --------------------------- | ------------------------------------------------------------------------- |
-| `create_construction_plane` | Offset, angle, midplane, 3-point, tangent                                 |
-| `create_construction_axis`  | Two-point, intersection, edge, perpendicular                              |
-| `create_ucs`                | User Coordinate System at a point with optional rotation (2026+, preview) |
-
-### Assembly
-
-| Tool                    | Description                                                         |
-| ----------------------- | ------------------------------------------------------------------- |
-| `create_component`      | Create a sub-assembly component                                     |
-| `add_joint`             | Joint between two components                                        |
-| `create_as_built_joint` | Joint from current positions                                        |
-| `create_rigid_group`    | Lock components together                                            |
-| `set_joint_value`       | Drive a joint and read the value back (angles in deg, slides in cm) |
-
-### Inspection & Analysis
-
-| Tool                      | Description                                            |
-| ------------------------- | ------------------------------------------------------ |
-| `measure_distance`        | Minimum distance between entities                      |
-| `measure_angle`           | Angle between entities                                 |
-| `get_physical_properties` | Mass, volume, area, center of mass                     |
-| `create_section_analysis` | Section plane through model                            |
-| `check_interference`      | Detect collisions between components                   |
-| `compare_meshes`          | Deviation stats between two mesh bodies (Fusion 2026+) |
-
-### Appearance & Parameters
-
-| Tool               | Description                             |
-| ------------------ | --------------------------------------- |
-| `set_appearance`   | Assign material appearance from library |
-| `set_color`        | Assign a flat RGB color to a body       |
-| `get_parameters`   | List all user parameters                |
-| `create_parameter` | Create a new parameter                  |
-| `set_parameter`    | Update a parameter value                |
-| `delete_parameter` | Remove a parameter                      |
-
-### Import
-
-| Tool          | Description                                                               |
-| ------------- | ------------------------------------------------------------------------- |
-| `import_mesh` | Import a mesh file (STL, OBJ, 3MF) as a mesh body, for reference geometry |
-
-### Export
-
-| Tool                | Description                                                           |
-| ------------------- | --------------------------------------------------------------------- |
-| `export_stl`        | Export body as STL                                                    |
-| `export_step`       | Export body as STEP                                                   |
-| `export_f3d`        | Export design as Fusion archive                                       |
-| `export_view_sheet` | Orthographic + isometric PNGs, plus a shareable HTML sheet            |
-| `export`            | Unified wrapper — picks STL, STEP or f3d from the format or extension |
-
-### CAM / Manufacturing
-
-| Tool                     | Description                                                         |
-| ------------------------ | ------------------------------------------------------------------- |
-| `cam_create_setup`       | Create a manufacturing setup (milling/turning/cutting)              |
-| `cam_create_operation`   | Add a machining operation (face, contour, adaptive, drilling, etc.) |
-| `cam_generate_toolpath`  | Generate toolpaths for operations                                   |
-| `cam_post_process`       | Post-process to G-code (fanuc, grbl, haas, etc.)                    |
-| `cam_list_setups`        | List all manufacturing setups                                       |
-| `cam_list_operations`    | List operations in a setup                                          |
-| `cam_get_operation_info` | Get operation details (strategy, tool, parameters)                  |
-
-### Code Execution
-
-| Tool           | Description                                 |
-| -------------- | ------------------------------------------- |
-| `execute_code` | Run arbitrary Python in Fusion (REPL-style) |
-
-### Perception
-
-| Tool          | Description                                                                                                                                                                                                               |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `render_view` | Capture the active viewport as a PNG. Pass `view=iso\|front\|top\|...` to reposition the camera first. Returns an image content block you can visually inspect to validate geometry before committing to more operations. |
+| Area | Tools |
+| --- | --- |
+| Document | `new_document`, `get_design_type`, `set_design_type` |
+| Scene & Query | `ping`, `get_scene_info`, `get_object_info`, `list_edges`, `list_components`, `get_bounding_box` |
+| Sketching | `create_sketch`, `draw_rectangle`, `draw_circle`, `draw_line`, `draw_arc`, `draw_spline`, `create_polygon`, `draw_circles`, `add_constraint`, `auto_constrain`, `add_dimension`, `offset_curve`, `trim_curve`, `extend_curve`, `project_geometry` |
+| Features | `extrude`, `revolve`, `sweep`, `loft`, `fillet`, `chamfer`, `shell`, `mirror`, `create_hole`, `rectangular_pattern`, `circular_pattern`, `create_thread`, `draft_faces`, `split_body`, `split_face`, `offset_faces`, `scale_body`, `suppress_feature`, `unsuppress_feature` |
+| Body Operations | `move_body`, `rename_body`, `boolean_operation`, `delete_all`, `undo` |
+| Direct Primitives | `create_box`, `create_cylinder`, `create_sphere`, `create_torus`, `create_box_parametric` |
+| Surface Operations | `patch_surface`, `stitch_surfaces`, `thicken_surface`, `ruled_surface`, `trim_surface` |
+| Sheet Metal | `create_flange`, `create_bend`, `flat_pattern`, `unfold` |
+| Construction Geometry | `create_construction_plane`, `create_construction_axis`, `create_ucs` |
+| Assembly | `create_component`, `add_joint`, `create_as_built_joint`, `create_rigid_group`, `set_joint_value` |
+| Inspection & Analysis | `measure_distance`, `measure_angle`, `get_physical_properties`, `create_section_analysis`, `check_interference`, `compare_meshes` |
+| Appearance & Parameters | `set_appearance`, `set_color`, `get_parameters`, `create_parameter`, `set_parameter`, `delete_parameter` |
+| Import | `import_mesh` |
+| Export | `export_stl`, `export_step`, `export_f3d`, `export_view_sheet`, `export` |
+| CAM / Manufacturing | `cam_create_setup`, `cam_create_operation`, `cam_generate_toolpath`, `cam_post_process`, `cam_list_setups`, `cam_list_operations`, `cam_get_operation_info` |
+| Code Execution | `execute_code` |
+| Perception | `render_view` |
 
 ## Response shape
 

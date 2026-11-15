@@ -1751,42 +1751,138 @@ def test_the_dated_heading_accepts_only_the_shape_every_entry_uses():
     assert not pattern.search("## [0.8.2] - 2026-11-14")
 
 
-TOOL_CATALOGUES = ("AGENTS.md", "docs/TOOLS.md")
-"""Documents that promise a catalogue of every tool the server exposes.
+TOOL_CATALOGUES = {
+    "AGENTS.md": (1, "Area"),  # | Area | `a`, `b`, ... |
+    "docs/TOOLS.md": (0, "Tool"),  # | `tool` | description |
+}
+"""Documents that promise a catalogue of every tool: which cell holds the name, and the
+header that opens the table it lives in.
 
-``AGENTS.md`` says "Available tools (97)" and listed 96: ``list_edges`` was
-missing, and nothing noticed, because no guard read the page.  The count in prose
-was never the problem — the missing row was.
+``AGENTS.md`` said "Available tools (97)" and listed 96: ``list_edges`` was missing,
+and nothing noticed, because no guard read the page.  The count in prose was never the
+problem - the missing row was.
+
+Everything here is narrow on purpose:
+
+* the **column** matters - ``AGENTS.md`` indexes names in the second cell of a 17-row
+  table, ``docs/TOOLS.md`` documents them in the first, and reading whole rows would
+  let a description that mentions ``entityToken`` count as a tool;
+* the **header** matters - ``docs/TOOLS.md`` also carries a legend table whose first
+  cells are ``x``, ``y`` and ``z``, and those are not tools;
+* the **section** matters - ``AGENTS.md`` names ``render_view`` again in its
+  Response-shape prose, so reading the whole page would keep the guard green after its
+  row was deleted.
 """
 
+CATALOGUE_HEADING = "## Available tools"
+"""Where ``AGENTS.md``'s catalogue starts; the next ``## `` ends it."""
 
-def _missing_from_catalogue(text: str, names: set[str]) -> set[str]:
-    """Tool names the document never mentions in backticks.
 
-    Backticks are the house convention for a tool name in every page here, and
-    requiring them keeps a tool from being "covered" by a word that happens to be
-    spelled the same inside prose.
+def _catalogue_section(text: str) -> str:
+    start = text.find(CATALOGUE_HEADING)
+    if start == -1:
+        return text
+    end = text.find("\n## ", start + len(CATALOGUE_HEADING))
+    return text[start : end if end != -1 else len(text)]
+
+
+def _catalogue_names(text: str, column: int, header: str) -> set[str]:
+    """Backticked identifiers in *column* of the tables opened by *header*."""
+    names: set[str] = set()
+    in_table = False
+    for line in _catalogue_section(text).splitlines():
+        if not line.startswith("|"):
+            in_table = False
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if not in_table:
+            # This row is the header of a new table: only tables that say "Tool" or
+            # "Area" here hold tool names.
+            in_table = bool(cells) and cells[0].lower() == header.lower()
+            continue
+        if len(cells) > column:
+            names.update(re.findall(r"`([a-z][a-z0-9_]*)`", cells[column]))
+    return names
+
+
+@pytest.mark.parametrize("path, spec", TOOL_CATALOGUES.items())
+def test_the_catalogue_lists_exactly_the_tools(path, spec):
+    """Both directions: no tool without a row, no row without a tool.
+
+    The first direction is the one that would have caught ``list_edges``; the second
+    stops a row naming something that is not a tool, which is how a rename leaves a
+    ghost that still reads as documentation.
     """
-    mentioned = set(re.findall(r"`([a-z][a-z0-9_]*)`", text))
-    return names - mentioned
-
-
-@pytest.mark.parametrize("path", TOOL_CATALOGUES)
-def test_every_tool_is_in_the_catalogue(path):
     from fusion360_mcp.tools import TOOLS
 
+    column, header = spec
     text = (REPO_ROOT / path).read_text(encoding="utf-8")
-    missing = _missing_from_catalogue(text, {tool["name"] for tool in TOOLS})
+    if path == "AGENTS.md":
+        # Fail closed: a reworded heading would scope nothing, and the guard would
+        # go back to accepting a row from any table on the page.
+        assert CATALOGUE_HEADING in text, (
+            f"{path} has no {CATALOGUE_HEADING!r} heading; the guard scopes to it"
+        )
+    names = {tool["name"] for tool in TOOLS}
+    listed = _catalogue_names(text, column, header)
 
-    assert not missing, (
-        f"{path} documents no row for {sorted(missing)}. Every tool in tools.py "
-        "needs a catalogue entry, or an agent reading the page cannot find it."
+    assert not names - listed, (
+        f"{path} documents no row for {sorted(names - listed)}. Every tool in "
+        "tools.py needs a catalogue entry, or an agent reading the page cannot "
+        "find it."
     )
+    assert not listed - names, (
+        f"{path} documents {sorted(listed - names)}, which are not tools. A "
+        "renamed or deleted tool leaves a ghost row that reads as documentation."
+    )
+
+
+TOOL_TABLE = "| Tool | Description |\n| --- | --- |\n"
+"""The shape ``docs/TOOLS.md`` uses, for the guard's own tests."""
 
 
 def test_the_catalogue_guard_catches_a_missing_tool():
     """The guard's own test: one that cannot fail protects nothing."""
-    text = "| `draw_circle` | a circle |\n| `rectangle` | not the tool name |\n"
-    assert _missing_from_catalogue(text, {"draw_circle", "draw_rectangle"}) == {
+    text = TOOL_TABLE + "| `draw_circle` | a circle |\n"
+
+    assert _catalogue_names(text, 0, "Tool") == {"draw_circle"}
+    assert {"draw_circle", "draw_rectangle"} - _catalogue_names(text, 0, "Tool") == {
         "draw_rectangle"
     }
+
+
+def test_the_catalogue_guard_catches_a_ghost_row():
+    text = TOOL_TABLE + "| `draw_circle` | a circle |\n| `draw_rectangle` | boxed |\n"
+
+    assert _catalogue_names(text, 0, "Tool") - {"draw_circle"} == {"draw_rectangle"}
+
+
+def test_the_catalogue_guard_ignores_a_table_it_was_not_pointed_at():
+    """``docs/TOOLS.md`` carries a legend whose first cells are ``x``, ``y``, ``z``."""
+    text = TOOL_TABLE + "| `draw_circle` | a circle |\n"
+    text += "\n| Axis | Direction |\n| --- | --- |\n| `x` | -X |\n"
+
+    assert _catalogue_names(text, 0, "Tool") == {"draw_circle"}
+
+
+def test_the_catalogue_guard_reads_only_the_catalogue_section():
+    """A table after the section must not stand in for a row.
+
+    The bait is a *table*, not prose: prose outside the section is already
+    filtered by the `|` check, so a prose bait left this test green with the
+    section logic deleted - which is what a first attempt at it did.
+    """
+    page = (
+        "## Available tools\n\n| Area | Tools |\n| --- | --- |\n"
+        "| Perception | `render_view` |\n\n## Response shape\n\n"
+        "| Area | Tools |\n| --- | --- |\n| Other | `undo` |\n"
+    )
+
+    assert _catalogue_names(page, 1, "Area") == {"render_view"}
+
+
+def test_the_catalogue_guard_reads_only_the_name_column():
+    """A description mentioning a word in backticks is not a row."""
+    page = TOOL_TABLE + "| `draw_circle` | sets `entityToken` on the body |\n"
+
+    assert _catalogue_names(page, 0, "Tool") == {"draw_circle"}
