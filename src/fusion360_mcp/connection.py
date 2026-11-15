@@ -158,15 +158,9 @@ class Fusion360Connection:
 
         is_mutation = command_type in _MUTATION_COMMANDS
         sock = self._sock
-        if sock is None:
-            # A dead connection would otherwise surface as AttributeError.
-            raise FusionError(
-                f"{command_type}: not connected to Fusion 360",
-                hints=[
-                    "Ensure the Fusion360MCP add-in is running: "
-                    "Fusion → Utilities → Add-Ins → Run.",
-                ],
-            )
+        # connect() above either set a socket or raised, so this is a narrowing
+        # for the type checker, not a second branch a caller can reach.
+        assert sock is not None
         try:
             sock.sendall(payload.encode("utf-8"))
             sock.settimeout(timeout)

@@ -186,8 +186,7 @@ def build_server(mode: str, host: str, port: int) -> Server:
         name: str,
         arguments: dict,
     ) -> list[types.ContentBlock] | types.CallToolResult:
-        tool_def = get_tool_by_name(name)
-        if not tool_def:
+        if get_tool_by_name(name) is None:
             raise ValueError(f"Unknown tool: {name}")
 
         try:
@@ -238,83 +237,51 @@ def build_server(mode: str, host: str, port: int) -> Server:
             ),
         ]
 
+    # Resource templates are matched by the same table the read dispatches on,
+    # so a template can never be advertised without being renderable.
+    _RESOURCES = {
+        "fusion360://design": ("get_scene_info", None),
+        "fusion360://parameters": ("get_parameters", None),
+    }
+    _RESOURCE_TEMPLATES = (
+        (re.compile(r"^fusion360://body/(.+)$"), "get_object_info"),
+        (re.compile(r"^fusion360://component/(.+)$"), "get_object_info"),
+    )
+
+    def _read(command: str, params: dict | None = None) -> dict:
+        """The add-in's answer, or ``{"error": ...}`` after dropping the socket.
+
+        One boundary for six reads instead of six copies of it: a failure must
+        reset the connection exactly once, and a resource must degrade to an
+        error document rather than raise into the protocol.
+        """
+        try:
+            return _send(mode, command, params, host=host, port=port)
+        except Exception as exc:
+            reset_connection()
+            return {"error": str(exc)}
+
     @app.read_resource()
     async def read_resource(uri: AnyUrl) -> str:
         uri_str = str(uri)
         if uri_str == "fusion360://status":
-            try:
-                result = _send(mode, "ping", host=host, port=port)
-                return json.dumps(
-                    {"connected": True, "ping": result},
-                    indent=2,
-                )
-            except Exception as exc:
-                reset_connection()
-                return json.dumps(
-                    {"connected": False, "error": str(exc)},
-                    indent=2,
-                )
+            result = _read("ping")
+            payload = (
+                {"connected": False, "error": result["error"]}
+                if "error" in result
+                else {"connected": True, "ping": result}
+            )
+            return json.dumps(payload, indent=2)
 
-        if uri_str == "fusion360://design":
-            try:
-                result = _send(mode, "get_scene_info", host=host, port=port)
-                return json.dumps(result, indent=2)
-            except Exception as exc:
-                reset_connection()
-                return json.dumps({"error": str(exc)}, indent=2)
+        if command := _RESOURCES.get(uri_str):
+            return json.dumps(_read(*command), indent=2)
 
-        if uri_str == "fusion360://parameters":
-            try:
-                result = _send(
-                    mode,
-                    "get_parameters",
-                    host=host,
-                    port=port,
-                )
+        for pattern, handler_name in _RESOURCE_TEMPLATES:
+            if found := pattern.match(uri_str):
+                result = _read(handler_name, {"name": found.group(1)})
                 return json.dumps(result, indent=2)
-            except Exception as exc:
-                reset_connection()
-                return json.dumps({"error": str(exc)}, indent=2)
-
-        # ── resource template matches ─────────────────────────────
-        body_match = re.match(r"^fusion360://body/(.+)$", uri_str)
-        if body_match:
-            name = body_match.group(1)
-            try:
-                result = _send(
-                    mode,
-                    "get_object_info",
-                    {"name": name},
-                    host=host,
-                    port=port,
-                )
-                return json.dumps(result, indent=2)
-            except Exception as exc:
-                reset_connection()
-                return json.dumps({"error": str(exc)}, indent=2)
-
-        comp_match = re.match(
-            r"^fusion360://component/(.+)$",
-            uri_str,
-        )
-        if comp_match:
-            name = comp_match.group(1)
-            try:
-                result = _send(
-                    mode,
-                    "get_object_info",
-                    {"name": name},
-                    host=host,
-                    port=port,
-                )
-                return json.dumps(result, indent=2)
-            except Exception as exc:
-                reset_connection()
-                return json.dumps({"error": str(exc)}, indent=2)
 
         raise ValueError(f"Unknown resource: {uri_str}")
-
-    # ── resource templates ────────────────────────────────────────────
 
     @app.list_resource_templates()
     async def list_resource_templates() -> list[types.ResourceTemplate]:
@@ -335,116 +302,103 @@ def build_server(mode: str, host: str, port: int) -> Server:
 
     # ── prompts ───────────────────────────────────────────────────────
 
+    def _prompt(name: str, description: str, *args: types.PromptArgument):
+        return types.Prompt(
+            name=name,
+            description=description,
+            arguments=list(args),
+        )
+
+    def _dimensions(what: str) -> list[types.PromptArgument]:
+        """The three box/enclosure arguments, which differ only in their noun."""
+        return [
+            types.PromptArgument(
+                name=factor, description=f"{what} {factor} in cm", required=False
+            )
+            for factor in ("length", "width", "height")
+        ]
+
+    def _render_box(args: dict) -> str:
+        return (
+            "Create a parametric box in Fusion 360:\n"
+            + "1. create_sketch on xy plane\n"
+            + f"2. draw_rectangle width={args.get('width', '5')} "
+            + f"height={args.get('length', '10')}\n"
+            + f"3. extrude height={args.get('height', '3')}\n"
+            + "4. get_scene_info to verify"
+        )
+
+    def _render_bolt(args: dict) -> str:
+        desig = args.get("designation", "M10x1.5")
+        return (
+            f"Model a threaded bolt ({desig}):\n"
+            + "1. create_sketch on xy plane\n"
+            + "2. draw_circle for bolt shaft\n"
+            + "3. extrude to bolt length\n"
+            + f"4. create_thread designation={desig}\n"
+            + "5. Create hex head sketch + extrude\n"
+            + "6. chamfer head edges"
+        )
+
+    def _render_enclosure(args: dict) -> str:
+        length = args.get("length", "20")
+        width = args.get("width", "10")
+        height = args.get("height", "5")
+        return (
+            f"Create a sheet metal enclosure ({length}x{width}x{height} cm):\n"
+            + "1. create_sketch on xy plane\n"
+            + f"2. draw_rectangle {width}x{length}\n"
+            + "3. extrude to sheet thickness\n"
+            + "4. create_flange on each edge\n"
+            + "5. flat_pattern to verify unfold"
+        )
+
+    # name -> (what the client sees, how the text is rendered).  One table, so a
+    # prompt cannot be advertised without a renderer or the reverse.
     _PROMPTS = {
-        "create-box": types.Prompt(
-            name="create-box",
-            description=("Guide for creating a parametric box in Fusion 360"),
-            arguments=[
-                types.PromptArgument(
-                    name="length",
-                    description="Box length in cm",
-                    required=False,
-                ),
-                types.PromptArgument(
-                    name="width",
-                    description="Box width in cm",
-                    required=False,
-                ),
-                types.PromptArgument(
-                    name="height",
-                    description="Box height in cm",
-                    required=False,
-                ),
-            ],
-        ),
-        "model-threaded-bolt": types.Prompt(
-            name="model-threaded-bolt",
-            description=(
-                "Step-by-step guide for modeling a threaded bolt in Fusion 360"
+        "create-box": (
+            _prompt(
+                "create-box",
+                "Guide for creating a parametric box in Fusion 360",
+                *_dimensions("Box"),
             ),
-            arguments=[
+            _render_box,
+        ),
+        "model-threaded-bolt": (
+            _prompt(
+                "model-threaded-bolt",
+                "Step-by-step guide for modeling a threaded bolt in Fusion 360",
                 types.PromptArgument(
                     name="designation",
-                    description=("Thread designation (e.g. M10x1.5)"),
+                    description="Thread designation (e.g. M10x1.5)",
                     required=False,
                 ),
-            ],
+            ),
+            _render_bolt,
         ),
-        "sheet-metal-enclosure": types.Prompt(
-            name="sheet-metal-enclosure",
-            description=("Guide for creating a sheet metal enclosure"),
-            arguments=[
-                types.PromptArgument(
-                    name="length",
-                    description="Enclosure length in cm",
-                    required=False,
-                ),
-                types.PromptArgument(
-                    name="width",
-                    description="Enclosure width in cm",
-                    required=False,
-                ),
-                types.PromptArgument(
-                    name="height",
-                    description="Enclosure height in cm",
-                    required=False,
-                ),
-            ],
+        "sheet-metal-enclosure": (
+            _prompt(
+                "sheet-metal-enclosure",
+                "Guide for creating a sheet metal enclosure",
+                *_dimensions("Enclosure"),
+            ),
+            _render_enclosure,
         ),
     }
 
     @app.list_prompts()
     async def list_prompts() -> list[types.Prompt]:
-        return list(_PROMPTS.values())
+        return [prompt for prompt, _render in _PROMPTS.values()]
 
     @app.get_prompt()
     async def get_prompt(
         name: str,
         arguments: dict | None = None,
     ) -> types.GetPromptResult:
-        prompt = _PROMPTS.get(name)
-        if not prompt:
-            raise ValueError(f"Unknown prompt: {name}")
-        args = arguments or {}
-
-        if name == "create-box":
-            length = args.get("length", "10")
-            width = args.get("width", "5")
-            height = args.get("height", "3")
-            text = (
-                f"Create a parametric box in Fusion 360:\n"
-                f"1. create_sketch on xy plane\n"
-                f"2. draw_rectangle width={width} height={length}\n"
-                f"3. extrude height={height}\n"
-                f"4. get_scene_info to verify"
-            )
-        elif name == "model-threaded-bolt":
-            desig = args.get("designation", "M10x1.5")
-            text = (
-                f"Model a threaded bolt ({desig}):\n"
-                f"1. create_sketch on xy plane\n"
-                f"2. draw_circle for bolt shaft\n"
-                f"3. extrude to bolt length\n"
-                f"4. create_thread designation={desig}\n"
-                f"5. Create hex head sketch + extrude\n"
-                f"6. chamfer head edges"
-            )
-        elif name == "sheet-metal-enclosure":
-            length = args.get("length", "20")
-            width = args.get("width", "10")
-            height = args.get("height", "5")
-            text = (
-                f"Create a sheet metal enclosure "
-                f"({length}x{width}x{height} cm):\n"
-                f"1. create_sketch on xy plane\n"
-                f"2. draw_rectangle {width}x{length}\n"
-                f"3. extrude to sheet thickness\n"
-                f"4. create_flange on each edge\n"
-                f"5. flat_pattern to verify unfold"
-            )
-        else:
-            text = f"No template for prompt: {name}"
-
+        try:
+            prompt, render = _PROMPTS[name]
+        except KeyError:
+            raise ValueError(f"Unknown prompt: {name}") from None
         return types.GetPromptResult(
             description=prompt.description,
             messages=[
@@ -452,7 +406,7 @@ def build_server(mode: str, host: str, port: int) -> Server:
                     role="user",
                     content=types.TextContent(
                         type="text",
-                        text=text,
+                        text=render(arguments or {}),
                     ),
                 ),
             ],

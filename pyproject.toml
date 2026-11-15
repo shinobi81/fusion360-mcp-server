@@ -80,9 +80,11 @@ testpaths = ["tests"]
 # This lives in addopts, so run a subset with `--no-cov` (see AGENTS.md): the floor is
 # about the whole suite, not one file.
 #
-# Permanently uncovered, by design: `server.py` line 91 (`bbox_before` is never set
-# by a mock), line 444 (the unreachable prompt fallback), 493-494 (`app.run` inside
-# main()'s stdio coroutine), and `__main__.py`'s click entry point.
+# Permanently uncovered, by design: `server.py`'s `bbox_before` branch (never set by a
+# mock), the two lines inside main()'s stdio coroutine (`app.run`, and the `anyio.run`
+# call that awaits it), and `__main__.py`'s click entry point.  Named by symbol rather
+# than by line number: the numbers drifted on every edit, and a stale one reads as a
+# waiver for code that no longer exists.
 addopts = "--cov --cov-report=term-missing --cov-fail-under=59"
 
 # The add-in imports Fusion's `adsk` runtime, which exists only inside Fusion.
