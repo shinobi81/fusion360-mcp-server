@@ -81,7 +81,9 @@ pythonVersion = "3.14"
 
 # Run by `uv run mypy src` in the `test` CI job: a checker nothing invokes reports
 # nothing.  `src/` only — `addon/` reaches Fusion's `adsk`, which no checker can
-# resolve, and the suite covers it instead.
+# resolve, and the suite covers it instead.  `check_untyped_defs` is left off, so a
+# body with no annotations is not analysed: "0 errors" is a floor, not a claim about
+# those bodies.
 [tool.mypy]
 exclude = ["^addon/", "^build/"]
 ignore_missing_imports = true

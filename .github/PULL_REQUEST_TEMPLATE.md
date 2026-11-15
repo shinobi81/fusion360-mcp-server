@@ -7,6 +7,7 @@
 - [ ] `uv run pytest -q` — all tests pass
 - [ ] `uv run ruff check src/ tests/ fuzz/ addon/ scripts/`
 - [ ] `uv run ruff format --check src/ tests/ fuzz/ scripts/`
+- [ ] `uv run mypy src`
 - [ ] `npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"`
 - [ ] Live Fusion check if this touches the add-in (`ping` → `pong`, then the operation)
 

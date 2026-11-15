@@ -14,6 +14,7 @@ uv run pytest -q --no-cov tests/test_tools.py   # one file, without the coverage
 uv run pytest -q -k revolve              # by name
 uv run ruff check src/ tests/ fuzz/ addon/ scripts/      # what CI runs
 uv run ruff format --check src/ tests/ fuzz/ scripts/    # what CI runs (addon/ is exempt)
+uv run mypy src                          # what CI runs (src/ only; addon/ is exempt)
 ```
 
 Nothing in the suite needs Fusion, a network, or a display. The packaging guards in
