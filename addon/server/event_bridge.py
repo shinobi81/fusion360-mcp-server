@@ -29,7 +29,12 @@ TIMER_INTERVAL_MS = 200  # backup polling interval
 #: module re-executed after its importer leaves the importer holding the old class.
 #: The add-in cannot import ``scripts/reload_addin.py``, so this is its own copy of
 #: that list; ``tests/test_reload_addin.py`` fails when the two disagree.
-COMMAND_MODULES = ("command_handler",)
+COMMAND_MODULES = (
+    "handler_base",
+    "handler_sketch",
+    "handler_features",
+    "command_handler",
+)
 
 #: Everything ``reload_handler`` re-executes, in dependency order: the sibling modules
 #: a command module imports at module scope, then ``COMMAND_MODULES``.  A new domain

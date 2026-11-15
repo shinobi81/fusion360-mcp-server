@@ -40,7 +40,12 @@ HANDLER = SERVER / "command_handler.py"
 #: module re-executed after its importer leaves the importer holding the old class.
 #: The add-in keeps its own copy - it cannot import this file - and
 #: ``tests/test_reload_addin.py`` fails if the two disagree.
-COMMAND_MODULES: tuple[str, ...] = ("command_handler",)
+COMMAND_MODULES: tuple[str, ...] = (
+    "handler_base",
+    "handler_sketch",
+    "handler_features",
+    "command_handler",
+)
 
 #: Every module ``reload_handler`` re-executes, in order.  The printed success line is
 #: this tuple, so a module added to the reload is named in one place.

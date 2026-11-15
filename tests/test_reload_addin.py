@@ -36,6 +36,21 @@ def _script():
     return module
 
 
+@pytest.fixture
+def one_command_module(monkeypatch):
+    """``_script()`` with a one-module tuple: these tests hand-build a source map.
+
+    ``declared_methods`` requires every module ``COMMAND_MODULES`` names to appear in
+    the map it is given, and the real tuple gains a module per task while these maps
+    stay hand-written.  Pinning it here keeps the requirement itself tested - by
+    ``test_a_command_module_the_tuple_forgets_is_reported``, which sets its own tuple -
+    without these tests restating the layout of ``addon/server``.
+    """
+    module = _script()
+    monkeypatch.setattr(module, "COMMAND_MODULES", ("command_handler",))
+    return module
+
+
 SOURCE = """
 class CommandHandler:
     _CONSTANTS = {"a": 1}
@@ -60,23 +75,23 @@ class Other:
 """
 
 
-def test_only_the_handlers_own_methods_are_declared():
+def test_only_the_handlers_own_methods_are_declared(one_command_module):
     """Methods, not attributes; the command classes, not the module."""
-    declared = _script().declared_methods({"command_handler.py": SOURCE})
+    declared = one_command_module.declared_methods({"command_handler.py": SOURCE})
 
     assert declared == {"extract", "_helper"}
     assert "not_a_handler_method" not in declared
 
 
-def test_dunders_and_attribute_tables_are_ignored():
+def test_dunders_and_attribute_tables_are_ignored(one_command_module):
     """``dir()`` sees ``_CONSTANTS`` and ``__init__``; the comparison must not."""
-    declared = _script().declared_methods({"command_handler.py": SOURCE})
+    declared = one_command_module.declared_methods({"command_handler.py": SOURCE})
 
     assert "_CONSTANTS" not in declared
     assert not [name for name in declared if name.startswith("__")]
 
 
-def test_inherited_methods_count_as_declared():
+def test_inherited_methods_count_as_declared(one_command_module):
     """A helper in the base counts as the running class's, because it is inherited."""
     sources = {
         "handler_base.py": "class HandlerBase:\n    def helper(self): pass\n",
@@ -86,7 +101,7 @@ def test_inherited_methods_count_as_declared():
         "command_handler.py": "class CommandHandler(SketchCommands):\n    pass\n",
     }
 
-    assert _script().declared_methods(sources) == {"helper", "create_sketch"}
+    assert one_command_module.declared_methods(sources) == {"helper", "create_sketch"}
 
 
 def test_a_command_module_the_tuple_forgets_is_reported(monkeypatch):
@@ -218,11 +233,10 @@ def test_main_says_what_a_reload_does_not_cover(monkeypatch, capsys):
 
     module.main([])
 
+    # Derived, not retyped: this is the tuple ``main`` prints, so a module added to
+    # the reload should not need a second edit here to keep the test honest.
     out = capsys.readouterr().out
-    assert (
-        "reloaded: hints, rules, hole_geometry, parameter_units, "
-        "mutation_commands, command_handler"
-    ) in out
+    assert f"reloaded: {', '.join(module.RELOAD_ORDER)}" in out
     assert "not reloaded: event_bridge, socket_server" in out
 
 
@@ -249,6 +263,21 @@ def test_the_add_in_reloads_what_this_script_prints():
     from addon.server import event_bridge
 
     assert event_bridge.RELOAD_ORDER == _script().RELOAD_ORDER
+
+
+def test_the_add_in_names_the_same_command_modules_in_the_same_order():
+    """``RELOAD_ORDER`` is derived from this tuple, so the test above cannot pin it.
+
+    Both copies build their printed order from their own ``COMMAND_MODULES``, which
+    means the additive test passes as long as the two derived lists agree - a copy
+    whose tuple was edited without its order following it, or the other way round,
+    is invisible there.  Pinning the tuples closes that gap, and a divergence in
+    either direction leaves one of the two lists naming a module the other never
+    reloads.
+    """
+    from addon.server import event_bridge
+
+    assert event_bridge.COMMAND_MODULES == _script().COMMAND_MODULES
 
 
 def test_the_code_it_sends_reports_the_class_through_its_mro(
