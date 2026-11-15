@@ -120,10 +120,12 @@ dev = [
 # `uv sync --locked --only-group fuzz --python 3.14`, or a fuzz target stops at
 # `import atheris` with nothing to say why.
 #
-# The group is empty, not broken, where the marker excludes it; and on 3.15 atheris
-# publishes neither wheel nor sdist, so a sync there fails loudly at resolve time -
-# which is the behaviour you want. Do not hardcode a `< 3.15` cap: it goes stale the
-# day a cp315 wheel lands.
+# The marker's own floor is not the operative one - uv locks every version inside
+# `requires-python`, and atheris 3.1.0's newest wheel is cp314, which is why the
+# command names `--python 3.14`. The group is empty, not broken, where the marker
+# excludes it; and on 3.15 atheris publishes neither wheel nor sdist, so a sync
+# there fails loudly at resolve time - which is the behaviour you want. Do not
+# hardcode a `< 3.15` cap: it goes stale the day a cp315 wheel lands.
 fuzz = [
     "atheris==3.1.0; sys_platform == 'linux' and python_full_version >= '3.12'",
 ]

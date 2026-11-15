@@ -401,8 +401,8 @@ class TestMockDispatchCompleteness:
     """No handler without a tool.
 
     The other direction - every tool has a handler - is asserted once, in
-    ``tests/test_mock.py::TestMockDispatchCoverage``.  Both halves used to live
-    in both files, which is how "covered" stops meaning anything.
+    ``tests/test_mock.py::TestMockDispatchCoverage``.  That direction used to be
+    asserted in both files, which is how "covered" stops meaning anything.
     """
 
     def test_no_extra_handlers(self):

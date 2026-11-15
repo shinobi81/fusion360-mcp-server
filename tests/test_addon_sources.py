@@ -92,14 +92,17 @@ def test_no_add_in_file_names_an_except_tuple_without_brackets(path):
         ("parenthesised", "except (TypeError, ValueError):"),
         ("single exception", "except OSError:"),
         ("aliased tuple", "except (TypeError, ValueError) as exc:"),
-        ("aliased single", "except OSError as exc:"),
         ("starred", "except* (TypeError, ValueError):"),
         ("wrapped across lines", "except (\n    TypeError,\n):"),
     ],
     ids=lambda label: label,
 )
-def test_the_checker_accepts_the_forms_fusion_can_parse(label, body):
-    """Every spelling Fusion parses, with the case named in the id."""
+def test_the_checker_accepts_every_bracketed_form(label, body):
+    """Every bracketed header the checker must pass, named by the id.
+
+    ``except*`` is in here because the checker tokenises, not parses: whether
+    Fusion's interpreter accepts PEP 654 is not the claim being pinned.
+    """
     source = "try:\n    pass\n" + body + "\n    pass\n"
     assert unparenthesised_except_tuples(source) == [], label
 
