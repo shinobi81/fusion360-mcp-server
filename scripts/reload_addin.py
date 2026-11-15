@@ -44,6 +44,7 @@ COMMAND_MODULES: tuple[str, ...] = (
     "handler_base",
     "handler_sketch",
     "handler_features",
+    "handler_primitives",
     "command_handler",
 )
 
