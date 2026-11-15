@@ -297,10 +297,12 @@ _RULES: list[tuple[str, str, list[str]]] = [
         r"invalid free edge",
         "INVALID_INPUT",
         [
-            "A ruled surface extends a free edge - a sheet body's boundary, not "
-            "a solid's edge, which two faces share.",
-            "Patch or stitch the sketch into a surface body first, then rule one "
-            "of its boundary edges.",
+            # One literal per hint, never two adjacent ones: CodeQL reads the
+            # latter as a possibly missing comma, and it cannot tell a wrapped
+            # sentence from a bug.
+            "A ruled surface extends a free edge, not a solid's shared one.",
+            "A sheet body's boundary edge is free; patch or stitch first.",
+            "Then rule one of its boundary edges with that edge_index.",
         ],
     ),
     (
