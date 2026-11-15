@@ -94,3 +94,62 @@ def test_the_base_feature_is_finished_after_the_add(bound_handler):
     feature = design.rootComponent.features.baseFeatures.item(0)
     assert feature.bodies == [design.rootComponent.bRepBodies.item(0)]
     assert not feature.editing, "the base feature is finished after the add"
+
+
+@pytest.mark.parametrize(
+    "method, kwargs",
+    [
+        ("create_cylinder", {"radius": 1, "height": 2}),
+        ("create_sphere", {"radius": 1}),
+        ("create_torus", {"major_radius": 2, "minor_radius": 0.5}),
+    ],
+)
+def test_every_primitive_lands_in_a_finished_base_feature(
+    bound_handler, method, kwargs
+):
+    """``_add_base_body`` is shared by four primitives; ``create_box`` owned the test.
+
+    The three above were only ever read, so a dedupe that wired the helper to them
+    wrongly would have shipped green.  One case each, asserting the same two
+    facts ``create_box`` asserts: the body is inside the feature, and the feature
+    is no longer in edit.
+    """
+    design = FakeDesign(features=0)
+    getattr(bound_handler(design), method)(**kwargs)
+
+    body = design.rootComponent.bRepBodies.item(0)
+    feature = design.rootComponent.features.baseFeatures.item(0)
+    assert feature.bodies == [body]
+    assert not feature.editing
+
+
+class TestSuppressFeature:
+    """``suppress_feature``/``unsuppress_feature`` share ``_set_suppressed``."""
+
+    def _design(self):
+        design = FakeDesign()
+        named = design.timeline.item(0).entity.name
+        return design, named
+
+    def test_a_feature_is_suppressed_by_name(self, bound_handler):
+        design, named = self._design()
+
+        out = bound_handler(design).suppress_feature(named)
+
+        assert out == {"suppressed": True, "feature": named}
+        assert design.timeline.item(0).isSuppressed is True
+
+    def test_a_feature_is_unsuppressed_by_name(self, bound_handler):
+        design, named = self._design()
+        design.timeline.item(0).isSuppressed = True
+
+        out = bound_handler(design).unsuppress_feature(named)
+
+        assert out == {"unsuppressed": True, "feature": named}
+        assert design.timeline.item(0).isSuppressed is False
+
+    def test_an_unknown_feature_is_refused(self, bound_handler):
+        design, _named = self._design()
+
+        with pytest.raises(RuntimeError, match="not found in timeline"):
+            bound_handler(design).suppress_feature("NoSuchFeature")

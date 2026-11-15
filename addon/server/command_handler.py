@@ -719,8 +719,10 @@ class CommandHandler:
     def _edges_in_extreme_plane(self, body, selection: str) -> list:
         """The edges in the top/bottom plane - see ``_in_extreme_plane``.
 
-        Measured from the *roundable* edges: curved edges are excluded upstream, so
-        a fillet cannot name a plane its own box only grazes.
+        Measured from the *roundable* edges: ``_roundable_edges`` drops degenerate
+        ones upstream, and every edge that remains - curved and raking ones
+        included - is judged by its whole box, which is exactly why one raking edge
+        cannot invent a plane that holds nothing.
         """
         return self._in_extreme_plane(self._roundable_edges(body), selection)
 
