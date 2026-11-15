@@ -111,16 +111,14 @@ class FakeOrientedBoundingBox3D:
 
 
 class FakeTemporaryBRepManager:
-    """``adsk.fusion.TemporaryBRepManager``: ``get()`` and ``createBox``.
+    """``adsk.fusion.TemporaryBRepManager``: ``get()`` and the four primitives.
 
-    ``createBox`` is the only primitive modelled, because it is the only one a
-    test drives: ``createCylinderOrCone``, ``createSphere`` and ``createTorus``
-    are absent, so those three handlers still cannot run under the fake.  The body
-    returned is transient and face-less - not null - whose box is the oriented box
-    projected onto the world axes, so a test reads where the solid actually landed
-    rather than trusting the arguments it was asked for.  Its ``volume`` and
-    ``area`` are the box's real ones; its face count is not modelled, because
-    nothing reads a primitive's faces.
+    Each returns a transient, face-less body whose *box* is right, so a test reads
+    where the solid actually landed rather than trusting the arguments it was
+    asked for.  ``createBox`` computes real volume and area as well; the other
+    three leave ``FakeBody``'s placeholders (volume 1.0, area 6.0), which are *not*
+    the solid's values - nothing reads them, and inventing real ones would be a
+    measurement nobody took.  Face counts are not modelled for any of them.
     """
 
     @staticmethod
@@ -146,6 +144,48 @@ class FakeTemporaryBRepManager:
         body.volume = length * width * height
         body.area = 2 * (length * width + length * height + width * height)
         return body
+
+    def createCylinderOrCone(self, point_one, radius_one, point_two, radius_two):
+        """A cone frustum between two points: box = the span, grown by the radius.
+
+        Fusion's own signature and argument order.  The orientation is not
+        modelled - only the extent - because the handler passes the body straight
+        to ``BRepBodies.add`` and nothing reads its geometry.
+        """
+        (x1, y1, z1) = point_one.coords()
+        (x2, y2, z2) = point_two.coords()
+        radius = max(radius_one, radius_two)
+        return FakeBody(
+            "Cylinder",
+            faces=FakeCollection(),
+            bounding_box=FakeBoundingBox(
+                (min(x1, x2) - radius, min(y1, y2) - radius, min(z1, z2)),
+                (max(x1, x2) + radius, max(y1, y2) + radius, max(z1, z2)),
+            ),
+        )
+
+    def createSphere(self, center, radius: float):
+        (x, y, z) = center.coords()
+        return FakeBody(
+            "Sphere",
+            faces=FakeCollection(),
+            bounding_box=FakeBoundingBox(
+                (x - radius, y - radius, z - radius),
+                (x + radius, y + radius, z + radius),
+            ),
+        )
+
+    def createTorus(self, center, axis, major_radius: float, minor_radius: float):
+        (x, y, z) = center.coords()
+        outer = major_radius + minor_radius
+        return FakeBody(
+            "Torus",
+            faces=FakeCollection(),
+            bounding_box=FakeBoundingBox(
+                (x - outer, y - outer, z - minor_radius),
+                (x + outer, y + outer, z + minor_radius),
+            ),
+        )
 
 
 def _as_unit(vector: FakePoint3D, name: str) -> tuple[float, float, float]:
