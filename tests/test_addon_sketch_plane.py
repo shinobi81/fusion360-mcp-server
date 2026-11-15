@@ -23,12 +23,7 @@ def draw(handler_module):
     """Return ``(sketch, handler)``: a fake sketch and a bound handler."""
 
     def factory(offset=-0.65, x_axis=(1.0, 0.0, 0.0), y_axis=(0.0, 1.0, 0.0)):
-        handler = handler_module.CommandHandler.__new__(handler_module.CommandHandler)
-        # ``execute_command`` dispatches through a table ``__init__`` builds; this
-        # fixture skips the constructor, so it builds the same one.
-        handler._commands = {
-            name: getattr(handler, name) for name in handler._COMMAND_NAMES
-        }
+        handler = handler_module.CommandHandler()
         sketch = FakeSketch(
             transform=FakeTransform(
                 origin=(0.0, 0.0, offset),

@@ -53,6 +53,7 @@ class FakeTimelineObject:
     def __init__(self, name: str, remove):
         self.name = name
         self.entity = FakeTimelineEntity(name, remove)
+        self.isSuppressed = False
 
 
 class FakeTimeline:
@@ -233,6 +234,9 @@ class FakeBRepBodies(FakeCollection):
     def __init__(self, items=None, design: "FakeDesign | None" = None):
         super().__init__(items)
         self._design = design
+
+    def __iter__(self):
+        return iter(self._items)
 
     def add(self, body, targetBaseFeature: FakeBaseFeature | None = None):
         """Persist a new body, refusing what a parametric design refuses."""
