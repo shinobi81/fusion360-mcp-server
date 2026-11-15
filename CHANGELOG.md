@@ -7,6 +7,54 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.8.4] - 2026-11-15
+
+Three merged PRs, and the review of them. The behaviour change is in `create_thread`:
+it refuses a thread whose designation does not match the face instead of letting Fusion
+quietly resize the body to it. Everything here was checked against Fusion 2706.
+
+### Added
+
+- **`scripts/reload_addin.py`** - the add-in keeps `command_handler` in memory, so a
+  `git pull` changes what is on disk and nothing about what Fusion executes, and
+  `inspect.getsource` reads the *file*, so a stale class describes itself with the new
+  code. The script sends `reload_handler` and compares the running class's method names
+  with the methods the file declares, exiting 1 on drift in either direction. `--check`
+  verifies without reloading. It says what it does not prove: bodies are not compared,
+  and `event_bridge.py`/`socket_server.py` are not reloaded by it.
+
+### Changed
+
+- **`create_thread` refuses a designation that would resize the body.** An `M6x1`
+  cosmetic thread on a Ø20 mm shaft left a **Ø5.88 mm** one - Fusion sizes the body to
+  the thread - so a mistyped designation silently destroyed the geometry. It now
+  compares the face's diameter with the thread's (major externally, minor in a tapped
+  hole, read from the `ThreadInfo` Fusion builds) and refuses beyond `max(2%, 0.12 mm)`,
+  naming the thread Fusion recommends for that diameter and diagnosing a wrong
+  `is_internal` when the other polarity fits. `allow_resize=true` opts in. Either way
+  the result reports `face_diameter_cm` and `thread_diameter_cm`.
+
+### Fixed
+
+- **the size check's first tolerance refused the canonical small-thread call.** A
+  relative-only 2 % band tightened as the thread shrank and refused Ø3.00 mm stock
+  against M3x0.5, while accepting a larger resize on an M6 - and then recommended the
+  designation it had just refused. It has an absolute floor now, and the message never
+  names the refused designation as the fix.
+- **the "not cylindrical" refusal reached the caller as `UNKNOWN` with no hints** - a
+  regression, since Fusion used to refuse it with a classified error. Both mirrors have
+  the rule, and picking a non-cylindrical `face_index` is the likeliest mistake with
+  this tool.
+- **`scripts/smoke_envelope.py` could not run on a Windows console**: it printed `→`
+  from the delta formatter to cp1252 and died with `UnicodeEncodeError`.
+- **the reload script's first version read a reply shape that does not exist**
+  (`reload_handler` answers flat; only `execute_code` nests under `result`), and its
+  success line read as "everything is current" when it compares names only.
+- **the add-in's fake thread table was derived, not measured**, and thread diameters
+  differ by class: `M3x0.5` is 2.927 mm major externally and 3.086 mm internally. It is
+  keyed by `(designation, is_internal)` with values measured on 2706, and
+  `ThreadInfo.create` refuses a null class the way Fusion does.
+
 ## [0.8.3] - 2026-11-15
 
 Three tools that had never worked now do, and the rest of the release is the dedupe
@@ -833,6 +881,7 @@ reporting a result it had only echoed back.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.8.4]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.0...v0.8.1
