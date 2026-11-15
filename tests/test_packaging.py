@@ -10,12 +10,15 @@ the configuration no longer has, when CI stops running a gate those configuratio
 describe, when the add-in's Fusion manifest declares a version the release does
 not, when it changes the id it declares, when that add-in is renamed in one place and
 not the others, when a documented install snippet pins a release other than the one
-being cut, when a document names a lint command CI does not run, when the release
-stops checking that both artifacts carry the add-in, when `SECURITY.md` answers the
-supported-versions question with a series nobody is on, when a workflow or a documented
-command syncs from a lock nobody checks - or when `SECURITY.md`, `AGENTS.md`,
-`CONTRIBUTING.md`, `README.md` or `docs/TESTING.md` stops showing that command - or when
-the changelog opens at a release other than the one being cut.
+being cut or the quick start stops installing the add-in from it, when a document names
+a lint command CI does not run, when the release stops checking that both artifacts
+carry the add-in, when the build stops mapping the add-in into the package, maps an
+add-on package the tree does not hold or leaves a package it does hold out of the wheel,
+or is told to include package data, when `SECURITY.md` answers the supported-versions
+question with a series nobody is on, when a workflow or a documented command syncs from
+a lock nobody checks - or when `SECURITY.md`, `AGENTS.md`, `CONTRIBUTING.md`,
+`README.md` or `docs/TESTING.md` stops showing that command - or when the changelog
+opens at a release other than the one being cut.
 """
 
 from __future__ import annotations
