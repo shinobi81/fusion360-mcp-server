@@ -18,6 +18,7 @@ test fails.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import ClassVar
 
 from .bodies import FakeBody, FakeFace
@@ -53,6 +54,9 @@ class FakeTimelineObject:
     def __init__(self, name: str, remove):
         self.name = name
         self.entity = FakeTimelineEntity(name, remove)
+        # A real property: ``_set_suppressed`` writes it for both
+        # ``suppress_feature`` and ``unsuppress_feature``, and the test reads it
+        # back to prove the flip landed on the named entry.
         self.isSuppressed = False
 
 
@@ -235,7 +239,7 @@ class FakeBRepBodies(FakeCollection):
         super().__init__(items)
         self._design = design
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[FakeBody]:
         return iter(self._items)
 
     def add(self, body, targetBaseFeature: FakeBaseFeature | None = None):

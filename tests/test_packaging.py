@@ -794,11 +794,13 @@ def test_the_type_gate_guard_covers_every_gate_document():
     """A page that teaches a gate must not escape the type gate's guard.
 
     The two tuples answer the same question - which pages tell a contributor what CI
-    runs - so they hold the same names.  ``GATE_DOCUMENTS`` is the older, wider set:
-    a page added there and not here would silently stop being checked for the type
-    command, which is how the gate came to be documented in three of five pages.
+    runs - so they hold the same names, in the same order: ``TYPE_CHECK_DOCUMENTS``'s
+    docstring says "in its order", and comparing sets let a reorder keep the test green
+    while that sentence went false.  ``GATE_DOCUMENTS`` is the older, wider set: a page
+    added there and not here would silently stop being checked for the type command,
+    which is how the gate came to be documented in three of five pages.
     """
-    assert set(TYPE_CHECK_DOCUMENTS) == set(GATE_DOCUMENTS)
+    assert TYPE_CHECK_DOCUMENTS == GATE_DOCUMENTS
 
 
 def test_every_type_gate_document_names_the_command_ci_runs():
