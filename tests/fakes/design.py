@@ -25,6 +25,7 @@ from .collection import FakeCollection, FakeDeletable, FakeItemCollection
 from .features import (
     FakeAnalyses,
     FakeDraftFeatures,
+    FakeExportManager,
     FakeFeature,
     FakeInterference,
     FakeProfile,
@@ -1119,6 +1120,7 @@ class FakeDesign:
         self.compute_all_calls = 0
         self.marker_writes: list[int] = []
         self.parentDocument = type("FakeDocument", (), {"name": "fake-design"})()
+        self.exportManager = FakeExportManager()
 
     @property
     def timeline_count(self) -> int:

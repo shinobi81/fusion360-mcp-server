@@ -302,3 +302,79 @@ class FakeAnalyses:
         analysis.input = inp
         self.added.append(analysis)
         return analysis
+
+
+class FakeExportOptions:
+    """One export's options: the entity, the path, and the flags set on it.
+
+    ``meshRefinement`` exists on STL options only - Fusion's STEP options have no
+    such property and SWIG raises ``AttributeError`` when one is assigned.  The
+    write is refused here for the same reason, so "set the refinement for both
+    kinds" fails with the error Fusion gives rather than a value mismatch.
+    """
+
+    def __init__(self, kind: str, entity, path: str):
+        object.__setattr__(self, "kind", kind)
+        object.__setattr__(self, "entity", entity)
+        object.__setattr__(self, "path", path)
+        object.__setattr__(self, "meshRefinement", None)
+
+    def __setattr__(self, name, value):
+        if name == "meshRefinement" and self.kind != "stl":
+            raise AttributeError(f"'{self.kind}' export options have no meshRefinement")
+        object.__setattr__(self, name, value)
+
+
+class FakeExportManager:
+    """``design.exportManager``.
+
+    The two creation methods keep Fusion's own argument order, which is the whole
+    reason the STL and STEP call sites could not simply be merged by name:
+    ``createSTLExportOptions(entity, path)`` against
+    ``createSTEPExportOptions(path, entity)``.  A fake that took them in one order
+    would let a wrong call pass.
+    """
+
+    def __init__(self, fail: bool = False):
+        self.executed: list[FakeExportOptions] = []
+        #: ``isVisible`` of every body in the exported occurrence, sampled inside
+        #: ``execute``.  Asserting after the handler returns can only see the state
+        #: after the ``finally`` restored it, which is how a sibling sweep that
+        #: never ran would still pass.
+        self.visible_at_execute: list[bool] | None = None
+        self.fail = fail
+
+    # The ``isinstance(path, str)`` guards below exist for one mistake: calling a
+    # factory with the arguments swapped.  The tests also assert on ``entity`` and
+    # ``path`` directly, so the guard is belt-and-braces - and it is the only way
+    # the fake fails with Fusion's own TypeError rather than a shape mismatch.
+    def createSTLExportOptions(self, entity, path: str) -> FakeExportOptions:
+        if not isinstance(path, str):
+            raise TypeError(
+                "Wrong number or type of arguments for overloaded function "
+                "'ExportManager_createSTLExportOptions'"
+            )
+        return FakeExportOptions("stl", entity, path)
+
+    def createSTEPExportOptions(self, path: str, entity) -> FakeExportOptions:
+        if not isinstance(path, str):
+            raise TypeError(
+                "Wrong number or type of arguments for overloaded function "
+                "'ExportManager_createSTEPExportOptions'"
+            )
+        return FakeExportOptions("step", entity, path)
+
+    def createFusionArchiveExportOptions(self, path: str) -> FakeExportOptions:
+        return FakeExportOptions("f3d", None, path)
+
+    def execute(self, options: FakeExportOptions) -> None:
+        self.executed.append(options)
+        # Cleared first: a second export must not read the previous sample.
+        self.visible_at_execute = None
+        bodies = getattr(options.entity, "bRepBodies", None)
+        if bodies is not None:
+            self.visible_at_execute = [
+                bodies.item(i).isVisible for i in range(bodies.count)
+            ]
+        if self.fail:
+            raise RuntimeError("3 : Some input argument is invalid.")

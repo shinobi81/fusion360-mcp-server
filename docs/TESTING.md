@@ -31,8 +31,10 @@ recorded there. The floor is **two gates**, because one number cannot hold two v
 different populations:
 
 - **59** for the whole suite, which now measures `src/fusion360_mcp` **and**
-  `addon/server`. The add-in's CAM, export, view-sheet and viewport-render paths only
+  `addon/server`. The add-in's CAM, view-sheet export and viewport-render paths only
   run inside Fusion, and they account for almost all of the uncovered statements.
+  (Body STL/STEP and f3d export *are* covered offline, by
+  `tests/test_addon_export.py`, against a fake export manager.)
 - **95** for the server alone, enforced separately in CI:
   `uv run coverage report --include="src/fusion360_mcp/*" --fail-under=95`. Without it,
   an add-in regression would buy slack for `src/`.

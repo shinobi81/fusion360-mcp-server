@@ -66,10 +66,11 @@ testpaths = ["tests"]
 # Measured on every run so a regression shows up in the diff, and floored just under the
 # measured total: the number is printed by the test job, never written down here.
 #
-# The combined total is dominated by the add-in, where CAM, export, view-sheet and
-# viewport-render only run inside Fusion - so the add-in's half is low on purpose and
-# `src/` keeps its own gate (CI: `coverage report --include="src/fusion360_mcp/*"
-# --fail-under=95`), which an add-in regression cannot buy slack for.
+# The combined total is dominated by the add-in, where CAM, view-sheet export and
+# viewport-render only run inside Fusion (body STL/STEP and f3d export are covered
+# offline) - so the add-in's half is low on purpose and `src/` keeps its own gate (CI:
+# `coverage report --include="src/fusion360_mcp/*" --fail-under=95`), which an add-in
+# regression cannot buy slack for.
 #
 # This lives in addopts, so run a subset with `--no-cov` (see AGENTS.md): the floor is
 # about the whole suite, not one file.

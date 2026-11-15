@@ -2563,85 +2563,66 @@ class CommandHandler:
         feat = move_feats.add(inp)
         return {"feature_name": feat.name, "body": body_name, "translation": [x, y, z]}
 
-    def export_stl(self, body_name: str, file_path: str | None = None):
+    def _export_body(self, kind: str, body_name: str, file_path: str | None) -> dict:
+        """Export one body as STL or STEP, hiding its siblings when it is nested.
+
+        The two APIs differ in more than the extension: STL's factory takes
+        ``(entity, path)`` and accepts a mesh refinement, STEP's takes
+        ``(path, entity)``.  Everything else - the Desktop default, the sibling
+        sweep keyed on ``entityToken``, the restore in a ``finally`` - is the same
+        for both, which is why this is one function and not two ~40-line twins.
+        """
         body = self._body_by_name(body_name)
 
         if file_path is None:
             desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-            file_path = os.path.join(desktop, f"{body_name}.stl")
+            file_path = os.path.join(desktop, f"{body_name}.{kind}")
 
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        # A bare filename has no directory to make, and os.makedirs("") raises.
+        parent = os.path.dirname(file_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
 
         export_mgr = self._design().exportManager
-        occ = body.assemblyContext  # None if body is at root
+        occurrence = body.assemblyContext  # None if the body is at root
 
-        if occ is None:
-            stl_opts = export_mgr.createSTLExportOptions(body, file_path)
-            stl_opts.meshRefinement = (
-                adsk.fusion.MeshRefinementSettings.MeshRefinementMedium
-            )
-            export_mgr.execute(stl_opts)
+        def options_for(entity):
+            if kind == "stl":
+                created = export_mgr.createSTLExportOptions(entity, file_path)
+                created.meshRefinement = (
+                    adsk.fusion.MeshRefinementSettings.MeshRefinementMedium
+                )
+                return created
+            return export_mgr.createSTEPExportOptions(file_path, entity)
+
+        if occurrence is None:
+            export_mgr.execute(options_for(body))
             return {"exported": True, "body": body_name, "file_path": file_path}
 
-        # Body lives in a component occurrence: hide siblings so the
-        # occurrence export only contains the target body. Identify
-        # siblings by entityToken, not name, to handle same-name bodies.
+        # The body lives in a component occurrence: hide its siblings so the
+        # export contains only this one.  Identified by entityToken, not name,
+        # so a component holding two bodies called "Body1" still exports one.
         target_token = body.entityToken
         hidden = []
-        for i in range(occ.bRepBodies.count):
-            sibling = occ.bRepBodies.item(i)
+        for i in range(occurrence.bRepBodies.count):
+            sibling = occurrence.bRepBodies.item(i)
             if sibling.entityToken != target_token and sibling.isVisible:
                 sibling.isVisible = False
                 hidden.append(sibling)
 
         try:
-            stl_opts = export_mgr.createSTLExportOptions(occ, file_path)
-            stl_opts.meshRefinement = (
-                adsk.fusion.MeshRefinementSettings.MeshRefinementMedium
-            )
-            export_mgr.execute(stl_opts)
+            export_mgr.execute(options_for(occurrence))
         finally:
             for sibling in hidden:
                 sibling.isVisible = True
 
         return {"exported": True, "body": body_name, "file_path": file_path}
+
+    def export_stl(self, body_name: str, file_path: str | None = None):
+        return self._export_body("stl", body_name, file_path)
 
     def export_step(self, body_name: str, file_path: str | None = None):
-        body = self._body_by_name(body_name)
-
-        if file_path is None:
-            desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-            file_path = os.path.join(desktop, f"{body_name}.step")
-
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
-        export_mgr = self._design().exportManager
-        occ = body.assemblyContext  # None if body is at root
-
-        if occ is None:
-            step_opts = export_mgr.createSTEPExportOptions(file_path, body)
-            export_mgr.execute(step_opts)
-            return {"exported": True, "body": body_name, "file_path": file_path}
-
-        # Body lives in a component occurrence: hide siblings so the
-        # occurrence export only contains the target body. Identify
-        # siblings by entityToken, not name, to handle same-name bodies.
-        target_token = body.entityToken
-        hidden = []
-        for i in range(occ.bRepBodies.count):
-            sibling = occ.bRepBodies.item(i)
-            if sibling.entityToken != target_token and sibling.isVisible:
-                sibling.isVisible = False
-                hidden.append(sibling)
-
-        try:
-            step_opts = export_mgr.createSTEPExportOptions(file_path, occ)
-            export_mgr.execute(step_opts)
-        finally:
-            for sibling in hidden:
-                sibling.isVisible = True
-
-        return {"exported": True, "body": body_name, "file_path": file_path}
+        return self._export_body("step", body_name, file_path)
 
     def export_f3d(self, file_path: str | None = None):
         design = self._design()
@@ -2651,7 +2632,9 @@ class CommandHandler:
             desktop = os.path.join(os.path.expanduser("~"), "Desktop")
             file_path = os.path.join(desktop, f"{doc_name}.f3d")
 
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        parent = os.path.dirname(file_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
 
         export_mgr = design.exportManager
         f3d_opts = export_mgr.createFusionArchiveExportOptions(file_path)
