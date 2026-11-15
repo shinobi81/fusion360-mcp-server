@@ -16,9 +16,9 @@ carry the add-in, when the build stops mapping the add-in into the package, maps
 add-on package the tree does not hold or leaves a package it does hold out of the wheel,
 or is told to include package data, when `SECURITY.md` answers the supported-versions
 question with a series nobody is on, when a workflow or a documented command syncs from
-a lock nobody checks - or when one of the pages `SYNC_DOCUMENTS` names stops showing
-that command - or when the changelog opens at a release other than the one being
-cut.
+a lock nobody checks, when no workflow syncs at all - or when one of the pages
+`SYNC_DOCUMENTS` names stops showing that command - or when the changelog opens at a
+release other than the one being cut.
 """
 
 from __future__ import annotations
@@ -1628,8 +1628,8 @@ def test_every_sync_asserts_the_lock_is_current():
 
     Every tracked markdown page is swept as well as every workflow, because a new page
     saying `uv sync --frozen` must be read the moment it exists - the sweep the ruff,
-    pin and add-in-name guards all use.  `SYNC_DOCUMENTS` is the other half: these four
-    pages must still *show* the command, or the check has nothing to read and passing
+    pin and add-in-name guards all use.  `SYNC_DOCUMENTS` is the other half: these pages
+    must still *show* the command, or the check has nothing to read and passing
     over nothing is not passing.
     """
     documents = {
