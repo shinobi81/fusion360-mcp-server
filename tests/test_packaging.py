@@ -796,11 +796,24 @@ def test_the_type_gate_guard_covers_every_gate_document():
     The two tuples answer the same question - which pages tell a contributor what CI
     runs - so they hold the same names, in the same order: ``TYPE_CHECK_DOCUMENTS``'s
     docstring says "in its order", and comparing sets let a reorder keep the test green
-    while that sentence went false.  ``GATE_DOCUMENTS`` is the older, wider set: a page
-    added there and not here would silently stop being checked for the type command,
-    which is how the gate came to be documented in three of five pages.
+    while that sentence went false.  Equality alone still leaves neither tuple read as
+    *names*: each is only ever iterated, so a page deleted from the other set as well
+    shrinks both guards at once and the suite stays green - which is how the gate came
+    to be documented in three of five pages.  Hence the literal: ``CONTRIBUTING.md``,
+    ``docs/TESTING.md`` and ``.github/PULL_REQUEST_TEMPLATE.md`` are pinned nowhere
+    else.
     """
-    assert TYPE_CHECK_DOCUMENTS == GATE_DOCUMENTS
+    assert (
+        TYPE_CHECK_DOCUMENTS
+        == GATE_DOCUMENTS
+        == (
+            "README.md",
+            "CONTRIBUTING.md",
+            "AGENTS.md",
+            "docs/TESTING.md",
+            ".github/PULL_REQUEST_TEMPLATE.md",
+        )
+    )
 
 
 def test_every_type_gate_document_names_the_command_ci_runs():
