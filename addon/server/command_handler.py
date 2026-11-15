@@ -2372,13 +2372,19 @@ class CommandHandler:
             False, is_internal, thread_type, thread_designation, thread_class, True
         )
         thread_diameter = self._named_thread_diameter(info, is_internal)
-        if not allow_resize and not self._thread_fits(face_diameter, thread_diameter):
+        if (
+            not allow_resize
+            and thread_diameter > 0
+            and not self._thread_fits(face_diameter, thread_diameter)
+        ):
             raise RuntimeError(
-                f"The face is {face_diameter * 10:.2f} mm across but "
-                f"{thread_designation} is {thread_diameter * 10:.2f} mm: Fusion would "
-                f"resize the body to match the thread. "
-                f"{self._recommended_thread(face_diameter, is_internal, thread_type)}. "
-                "Pass allow_resize=true to accept the resize."
+                self._mismatch_message(
+                    face_diameter,
+                    thread_diameter,
+                    thread_designation,
+                    is_internal,
+                    thread_type,
+                )
             )
 
         inp = threads.createInput(face, info)
@@ -2425,31 +2431,80 @@ class CommandHandler:
 
     @staticmethod
     def _thread_fits(face_diameter: float, thread_diameter: float) -> bool:
-        """Whether Fusion would leave the body alone.
+        """Whether the face is the size the designation describes, near enough.
 
-        Two percent, measured: a Ø6.00 mm shaft against M6x1's 5.884 mm major
-        diameter is 1.9% and Fusion trims it by 0.1 mm as a matter of course, while a
-        Ø20 mm shaft against M6 is 240% and Fusion replaces the geometry outright.
+        A *relative* band alone is wrong, and the first version of this shipped one.
+        Callers model the nominal diameter while Fusion reports the middle of the
+        tolerance band, and the gap between the two is roughly constant in absolute
+        terms - 0.073 mm on an M3, 0.116 mm on an M6, 0.209 mm on an M20 - so a
+        percentage gate tightens as the thread shrinks and refused Ø3.00 mm stock
+        against M3x0.5, the canonical small-thread call. The floor keeps that
+        accepted; Ø20 against M6 is 14.1 cm apart and still refused.
         """
-        return abs(face_diameter - thread_diameter) <= 0.02 * thread_diameter
+        return abs(face_diameter - thread_diameter) <= max(
+            0.02 * thread_diameter, 0.012
+        )
+
+    def _mismatch_message(
+        self,
+        face_diameter: float,
+        thread_diameter: float,
+        designation: str,
+        is_internal: bool,
+        thread_type: str,
+    ) -> str:
+        """What to tell a caller whose face and designation disagree.
+
+        Three things a first version got wrong: it could recommend the designation it
+        had just refused (the recommendation is the nearest standard thread, which on
+        nominal-sized stock *is* the one asked for), it never considered that
+        ``is_internal`` might be the wrong flag rather than the designation, and it
+        said nothing about which diameter it had measured.
+        """
+        parts = [
+            f"The face is {face_diameter * 10:.2f} mm across but {designation} is "
+            f"{thread_diameter * 10:.2f} mm: Fusion would resize the body to match "
+            "the thread."
+        ]
+        ok, recommended, recommended_class = self._recommended_thread(
+            face_diameter, is_internal, thread_type
+        )
+        if ok and recommended != designation:
+            parts.append(f"{recommended} ({recommended_class}) matches that diameter.")
+
+        # A wrong flag is diagnosed without building a second ThreadInfo: if asking
+        # the *other* polarity for this diameter returns the designation the caller
+        # already asked for, the flag is the mistake, not the thread.
+        ok_other, recommended_other, _ = self._recommended_thread(
+            face_diameter, not is_internal, thread_type
+        )
+        if ok_other and recommended_other == designation:
+            kind = "internal" if not is_internal else "external"
+            parts.append(
+                f"This face sizes up as {kind} ({designation}) - check "
+                f"is_internal={str(not is_internal).lower()}."
+            )
+
+        parts.append("Pass allow_resize=true to accept the resize.")
+        return " ".join(parts)
 
     @staticmethod
     def _recommended_thread(
         face_diameter: float, is_internal: bool, thread_type: str
-    ) -> str:
+    ) -> tuple[bool, str, str]:
         """Fusion's own answer to "what thread belongs on this diameter?".
 
         ``ThreadDataQuery.create`` is the current accessor - ``threadFeatures.
         threadDataQuery`` is retired - and ``recommendThreadData`` returns
         ``(ok, designation, class)`` with the out-parameters folded into the tuple.
+        The callers compare the designation as a *string*, which is why this returns
+        the pieces rather than a sentence.
         """
         query = adsk.fusion.ThreadDataQuery.create(False)
-        recommended = query.recommendThreadData(
+        ok, designation, thread_class = query.recommendThreadData(
             face_diameter, is_internal, thread_type
         )
-        if not recommended[0]:
-            return "No standard thread matches that diameter"
-        return f"{recommended[1]} ({recommended[2]}) matches that diameter"
+        return bool(ok), str(designation), str(thread_class)
 
     def draft_faces(
         self,

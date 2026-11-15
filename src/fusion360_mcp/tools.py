@@ -1426,9 +1426,12 @@ TOOLS: list[dict] = [
         "create_thread",
         "Create Thread",
         (
-            "Add threads to a cylindrical face (cosmetic or modeled). "
-            "Fusion sizes the cylinder or hole to the designation's diameter, "
-            "so a M6x1 thread on a 20 mm shaft leaves a 6 mm one."
+            "Add threads to a cylindrical face (cosmetic or modeled). Fusion sizes "
+            "the body to the designation's diameter, so a designation that does not "
+            "match the face is refused (M6x1 on a 20 mm shaft would leave a 6 mm "
+            "one); allow_resize=true accepts that. The result reports "
+            "face_diameter_cm, measured before the feature runs, and "
+            "thread_diameter_cm."
         ),
         required=["body_name", "face_index"],
         body_name={"type": "string"},
@@ -1479,7 +1482,8 @@ TOOLS: list[dict] = [
             "description": (
                 "Fusion sizes the body to the thread's diameter, so a designation "
                 "that does not match the face is refused by default. Set this true "
-                "to accept the body being resized."
+                "to accept the body being resized; face_diameter_cm is measured "
+                "before the feature runs."
             ),
         },
         thread_length={

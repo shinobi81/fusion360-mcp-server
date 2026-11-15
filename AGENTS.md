@@ -291,6 +291,9 @@ tells you whether it did the _right_ something.
   to start it in Fusion (Shift+S > Add-Ins > Run).
 - If commands time out, the Fusion main thread may be blocked (modal dialog, heavy
   computation).
+- If a merge looks live but Fusion behaves as it did before, the add-in is running the
+  class it loaded at start-up: `uv run python scripts/reload_addin.py` reloads it and
+  proves the running class matches the file (see `docs/TESTING.md`).
 - After any error, call `get_scene_info` to check if the operation partially applied
   before retrying.
 - Logs are written to `~/fusion360mcp.log` by the add-in.

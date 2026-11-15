@@ -195,3 +195,60 @@ class TestSizeMatching:
 
         with pytest.raises(RuntimeError, match="not cylindrical"):
             bound_handler(design).create_thread("Body1", face_index=0)
+
+
+class TestNominalStock:
+    """The calls a person actually makes: nominal stock, standard thread.
+
+    The first version of the size check used a *relative* band only, and it refused
+    Ø3.00 mm stock against M3x0.5 - because Fusion reports the middle of the
+    tolerance band (2.927 mm) while callers model the nominal 3 mm, and a percentage
+    gate tightens as the thread shrinks.  These two cases are the regression.
+    """
+
+    def _shaft(self, diameter_cm: float):
+        face = FakeFace(normal=(0.0, 0.0, 1.0), planar=False, radius=diameter_cm / 2)
+        return FakeDesign(bodies=[FakeBody("Body1", faces=FakeCollection([face]))])
+
+    def test_nominal_three_millimetre_stock_takes_an_m3(self, bound_handler):
+        design = self._shaft(0.300)
+
+        out = bound_handler(design).create_thread(
+            "Body1", face_index=0, thread_designation="M3x0.5"
+        )
+
+        assert out["feature_name"] == "Thread1"
+        assert out["face_diameter_cm"] == pytest.approx(0.300)
+        assert out["thread_diameter_cm"] == pytest.approx(0.2927)
+
+    def test_nominal_twenty_millimetre_stock_takes_an_m20(self, bound_handler):
+        design = self._shaft(2.0)
+
+        out = bound_handler(design).create_thread(
+            "Body1", face_index=0, thread_designation="M20x2.5"
+        )
+
+        assert out["thread_designation"] == "M20x2.5"
+
+    def test_a_shaft_far_too_big_for_the_thread_is_still_refused(self, bound_handler):
+        design = self._shaft(0.340)
+
+        with pytest.raises(RuntimeError, match="would resize the body"):
+            bound_handler(design).create_thread(
+                "Body1", face_index=0, thread_designation="M3x0.5"
+            )
+
+
+class TestPolarityAdvice:
+    def test_a_wrong_is_internal_is_diagnosed_as_the_flag(self, bound_handler):
+        """The face is M6-shaft sized; asking for an internal M6 is the error."""
+        design, _ = _design_with_a_bore("M6x1")
+        handler = bound_handler(design)
+
+        with pytest.raises(RuntimeError) as raised:
+            handler.create_thread(
+                "Body1", face_index=0, is_internal=True, thread_designation="M6x1"
+            )
+
+        message = str(raised.value)
+        assert "is_internal=false" in message, message

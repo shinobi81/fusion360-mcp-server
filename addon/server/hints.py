@@ -291,6 +291,20 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # A face index that names a plane, an edge or a wrong face. Before the size
+        # check existed Fusion refused this itself with "some input argument is
+        # invalid"; the handler now says it first, so it needs its own rule.
+        r"not cylindrical",
+        "INVALID_INPUT",
+        [
+            # One literal per hint: two adjacent ones read as a missing comma to
+            # CodeQL, and it cannot tell a wrapped sentence from a bug.
+            "A thread needs a cylindrical face; nothing was written.",
+            "Use get_object_info to list the body's faces.",
+            "Then pass a cylindrical face_index.",
+        ],
+    ),
+    (
         # Found live on 2706: Fusion sizes the body to the thread's designation, so a
         # caller who mistyped one silently loses the geometry they asked for. The
         # handler refuses that by default and names the thread that would fit.
