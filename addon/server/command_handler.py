@@ -499,10 +499,11 @@ class CommandHandler:
         if target_body is None:
             return None
         if operation == "new_body":
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "INVALID_INPUT",
                 "Invalid input: target_body applies only to cut, join or "
                 "intersect — new_body builds a body of its own, so there is "
-                "nothing to target"
+                "nothing to target",
             )
         return self._body_by_name(target_body)
 
@@ -544,14 +545,16 @@ class CommandHandler:
         default and so means "unset".
         """
         if indices is not None and points is not None:
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "INVALID_INPUT",
                 "Pass only one of edge_indices and edge_points — they name the "
-                "same edges two ways, so one would be ignored"
+                "same edges two ways, so one would be ignored",
             )
         if (indices is not None or points is not None) and selection != "all":
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "INVALID_INPUT",
                 f"edge_selection '{selection}' cannot be combined with "
-                "edge_indices or edge_points — pass one selector, not two"
+                "edge_indices or edge_points — pass one selector, not two",
             )
 
         coll = adsk.core.ObjectCollection.create()
@@ -596,8 +599,9 @@ class CommandHandler:
                 ):
                     coll.add(edge)
         else:
-            raise RuntimeError(
-                f"Unknown edge_selection '{selection}' — use all/top/bottom/vertical"
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"Unknown edge_selection '{selection}' — use all/top/bottom/vertical",
             )
 
         if coll.count == 0:
@@ -709,9 +713,10 @@ class CommandHandler:
             if index not in wanted:
                 wanted.append(index)
         if not wanted:
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "INVALID_INPUT",
                 "edge_indices was empty — name at least one edge, or omit it to "
-                "use edge_selection"
+                "use edge_selection",
             )
         return [body.edges.item(index) for index in wanted]
 
@@ -828,9 +833,10 @@ class CommandHandler:
                 chosen_ids.add(id(edge))
                 chosen.append(edge)
         if not chosen:
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "INVALID_INPUT",
                 "edge_points was empty — name at least one point, or omit it to "
-                "use edge_selection"
+                "use edge_selection",
             )
         return chosen
 
@@ -4693,8 +4699,9 @@ class CommandHandler:
         if ruled_type is None:
             # The schema's enum is advisory: a socket caller is not the schema, and
             # a bare KeyError classified as UNKNOWN tells it nothing.
-            raise RuntimeError(
-                f"Unknown rule_type {rule_type!r} - use 'normal' or 'tangent'"
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"Unknown rule_type {rule_type!r} - use 'normal' or 'tangent'",
             )
         inp = ruled.createInput(
             profile,

@@ -516,12 +516,64 @@ _RULES: list[tuple[str, str, list[str]]] = [
 ]
 
 
+#: Advice for a refusal whose kind no rule mentions — an empty hint list is the
+#: failure mode every rule above exists to stop, and a later kind must not revive it.
+_GENERIC_HINTS: list[str] = [
+    "The add-in refused this input; nothing was written.",
+    "error_message names the field it rejected and the values it accepts.",
+]
+
+
+class Refusal(RuntimeError):
+    """An input the add-in refused, carrying the classification it already knew.
+
+    ``classify`` recovered ``error_kind`` by matching the message against
+    ``_RULES``, so the code that refused an input — the one place that knows which
+    field was wrong — discarded that and let a regex guess it back.  A ``Refusal``
+    states it.  Fusion's own refusals stay untyped, and the table stays theirs.
+    """
+
+    def __init__(
+        self,
+        error_kind: str,
+        message: str,
+        hints: tuple[str, ...] = (),
+    ) -> None:
+        super().__init__(message)
+        self.error_kind = error_kind
+        self.hints = tuple(hints)
+
+
+def _hints_for(exc: Refusal) -> list[str]:
+    """The hints for a ``Refusal`` that carries none of its own.
+
+    The table is read for hints but never for the kind: the kind is what the raiser
+    already knew, while the message-shaped rules are what know the advice, one rule
+    per refusal.  A per-kind lookup alone would give every refusal of that kind the
+    same hints, whichever input it actually refused.
+    """
+    if exc.hints:
+        return list(exc.hints)
+    msg = str(exc)
+    for pattern, _kind, hints in _RULES:
+        if re.search(pattern, msg, re.IGNORECASE):
+            return list(hints)
+    for _pattern, kind, hints in _RULES:
+        if kind == exc.error_kind:
+            return list(hints)
+    return list(_GENERIC_HINTS)
+
+
 def classify(exc: BaseException | str) -> tuple[str, list[str]]:
     """Return ``(error_kind, hints)`` for *exc*.
 
-    Accepts either an exception or a message string.  Falls back to
-    ``("UNKNOWN", [])`` if no rule matches.
+    Accepts either an exception or a message string.  A ``Refusal`` names its own
+    kind, so the rules are consulted for its hints and never for that; any other
+    exception — Fusion's own messages included — is matched against ``_RULES``,
+    falling back to ``("UNKNOWN", [])``.
     """
+    if isinstance(exc, Refusal):
+        return exc.error_kind, _hints_for(exc)
     if isinstance(exc, BaseException):
         msg = str(exc) or exc.__class__.__name__
     else:
