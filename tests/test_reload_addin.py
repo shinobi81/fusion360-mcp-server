@@ -240,6 +240,30 @@ def test_main_says_what_a_reload_does_not_cover(monkeypatch, capsys):
     assert "not reloaded: event_bridge, socket_server" in out
 
 
+def test_the_sibling_modules_are_named_in_the_reload_order():
+    """The line above is derived from ``RELOAD_ORDER``, so it cannot pin it.
+
+    Comparing the printed line with the tuple it was built from agrees with itself:
+    drop ``hints`` from *both* copies of ``RELOAD_ORDER`` and every other test in this
+    file stays green while Fusion keeps serving the pre-pull ``hints``.  So the
+    siblings are named here, and ``COMMAND_MODULES`` is spliced in rather than
+    retyped - a new domain module is one edit in ``COMMAND_MODULES``, not two here.
+    """
+    module = _script()
+
+    # ``expected`` first, not last: SIM300 reads the upper-case attribute name as the
+    # constant and flags ``module.RELOAD_ORDER == (...)`` as the Yoda form.
+    expected = (
+        "hints",
+        "rules",
+        "hole_geometry",
+        "parameter_units",
+        "mutation_commands",
+        *module.COMMAND_MODULES,
+    )
+    assert expected == module.RELOAD_ORDER
+
+
 def test_a_fused_addin_is_reported_not_raised(monkeypatch, capsys):
     """A TIMEOUT arrives as FusionError; the reader gets a line, not a traceback."""
     from fusion360_mcp.connection import FusionError
