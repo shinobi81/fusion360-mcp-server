@@ -525,3 +525,37 @@ class TestEndpointChange:
         c2 = get_connection(port=port)
         assert c1 is c2
         c1.disconnect()
+
+
+def test_the_cli_port_default_is_the_one_parser_connection_owns():
+    """``FUSION_MCP_PORT`` must be parsed in one place, with one failure mode.
+
+    ``connection.default_port`` falls back to 9876 and warns; ``server`` used to
+    do its own ``int(os.environ[...])`` in a click default, which raises at
+    start-up instead, so the same typo killed one entry point and not the other.
+    Sharing the parser is the fix, and the identity check is what keeps a second
+    one from reappearing quietly.
+    """
+    from fusion360_mcp import server
+    from fusion360_mcp.connection import default_host, default_port
+
+    defaults = {param.name: param.default for param in server.main.params}
+    assert defaults["port"] is default_port
+    assert defaults["host"] is default_host
+
+
+def test_a_bad_port_falls_back_instead_of_refusing(monkeypatch):
+    """A typo must warn and use 9876 - the CLI and the socket agree on that now."""
+    from fusion360_mcp import connection
+
+    monkeypatch.setenv("FUSION_MCP_PORT", "not-a-port")
+    assert connection.default_port() == 9876
+
+
+def test_the_port_parser_reads_the_environment(monkeypatch):
+    from fusion360_mcp import connection
+
+    monkeypatch.setenv("FUSION_MCP_PORT", "9999")
+    monkeypatch.setenv("FUSION_MCP_HOST", "10.0.0.9")
+    assert connection.default_port() == 9999
+    assert connection.default_host() == "10.0.0.9"

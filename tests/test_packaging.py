@@ -1749,3 +1749,44 @@ def test_the_dated_heading_accepts_only_the_shape_every_entry_uses():
         "a trailing character must not slip past the end anchor"
     )
     assert not pattern.search("## [0.8.2] - 2026-11-14")
+
+
+TOOL_CATALOGUES = ("AGENTS.md", "docs/TOOLS.md")
+"""Documents that promise a catalogue of every tool the server exposes.
+
+``AGENTS.md`` says "Available tools (97)" and listed 96: ``list_edges`` was
+missing, and nothing noticed, because no guard read the page.  The count in prose
+was never the problem — the missing row was.
+"""
+
+
+def _missing_from_catalogue(text: str, names: set[str]) -> set[str]:
+    """Tool names the document never mentions in backticks.
+
+    Backticks are the house convention for a tool name in every page here, and
+    requiring them keeps a tool from being "covered" by a word that happens to be
+    spelled the same inside prose.
+    """
+    mentioned = set(re.findall(r"`([a-z][a-z0-9_]*)`", text))
+    return names - mentioned
+
+
+@pytest.mark.parametrize("path", TOOL_CATALOGUES)
+def test_every_tool_is_in_the_catalogue(path):
+    from fusion360_mcp.tools import TOOLS
+
+    text = (REPO_ROOT / path).read_text(encoding="utf-8")
+    missing = _missing_from_catalogue(text, {tool["name"] for tool in TOOLS})
+
+    assert not missing, (
+        f"{path} documents no row for {sorted(missing)}. Every tool in tools.py "
+        "needs a catalogue entry, or an agent reading the page cannot find it."
+    )
+
+
+def test_the_catalogue_guard_catches_a_missing_tool():
+    """The guard's own test: one that cannot fail protects nothing."""
+    text = "| `draw_circle` | a circle |\n| `rectangle` | not the tool name |\n"
+    assert _missing_from_catalogue(text, {"draw_circle", "draw_rectangle"}) == {
+        "draw_rectangle"
+    }

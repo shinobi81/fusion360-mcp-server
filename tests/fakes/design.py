@@ -23,9 +23,13 @@ from typing import ClassVar
 from .bodies import FakeBody, FakeFace
 from .collection import FakeCollection, FakeDeletable, FakeItemCollection
 from .features import (
+    FakeAnalyses,
     FakeDraftFeatures,
     FakeFeature,
     FakeInterference,
+    FakeProfile,
+    FakeRuledSurfaceFeatures,
+    FakeThreadFeatures,
 )
 from .runtime import DIRECT, PARAMETRIC, FakePoint3D, FakeValueInput
 from .sketch import FakeSketches, FakeSketchPoint
@@ -710,6 +714,8 @@ class FakeFeatures:
         self.shellFeatures = FakeShellFeatures()
         self.holeFeatures = FakeHoleFeatures(design)
         self.baseFeatures = FakeBaseFeatures()
+        self.threadFeatures = FakeThreadFeatures()
+        self.ruledSurfaceFeatures = FakeRuledSurfaceFeatures()
 
     def createPath(self, curve):
         """``features.createPath``: a sweep needs a Path around the curve."""
@@ -1044,6 +1050,21 @@ class FakeRoot:
         self.xYConstructionPlane = planes.xYConstructionPlane
         self.yZConstructionPlane = planes.yZConstructionPlane
         self.xZConstructionPlane = planes.xZConstructionPlane
+        self.analyses = FakeAnalyses()
+
+    def createBRepEdgeProfile(self, edges, chain_edges: bool = True):
+        """``Component.createBRepEdgeProfile``: a ruled surface is built from a profile.
+
+        The handler's mistake was one level up - ``RuledSurfaceFeatures.createInput``
+        takes the *profile* this returns, not the edge - so the fake's job is to
+        return the one type that call accepts.
+
+        The first argument is deliberately permissive, because Fusion's is: the SDK
+        says "edges : A single BRepEdge object or an ObjectCollection containing
+        multiple BRepEdge objects, or a BRepLoop object", so a bare edge is a
+        documented call shape, not a bug.
+        """
+        return FakeProfile(edges, chain_edges)
 
     @property
     def allOccurrences(self) -> FakeCollection:

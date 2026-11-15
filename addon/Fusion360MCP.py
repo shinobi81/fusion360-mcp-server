@@ -43,7 +43,22 @@ def run(context) -> None:
         _log = get_logger("main")
 
         host = os.environ.get("FUSION_MCP_HOST", "127.0.0.1")
-        port = int(os.environ.get("FUSION_MCP_PORT", "9876"))
+        # Tolerant on purpose, and the same contract as the server's
+        # connection.default_port: a typo must not stop the add-in from starting
+        # while the server quietly falls back to the same 9876.  The two halves
+        # cannot share code - different interpreter, different install - so they
+        # agree by test (tests/test_addon_sources.py reads both spellings).
+        try:
+            port = int(os.environ.get("FUSION_MCP_PORT", "9876"))
+        except ValueError:
+            # Logged, not silent: a typo leaves the add-in on 9876 while the
+            # server falls back to the same port, and the log is where anyone
+            # looks first when the two halves disagree about where to listen.
+            _log.warning(
+                "Invalid FUSION_MCP_PORT %r - falling back to 9876",
+                os.environ.get("FUSION_MCP_PORT"),
+            )
+            port = 9876
 
         _handler = CommandHandler()
         _bridge = EventBridge(_app, _handler)

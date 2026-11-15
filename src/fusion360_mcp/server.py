@@ -7,7 +7,6 @@ Supports ``--mode mock`` for testing without Fusion running.
 
 import json
 import logging
-import os
 import re
 from pathlib import Path
 
@@ -22,6 +21,8 @@ from .connection import (
     _DEFAULT_HOST,
     _DEFAULT_PORT,
     FusionError,
+    default_host,
+    default_port,
     get_connection,
     reset_connection,
 )
@@ -471,7 +472,7 @@ def build_server(mode: str, host: str, port: int) -> Server:
 @click.option(
     "--host",
     type=str,
-    default=lambda: os.environ.get("FUSION_MCP_HOST", "127.0.0.1"),
+    default=default_host,
     help=(
         "Host where the Fusion 360 add-in listens (env: FUSION_MCP_HOST). "
         "Use the Windows LAN IP when the MCP server runs on a different machine."
@@ -480,7 +481,7 @@ def build_server(mode: str, host: str, port: int) -> Server:
 @click.option(
     "--port",
     type=int,
-    default=lambda: int(os.environ.get("FUSION_MCP_PORT", "9876")),
+    default=default_port,
     help="TCP port the Fusion 360 add-in listens on (env: FUSION_MCP_PORT)",
 )
 @click.option(

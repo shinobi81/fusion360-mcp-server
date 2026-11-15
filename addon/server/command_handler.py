@@ -1794,13 +1794,14 @@ class CommandHandler:
 
         projected = []
         for edge in body.edges:
-            proj = sketch.project(edge)
-            projected.append(proj.count)
+            # project2, not the retired project(): only project2 takes isLinked.
+            projected.extend(sketch.project2([edge], is_linked))
 
         return {
             "sketch": sketch.name,
             "source": source_name,
-            "projected_curves": sum(projected),
+            "projected_curves": len(projected),
+            "is_linked": is_linked,
         }
 
     # ------------------------------------------------------------------
@@ -2395,7 +2396,7 @@ class CommandHandler:
         is_internal: bool = False,
         thread_type: str = "ISO Metric profile",
         thread_designation: str = "M10x1.5",
-        thread_class: str = "6g",
+        thread_class: str | None = None,
         is_modeled: bool = False,
         is_full_length: bool = True,
         thread_length: float | None = None,
@@ -2405,17 +2406,33 @@ class CommandHandler:
         face = body.faces.item(face_index)
 
         threads = root.features.threadFeatures
-        thread_data = threads.threadDataQuery
-        thread_data.threadType = thread_type
+        # A ThreadInfo, not the ThreadDataQuery: createInput takes the former and
+        # raises "argument 3 of type ThreadInfo" for the latter (measured on 2706).
+        # The query carries no designation or class at all - assigning them to it
+        # writes plain Python attributes Fusion never reads.
+        # ISO 965 assigns 6g to external threads and 6H to internal ones, so the
+        # default follows is_internal rather than naming one class for both. An
+        # explicit thread_class always wins.
+        if thread_class is None:
+            thread_class = "6H" if is_internal else "6g"
+        info = adsk.fusion.ThreadInfo.create(
+            False, is_internal, thread_type, thread_designation, thread_class, True
+        )
 
-        inp = threads.createInput(face, thread_data)
+        inp = threads.createInput(face, info)
         inp.isModeled = is_modeled
         inp.isFullLength = is_full_length
         if not is_full_length and thread_length:
             inp.threadLength = adsk.core.ValueInput.createByReal(thread_length)
 
         feat = threads.add(inp)
-        return {"feature_name": feat.name, "thread_type": thread_type}
+        return {
+            "feature_name": feat.name,
+            "thread_type": thread_type,
+            "thread_designation": thread_designation,
+            "thread_class": thread_class,
+            "is_internal": is_internal,
+        }
 
     def draft_faces(
         self,
@@ -4331,8 +4348,15 @@ class CommandHandler:
         if offset != 0:
             inp.distance = adsk.core.ValueInput.createByReal(offset)
 
-        analyses.add(inp)
-        return {"created": True, "plane": plane, "offset": offset}
+        analysis = analyses.add(inp)
+        return {
+            "created": True,
+            # Named so the agent can reference it: every other builder reports a
+            # name, and add() returns the SectionAnalysis the name lives on.
+            "analysis_name": analysis.name,
+            "plane": plane,
+            "offset": offset,
+        }
 
     def check_interference(
         self, component_names: list, include_coincident_faces: bool = False
@@ -4673,9 +4697,32 @@ class CommandHandler:
         edge = body.edges.item(edge_index)
 
         ruled = root.features.ruledSurfaceFeatures
-        inp = ruled.createInput(edge, adsk.core.ValueInput.createByReal(distance))
+        # The shipped signature is createInput(profile, distance, angle, type) and
+        # it takes a Profile, not an edge: the two-argument edge form this used to
+        # call raised "Wrong number or type of arguments" on every invocation.
+        profile = root.createBRepEdgeProfile(edge, True)
+        ruled_type = {
+            "tangent": adsk.fusion.RuledSurfaceTypes.TangentRuledSurfaceType,
+            "normal": adsk.fusion.RuledSurfaceTypes.NormalRuledSurfaceType,
+        }.get(rule_type)
+        if ruled_type is None:
+            # The schema's enum is advisory: a socket caller is not the schema, and
+            # a bare KeyError classified as UNKNOWN tells it nothing.
+            raise RuntimeError(
+                f"Unknown rule_type {rule_type!r} - use 'normal' or 'tangent'"
+            )
+        inp = ruled.createInput(
+            profile,
+            adsk.core.ValueInput.createByReal(distance),
+            adsk.core.ValueInput.createByReal(0.0),
+            ruled_type,
+        )
         feat = ruled.add(inp)
-        return {"feature_name": feat.name, "distance": distance}
+        return {
+            "feature_name": feat.name,
+            "distance": distance,
+            "rule_type": rule_type,
+        }
 
     def trim_surface(self, body_name: str, tool_name: str):
         root = self._root()
@@ -5367,9 +5414,10 @@ class CommandHandler:
         is reported in grams; bbox in cm (Fusion's internal unit).
         """
         try:
-            design = self.app.activeProduct
-            if design is None or not hasattr(design, "rootComponent"):
-                return None
+            # The Design product, through _design()'s own preference: activeProduct
+            # is the CAM product while the Manufacture workspace is active, and it
+            # has no rootComponent - which silently cost every mutation its deltas.
+            design = self._design()
             root = design.rootComponent
 
             # Count bodies recursively (root + occurrences).
@@ -5519,7 +5567,14 @@ class CommandHandler:
         ``spec`` is ``(eye_dir, up_vec)`` from ``_VIEW_DIRS``.
         """
         eye_dir, up_vec = spec
-        design = self.app.activeProduct
+        # _design(), not activeProduct: in the Manufacture workspace the active
+        # product is CAM and has no rootComponent, which is the read this PR
+        # removed from _snapshot.  A view still renders without a design - the
+        # target then stays at the origin - so a missing design is not fatal here.
+        try:
+            design = self._design()
+        except RuntimeError:
+            design = None
         root = design.rootComponent if design is not None else None
 
         # Target is the model centroid (or origin if no bodies).
