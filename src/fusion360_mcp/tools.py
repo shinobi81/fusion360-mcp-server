@@ -17,6 +17,184 @@ _SKETCH_PLANE_Z = (
 # Naming the sketch is what keeps geometry out of "whatever was created last".
 _SKETCH_NAME_TARGET = "Sketch to draw into (default: the most recent sketch)."
 
+# A 3-D point as ``[x, y, z]`` in centimetres: the shape every point argument uses.
+_POINT3 = {
+    "type": "array",
+    "items": {"type": "number"},
+    "minItems": 3,
+    "maxItems": 3,
+}
+
+# fillet and chamfer take the same four edge selectors; only the size argument
+# differs (a radius or a distance), so the rest is stated once.
+_EDGE_SELECTOR = {
+    "edge_selection": {
+        "type": "string",
+        "enum": ["all", "top", "bottom", "vertical"],
+        "default": "all",
+    },
+    "edge_indices": {
+        "type": "array",
+        "items": {"type": "integer", "minimum": 0},
+        "description": (
+            "Exact edges to affect, indexed as list_edges reports them. "
+            "Indices are positional, so re-run list_edges after a change."
+        ),
+    },
+    "edge_points": {
+        "type": "array",
+        "items": _POINT3,
+        "description": (
+            "Points near the edges to affect; each snaps to the nearest "
+            "edge within edge_tolerance. Ambiguous points are refused."
+        ),
+    },
+    "edge_tolerance": {
+        "type": "number",
+        "default": 0.1,
+        "minimum": 0.0001,
+        "description": "How near a point must be to an edge (cm)",
+    },
+}
+
+# The joint geometry arguments are the same on both joint tools; only the
+# key_point wording differs (add_joint measured what Fusion refuses, the
+# as-built one did not have to).  The sub-dicts are shared between the two
+# schemas and never mutated - the annotations pass below only writes on the tool
+# dict itself - which is what makes stating them once safe.
+_JOINT_TYPE = {
+    "type": "string",
+    "enum": [
+        "rigid",
+        "revolute",
+        "slider",
+        "cylindrical",
+        "pin_slot",
+        "planar",
+        "ball",
+    ],
+    "default": "rigid",
+}
+
+_JOINT_KEY_POINT = {
+    "type": "string",
+    "enum": ["start", "middle", "center", "end"],
+    "default": "end",
+    "description": (
+        "Axial position of the joint origin on a cylindrical face. "
+        "`end` is the only value that produced a valid joint on "
+        "Fusion 2705; others raise Invalid parameter height or "
+        "InternalValidationError."
+    ),
+}
+
+_AS_BUILT_KEY_POINT = {
+    "type": "string",
+    "enum": ["start", "middle", "center", "end"],
+    "default": "end",
+    "description": ("Axial position of the joint origin on a cylindrical face."),
+}
+
+
+def _joint_properties(key_point: dict) -> dict:
+    """The joint arguments both joint tools share, in schema order."""
+    return {
+        "joint_type": _JOINT_TYPE,
+        "body_one": {
+            "type": "string",
+            "description": (
+                "Body inside component_one carrying the joint geometry. "
+                "Omit when the component holds exactly one body."
+            ),
+        },
+        "face_one": {
+            "type": "integer",
+            "description": ("Face index on that body (cylindrical faces work best)."),
+        },
+        "body_two": {
+            "type": "string",
+            "description": (
+                "Body inside component_two carrying the joint geometry. "
+                "Omit when the component holds exactly one body."
+            ),
+        },
+        "face_two": {
+            "type": "integer",
+            "description": ("Face index on that body (cylindrical faces work best)."),
+        },
+        "axis": {
+            "type": "string",
+            "enum": ["x", "y", "z"],
+            "default": "x",
+            "description": (
+                "Rotation/slide axis in MODEL terms (x/y/z), resolved against "
+                "the joint's own axes: Fusion's JointDirections enum selects a "
+                "joint axis, so the nearest one is used and the result's "
+                "axis_world / directions report the sign actually applied. "
+                "Rotation/slide axis for revolute, slider and cylindrical; "
+                "primary direction for pin_slot, planar and ball."
+            ),
+        },
+        "second_axis": {
+            "type": "string",
+            "enum": ["x", "y", "z"],
+            "description": (
+                "Secondary direction for pin_slot and ball. "
+                "Defaults to an axis perpendicular to `axis`. "
+                "For ball joints Fusion takes (pitch, yaw) and "
+                "rejects a pitch parallel to the joint axis, so "
+                "the perpendicular one is sent first."
+            ),
+        },
+        "quadrant": {
+            "type": "string",
+            "enum": ["start", "quarter", "middle", "third_quarter"],
+            "default": "middle",
+            "description": (
+                "Angular position of the joint origin on a cylindrical face."
+            ),
+        },
+        "key_point": key_point,
+    }
+
+
+# Where the four profile-based features say the same thing, they say it once.
+# Only the spellings that are actually identical are shared: revolve's
+# profile_index never declared `minimum`, and it keeps its own literal, because
+# adding one here would change a schema in a commit that changes none.
+_PROFILE_INDEX = {
+    "type": "integer",
+    "default": 0,
+    "minimum": 0,
+    "description": (
+        "Index of the profile in the chosen sketch "
+        "(sketch_name, default the most recent one)"
+    ),
+}
+
+_PROFILE_SKETCH = {
+    "type": "string",
+    "description": ("Sketch holding the profile (default: the most recent sketch)"),
+}
+
+_OPERATION = {
+    "type": "string",
+    "enum": ["new_body", "join", "cut", "intersect"],
+    "default": "new_body",
+}
+
+
+def _target_body(reaches: str) -> dict:
+    """``target_body`` for a feature whose reach is a profile, sweep or loft."""
+    return {
+        "type": "string",
+        "description": (
+            "Body the cut/join/intersect applies to. Without it "
+            f"Fusion applies the operation to every body the {reaches} reaches."
+        ),
+    }
+
+
 TOOLS: list[dict] = [
     # ── scene / query ────────────────────────────────────────────────
     {
@@ -170,39 +348,15 @@ TOOLS: list[dict] = [
             "required": ["height"],
             "properties": {
                 "height": {"type": "number"},
-                "profile_index": {
-                    "type": "integer",
-                    "default": 0,
-                    "minimum": 0,
-                    "description": (
-                        "Index of the profile in the chosen sketch "
-                        "(sketch_name, default the most recent one)"
-                    ),
-                },
-                "operation": {
-                    "type": "string",
-                    "enum": ["new_body", "join", "cut", "intersect"],
-                    "default": "new_body",
-                },
+                "profile_index": _PROFILE_INDEX,
+                "operation": _OPERATION,
                 "direction": {
                     "type": "string",
                     "enum": ["positive", "negative", "symmetric"],
                     "default": "positive",
                 },
-                "sketch_name": {
-                    "type": "string",
-                    "description": (
-                        "Sketch holding the profile (default: the most recent sketch)"
-                    ),
-                },
-                "target_body": {
-                    "type": "string",
-                    "description": (
-                        "Body the cut/join/intersect applies to. Without it "
-                        "Fusion applies the operation to every body the "
-                        "profile reaches."
-                    ),
-                },
+                "sketch_name": _PROFILE_SKETCH,
+                "target_body": _target_body("profile"),
             },
         },
     },
@@ -233,12 +387,7 @@ TOOLS: list[dict] = [
                         "(sketch_name, default the most recent one)"
                     ),
                 },
-                "sketch_name": {
-                    "type": "string",
-                    "description": (
-                        "Sketch holding the profile (default: the most recent sketch)"
-                    ),
-                },
+                "sketch_name": _PROFILE_SKETCH,
                 "axis_origin_x": {
                     "type": "number",
                     "default": 0,
@@ -273,19 +422,8 @@ TOOLS: list[dict] = [
                     "default": 0,
                     "description": "Axis direction Z, model space (normalised)",
                 },
-                "operation": {
-                    "type": "string",
-                    "enum": ["new_body", "join", "cut", "intersect"],
-                    "default": "new_body",
-                },
-                "target_body": {
-                    "type": "string",
-                    "description": (
-                        "Body the cut/join/intersect applies to. Without it "
-                        "Fusion applies the operation to every body the "
-                        "profile reaches."
-                    ),
-                },
+                "operation": _OPERATION,
+                "target_body": _target_body("profile"),
             },
         },
     },
@@ -303,38 +441,7 @@ TOOLS: list[dict] = [
                 "radius": {"type": "number", "minimum": 0.001},
                 "body_name": {"type": "string", "description": "Body name (preferred)"},
                 "body_index": {"type": "integer", "default": 0},
-                "edge_selection": {
-                    "type": "string",
-                    "enum": ["all", "top", "bottom", "vertical"],
-                    "default": "all",
-                },
-                "edge_indices": {
-                    "type": "array",
-                    "items": {"type": "integer", "minimum": 0},
-                    "description": (
-                        "Exact edges to affect, indexed as list_edges reports them. "
-                        "Indices are positional, so re-run list_edges after a change."
-                    ),
-                },
-                "edge_points": {
-                    "type": "array",
-                    "items": {
-                        "type": "array",
-                        "items": {"type": "number"},
-                        "minItems": 3,
-                        "maxItems": 3,
-                    },
-                    "description": (
-                        "Points near the edges to affect; each snaps to the nearest "
-                        "edge within edge_tolerance. Ambiguous points are refused."
-                    ),
-                },
-                "edge_tolerance": {
-                    "type": "number",
-                    "default": 0.1,
-                    "minimum": 0.0001,
-                    "description": "How near a point must be to an edge (cm)",
-                },
+                **_EDGE_SELECTOR,
             },
         },
     },
@@ -352,38 +459,7 @@ TOOLS: list[dict] = [
                 "distance": {"type": "number", "minimum": 0.001},
                 "body_name": {"type": "string"},
                 "body_index": {"type": "integer", "default": 0},
-                "edge_selection": {
-                    "type": "string",
-                    "enum": ["all", "top", "bottom", "vertical"],
-                    "default": "all",
-                },
-                "edge_indices": {
-                    "type": "array",
-                    "items": {"type": "integer", "minimum": 0},
-                    "description": (
-                        "Exact edges to affect, indexed as list_edges reports them. "
-                        "Indices are positional, so re-run list_edges after a change."
-                    ),
-                },
-                "edge_points": {
-                    "type": "array",
-                    "items": {
-                        "type": "array",
-                        "items": {"type": "number"},
-                        "minItems": 3,
-                        "maxItems": 3,
-                    },
-                    "description": (
-                        "Points near the edges to affect; each snaps to the nearest "
-                        "edge within edge_tolerance. Ambiguous points are refused."
-                    ),
-                },
-                "edge_tolerance": {
-                    "type": "number",
-                    "default": 0.1,
-                    "minimum": 0.0001,
-                    "description": "How near a point must be to an edge (cm)",
-                },
+                **_EDGE_SELECTOR,
             },
         },
     },
@@ -555,39 +631,15 @@ TOOLS: list[dict] = [
             "type": "object",
             "required": ["profile_index", "path_sketch_name"],
             "properties": {
-                "profile_index": {
-                    "type": "integer",
-                    "default": 0,
-                    "minimum": 0,
-                    "description": (
-                        "Index of the profile in the chosen sketch "
-                        "(sketch_name, default the most recent one)"
-                    ),
-                },
+                "profile_index": _PROFILE_INDEX,
                 "path_sketch_name": {
                     "type": "string",
                     "description": "Name of the sketch containing the sweep path",
                 },
                 "path_curve_index": {"type": "integer", "default": 0, "minimum": 0},
-                "sketch_name": {
-                    "type": "string",
-                    "description": (
-                        "Sketch holding the profile (default: the most recent sketch)"
-                    ),
-                },
-                "operation": {
-                    "type": "string",
-                    "enum": ["new_body", "join", "cut", "intersect"],
-                    "default": "new_body",
-                },
-                "target_body": {
-                    "type": "string",
-                    "description": (
-                        "Body the cut/join/intersect applies to. Without it "
-                        "Fusion applies the operation to every body the sweep "
-                        "reaches."
-                    ),
-                },
+                "sketch_name": _PROFILE_SKETCH,
+                "operation": _OPERATION,
+                "target_body": _target_body("sweep"),
             },
         },
     },
@@ -612,19 +664,8 @@ TOOLS: list[dict] = [
                         "first profile will be lofted"
                     ),
                 },
-                "operation": {
-                    "type": "string",
-                    "enum": ["new_body", "join", "cut", "intersect"],
-                    "default": "new_body",
-                },
-                "target_body": {
-                    "type": "string",
-                    "description": (
-                        "Body the cut/join/intersect applies to. Without it "
-                        "Fusion applies the operation to every body the loft "
-                        "reaches."
-                    ),
-                },
+                "operation": _OPERATION,
+                "target_body": _target_body("loft"),
             },
         },
     },
@@ -836,88 +877,7 @@ TOOLS: list[dict] = [
             "properties": {
                 "component_one": {"type": "string"},
                 "component_two": {"type": "string"},
-                "joint_type": {
-                    "type": "string",
-                    "enum": [
-                        "rigid",
-                        "revolute",
-                        "slider",
-                        "cylindrical",
-                        "pin_slot",
-                        "planar",
-                        "ball",
-                    ],
-                    "default": "rigid",
-                },
-                "body_one": {
-                    "type": "string",
-                    "description": (
-                        "Body inside component_one carrying the joint geometry. "
-                        "Omit when the component holds exactly one body."
-                    ),
-                },
-                "face_one": {
-                    "type": "integer",
-                    "description": (
-                        "Face index on that body (cylindrical faces work best)."
-                    ),
-                },
-                "body_two": {
-                    "type": "string",
-                    "description": (
-                        "Body inside component_two carrying the joint geometry. "
-                        "Omit when the component holds exactly one body."
-                    ),
-                },
-                "face_two": {
-                    "type": "integer",
-                    "description": (
-                        "Face index on that body (cylindrical faces work best)."
-                    ),
-                },
-                "axis": {
-                    "type": "string",
-                    "enum": ["x", "y", "z"],
-                    "default": "x",
-                    "description": (
-                        "Rotation/slide axis in MODEL terms (x/y/z), resolved against "
-                        "the joint's own axes: Fusion's JointDirections enum selects a "
-                        "joint axis, so the nearest one is used and the result's "
-                        "axis_world / directions report the sign actually applied. "
-                        "Rotation/slide axis for revolute, slider and cylindrical; "
-                        "primary direction for pin_slot, planar and ball."
-                    ),
-                },
-                "second_axis": {
-                    "type": "string",
-                    "enum": ["x", "y", "z"],
-                    "description": (
-                        "Secondary direction for pin_slot and ball. "
-                        "Defaults to an axis perpendicular to `axis`. "
-                        "For ball joints Fusion takes (pitch, yaw) and "
-                        "rejects a pitch parallel to the joint axis, so "
-                        "the perpendicular one is sent first."
-                    ),
-                },
-                "quadrant": {
-                    "type": "string",
-                    "enum": ["start", "quarter", "middle", "third_quarter"],
-                    "default": "middle",
-                    "description": (
-                        "Angular position of the joint origin on a cylindrical face."
-                    ),
-                },
-                "key_point": {
-                    "type": "string",
-                    "enum": ["start", "middle", "center", "end"],
-                    "default": "end",
-                    "description": (
-                        "Axial position of the joint origin on a cylindrical face. "
-                        "`end` is the only value that produced a valid joint on "
-                        "Fusion 2705; others raise Invalid parameter height or "
-                        "InternalValidationError."
-                    ),
-                },
+                **_joint_properties(_JOINT_KEY_POINT),
             },
         },
     },
@@ -2144,85 +2104,7 @@ TOOLS: list[dict] = [
             "properties": {
                 "component_one": {"type": "string"},
                 "component_two": {"type": "string"},
-                "joint_type": {
-                    "type": "string",
-                    "enum": [
-                        "rigid",
-                        "revolute",
-                        "slider",
-                        "cylindrical",
-                        "pin_slot",
-                        "planar",
-                        "ball",
-                    ],
-                    "default": "rigid",
-                },
-                "body_one": {
-                    "type": "string",
-                    "description": (
-                        "Body inside component_one carrying the joint geometry. "
-                        "Omit when the component holds exactly one body."
-                    ),
-                },
-                "face_one": {
-                    "type": "integer",
-                    "description": (
-                        "Face index on that body (cylindrical faces work best)."
-                    ),
-                },
-                "body_two": {
-                    "type": "string",
-                    "description": (
-                        "Body inside component_two carrying the joint geometry. "
-                        "Omit when the component holds exactly one body."
-                    ),
-                },
-                "face_two": {
-                    "type": "integer",
-                    "description": (
-                        "Face index on that body (cylindrical faces work best)."
-                    ),
-                },
-                "axis": {
-                    "type": "string",
-                    "enum": ["x", "y", "z"],
-                    "default": "x",
-                    "description": (
-                        "Rotation/slide axis in MODEL terms (x/y/z), resolved against "
-                        "the joint's own axes: Fusion's JointDirections enum selects a "
-                        "joint axis, so the nearest one is used and the result's "
-                        "axis_world / directions report the sign actually applied. "
-                        "Rotation/slide axis for revolute, slider and cylindrical; "
-                        "primary direction for pin_slot, planar and ball."
-                    ),
-                },
-                "second_axis": {
-                    "type": "string",
-                    "enum": ["x", "y", "z"],
-                    "description": (
-                        "Secondary direction for pin_slot and ball. "
-                        "Defaults to an axis perpendicular to `axis`. "
-                        "For ball joints Fusion takes (pitch, yaw) and "
-                        "rejects a pitch parallel to the joint axis, so "
-                        "the perpendicular one is sent first."
-                    ),
-                },
-                "quadrant": {
-                    "type": "string",
-                    "enum": ["start", "quarter", "middle", "third_quarter"],
-                    "default": "middle",
-                    "description": (
-                        "Angular position of the joint origin on a cylindrical face."
-                    ),
-                },
-                "key_point": {
-                    "type": "string",
-                    "enum": ["start", "middle", "center", "end"],
-                    "default": "end",
-                    "description": (
-                        "Axial position of the joint origin on a cylindrical face."
-                    ),
-                },
+                **_joint_properties(_AS_BUILT_KEY_POINT),
             },
         },
     },
@@ -3047,29 +2929,14 @@ _READ_ONLY = {
     "render_view",
 }
 _DESTRUCTIVE = {"delete_all", "delete_parameter", "execute_code"}
-_IDEMPOTENT = {
-    "ping",
-    "get_scene_info",
-    "get_object_info",
-    "list_edges",
-    "get_bounding_box",
-    "list_components",
-    "get_parameters",
-    "get_physical_properties",
-    "measure_distance",
-    "measure_angle",
-    "check_interference",
-    "compare_meshes",
+# Every read-only tool is also idempotent (repeating a read changes nothing),
+# plus the setters whose second application lands on the same state.
+_IDEMPOTENT = _READ_ONLY | {
     "set_parameter",
     "set_appearance",
     "set_color",
-    "cam_list_setups",
-    "cam_list_operations",
-    "cam_get_operation_info",
-    "get_design_type",
     "set_design_type",
     "rename_body",
-    "render_view",
 }
 
 for _t in TOOLS:
