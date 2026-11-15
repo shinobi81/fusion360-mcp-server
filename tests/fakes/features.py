@@ -229,6 +229,21 @@ class FakeRuledSurfaceInput:
         self.ruleType = ruled_type
 
 
+class FakeProfile:
+    """What ``Component.createBRepEdgeProfile`` returns, and the only legal first
+    argument to ``RuledSurfaceFeatures.createInput``.
+
+    Fusion's signature is ``createInput(profile, distance, angle, type)``; the
+    handler used to pass a raw edge and two arguments, which is the bug these
+    fakes exist to keep buried.  Arity alone would not have caught a two-argument
+    call that passed an edge - the type check does.
+    """
+
+    def __init__(self, edges, chain_edges: bool):
+        self.edges = edges
+        self.chainEdges = chain_edges
+
+
 class FakeRuledSurfaceFeatures:
     """``root.features.ruledSurfaceFeatures``: four positional arguments, as in the SDK.
 
@@ -244,6 +259,11 @@ class FakeRuledSurfaceFeatures:
     def createInput(
         self, profile, distance, angle, ruled_type
     ) -> FakeRuledSurfaceInput:
+        if not isinstance(profile, FakeProfile):
+            raise TypeError(
+                "Wrong number or type of arguments for overloaded function "
+                "'RuledSurfaceFeatures_createInput'"
+            )
         created = FakeRuledSurfaceInput(profile, distance, angle, ruled_type)
         self.inputs.append(created)
         return created

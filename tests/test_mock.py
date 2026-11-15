@@ -803,8 +803,11 @@ class TestMockProjectGeometry:
                 "sketch_name": "Sketch2",
             },
         )
-        assert result["source_name"] == "TopEdge"
-        assert result["sketch_name"] == "Sketch2"
+        # The keys the real handler reports, not the request's own names: mock
+        # mode exists so an agent can rehearse against the real envelope.
+        assert result["source"] == "TopEdge"
+        assert result["sketch"] == "Sketch2"
+        assert result["is_linked"] is True
         assert "projected_curves" in result
 
 

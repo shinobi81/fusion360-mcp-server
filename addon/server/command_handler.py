@@ -2396,7 +2396,7 @@ class CommandHandler:
         is_internal: bool = False,
         thread_type: str = "ISO Metric profile",
         thread_designation: str = "M10x1.5",
-        thread_class: str = "6g",
+        thread_class: str | None = None,
         is_modeled: bool = False,
         is_full_length: bool = True,
         thread_length: float | None = None,
@@ -2410,6 +2410,11 @@ class CommandHandler:
         # raises "argument 3 of type ThreadInfo" for the latter (measured on 2706).
         # The query carries no designation or class at all - assigning them to it
         # writes plain Python attributes Fusion never reads.
+        # ISO 965 assigns 6g to external threads and 6H to internal ones, so the
+        # default follows is_internal rather than naming one class for both. An
+        # explicit thread_class always wins.
+        if thread_class is None:
+            thread_class = "6H" if is_internal else "6g"
         info = adsk.fusion.ThreadInfo.create(
             False, is_internal, thread_type, thread_designation, thread_class, True
         )
@@ -4699,7 +4704,13 @@ class CommandHandler:
         ruled_type = {
             "tangent": adsk.fusion.RuledSurfaceTypes.TangentRuledSurfaceType,
             "normal": adsk.fusion.RuledSurfaceTypes.NormalRuledSurfaceType,
-        }[rule_type]
+        }.get(rule_type)
+        if ruled_type is None:
+            # The schema's enum is advisory: a socket caller is not the schema, and
+            # a bare KeyError classified as UNKNOWN tells it nothing.
+            raise RuntimeError(
+                f"Unknown rule_type {rule_type!r} - use 'normal' or 'tangent'"
+            )
         inp = ruled.createInput(
             profile,
             adsk.core.ValueInput.createByReal(distance),

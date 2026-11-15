@@ -1048,11 +1048,17 @@ def _extend_curve(p: dict) -> dict:
 
 
 def _create_thread(p: dict) -> dict:
+    is_internal = p.get("is_internal", False)
     return {
         "body_name": p.get("body_name", "Body1"),
         "face_index": p.get("face_index", 0),
         "is_modeled": p.get("is_modeled", False),
+        "thread_type": p.get("thread_type", "ISO Metric profile"),
         "thread_designation": p.get("thread_designation", "M10x1.5"),
+        # The same conditional default the handler applies: ISO 965 gives internal
+        # threads 6H and external ones 6g.
+        "thread_class": p.get("thread_class") or ("6H" if is_internal else "6g"),
+        "is_internal": is_internal,
     }
 
 
@@ -1249,9 +1255,10 @@ def _set_appearance(p: dict) -> dict:
 
 def _project_geometry(p: dict) -> dict:
     return {
-        "source_name": p.get("source_name", "Body1"),
-        "sketch_name": p.get("sketch_name", "Sketch1"),
+        "sketch": p.get("sketch_name", "Sketch1"),
+        "source": p.get("source_name", "Body1"),
         "projected_curves": 4,
+        "is_linked": p.get("is_linked", True),
     }
 
 
@@ -1301,9 +1308,11 @@ def _thicken_surface(p: dict) -> dict:
 
 def _ruled_surface(p: dict) -> dict:
     return {
+        "feature_name": "Ruled Surface1",
         "body_name": p.get("body_name", "Body1"),
         "edge_index": p.get("edge_index", 0),
         "distance": p.get("distance", 1.0),
+        "rule_type": p.get("rule_type", "normal"),
         "result_body": "RuledSurface_mock",
     }
 

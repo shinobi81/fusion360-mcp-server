@@ -83,3 +83,32 @@ def test_a_partial_length_is_a_value_input_in_centimetres(bound_handler):
     length = created.threadLength
     assert length is not None, "a partial thread needs a length"
     assert (length.kind, length.value) == ("real", 2.5)
+
+
+def test_the_default_class_follows_internal_or_external(bound_handler):
+    """ISO 965 gives internal threads 6H and external ones 6g.
+
+    The parameter is live for the first time in this PR, so a single ``"6g"``
+    default would have asked Fusion for an external tolerance class on every
+    internal thread the caller did not spell out.
+    """
+    design, _ = _design_with_a_bore()
+    handler = bound_handler(design)
+
+    handler.create_thread("Body1", face_index=0, is_internal=True)
+    threads = design.rootComponent.features.threadFeatures
+
+    assert threads.inputs[0].threadInfo.threadClass == "6H"
+
+    handler.create_thread("Body1", face_index=0)
+    assert threads.inputs[1].threadInfo.threadClass == "6g"
+
+
+def test_an_explicit_class_wins_over_the_default(bound_handler):
+    design, _ = _design_with_a_bore()
+    handler = bound_handler(design)
+
+    handler.create_thread("Body1", face_index=0, is_internal=True, thread_class="6G")
+
+    info = design.rootComponent.features.threadFeatures.inputs[0].threadInfo
+    assert info.threadClass == "6G"

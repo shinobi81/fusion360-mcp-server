@@ -1749,8 +1749,10 @@ TOOLS: list[dict] = [
                 },
                 "thread_class": {
                     "type": "string",
-                    "default": "6g",
-                    "description": "Thread class (e.g. '6g', '6H')",
+                    "description": (
+                        "Thread class. Defaults to 6H for an internal thread and "
+                        "6g for an external one, which is what ISO 965 assigns."
+                    ),
                 },
                 "is_modeled": {
                     "type": "boolean",

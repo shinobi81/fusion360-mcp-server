@@ -27,6 +27,7 @@ from .features import (
     FakeDraftFeatures,
     FakeFeature,
     FakeInterference,
+    FakeProfile,
     FakeRuledSurfaceFeatures,
     FakeThreadFeatures,
 )
@@ -1055,10 +1056,10 @@ class FakeRoot:
         """``Component.createBRepEdgeProfile``: a ruled surface is built from a Profile.
 
         Its first argument is a Profile, not an edge - that is the mistake that
-        made ``ruled_surface`` raise on every call - so the profile records what
-        it was built from and the handler hands *it* to ``createInput``.
+        made ``ruled_surface`` raise on every call - so this returns the one type
+        ``RuledSurfaceFeatures.createInput`` accepts.
         """
-        return type("FakeProfile", (), {"edges": edges, "chainEdges": chain_edges})()
+        return FakeProfile(edges, chain_edges)
 
     @property
     def allOccurrences(self) -> FakeCollection:
