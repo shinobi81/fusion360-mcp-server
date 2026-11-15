@@ -288,6 +288,18 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # Found live on 2706: Fusion sizes the body to the thread's designation, so a
+        # caller who mistyped one silently loses the geometry they asked for. The
+        # handler refuses that by default and names the thread that would fit.
+        r"would resize the body",
+        "INVALID_INPUT",
+        [
+            "The face's diameter has to match the thread designation.",
+            "Pass allow_resize=true to accept Fusion resizing the body.",
+            "Or use the thread designation the message names.",
+        ],
+    ),
+    (
         # Found live on 2706: a ruled surface needs a FREE (open) edge, and every
         # edge of a solid is shared by two faces, so Fusion answers "3 : invalid
         # free edge". Unclassified it reached the caller as UNKNOWN with no hints.

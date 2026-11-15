@@ -1473,6 +1473,15 @@ TOOLS: list[dict] = [
             "default": True,
             "description": "Thread entire cylinder length",
         },
+        allow_resize={
+            "type": "boolean",
+            "default": False,
+            "description": (
+                "Fusion sizes the body to the thread's diameter, so a designation "
+                "that does not match the face is refused by default. Set this true "
+                "to accept the body being resized."
+            ),
+        },
         thread_length={
             "type": "number",
             "description": ("Thread length in cm (only if is_full_length=false)"),

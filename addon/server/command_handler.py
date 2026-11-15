@@ -2351,10 +2351,12 @@ class CommandHandler:
         is_modeled: bool = False,
         is_full_length: bool = True,
         thread_length: float | None = None,
+        allow_resize: bool = False,
     ):
         root = self._root()
         body = self._body_by_name(body_name)
         face = body.faces.item(face_index)
+        face_diameter = self._cylindrical_diameter(face)
 
         threads = root.features.threadFeatures
         # A ThreadInfo, not the ThreadDataQuery: createInput takes the former and
@@ -2369,6 +2371,15 @@ class CommandHandler:
         info = adsk.fusion.ThreadInfo.create(
             False, is_internal, thread_type, thread_designation, thread_class, True
         )
+        thread_diameter = self._named_thread_diameter(info, is_internal)
+        if not allow_resize and not self._thread_fits(face_diameter, thread_diameter):
+            raise RuntimeError(
+                f"The face is {face_diameter * 10:.2f} mm across but "
+                f"{thread_designation} is {thread_diameter * 10:.2f} mm: Fusion would "
+                f"resize the body to match the thread. "
+                f"{self._recommended_thread(face_diameter, is_internal, thread_type)}. "
+                "Pass allow_resize=true to accept the resize."
+            )
 
         inp = threads.createInput(face, info)
         inp.isModeled = is_modeled
@@ -2383,7 +2394,62 @@ class CommandHandler:
             "thread_designation": thread_designation,
             "thread_class": thread_class,
             "is_internal": is_internal,
+            "face_diameter_cm": face_diameter,
+            "thread_diameter_cm": thread_diameter,
         }
+
+    @staticmethod
+    def _cylindrical_diameter(face) -> float:
+        """The diameter a thread could be cut on this face, in centimetres.
+
+        ``Cylinder.cast`` answers None for anything else, which is Fusion's own test
+        for "can this face be threaded" - a thread needs a cylindrical face, and the
+        diameter is what its designation has to match.
+        """
+        cylinder = adsk.core.Cylinder.cast(face.geometry)
+        if cylinder is None:
+            raise RuntimeError(
+                "That face is not cylindrical, so no thread can be cut on it."
+            )
+        return float(cylinder.radius) * 2.0
+
+    @staticmethod
+    def _named_thread_diameter(info, is_internal: bool) -> float:
+        """What the designation says the body's diameter should be, in centimetres.
+
+        External threads are cut on the major diameter; an internal thread's hole is
+        tapped to the minor one.  Read from the ``ThreadInfo`` Fusion built from the
+        designation, so no table of thread sizes lives here.
+        """
+        return float(info.minorDiameter if is_internal else info.majorDiameter)
+
+    @staticmethod
+    def _thread_fits(face_diameter: float, thread_diameter: float) -> bool:
+        """Whether Fusion would leave the body alone.
+
+        Two percent, measured: a Ø6.00 mm shaft against M6x1's 5.884 mm major
+        diameter is 1.9% and Fusion trims it by 0.1 mm as a matter of course, while a
+        Ø20 mm shaft against M6 is 240% and Fusion replaces the geometry outright.
+        """
+        return abs(face_diameter - thread_diameter) <= 0.02 * thread_diameter
+
+    @staticmethod
+    def _recommended_thread(
+        face_diameter: float, is_internal: bool, thread_type: str
+    ) -> str:
+        """Fusion's own answer to "what thread belongs on this diameter?".
+
+        ``ThreadDataQuery.create`` is the current accessor - ``threadFeatures.
+        threadDataQuery`` is retired - and ``recommendThreadData`` returns
+        ``(ok, designation, class)`` with the out-parameters folded into the tuple.
+        """
+        query = adsk.fusion.ThreadDataQuery.create(False)
+        recommended = query.recommendThreadData(
+            face_diameter, is_internal, thread_type
+        )
+        if not recommended[0]:
+            return "No standard thread matches that diameter"
+        return f"{recommended[1]} ({recommended[2]}) matches that diameter"
 
     def draft_faces(
         self,
@@ -4607,6 +4673,11 @@ class CommandHandler:
         # The shipped signature is createInput(profile, distance, angle, type) and
         # it takes a Profile, not an edge: the two-argument edge form this used to
         # call raised "Wrong number or type of arguments" on every invocation.
+        # Measured on 2706: a sketch profile does NOT work here - a closed rectangle
+        # answers "3 : face profiles not supported" and a bare sketch line "3 :
+        # invalid profile for Ruled Surface Feature", despite the SDK's wording
+        # ("defines the sketch geometry or edges").  A sheet body's free edge is the
+        # only source.
         profile = root.createBRepEdgeProfile(edge, True)
         ruled_type = {
             "tangent": adsk.fusion.RuledSurfaceTypes.TangentRuledSurfaceType,

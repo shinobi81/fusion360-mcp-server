@@ -1065,6 +1065,12 @@ def _create_thread(p: dict) -> dict:
             else ("6H" if is_internal else "6g")
         ),
         "is_internal": is_internal,
+        # No face to measure here, so the size check cannot run; saying so is
+        # better than reporting two diameters nobody measured.
+        "note": (
+            "mock mode has no face to measure, so the thread/face size check the "
+            "add-in makes is skipped"
+        ),
     }
 
 

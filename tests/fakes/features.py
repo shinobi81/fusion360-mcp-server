@@ -126,6 +126,26 @@ class FakeInterference:
         return self.results
 
 
+#: ``(designation, is_internal) -> (major, minor)``, measured on Fusion 2706.
+#:
+#: Measured, not derived: an ISO formula gives the nominal profile, while Fusion
+#: reports the tolerance-band extremes, and they differ by *class* - 6g external and 6H
+#: internal are different numbers for the same designation (``M3x0.5`` is 2.927 mm
+#: major externally and 3.086 mm internally).  A single value per designation is wrong
+#: for half the calls, which is how the first version of this table shipped a 2.459 mm
+#: minor for M3x0.5 when Fusion says 2.529 mm.
+_THREAD_SIZES: dict[tuple[str, bool], tuple[float, float]] = {
+    ("M3x0.5", False): (0.2927, 0.2356),
+    ("M3x0.5", True): (0.3086, 0.2529),
+    ("M6x1", False): (0.5884, 0.4744),
+    ("M6x1", True): (0.6147, 0.5035),
+    ("M10x1.5", False): (0.985, 0.8141),
+    ("M10x1.5", True): (1.0198, 0.8526),
+    ("M20x2.5", False): (1.9791, 1.6938),
+    ("M20x2.5", True): (2.0293, 1.7519),
+}
+
+
 class FakeThreadInfo:
     """``adsk.fusion.ThreadInfo``: what a thread feature is actually built from.
 
@@ -146,12 +166,25 @@ class FakeThreadInfo:
         thread_class,
         is_right_handed,
     ):
+        if (designation, bool(is_internal)) not in _THREAD_SIZES:
+            # Fusion builds a ThreadInfo from its thread XML, so an unknown
+            # designation fails there; a fake that invented a diameter would let the
+            # size check pass for a thread that does not exist.
+            raise RuntimeError(f"{designation!r} is not a thread this fake models")
+        if thread_class is None:
+            # The real call refuses a null class ("invalid null reference in method
+            # ThreadInfo_create, argument 5"), so the fake does too rather than
+            # flattering a caller Fusion would reject.
+            raise RuntimeError("ThreadInfo.create needs a thread class, not None")
         self.isTapered = is_tapered
         self.isInternal = is_internal
         self.threadType = thread_type
         self.threadDesignation = designation
         self.threadClass = thread_class
         self.isRightHanded = is_right_handed
+        self.majorDiameter, self.minorDiameter = _THREAD_SIZES[
+            (designation, bool(is_internal))
+        ]
 
     @staticmethod
     def create(
@@ -188,6 +221,34 @@ class FakeThreadDataQuery:
     ]
     defaultMetricThreadType = "ISO Metric profile"
     defaultInchThreadType = "ANSI Unified Screw Threads"
+
+    @staticmethod
+    def create(is_tapered: bool = False) -> "FakeThreadDataQuery":
+        """``ThreadDataQuery.create(isTapered)`` - the current accessor.
+
+        ``threadFeatures.threadDataQuery`` is the retired one; Fusion's own docstring
+        says so, and the handler uses this.
+        """
+        return FakeThreadDataQuery()
+
+    def recommendThreadData(self, model_diameter, is_internal, thread_type):
+        """``(ok, designation, class)`` for the nearest standard thread.
+
+        Fusion returns the three through out-parameters, which SWIG folds into a
+        tuple - measured on 2706: ``(True, 'M20x2.5', '6g')`` for a 2 cm shaft.
+        """
+        candidates = {
+            name: size
+            for (name, internal), size in _THREAD_SIZES.items()
+            if internal == bool(is_internal)
+        }
+        # The diameter a thread must match is the major one externally and the minor
+        # one in a tapped hole, the same rule the handler applies.
+        index = 1 if is_internal else 0
+        nearest = min(
+            candidates, key=lambda name: abs(candidates[name][index] - model_diameter)
+        )
+        return True, nearest, "6H" if is_internal else "6g"
 
 
 class FakeThreadFeatureInput:
@@ -312,6 +373,13 @@ class FakeExportOptions:
     write is refused here for the same reason, so "set the refinement for both
     kinds" fails with the error Fusion gives rather than a value mismatch.
     """
+
+    # Declared for the type checker: the ``__setattr__`` below writes through
+    # ``object.__setattr__``, which pyright cannot see as initialisation.
+    kind: str
+    entity: object
+    path: str
+    meshRefinement: object | None
 
     def __init__(self, kind: str, entity, path: str):
         object.__setattr__(self, "kind", kind)

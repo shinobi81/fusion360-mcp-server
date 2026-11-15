@@ -86,7 +86,7 @@ at all is refused instead — `INVALID_INPUT`, where Fusion's own message is
 | `create_hole`         | Hole feature on a body face           |
 | `rectangular_pattern` | Pattern in rows and columns           |
 | `circular_pattern`    | Pattern around an axis                |
-| `create_thread`       | Add threads (cosmetic or modeled). Fusion resizes the cylinder/hole to the designation's diameter, so `M6x1` on a 20 mm shaft leaves a 6 mm one. `thread_class` defaults to 6H internal / 6g external (ISO 965) |
+| `create_thread`       | Add threads (cosmetic or modeled). **Refuses** a designation that does not match the face - Fusion would resize the body to it (an `M6x1` thread on a 20 mm shaft leaves a 5.88 mm one) - and names the thread that fits; `allow_resize=true` accepts the resize. `thread_class` defaults to 6H internal / 6g external (ISO 965) |
 | `draft_faces`         | Draft/taper faces for mold release    |
 | `split_body`          | Split a body using a plane            |
 | `split_face`          | Split faces of a body                 |
