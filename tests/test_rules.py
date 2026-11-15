@@ -159,6 +159,34 @@ def test_the_point_shape_refusal_names_the_count_it_found():
     )
 
 
+@pytest.mark.parametrize(
+    ("params", "message"),
+    [
+        ({"edge_indices": 3}, "edge_indices needs a list of whole numbers, got 3"),
+        (
+            {"edge_points": 3},
+            "edge_points needs a list of three-number points, got 3",
+        ),
+    ],
+)
+def test_a_selector_that_is_not_a_list_is_refused_with_its_own_hints(params, message):
+    """Pinned as literal text plus the hints, not just the kind.
+
+    Iterating one raised ``TypeError`` out of the validator: the add-in reported
+    ``UNKNOWN`` with no hints, and mock mode raised through ``mock_command``.  The
+    hints rule matters as much as the refusal - without it the fallback answered
+    with the first ``INVALID_INPUT`` entry, which advises about inf and nan.
+    """
+    refusal = rules.edge_selector_refusal(params)
+
+    assert refusal is not None
+    assert (refusal.error_kind, str(refusal)) == ("INVALID_INPUT", message)
+    assert addon_hints.classify(refusal)[1] == [
+        "An edge selector is a list; nothing was written.",
+        "Pass edge_indices as whole numbers, or edge_points as [x, y, z] triples.",
+    ]
+
+
 def test_the_mirror_carries_the_same_validation():
     """``--check`` pins the mirror's bytes; this pins the behaviour mock mode imports.
 

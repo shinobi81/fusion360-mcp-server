@@ -214,6 +214,18 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # A selector that is not a list used to raise ``TypeError`` out of the
+        # validator: the add-in answered UNKNOWN with no hints and mock mode raised
+        # through ``mock_command``.  Without a rule the shape check fell back to the
+        # first ``INVALID_INPUT`` entry and advised about inf and nan.
+        r"edge_indices needs a list|edge_points needs a list",
+        "INVALID_INPUT",
+        [
+            "An edge selector is a list; nothing was written.",
+            "Pass edge_indices as whole numbers, or edge_points as [x, y, z] triples.",
+        ],
+    ),
+    (
         # The face selectors mean "the faces lying in the top/bottom PLANE", so a
         # body whose top is a curved surface has none there.
         r"no faces matched",
