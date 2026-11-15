@@ -443,6 +443,14 @@ class CommandHandler:
             raise RuntimeError("No sketch available — create one first")
         return root.sketches.item(root.sketches.count - 1)
 
+    def _sketch(self, name: str | None = None):
+        """The sketch called ``name``, or the most recent one when it is falsy.
+
+        Seventeen handlers resolve the same way; the truthiness test is load-bearing
+        (an empty string means "the last one", not a sketch called "").
+        """
+        return self._sketch_by_name(name) if name else self._last_sketch()
+
     def _sketch_by_name(self, name: str):
         root = self._root()
         for i in range(root.sketches.count):
@@ -480,6 +488,16 @@ class CommandHandler:
                 if b.name == name:
                     return b
         raise RuntimeError(f"Body '{name}' not found")
+
+    def _body_or_index(self, body_name: str | None, body_index: int):
+        """The body named, or the one at ``body_index`` when no name was given.
+
+        Six selectors take ``body_name``/``body_index`` in preference order; the
+        truthiness test keeps "" meaning "use the index".
+        """
+        if body_name:
+            return self._body_by_name(body_name)
+        return self._root().bRepBodies.item(body_index)
 
     def _component_by_name(self, name: str):
         root = self._root()
@@ -633,22 +651,33 @@ class CommandHandler:
             raise RuntimeError(f"No edges matched selection '{selection}'")
         return coll
 
-    def _faces_in_extreme_plane(self, body, selection: str) -> list:
-        """The faces lying in the highest (``top``) or lowest (``bottom``) plane.
+    @classmethod
+    def _in_extreme_plane(cls, entities, selection: str) -> list:
+        """The entities lying in the highest (``top``) or lowest (``bottom``) plane.
 
-        The same rule as ``_edges_in_extreme_plane``, and it exists for the same
-        measured reason: on Fusion 2706, `shell(face_selection="top")` on a plain
+        Faces and edges are selected by the same rule, and it exists for a measured
+        reason.  On Fusion 2706, ``shell(face_selection="top")`` on a plain
         10 x 10 x 2 box removed **five** faces - the top plus all four side walls,
         whose boxes reach z=2 - because the threshold came from the body's box and
-        any face that merely *reaches* it matched. "Top" now means the faces lying
-        in the top plane, which is the one face of a box.
+        any face that merely *reaches* it matched.  "Top" now means the entities
+        lying in the top plane, which is the one face of a box.
 
-        Only a face that already lies in a plane can name one, so a body whose top
-        is a curved surface (a dome on a plate) still resolves to its flat top
-        ring rather than refusing.
+        The plane is measured from the entities, not from the body's box: a plate
+        with a spheroid joined on top spans z -2..4 while every one of its fourteen
+        edges lies at z=0 or z=1, so a body-extreme threshold matched nothing.
+
+        An entity belongs to the plane only when its whole extent does.  An edge's
+        ``pointOnEdge`` is one point on it and a closed edge's two vertices are the
+        same point, so a sample cannot say where an edge *lies*; and taking the
+        highest z anything reaches would let one raking edge invent a plane that
+        holds nothing.
+
+        Two planes closer together than ``_EDGE_PLANE_EPSILON`` are one plane, so a
+        body thinner than 10 microns gets everything from both ``top`` and
+        ``bottom``.  A body that thin has no top to tell from its bottom.
         """
-        eps = self._EDGE_PLANE_EPSILON
-        boxes = [(face, face.boundingBox) for face in body.faces]
+        eps = cls._EDGE_PLANE_EPSILON
+        boxes = [(entity, entity.boundingBox) for entity in entities]
         flat = [box for _, box in boxes if box.maxPoint.z - box.minPoint.z <= eps]
         if not flat:
             return []
@@ -657,10 +686,19 @@ class CommandHandler:
         else:
             plane = min(box.minPoint.z for box in flat)
         return [
-            face
-            for face, box in boxes
+            entity
+            for entity, box in boxes
             if box.minPoint.z >= plane - eps and box.maxPoint.z <= plane + eps
         ]
+
+    def _faces_in_extreme_plane(self, body, selection: str) -> list:
+        """The faces in the top/bottom plane - see ``_in_extreme_plane``.
+
+        Only a face that already lies in a plane can name one, so a body whose top
+        is a curved surface (a dome on a plate) still resolves to its flat top ring
+        rather than refusing.
+        """
+        return self._in_extreme_plane(body.faces, selection)
 
     def _roundable_edges(self, body) -> list:
         """The body's edges minus the degenerate ones, which cannot be rounded.
@@ -679,43 +717,12 @@ class CommandHandler:
         return [edge for edge in body.edges if not edge.isDegenerate]
 
     def _edges_in_extreme_plane(self, body, selection: str) -> list:
-        """The edges lying in the highest (``top``) or lowest (``bottom``) plane.
+        """The edges in the top/bottom plane - see ``_in_extreme_plane``.
 
-        The plane is measured from the body's *edges*, not from the body's box.
-        Measured live on Fusion 2706: a plate (z 0..1) with a spheroid joined on
-        top spanned z -2..4, every one of its fourteen edges lay at z=0 or z=1,
-        and a body-extreme threshold therefore matched nothing — both selectors
-        refused a body whose top edges are perfectly ordinary.
-
-        Only an edge that already lies *in* a plane can name one.  Taking the
-        highest z any edge reaches instead would let one raking edge invent a
-        plane that holds nothing (a tilted or curved edge's box reaches its peak
-        at a single point), and a body with a perfectly flat top ring below it
-        would then refuse.
-
-        An edge belongs to the plane only when its whole extent does.  An edge's
-        ``pointOnEdge`` is one point on it and a closed edge's two vertices are
-        the same point, so a sample cannot say where an edge *lies*.
-
-        Two planes closer together than ``_EDGE_PLANE_EPSILON`` are one plane, so
-        a body thinner than 10 µm gets every edge from both ``top`` and
-        ``bottom``.  The old threshold was the same 1e-3, so that is unchanged —
-        a body that thin has no top to tell from its bottom.
+        Measured from the *roundable* edges: curved edges are excluded upstream, so
+        a fillet cannot name a plane its own box only grazes.
         """
-        eps = self._EDGE_PLANE_EPSILON
-        boxes = [(edge, edge.boundingBox) for edge in self._roundable_edges(body)]
-        flat = [box for _, box in boxes if box.maxPoint.z - box.minPoint.z <= eps]
-        if not flat:
-            return []
-        if selection == "top":
-            plane = max(box.maxPoint.z for box in flat)
-        else:
-            plane = min(box.minPoint.z for box in flat)
-        return [
-            edge
-            for edge, box in boxes
-            if box.minPoint.z >= plane - eps and box.maxPoint.z <= plane + eps
-        ]
+        return self._in_extreme_plane(self._roundable_edges(body), selection)
 
     def _edges_by_index(self, body, indices) -> list:
         """The edges at *indices*, de-duplicated and range-checked.
@@ -793,9 +800,7 @@ class CommandHandler:
                     t = max(0.0, min(1.0, t))
                 cx, cy, cz = ax + dx * t, ay + dy * t, az + dz * t
                 return (
-                    (target.x - cx) ** 2
-                    + (target.y - cy) ** 2
-                    + (target.z - cz) ** 2
+                    (target.x - cx) ** 2 + (target.y - cy) ** 2 + (target.z - cz) ** 2
                 ) ** 0.5
 
             return min(
@@ -1007,12 +1012,7 @@ class CommandHandler:
         flood a caller's context, but a caller that reads ``count`` as "how many
         I got back" would plan against a shorter list than the body has.
         """
-        root = self._root()
-        body = (
-            self._body_by_name(body_name)
-            if body_name
-            else root.bRepBodies.item(body_index)
-        )
+        body = self._body_or_index(body_name, body_index)
         count = body.edges.count
         limit = max(1, int(limit))
 
@@ -1190,9 +1190,7 @@ class CommandHandler:
         origin_z: float = 0,
         sketch_name: str | None = None,
     ):
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
         frame = self._sketch_frame(sketch)
         p1 = self._plane_point(origin_x, origin_y)
         p2 = self._plane_point(origin_x + width, origin_y + height)
@@ -1215,9 +1213,7 @@ class CommandHandler:
         center_z: float = 0,
         sketch_name: str | None = None,
     ):
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
         frame = self._sketch_frame(sketch)
         c = self._plane_point(center_x, center_y)
         sketch.sketchCurves.sketchCircles.addByCenterRadius(c, radius)
@@ -1241,9 +1237,7 @@ class CommandHandler:
         end_z: float = 0,
         sketch_name: str | None = None,
     ):
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
         frame = self._sketch_frame(sketch)
         sp = self._plane_point(start_x, start_y)
         ep = self._plane_point(end_x, end_y)
@@ -1271,9 +1265,7 @@ class CommandHandler:
         start_z: float = 0,
         sketch_name: str | None = None,
     ):
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
         frame = self._sketch_frame(sketch)
         center = self._plane_point(center_x, center_y)
         start = self._plane_point(start_x, start_y)
@@ -1296,9 +1288,7 @@ class CommandHandler:
         degree: int = 3,
         sketch_name: str | None = None,
     ):
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
         frame = self._sketch_frame(sketch)
         pts = adsk.core.ObjectCollection.create()
         for p in points:
@@ -1328,9 +1318,7 @@ class CommandHandler:
         center_z: float = 0,
         sketch_name: str | None = None,
     ):
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
         frame = self._sketch_frame(sketch)
         # Draw inscribed polygon. Deferring the solve matters here because Fusion
         # re-solves the whole sketch after every entity insert.
@@ -1386,9 +1374,7 @@ class CommandHandler:
         if axis not in ("x", "y"):
             raise RuntimeError(f"Unknown axis: {axis} - use x or y")
 
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
         previous_deferred = sketch.isComputeDeferred
         sketch.isComputeDeferred = True
         try:
@@ -1495,9 +1481,7 @@ class CommandHandler:
         symmetry_line: int | None = None,
         sketch_name: str | None = None,
     ):
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
         constraints = sketch.geometricConstraints
         curves = list(sketch.sketchCurves)
 
@@ -1583,9 +1567,7 @@ class CommandHandler:
         result_option: 1 = thorough (default), 2 = fast,
         3 = may move geometry within tolerance.
         """
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
 
         option_map = {
             1: adsk.fusion.AutoConstrainResultTypes.Option1AutoConstrainResultType,
@@ -1640,9 +1622,7 @@ class CommandHandler:
         entity_two: int | None = None,
         sketch_name: str | None = None,
     ):
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
         dims = sketch.sketchDimensions
         curves = list(sketch.sketchCurves)
 
@@ -1740,9 +1720,7 @@ class CommandHandler:
         direction_y: float = 0,
         sketch_name: str | None = None,
     ):
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
         curves = list(sketch.sketchCurves)
         curve = self._curve_by_index(sketch, curves, curve_index, "curve_index")
         direction_pt = adsk.core.Point3D.create(direction_x, direction_y, 0)
@@ -1759,9 +1737,7 @@ class CommandHandler:
         point_y: float,
         sketch_name: str | None = None,
     ):
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
         curves = list(sketch.sketchCurves)
         curve = self._curve_by_index(sketch, curves, curve_index, "curve_index")
         point = adsk.core.Point3D.create(point_x, point_y, 0)
@@ -1775,9 +1751,7 @@ class CommandHandler:
         point_y: float,
         sketch_name: str | None = None,
     ):
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
         curves = list(sketch.sketchCurves)
         curve = self._curve_by_index(sketch, curves, curve_index, "curve_index")
         point = adsk.core.Point3D.create(point_x, point_y, 0)
@@ -1787,9 +1761,7 @@ class CommandHandler:
     def project_geometry(
         self, source_name: str, is_linked: bool = True, sketch_name: str | None = None
     ):
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
         body = self._body_by_name(source_name)
 
         projected = []
@@ -1826,9 +1798,7 @@ class CommandHandler:
         # and a caller sent looking for a body or a sketch would fix that and be
         # refused again.
         feature_operation = self._operation_type(operation)
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
         if sketch.profiles.count == 0:
             raise RuntimeError("No profiles in sketch")
         profile = sketch.profiles.item(profile_index)
@@ -1882,9 +1852,7 @@ class CommandHandler:
         root = self._root()
         # The operation first: a mistyped one invalidates everything after it.
         feature_operation = self._operation_type(operation)
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
         if sketch.profiles.count == 0:
             raise RuntimeError("No profiles in sketch")
         # Read the frame before anything is created, so a failure here cannot
@@ -2028,9 +1996,7 @@ class CommandHandler:
         root = self._root()
         # The operation first: a mistyped one invalidates everything after it.
         feature_operation = self._operation_type(operation)
-        sketch = (
-            self._sketch_by_name(sketch_name) if sketch_name else self._last_sketch()
-        )
+        sketch = self._sketch(sketch_name)
         path_sketch = self._sketch_by_name(path_sketch_name)
 
         if sketch.profiles.count == 0:
@@ -2107,11 +2073,7 @@ class CommandHandler:
         edge_tolerance: float = 0.1,
     ):
         root = self._root()
-        body = (
-            self._body_by_name(body_name)
-            if body_name
-            else root.bRepBodies.item(body_index)
-        )
+        body = self._body_or_index(body_name, body_index)
         edges = self._select_edges(
             body,
             edge_selection,
@@ -2139,11 +2101,7 @@ class CommandHandler:
         edge_tolerance: float = 0.1,
     ):
         root = self._root()
-        body = (
-            self._body_by_name(body_name)
-            if body_name
-            else root.bRepBodies.item(body_index)
-        )
+        body = self._body_or_index(body_name, body_index)
         edges = self._select_edges(
             body,
             edge_selection,
@@ -2195,11 +2153,7 @@ class CommandHandler:
             )
 
         root = self._root()
-        body = (
-            self._body_by_name(body_name)
-            if body_name
-            else root.bRepBodies.item(body_index)
-        )
+        body = self._body_or_index(body_name, body_index)
 
         if face_selection not in ("top", "bottom"):
             raise RuntimeError(
@@ -2237,11 +2191,7 @@ class CommandHandler:
         self, mirror_plane: str, body_name: str | None = None, body_index: int = 0
     ):
         root = self._root()
-        body = (
-            self._body_by_name(body_name)
-            if body_name
-            else root.bRepBodies.item(body_index)
-        )
+        body = self._body_or_index(body_name, body_index)
 
         entities = adsk.core.ObjectCollection.create()
         entities.add(body)
@@ -2262,11 +2212,7 @@ class CommandHandler:
         center_y: float = 0,
     ):
         root = self._root()
-        body = (
-            self._body_by_name(body_name)
-            if body_name
-            else root.bRepBodies.item(body_index)
-        )
+        body = self._body_or_index(body_name, body_index)
 
         # Find the target face.
         # Comparing bounding boxes is not enough: the side faces of a box reach
@@ -2548,25 +2494,27 @@ class CommandHandler:
         feat = scales.add(inp)
         return {"feature_name": feat.name, "scale": scale}
 
-    def suppress_feature(self, feature_name: str):
+    def _set_suppressed(self, feature_name: str, suppressed: bool) -> dict:
+        """Flip one timeline entry's ``isSuppressed``, by feature name.
+
+        ``hasattr`` is not enough on its own: a direct design has no timeline at
+        all, and an item can wrap no entity, which is why both are tested.
+        """
         design = self._design()
         for i in range(design.timeline.count):
             item = design.timeline.item(i)
             has_entity = hasattr(item, "entity") and item.entity
             if has_entity and item.entity.name == feature_name:
-                item.isSuppressed = True
-                return {"suppressed": True, "feature": feature_name}
+                item.isSuppressed = suppressed
+                key = "suppressed" if suppressed else "unsuppressed"
+                return {key: True, "feature": feature_name}
         raise RuntimeError(f"Feature '{feature_name}' not found in timeline")
 
+    def suppress_feature(self, feature_name: str):
+        return self._set_suppressed(feature_name, True)
+
     def unsuppress_feature(self, feature_name: str):
-        design = self._design()
-        for i in range(design.timeline.count):
-            item = design.timeline.item(i)
-            has_entity = hasattr(item, "entity") and item.entity
-            if has_entity and item.entity.name == feature_name:
-                item.isSuppressed = False
-                return {"unsuppressed": True, "feature": feature_name}
-        raise RuntimeError(f"Feature '{feature_name}' not found in timeline")
+        return self._set_suppressed(feature_name, False)
 
     # ------------------------------------------------------------------
     # Body Operations
@@ -2766,7 +2714,6 @@ class CommandHandler:
             output_dir: destination folder
                 (default: ~/Desktop/<doc>_views_<timestamp>).
         """
-        import base64
         import html
         import json as _json
 
@@ -3114,39 +3061,8 @@ class CommandHandler:
         _sweep(root.constructionAxes, "construction_axis", "construction")
         _sweep(root.constructionPoints, "construction_point", "construction")
 
-        for i in range(root.bRepBodies.count - 1, -1, -1):
-            name = "?"
-            try:
-                body = root.bRepBodies.item(i)
-                name = body.name
-                body.deleteMe()
-                deleted["bodies"] += 1
-            except Exception as exc:
-                errors.append(
-                    {
-                        "stage": "body",
-                        "index": i,
-                        "name": name,
-                        "error": f"{type(exc).__name__}: {exc}",
-                    }
-                )
-
-        for i in range(root.sketches.count - 1, -1, -1):
-            name = "?"
-            try:
-                sk = root.sketches.item(i)
-                name = sk.name
-                sk.deleteMe()
-                deleted["sketches"] += 1
-            except Exception as exc:
-                errors.append(
-                    {
-                        "stage": "sketch",
-                        "index": i,
-                        "name": name,
-                        "error": f"{type(exc).__name__}: {exc}",
-                    }
-                )
+        _sweep(root.bRepBodies, "body", "bodies")
+        _sweep(root.sketches, "sketch", "sketches")
 
         remaining = {
             "bodies": root.bRepBodies.count,
@@ -3308,6 +3224,20 @@ class CommandHandler:
     # Direct Primitives (via TemporaryBRepManager)
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _add_base_body(root, body) -> None:
+        """Persist a temporary BRep body as a base feature's body.
+
+        Fusion's documented sequence is add() the feature, startEdit(), add the
+        body to it, finishEdit() - a body added outside the edit state is refused.
+        The four primitives all came from ``TemporaryBRepManager`` and all need
+        exactly this.
+        """
+        base_feat = root.features.baseFeatures.add()
+        base_feat.startEdit()
+        root.bRepBodies.add(body, base_feat)
+        base_feat.finishEdit()
+
     def create_box(
         self,
         length: float,
@@ -3334,10 +3264,7 @@ class CommandHandler:
         )
 
         box_body = temp_brep.createBox(orient)
-        base_feat = root.features.baseFeatures.add()
-        base_feat.startEdit()
-        root.bRepBodies.add(box_body, base_feat)
-        base_feat.finishEdit()
+        self._add_base_body(root, box_body)
 
         return {"created": True, "length": length, "width": width, "height": height}
 
@@ -3481,10 +3408,7 @@ class CommandHandler:
 
         cyl_body = temp_brep.createCylinderOrCone(base_pt, radius, top_pt, radius)
 
-        base_feat = root.features.baseFeatures.add()
-        base_feat.startEdit()
-        root.bRepBodies.add(cyl_body, base_feat)
-        base_feat.finishEdit()
+        self._add_base_body(root, cyl_body)
 
         return {"created": True, "radius": radius, "height": height}
 
@@ -3501,10 +3425,7 @@ class CommandHandler:
         center = adsk.core.Point3D.create(center_x, center_y, center_z)
         sphere_body = temp_brep.createSphere(center, radius)
 
-        base_feat = root.features.baseFeatures.add()
-        base_feat.startEdit()
-        root.bRepBodies.add(sphere_body, base_feat)
-        base_feat.finishEdit()
+        self._add_base_body(root, sphere_body)
 
         return {"created": True, "radius": radius}
 
@@ -3528,10 +3449,7 @@ class CommandHandler:
             center, axis_vector, major_radius, minor_radius
         )
 
-        base_feat = root.features.baseFeatures.add()
-        base_feat.startEdit()
-        root.bRepBodies.add(torus_body, base_feat)
-        base_feat.finishEdit()
+        self._add_base_body(root, torus_body)
 
         return {
             "created": True,
@@ -3820,9 +3738,7 @@ class CommandHandler:
         # "2 : InternalValidationError : face".
         origin = geometries[0].origin
         primary = geometries[0].primaryAxisVector
-        axis_world = self._apply_joint_motion(
-            inp, joint_type, axis, second_axis, frame
-        )
+        axis_world = self._apply_joint_motion(inp, joint_type, axis, second_axis, frame)
 
         joint = joints.add(inp)
         self._design().computeAll()
@@ -5276,9 +5192,7 @@ class CommandHandler:
 
         last_expr_value = None
         last_expr = (
-            tree.body[-1]
-            if tree.body and isinstance(tree.body[-1], ast.Expr)
-            else None
+            tree.body[-1] if tree.body and isinstance(tree.body[-1], ast.Expr) else None
         )
         if last_expr is not None:
             tree.body.pop()
