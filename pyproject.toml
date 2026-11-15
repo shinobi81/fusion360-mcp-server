@@ -23,7 +23,7 @@ dependencies = [
     # Floors are the first patched releases for known advisories: a tag
     # install resolves from these, not from uv.lock.
     "anyio>=4.14.2",
-    "click>=8.1",
+    "click>=8.5.1",
     "mcp>=1.27.2,<2",
 ]
 
@@ -95,8 +95,8 @@ ignore_missing_imports = true
 dev = [
     "pytest>=9.0.3",
     "pytest-cov>=6.0",
-    "hypothesis>=6.100",
-    "ruff>=0.6",
+    "hypothesis>=6.170.15",
+    "ruff>=0.17.4",
     "mypy>=2.4.1",
 ]
 # Not in `dev`: atheris publishes no Windows wheel and `ci.yml` syncs `--dev` on three
