@@ -18,8 +18,8 @@
 Delete what does not apply — these are the places a change quietly breaks callers.
 
 - [ ] Tool added/renamed → `tools.py`, `mock.py`, annotations, `tests/test_tools.py`
-- [ ] New failure mode → `hints.py` in **both** mirrors
-      (`addon/server/` and `src/fusion360_mcp/`)
+- [ ] New failure mode → a rule in `addon/server/hints.py`, then
+      `uv run python scripts/sync_mirrors.py` (the `src/fusion360_mcp/` copy is generated)
 - [ ] Response shape changed → `AGENTS.md` and `CHANGELOG.md`
 - [ ] Design-type or undo behaviour touched → note the parametric **and**
       direct paths

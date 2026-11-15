@@ -39,7 +39,7 @@ explains most of the system's design:
 | `src/fusion360_mcp/server.py` | MCP surface: stdio transport, tools, resources, prompts, result formatting |
 | `src/fusion360_mcp/connection.py` | TCP client, newline-delimited JSON, per-command timeouts |
 | `src/fusion360_mcp/tools.py` | tool schemas — the contract agents read |
-| `src/fusion360_mcp/hints.py` | error-kind table (mirror of the add-in's, kept in sync by a test) |
+| `src/fusion360_mcp/hints.py` | error-kind table (generated from the add-in's by `scripts/sync_mirrors.py`, guarded by a test) |
 | `src/fusion360_mcp/mock.py` | `--mode mock` responses, so the envelope is testable without Fusion |
 | `addon/server/socket_server.py` | listener, per-client threads, framing, malformed-input handling |
 | `addon/server/event_bridge.py` | CustomEvent bridge and the work queue |
@@ -58,9 +58,10 @@ Failures are data, not exceptions:
 ```
 
 `error_kind` comes from `hints.py`, matched by regex against the exception text, in
-order — first match wins. Adding a failure mode means adding a rule in both mirrors plus
-a test; several kinds exist purely so an agent can branch instead of parsing prose
-(`TIMEOUT`, `NOT_ENTITLED`, `DESIGN_TYPE_MISMATCH`).
+order — first match wins. Adding a failure mode means adding a rule to
+`addon/server/hints.py` and running `uv run python scripts/sync_mirrors.py` to regenerate
+`src/fusion360_mcp/hints.py`, plus a test; several kinds exist purely so an agent can
+branch instead of parsing prose (`TIMEOUT`, `NOT_ENTITLED`, `DESIGN_TYPE_MISMATCH`).
 
 Mutations additionally carry `deltas` (body count, mass, bbox before/after) so a no-op
 is visible without a render.

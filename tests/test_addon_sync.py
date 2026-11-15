@@ -3,7 +3,9 @@
 The Fusion add-in is installed into Fusion's AddIns folder and cannot
 import from this package, so a few tables are duplicated:
 
-* ``addon/server/hints.py:_RULES``   ↔  ``src/fusion360_mcp/hints.py:_RULES``
+* ``src/fusion360_mcp/hints.py`` is generated from ``addon/server/hints.py``
+  by ``scripts/sync_mirrors.py``; ``test_the_hints_mirror_is_generated`` runs it
+  with ``--check``.
 * ``CommandHandler._MUTATION_COMMANDS``  ↔  ``mock.py:_MUTATION_MOCKS``
 
 If they drift, agents see different error envelopes / delta payloads
@@ -15,18 +17,11 @@ other.
 from __future__ import annotations
 
 import ast
-import importlib.util
+import subprocess
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-
-
-def _load_module_by_path(path: Path, name: str):
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None, f"cannot load {path}"
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
 
 
 def _extract_class_attr_set(path: Path, class_name: str, attr: str) -> set[str]:
@@ -63,17 +58,14 @@ def _extract_class_attr_set(path: Path, class_name: str, attr: str) -> set[str]:
     raise AssertionError(f"{class_name}.{attr} not found in {path}")
 
 
-def test_hints_rules_in_sync():
-    """addon and src copies of hints._RULES must be identical."""
-    addon_hints = _load_module_by_path(
-        REPO_ROOT / "addon" / "server" / "hints.py", "_addon_hints"
-    )
-    src_hints = _load_module_by_path(
-        REPO_ROOT / "src" / "fusion360_mcp" / "hints.py", "_src_hints"
-    )
-    assert addon_hints._RULES == src_hints._RULES, (
-        "addon/server/hints.py and src/fusion360_mcp/hints.py have drifted. "
-        "Update both files in lockstep."
+def test_the_hints_mirror_is_generated():
+    mirror_path = REPO_ROOT / "src" / "fusion360_mcp" / "hints.py"
+    mirror = mirror_path.read_text(encoding="utf-8")
+    assert "GENERATED, do not edit" in mirror.split("\n\n")[0]
+    subprocess.run(
+        [sys.executable, "scripts/sync_mirrors.py", "--check"],
+        cwd=REPO_ROOT,
+        check=True,
     )
 
 

@@ -4,9 +4,11 @@ Error classification for Fusion API failures.
 Maps exception messages from the Fusion API (and our handler code) to a
 stable ``error_kind`` tag plus a small list of contextual repair hints.
 
-Keep this file in sync with ``src/fusion360_mcp/hints.py`` — the addon
-is installed into Fusion's AddIns folder at deploy time and cannot import
-from the MCP server package.
+This file is canonical — the addon is installed into Fusion's AddIns folder
+at deploy time and cannot import from the MCP server package, so
+``src/fusion360_mcp/hints.py`` is generated from it.  Edit here, then run
+``uv run python scripts/sync_mirrors.py``; a hand edit in the ``src`` copy is
+overwritten.
 """
 
 import re

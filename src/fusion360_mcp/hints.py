@@ -1,9 +1,9 @@
-"""
-Error classification for Fusion API failures (mirror of addon copy).
+"""Error classification for Fusion API failures — GENERATED, do not edit.
 
-This module is used in mock mode and in tests.  The canonical table lives
-in ``addon/server/hints.py`` because the addon is installed into Fusion's
-AddIns folder and cannot import from this package.  Keep them in sync.
+Rendered by ``scripts/sync_mirrors.py`` from ``addon/server/hints.py``: the
+add-in is installed into Fusion's AddIns folder and cannot import this
+package, so its copy is canonical.  Edit that file and run
+``uv run python scripts/sync_mirrors.py``; hand edits here are overwritten.
 """
 
 import re

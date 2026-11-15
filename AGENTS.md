@@ -92,7 +92,8 @@ The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
 - **All lengths are centimetres** — Fusion's internal unit. Not millimetres.
 - Wire format is newline-delimited JSON over TCP; `ping` never touches the Fusion API.
 - Errors are returned as data (`ok: false`, `error_kind`, `hints`), not raised across the
-  wire. New failure modes get a rule in `hints.py` — in **both** mirrors.
+  wire. New failure modes get a rule in `addon/server/hints.py` — the canonical table —
+  then `uv run python scripts/sync_mirrors.py` regenerates `src/fusion360_mcp/hints.py`.
 - Every tool has a mock handler, so `--mode mock` works without Fusion.
 
 ## Boundaries

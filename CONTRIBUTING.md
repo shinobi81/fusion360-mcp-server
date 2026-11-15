@@ -70,8 +70,10 @@ Guidelines that actually get followed here:
 - **Keep the mock in step.** Every tool has a handler in `src/fusion360_mcp/mock.py`;
   `tests/test_addon_sync.py` fails if a command exists in one place but not the other.
 - **Errors are data.** Return `{"ok": false, "error_kind": ..., "hints": [...]}`, don't
-  raise through the bridge. New failure modes get a rule in `addon/server/hints.py`
-  **and** `src/fusion360_mcp/hints.py` — they are mirrors, and a test enforces that.
+  raise through the bridge. New failure modes get a rule in `addon/server/hints.py` — the
+  canonical table, since the add-in cannot import this package — then
+  `uv run python scripts/sync_mirrors.py` regenerates `src/fusion360_mcp/hints.py`.
+  `tests/test_addon_sync.py` fails while the generated copy is stale.
 - **Units are centimetres.** Fusion's internal unit. Not millimetres.
 
 ## Commit messages
