@@ -11,7 +11,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from .hints import Refusal
+# ``_hints.Refusal``, not ``from .hints import Refusal``: the add-in reloads these
+# modules in place, and a by-name import would keep the class object that was
+# imported first.  ``hints.classify`` tests ``isinstance(exc, Refusal)`` against the
+# fresh class, so every refusal built here would fall back to the regex table - and
+# that table answers the same today, so nothing would report the drift.
+from . import hints as _hints
 
 #: The four edge selectors ``fillet`` and ``chamfer`` accept.  ``tools.py`` advertises
 #: this tuple as the schema enum and refuses nothing itself, so the validator owns the
@@ -19,7 +24,7 @@ from .hints import Refusal
 EDGE_SELECTIONS = ("all", "top", "bottom", "vertical")
 
 
-def edge_selector_refusal(params: Mapping[str, Any]) -> Refusal | None:
+def edge_selector_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal an edge selector's parameters earn, or None when they are usable.
 
     ``params`` carries ``edge_selection``, ``edge_indices`` and ``edge_points`` as the
@@ -37,32 +42,42 @@ def edge_selector_refusal(params: Mapping[str, Any]) -> Refusal | None:
     selection = params.get("edge_selection", "all")
 
     if indices is not None and points is not None:
-        return Refusal(
+        return _hints.Refusal(
             "INVALID_INPUT",
             "Pass only one of edge_indices and edge_points — they name the same "
             "edges two ways, so one would be ignored",
         )
     if (indices is not None or points is not None) and selection != "all":
-        return Refusal(
+        return _hints.Refusal(
             "INVALID_INPUT",
             f"edge_selection '{selection}' cannot be combined with edge_indices "
             "or edge_points — pass one selector, not two",
         )
+    if indices is not None and not isinstance(indices, (list, tuple)):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"edge_indices needs a list of whole numbers, got {indices!r}",
+        )
+    if points is not None and not isinstance(points, (list, tuple)):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"edge_points needs a list of three-number points, got {points!r}",
+        )
     if indices is not None and not indices:
-        return Refusal(
+        return _hints.Refusal(
             "INVALID_INPUT",
             "edge_indices was empty — name at least one edge, or omit it to use "
             "edge_selection",
         )
     if points is not None and not points:
-        return Refusal(
+        return _hints.Refusal(
             "INVALID_INPUT",
             "edge_points was empty — name at least one point, or omit it to use "
             "edge_selection",
         )
     for index in indices or []:
         if isinstance(index, bool) or not isinstance(index, int):
-            return Refusal(
+            return _hints.Refusal(
                 "INVALID_INPUT",
                 f"Edge index {index!r} is out of range — indices are whole numbers "
                 "from list_edges",
@@ -72,19 +87,21 @@ def edge_selector_refusal(params: Mapping[str, Any]) -> Refusal | None:
         # TypeError — so ``3`` must not read as "three coordinates".
         if not isinstance(point, (list, tuple)) or len(point) != 3:
             got = len(point) if isinstance(point, (list, tuple)) else repr(point)
-            return Refusal(
+            return _hints.Refusal(
                 "INVALID_INPUT",
                 f"Each edge point needs three coordinates, got {got}",
             )
     if selection not in EDGE_SELECTIONS:
-        return Refusal(
+        return _hints.Refusal(
             "INVALID_INPUT",
             f"Unknown edge_selection '{selection}' — use all/top/bottom/vertical",
         )
     return None
 
 
-def target_body_refusal(params: Mapping[str, Any], operation: str) -> Refusal | None:
+def target_body_refusal(
+    params: Mapping[str, Any], operation: str
+) -> _hints.Refusal | None:
     """The refusal a ``target_body`` beside a new body earns, or None.
 
     ``operation`` decides it, not the body: a new body is the feature's output, so
@@ -93,10 +110,26 @@ def target_body_refusal(params: Mapping[str, Any], operation: str) -> Refusal | 
     """
     if params.get("target_body") is None or operation != "new_body":
         return None
-    return Refusal(
+    return _hints.Refusal(
         "INVALID_INPUT",
         "Invalid input: target_body applies only to cut, join or intersect — "
         "new_body builds a body of its own, so there is nothing to target",
+    )
+
+
+def rule_type_refusal(rule_type: str) -> _hints.Refusal | None:
+    """The refusal a ``ruled_surface`` ``rule_type`` earns, or None when it is usable.
+
+    The schema's enum is advisory: a socket caller is not the schema, so an unknown
+    value reaches the handler, and a bare ``KeyError`` classified as ``UNKNOWN`` tells
+    it nothing.  Judged from the parameter alone, so mock mode refuses it too instead
+    of rehearsing a call Fusion rejects.
+    """
+    if rule_type in ("normal", "tangent"):
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        f"Unknown rule_type {rule_type!r} - use 'normal' or 'tangent'",
     )
 
 

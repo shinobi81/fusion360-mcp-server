@@ -15,6 +15,8 @@ import pytest
 from addon.server import hints as addon_hints
 from addon.server import rules
 from fusion360_mcp import _rules, mock
+from tests.fakes.bodies import body_with_edges
+from tests.fakes.design import FakeDesign
 
 #: Refused from the parameters alone, so no body is ever touched.
 BAD_EDGE_SELECTORS = [
@@ -30,6 +32,9 @@ BAD_EDGE_SELECTORS = [
     {"edge_points": [0]},
     # A bare 3 is not a point: it must not read as "three coordinates" either.
     {"edge_points": [3]},
+    # Neither selector is a list: iterating one used to raise ``TypeError``.
+    {"edge_indices": 3},
+    {"edge_points": 3},
 ]
 
 
@@ -91,6 +96,29 @@ def test_a_missing_target_body_is_not_a_refusal(bare_handler):
     assert bare_handler._resolve_target_body(None, "new_body") is None
     assert rules.target_body_refusal({}, "new_body") is None
     assert mock._target_body_error({"operation": "new_body"}) is None
+
+
+def test_the_handler_and_the_mock_refuse_an_unknown_rule_type_alike(bound_handler):
+    """The text one place owns, compared as the handler raises it and the mock sends it.
+
+    ``ruled_surface`` reaches the check only after it has a body and an edge, so the
+    body is a fake one: the refusal is still decided by the parameter alone.
+    """
+    body = body_with_edges("Body1", [((0.0, 0.0, 0.0), (0.0, 10.0, 0.0))])
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.ruled_surface("Body1", edge_index=0, rule_type="Tangent")
+
+    refused = mock._ruled_surface({"rule_type": "Tangent"})
+
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+
+
+@pytest.mark.parametrize("rule_type", ["normal", "tangent"])
+def test_a_usable_rule_type_is_refused_by_neither_side(rule_type):
+    assert rules.rule_type_refusal(rule_type) is None
 
 
 def test_the_sketch_plane_z_note_is_one_sentence_on_both_sides(bare_handler):

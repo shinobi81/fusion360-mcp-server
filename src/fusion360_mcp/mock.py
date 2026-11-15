@@ -17,7 +17,12 @@ import math
 from typing import Any
 
 from ._mutation_commands import MUTATION_COMMANDS
-from ._rules import edge_selector_refusal, sketch_plane_z_note, target_body_refusal
+from ._rules import (
+    edge_selector_refusal,
+    rule_type_refusal,
+    sketch_plane_z_note,
+    target_body_refusal,
+)
 from .hints import Refusal
 from .hints import classify as _classify
 
@@ -762,8 +767,8 @@ def _curve_index_error(p: dict, fields: tuple[str, ...]) -> dict | None:
     but a negative index, a fractional one and a boolean are invalid in *every*
     sketch, and the handler refuses them before it touches geometry.  Echoing one
     would teach a sequence Fusion answers differently: ``-1`` wraps to the last
-    curve, so the add-in handed one dimensioned a curve nobody named and reported
-    success (measured live).
+    curve, so a caller of ``-1`` dimensioned the last curve and got ``ok: true``
+    (measured live).
 
     Every mock handler that takes a curve index calls this - the six the add-in
     guards - so mock mode cannot answer ``ok`` for an index real mode refuses.
@@ -1245,10 +1250,9 @@ def _ruled_surface(p: dict) -> dict:
     # The handler refuses an unknown rule_type; a mock that echoed it with ok:true
     # would let an agent rehearse a call Fusion rejects (mock.py's own rule).
     rule_type = p.get("rule_type", "normal")
-    if rule_type not in ("normal", "tangent"):
-        return _mock_error(
-            f"Unknown rule_type {rule_type!r} - use 'normal' or 'tangent'"
-        )
+    refusal = rule_type_refusal(rule_type)
+    if refusal is not None:
+        return _refusal_error(refusal)
     return {
         "feature_name": "Ruled Surface1",
         "body_name": p.get("body_name", "Body1"),

@@ -4664,17 +4664,15 @@ class CommandHandler:
         # profile for Ruled Surface Feature", despite the SDK's wording ("defines the
         # sketch geometry or edges").  A sheet body's free edge is the only source.
         profile = root.createBRepEdgeProfile(edge, True)
+        # The schema's enum is advisory: a socket caller is not the schema, and mock
+        # mode applies the same check, so both sides refuse the same value.
+        refusal = _rules.rule_type_refusal(rule_type)
+        if refusal is not None:
+            raise refusal
         ruled_type = {
             "tangent": adsk.fusion.RuledSurfaceTypes.TangentRuledSurfaceType,
             "normal": adsk.fusion.RuledSurfaceTypes.NormalRuledSurfaceType,
-        }.get(rule_type)
-        if ruled_type is None:
-            # The schema's enum is advisory: a socket caller is not the schema, and
-            # a bare KeyError classified as UNKNOWN tells it nothing.
-            raise _hints.Refusal(
-                "INVALID_INPUT",
-                f"Unknown rule_type {rule_type!r} - use 'normal' or 'tangent'",
-            )
+        }[rule_type]
         inp = ruled.createInput(
             profile,
             adsk.core.ValueInput.createByReal(distance),
