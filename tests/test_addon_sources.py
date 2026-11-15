@@ -138,3 +138,25 @@ def test_the_checker_ignores_the_phrase_in_a_comment():
 def test_the_checker_accepts_a_single_exception_with_an_alias():
     source = "try:\n    pass\nexcept OSError as exc:\n    pass\n"
     assert unparenthesised_except_tuples(source) == []
+
+
+def test_the_add_in_tolerates_a_bad_port_like_the_server_does():
+    """``FUSION_MCP_PORT`` is parsed twice, in two languages of one contract.
+
+    The add-in cannot import the server package (separate interpreter, separate
+    install) and the server cannot import the add-in, so the tolerance is
+    duplicated. It is asserted here because the two halves are one setting: a
+    server that falls back to 9876 while the add-in refuses to start leaves the
+    user with an add-in that is running nothing and a server looking for it.
+    """
+    add_in = (ADDON / "Fusion360MCP.py").read_text(encoding="utf-8")
+    server = (ADDON.parent / "src" / "fusion360_mcp" / "connection.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "except ValueError:" in add_in, (
+        "the add-in parses FUSION_MCP_PORT without tolerating a typo"
+    )
+    assert "port = 9876" in add_in
+    assert "def default_port() -> int:" in server
+    assert "return 9876" in server

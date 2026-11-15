@@ -272,6 +272,16 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # ruled_surface's rule_type takes the same shape as edge_selection below:
+        # the handler names both accepted values, so the hints repeat them.
+        r"unknown rule_type",
+        "INVALID_INPUT",
+        [
+            "rule_type is one of normal or tangent; nothing was written.",
+            "The error message names the full set.",
+        ],
+    ),
+    (
         # The message already lists the four it accepts; without a rule the
         # caller got UNKNOWN and a traceback for a one-word typo.
         r"unknown edge_selection",

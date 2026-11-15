@@ -1053,11 +1053,16 @@ class FakeRoot:
         self.analyses = FakeAnalyses()
 
     def createBRepEdgeProfile(self, edges, chain_edges: bool = True):
-        """``Component.createBRepEdgeProfile``: a ruled surface is built from a Profile.
+        """``Component.createBRepEdgeProfile``: a ruled surface is built from a profile.
 
-        Its first argument is a Profile, not an edge - that is the mistake that
-        made ``ruled_surface`` raise on every call - so this returns the one type
-        ``RuledSurfaceFeatures.createInput`` accepts.
+        The handler's mistake was one level up - ``RuledSurfaceFeatures.createInput``
+        takes the *profile* this returns, not the edge - so the fake's job is to
+        return the one type that call accepts.
+
+        The first argument is deliberately permissive, because Fusion's is: the SDK
+        says "edges : A single BRepEdge object or an ObjectCollection containing
+        multiple BRepEdge objects, or a BRepLoop object", so a bare edge is a
+        documented call shape, not a bug.
         """
         return FakeProfile(edges, chain_edges)
 

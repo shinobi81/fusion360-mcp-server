@@ -51,6 +51,13 @@ def run(context) -> None:
         try:
             port = int(os.environ.get("FUSION_MCP_PORT", "9876"))
         except ValueError:
+            # Logged, not silent: a typo leaves the add-in on 9876 while the
+            # server falls back to the same port, and the log is where anyone
+            # looks first when the two halves disagree about where to listen.
+            _log.warning(
+                "Invalid FUSION_MCP_PORT %r - falling back to 9876",
+                os.environ.get("FUSION_MCP_PORT"),
+            )
             port = 9876
 
         _handler = CommandHandler()

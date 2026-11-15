@@ -605,9 +605,14 @@ class TestMockAdvancedFeatures:
                 "is_modeled": True,
             },
         )
+        assert result["feature_name"] == "Thread1"
         assert result["body_name"] == "Bolt"
         assert result["thread_designation"] == "M8x1.25"
         assert result["is_modeled"] is True
+        # External by default, so the ISO external class - the same conditional
+        # default the handler applies.
+        assert result["thread_class"] == "6g"
+        assert result["is_internal"] is False
 
     def test_draft_faces(self):
         result = mock_command(
@@ -862,6 +867,23 @@ class TestMockSurfaceOps:
         )
         assert result["edge_index"] == 2
         assert result["distance"] == 1.5
+        assert result["rule_type"] == "normal"
+        assert result["feature_name"] == "Ruled Surface1"
+
+    def test_an_internal_thread_defaults_to_the_internal_class(self):
+        result = mock_command(
+            "create_thread", {"body_name": "Nut", "is_internal": True}
+        )
+
+        assert result["is_internal"] is True
+        assert result["thread_class"] == "6H"
+
+    def test_an_unknown_rule_type_is_refused_like_the_handler(self):
+        """Mock mode must not echo a call Fusion rejects with ok: true."""
+        result = mock_command("ruled_surface", {"rule_type": "Tangent"})
+
+        assert result["ok"] is False
+        assert "normal" in result["error_message"]
 
     def test_trim_surface(self):
         result = mock_command(

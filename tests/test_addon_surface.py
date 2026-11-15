@@ -17,6 +17,8 @@ of passing for the wrong reason.
 
 from __future__ import annotations
 
+import pytest
+
 from tests.fakes.bodies import body_with_edges
 from tests.fakes.design import FakeDesign
 from tests.fakes.runtime import PARAMETRIC
@@ -81,3 +83,23 @@ def test_projection_is_linked_by_default(bound_handler):
 
     assert [is_linked for _, is_linked in sketch.projected] == [True, True]
     assert out["projected_curves"] == 2
+
+
+def test_an_unknown_rule_type_is_refused_as_invalid_input(bound_handler):
+    """The refusal must classify, not fall through to UNKNOWN.
+
+    The handler names both accepted values; without a rule in ``hints.py`` (both
+    mirrors) the message matched nothing and the caller got a traceback and no
+    advice, which is the failure mode every rule in that table exists to stop.
+    """
+    from addon.server.hints import classify
+
+    design, _sketch = _design_with_a_sketch()
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError) as raised:
+        handler.ruled_surface("Body1", edge_index=0, rule_type="Tangent")
+
+    kind, hints = classify(str(raised.value))
+    assert kind == "INVALID_INPUT"
+    assert any("normal or tangent" in hint for hint in hints), hints

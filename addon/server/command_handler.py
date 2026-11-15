@@ -5567,7 +5567,14 @@ class CommandHandler:
         ``spec`` is ``(eye_dir, up_vec)`` from ``_VIEW_DIRS``.
         """
         eye_dir, up_vec = spec
-        design = self.app.activeProduct
+        # _design(), not activeProduct: in the Manufacture workspace the active
+        # product is CAM and has no rootComponent, which is the read this PR
+        # removed from _snapshot.  A view still renders without a design - the
+        # target then stays at the origin - so a missing design is not fatal here.
+        try:
+            design = self._design()
+        except RuntimeError:
+            design = None
         root = design.rootComponent if design is not None else None
 
         # Target is the model centroid (or origin if no bodies).
