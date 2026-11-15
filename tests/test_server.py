@@ -3,6 +3,8 @@
 import json
 import re
 
+import pytest
+
 from fusion360_mcp.server import _send
 
 
@@ -396,16 +398,12 @@ class TestErrorDetectionEdgeCases:
 
 
 class TestMockDispatchCompleteness:
-    """Verify mock dispatch covers every tool exactly."""
+    """No handler without a tool.
 
-    def test_every_tool_has_handler(self):
-        from fusion360_mcp.mock import _DISPATCH
-        from fusion360_mcp.tools import TOOLS
-
-        tool_names = {t["name"] for t in TOOLS}
-        dispatch_names = set(_DISPATCH.keys())
-        missing = tool_names - dispatch_names
-        assert not missing, f"Tools without mock handlers: {missing}"
+    The other direction - every tool has a handler - is asserted once, in
+    ``tests/test_mock.py::TestMockDispatchCoverage``.  Both halves used to live
+    in both files, which is how "covered" stops meaning anything.
+    """
 
     def test_no_extra_handlers(self):
         from fusion360_mcp.mock import _DISPATCH
@@ -426,26 +424,19 @@ class TestMockDispatchCompleteness:
 class TestAnnotationConsistency:
     """Cross-check annotation sets against actual tool list."""
 
-    def test_all_read_only_tools_exist(self):
-        from fusion360_mcp.tools import _READ_ONLY, TOOLS
+    @pytest.mark.parametrize(
+        "annotation", ["_READ_ONLY", "_DESTRUCTIVE", "_IDEMPOTENT"]
+    )
+    def test_every_annotated_name_is_a_real_tool(self, annotation):
+        """A typo in one of the three sets would otherwise annotate nothing."""
+        from fusion360_mcp import tools
 
-        tool_names = {t["name"] for t in TOOLS}
-        missing = _READ_ONLY - tool_names
-        assert not missing, f"Read-only set references nonexistent tools: {missing}"
+        named = set(getattr(tools, annotation))
+        tool_names = {t["name"] for t in tools.TOOLS}
 
-    def test_all_destructive_tools_exist(self):
-        from fusion360_mcp.tools import _DESTRUCTIVE, TOOLS
-
-        tool_names = {t["name"] for t in TOOLS}
-        missing = _DESTRUCTIVE - tool_names
-        assert not missing, f"Destructive set references nonexistent tools: {missing}"
-
-    def test_all_idempotent_tools_exist(self):
-        from fusion360_mcp.tools import _IDEMPOTENT, TOOLS
-
-        tool_names = {t["name"] for t in TOOLS}
-        missing = _IDEMPOTENT - tool_names
-        assert not missing, f"Idempotent set references nonexistent tools: {missing}"
+        assert not named - tool_names, (
+            f"{annotation} names tools that do not exist: {named - tool_names}"
+        )
 
     # `test_read_only_implies_idempotent` lived here and was deleted with the
     # dedupe that made it true by construction: `_IDEMPOTENT = _READ_ONLY | {...}`

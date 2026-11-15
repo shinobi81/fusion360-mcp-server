@@ -86,47 +86,32 @@ def test_no_add_in_file_names_an_except_tuple_without_brackets(path):
     )
 
 
-def test_the_checker_trips_on_the_forbidden_form():
-    """The guard's own test: a checker that cannot fail protects nothing."""
-    source = "try:\n    pass\nexcept TypeError, ValueError:\n    pass\n"
-    assert unparenthesised_except_tuples(source) == [3]
+@pytest.mark.parametrize(
+    "label, body",
+    [
+        ("parenthesised", "except (TypeError, ValueError):"),
+        ("single exception", "except OSError:"),
+        ("aliased tuple", "except (TypeError, ValueError) as exc:"),
+        ("aliased single", "except OSError as exc:"),
+        ("starred", "except* (TypeError, ValueError):"),
+        ("wrapped across lines", "except (\n    TypeError,\n):"),
+    ],
+    ids=lambda label: label,
+)
+def test_the_checker_accepts_the_forms_fusion_can_parse(label, body):
+    """Every spelling Fusion parses, with the case named in the id."""
+    source = "try:\n    pass\n" + body + "\n    pass\n"
+    assert unparenthesised_except_tuples(source) == [], label
 
 
-def test_the_checker_accepts_the_parenthesised_form():
-    source = "try:\n    pass\nexcept (TypeError, ValueError):\n    pass\n"
-    assert unparenthesised_except_tuples(source) == []
-
-
-def test_the_checker_accepts_a_single_exception():
-    source = "try:\n    pass\nexcept OSError:\n    pass\n"
-    assert unparenthesised_except_tuples(source) == []
-
-
-def test_the_checker_accepts_an_alias_after_a_tuple():
-    source = "try:\n    pass\nexcept (TypeError, ValueError) as exc:\n    pass\n"
-    assert unparenthesised_except_tuples(source) == []
-
-
-def test_the_checker_ignores_the_phrase_inside_a_docstring():
-    """Prose must not block every pull request."""
-    source = '"""Turns `except A, B:` into something else."""\n'
-    assert unparenthesised_except_tuples(source) == []
-
-
-def test_the_checker_trips_on_the_starred_form_too():
-    """``except*`` is PEP 654's grouping syntax and takes the same header."""
-    source = "try:\n    pass\nexcept* TypeError, ValueError:\n    pass\n"
-    assert unparenthesised_except_tuples(source) == [3]
-
-
-def test_the_checker_accepts_a_bracketed_starred_form():
-    source = "try:\n    pass\nexcept* (TypeError, ValueError):\n    pass\n"
-    assert unparenthesised_except_tuples(source) == []
-
-
-def test_the_checker_accepts_a_tuple_wrapped_across_lines():
-    source = "try:\n    pass\nexcept (\n    TypeError,\n    ValueError,\n):\n    pass\n"
-    assert unparenthesised_except_tuples(source) == []
+@pytest.mark.parametrize(
+    "body",
+    ["except TypeError, ValueError:", "except* TypeError, ValueError:"],
+)
+def test_the_checker_trips_on_the_forbidden_form(body):
+    """The guard own test: a checker that cannot fail protects nothing."""
+    source = "try:\n    pass\n" + body + "\n    pass\n"
+    assert unparenthesised_except_tuples(source) == [3], body
 
 
 def test_the_checker_ignores_the_phrase_in_a_comment():

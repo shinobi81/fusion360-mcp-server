@@ -213,8 +213,7 @@ _RULES: list[tuple[str, str, list[str]]] = [
     ),
     (
         # The face selectors mean "the faces lying in the top/bottom PLANE", so a
-        # body whose top is a curved surface has none there. Measured live: before
-        # this rule the refusal was UNKNOWN with no hints.
+        # body whose top is a curved surface has none there.
         r"no faces matched",
         "INVALID_INPUT",
         [
@@ -282,8 +281,8 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
-        # The message already lists the four it accepts; without a rule the
-        # caller got UNKNOWN and a traceback for a one-word typo.
+        # The message already lists the four it accepts; this keeps a one-word
+        # typo from becoming UNKNOWN.
         r"unknown edge_selection",
         "INVALID_INPUT",
         [
@@ -329,8 +328,8 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
-        # A type the tool does not know used to fall through to UNKNOWN with no
-        # hints, which is the failure mode every rule here exists to prevent.
+        # An unknown type would otherwise fall through to UNKNOWN with no hints,
+        # which is the failure mode every rule here exists to prevent.
         r"unknown (?:dimension|constraint) type",
         "INVALID_INPUT",
         [
@@ -352,10 +351,10 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
-        # Fusion's own "N : InternalValidationError" - the API refused the input's
+        # Fusion's own "N : InternalValidationError": the API refused the input's
         # STATE (a property unset, or a value it will not accept) rather than the
-        # call's arguments.  Filed in §24.5: it reached the caller as UNKNOWN with
-        # no hints, which is the failure mode every rule here exists to stop.
+        # call's arguments.  Unclassified it reaches the caller as UNKNOWN with no
+        # hints, which is the failure mode every rule here exists to stop.
         r"InternalValidationError",
         "INVALID_INPUT",
         [
@@ -390,9 +389,8 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
-        # A curve index past the end used to raise IndexError from `curves[i]`,
-        # which matched no rule and reached the caller as UNKNOWN with no hints.
-        # The three messages the handler now raises each carry one of these
+        # A curve index past the end would reach the caller as UNKNOWN with no
+        # hints.  The three messages the handler raises each carry one of these
         # phrases: a non-integer index, an empty sketch, and an index out of
         # range.  Placed above the generic INVALID_INPUT rule so it wins.
         r"curve index|has no curves, so|is outside sketch",

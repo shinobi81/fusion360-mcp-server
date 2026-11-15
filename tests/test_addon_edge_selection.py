@@ -365,7 +365,7 @@ def test_a_body_with_no_edges_refuses_rather_than_selecting_nothing(select):
     kind, hints = classify(raised.value)
     assert kind == "INVALID_INPUT"
     # The kind alone cannot prove *this* rule fired — the generic INVALID_INPUT
-    # rule gives the same kind, so the hint text is the assertion (§14).
+    # rule gives the same kind, so the hint text is the assertion.
     assert any("nothing a fillet can round" in hint for hint in hints), hints
 
 

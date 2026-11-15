@@ -366,7 +366,7 @@ def test_a_fillet_with_nothing_to_round_is_classified():
 class TestFusionRefusals:
     """Fusion's own opaque refusals must still reach the caller with advice.
 
-    Both of these were filed in HANDOVER §24.5: the first is Fusion rejecting the
+    Both were once unfiled: the first is Fusion rejecting the
     input's state, the second is a wall thickness a shell cannot honour. Neither
     matched a rule, so both arrived as ``UNKNOWN`` with no hints - the failure mode
     every rule in the table exists to stop.

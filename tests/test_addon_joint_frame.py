@@ -190,7 +190,7 @@ def test_pin_slot_slides_along_the_axis_asked_for(joint):
 
 
 def test_the_result_reports_where_the_joint_origin_landed(joint):
-    """§7.1: on the surface, not on the bore. Silent before, so it is reported.
+    """On the surface, not on the bore. Silent before, so it is reported.
 
     Measured: every valid quadrant/height combination puts the origin at radius 2
     on the cylinder's surface, and ``CenterKeyPoint`` is refused outright.
