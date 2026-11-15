@@ -277,3 +277,120 @@ def test_get_tool_by_name_edge_cases():
     assert get_tool_by_name("") is None
     assert get_tool_by_name("PING") is None  # case sensitive
     assert get_tool_by_name("ping ") is None  # trailing space
+
+
+#: How many arguments each tool declares.
+#:
+#: Not the registry the old ``test_expected_tools_present`` copied - that restated
+#: the tool *names*, which ``test_addon_sync.py`` and ``TestMockDispatchCoverage``
+#: already pin twice.  Nothing pinned a tool's *shape*, and the schema literal in
+#: ``tools.py`` is far too large to review line by line, so a dropped argument was
+#: a silent change to the contract every agent reads.  A count catches a drop or an
+#: addition; a *rename* keeps the count and shows up in the schema diff instead.
+#: Regenerated with a dict comprehension over ``TOOLS`` - see the PR that added it.
+_TOOL_ARGUMENT_COUNTS = {
+    "get_scene_info": 0,
+    "get_object_info": 1,
+    "get_bounding_box": 1,
+    "create_sketch": 2,
+    "draw_rectangle": 6,
+    "draw_circle": 5,
+    "draw_line": 7,
+    "extrude": 6,
+    "revolve": 11,
+    "fillet": 7,
+    "chamfer": 7,
+    "shell": 4,
+    "mirror": 3,
+    "rename_body": 2,
+    "move_body": 4,
+    "export_stl": 2,
+    "boolean_operation": 4,
+    "delete_all": 0,
+    "undo": 0,
+    "execute_code": 1,
+    "sweep": 6,
+    "loft": 3,
+    "create_polygon": 6,
+    "draw_arc": 8,
+    "create_hole": 7,
+    "rectangular_pattern": 5,
+    "circular_pattern": 4,
+    "new_document": 1,
+    "create_component": 2,
+    "add_joint": 11,
+    "set_joint_value": 6,
+    "list_edges": 3,
+    "list_components": 0,
+    "export_step": 2,
+    "export_f3d": 1,
+    "export_view_sheet": 5,
+    "export": 3,
+    "import_mesh": 3,
+    "get_parameters": 0,
+    "create_parameter": 4,
+    "set_parameter": 2,
+    "delete_parameter": 1,
+    "draw_circles": 7,
+    "add_constraint": 5,
+    "auto_constrain": 2,
+    "add_dimension": 5,
+    "create_construction_plane": 10,
+    "create_construction_axis": 7,
+    "create_ucs": 7,
+    "draw_spline": 4,
+    "offset_curve": 5,
+    "trim_curve": 4,
+    "extend_curve": 4,
+    "create_thread": 9,
+    "draft_faces": 5,
+    "split_body": 4,
+    "split_face": 4,
+    "offset_faces": 4,
+    "scale_body": 8,
+    "create_box": 6,
+    "create_box_parametric": 9,
+    "create_cylinder": 6,
+    "create_sphere": 4,
+    "create_torus": 6,
+    "create_as_built_joint": 11,
+    "create_rigid_group": 2,
+    "measure_distance": 2,
+    "measure_angle": 2,
+    "get_physical_properties": 2,
+    "create_section_analysis": 2,
+    "check_interference": 2,
+    "compare_meshes": 2,
+    "set_appearance": 4,
+    "set_color": 5,
+    "project_geometry": 3,
+    "suppress_feature": 1,
+    "unsuppress_feature": 1,
+    "patch_surface": 3,
+    "stitch_surfaces": 2,
+    "thicken_surface": 3,
+    "ruled_surface": 4,
+    "trim_surface": 2,
+    "create_flange": 5,
+    "create_bend": 4,
+    "flat_pattern": 1,
+    "unfold": 2,
+    "cam_create_setup": 7,
+    "cam_create_operation": 10,
+    "cam_generate_toolpath": 3,
+    "cam_post_process": 5,
+    "cam_list_setups": 0,
+    "cam_list_operations": 1,
+    "cam_get_operation_info": 2,
+    "ping": 0,
+    "get_design_type": 0,
+    "set_design_type": 1,
+    "render_view": 4,
+}
+
+
+def test_each_tool_declares_the_number_of_arguments_it_does_today():
+    """A dropped or added argument cannot pass silently."""
+    current = {t["name"]: len(t["inputSchema"]["properties"]) for t in TOOLS}
+
+    assert current == _TOOL_ARGUMENT_COUNTS
