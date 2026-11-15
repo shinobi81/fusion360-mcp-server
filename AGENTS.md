@@ -48,7 +48,9 @@ and the atheris targets: `docs/TESTING.md`.
 
 ## Adding a tool
 
-1. Handler method in `addon/server/command_handler.py`, and its name in `_COMMAND_NAMES`
+1. Handler method in the module that owns the domain — one of the `handler_*.py` modules
+   `COMMAND_MODULES` lists, not `command_handler.py`, which composes them and declares
+   nothing — and its name in `HandlerBase._COMMAND_NAMES`
    — `__init__` builds `self._commands` from that set, so a name with no method cannot be
    listed and a method with no name is unreachable
 2. Tool definition in `src/fusion360_mcp/tools.py` (`name` must match the command exactly)

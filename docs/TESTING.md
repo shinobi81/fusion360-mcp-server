@@ -82,6 +82,8 @@ The add-in loads `command_handler` from the checkout and keeps it in memory, so 
 `git pull` changes what is on disk and nothing about what Fusion executes. `inspect`
 cannot tell you either: `getsource` reads the *file*, so a stale class describes itself
 with the new code - a live check can pass for days after a merge that was never loaded.
+Edits to a command go to the domain module that owns it, one of the `handler_*.py`
+modules `COMMAND_MODULES` lists; `command_handler.py` only composes them.
 
 ```bash
 uv run python scripts/reload_addin.py            # reload, then verify
@@ -89,12 +91,12 @@ uv run python scripts/reload_addin.py --check    # verify only, change nothing
 ```
 
 It sends `reload_handler`, which re-executes the modules in `RELOAD_ORDER` - the
-sibling modules a handler module imports at module scope, then the command modules,
-`command_handler` last - and prints that list on every run. It then compares the
-running class's **method names**, read up its `__mro__`, with the methods the command
-modules declare, printing the loaded path. `COMMAND_MODULES` is the one list of
-command modules, and `tests/test_reload_addin.py` fails if the add-in's copy of the
-reload order drifts from the script's. Exit 1 means the sets differ. What "ok"
+sibling modules a handler module imports at module scope, then the command modules
+`COMMAND_MODULES` lists, `command_handler` last - and prints that list on every run.
+It then compares the running class's **method names**, read up its `__mro__`, with the
+methods the command modules declare, printing the loaded path. `COMMAND_MODULES` is the
+one list of command modules, and `tests/test_reload_addin.py` fails if the add-in's copy
+of the reload order drifts from the script's. Exit 1 means the sets differ. What "ok"
 therefore means is narrow, and the script's own output says so: editing a method *body*
 changes no name and still prints ok, so reload whenever you have pulled, not only when
 the check complains.

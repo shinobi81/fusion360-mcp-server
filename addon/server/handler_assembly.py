@@ -129,6 +129,12 @@ class AssemblyCommands:
         },
     }
 
+    # Attributes stored as an angle, so ``units`` applies to them. Everything
+    # else is a length in Fusion's internal unit, cm, and passes through.
+    _JOINT_ANGLE_ATTRIBUTES = frozenset(
+        {"rotationValue", "pitchValue", "yawValue", "rollValue"}
+    )
+
     def create_construction_plane(
         self,
         method: str,

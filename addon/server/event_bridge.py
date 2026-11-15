@@ -37,6 +37,8 @@ COMMAND_MODULES = (
     "handler_surface",
     "handler_primitives",
     "handler_scene",
+    "handler_export",
+    "handler_cam",
     "command_handler",
 )
 

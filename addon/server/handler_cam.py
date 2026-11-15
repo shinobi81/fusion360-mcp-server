@@ -1,0 +1,401 @@
+"""
+CAM commands: the Manufacture product, its setups, operations and toolpaths.
+
+The commands and the helpers only they call.  A helper a second domain needs lives
+in ``handler_base``; this module imports nothing from another domain and nothing
+from ``command_handler``.  Mixed into ``command_handler.CommandHandler``.
+
+Every command here resolves the CAM product through ``_get_cam`` first: on current
+Fusion builds it is only instantiated once the Manufacture workspace has been
+activated for the document, so the lookup activates it on demand.
+"""
+
+
+import os
+from contextlib import suppress
+from typing import Any
+
+from . import fusion_api as adsk
+from . import get_logger
+from . import parameter_units as _param_units
+
+log = get_logger("handler")
+
+
+class CamCommands:
+
+    def _get_cam(self):
+        """Get the CAM product from the active document.
+
+        On recent Fusion builds the CAM product is only instantiated once
+        the Manufacture workspace has been activated for the document, so
+        activate it on demand instead of failing outright.  Note:
+        itemByProductType *raises* when the product doesn't exist yet.
+        """
+        doc = self.app.activeDocument
+
+        def _find_cam_product():
+            try:
+                return doc.products.itemByProductType("CAMProductType")
+            except Exception:
+                return None
+
+        cam_product = _find_cam_product()
+        if cam_product is None:
+            ws = self.ui.workspaces.itemById("CAMEnvironment")
+            if ws is not None:
+                try:
+                    ws.activate()
+                    adsk.doEvents()
+                except Exception as exc:
+                    log.warning("Manufacture workspace activation failed: %s", exc)
+                cam_product = _find_cam_product()
+
+        if cam_product is None:
+            raise RuntimeError(
+                "No CAM workspace found. Open the Manufacturing workspace "
+                "in Fusion 360 at least once to initialise it."
+            )
+        return cam_product
+
+    def _find_setup(self, cam, name: str):
+        for i in range(cam.setups.count):
+            s = cam.setups.item(i)
+            if s.name == name:
+                return s
+        raise RuntimeError(f"Setup '{name}' not found")
+
+    def _find_operation(self, setup, name: str):
+        for i in range(setup.operations.count):
+            op = setup.operations.item(i)
+            if op.name == name:
+                return op
+        raise RuntimeError(f"Operation '{name}' not found in setup '{setup.name}'")
+
+    def cam_list_setups(self):
+        cam = self._get_cam()
+        result = []
+        for i in range(cam.setups.count):
+            setup = cam.setups.item(i)
+            ops = []
+            for j in range(setup.operations.count):
+                ops.append(setup.operations.item(j).name)
+            result.append(
+                {
+                    "name": setup.name,
+                    "operations": ops,
+                    "is_valid": setup.isValid,
+                }
+            )
+        return {"setups": result, "count": len(result)}
+
+    def cam_list_operations(self, setup_name: str):
+        cam = self._get_cam()
+        setup = self._find_setup(cam, setup_name)
+        result = []
+        for i in range(setup.operations.count):
+            op = setup.operations.item(i)
+            result.append(
+                {
+                    "name": op.name,
+                    "has_toolpath": op.hasToolpath,
+                    "is_valid": op.isValid,
+                }
+            )
+        return {"setup": setup_name, "operations": result, "count": len(result)}
+
+    def cam_get_operation_info(self, setup_name: str, operation_name: str):
+        cam = self._get_cam()
+        setup = self._find_setup(cam, setup_name)
+        op = self._find_operation(setup, operation_name)
+
+        info = {
+            "name": op.name,
+            "is_valid": op.isValid,
+            "has_toolpath": op.hasToolpath,
+        }
+
+        if hasattr(op, "tool") and op.tool:
+            tool = op.tool
+            desc = tool.description if hasattr(tool, "description") else str(tool)
+            info["tool"] = {"description": desc}
+
+        if hasattr(op, "parameters"):
+            params = {}
+            for param in op.parameters:
+                with suppress(Exception):
+                    params[param.name] = param.expression
+            info["parameters"] = params
+
+        return info
+
+    def cam_create_setup(
+        self,
+        body_name: str,
+        name: str | None = None,
+        operation_type: str = "milling",
+        stock_mode: str = "relative_box",
+        stock_offset_sides: float = 0,
+        stock_offset_top: float = 0,
+        stock_offset_bottom: float = 0,
+    ):
+        # Judged before any object exists: the refusal's hint says nothing was
+        # written, so a setup must not already be in the tree when it fires.
+        stock_offset_sides = _param_units.require_finite(stock_offset_sides)
+        stock_offset_top = _param_units.require_finite(stock_offset_top)
+        stock_offset_bottom = _param_units.require_finite(stock_offset_bottom)
+
+        cam = self._get_cam()
+        body = self._body_by_name(body_name)
+
+        op_type_map = {
+            "milling": adsk.cam.OperationTypes.MillingOperation,
+            "turning": adsk.cam.OperationTypes.TurningOperation,
+            "cutting": adsk.cam.OperationTypes.JetOperation,
+        }
+        op_type = op_type_map.get(operation_type)
+        if op_type is None:
+            raise RuntimeError(
+                f"Unknown operation_type '{operation_type}' "
+                "— use milling/turning/cutting"
+            )
+
+        setup_input = cam.setups.createInput(op_type)
+        setup_input.models = [body]
+
+        if name:
+            setup_input.name = name
+
+        setup = cam.setups.add(setup_input)
+
+        # Stock parameters live on the created setup, not the input.
+        # Names/enumeration values verified against Fusion 2705: the
+        # "Relative size box" UI choice has the id 'default'.
+        stock_mode_map = {
+            "relative_box": "default",
+            "fixed_box": "fixedbox",
+            "relative_cylinder": "relativecylinder",
+            "fixed_cylinder": "fixedcylinder",
+            "from_solid": "solid",
+        }
+        applied_stock: dict[str, Any] = {}
+        failed_stock: dict[str, Any] = {}
+        if stock_mode:
+            mode_id = stock_mode_map.get(stock_mode, stock_mode)
+            if self._set_cam_parameter(setup, "job_stockMode", mode_id, by_string=True):
+                applied_stock["stock_mode"] = mode_id
+            else:
+                failed_stock["stock_mode"] = stock_mode
+        for param_name, value in (
+            ("job_stockOffset", stock_offset_sides),
+            ("job_stockOffsetTop", stock_offset_top),
+            ("job_stockOffsetBottom", stock_offset_bottom),
+        ):
+            if value:
+                if self._set_cam_parameter(setup, param_name, value):
+                    applied_stock[param_name] = value
+                else:
+                    failed_stock[param_name] = value
+
+        result = {
+            "name": setup.name,
+            "body": body_name,
+            "operation_type": operation_type,
+        }
+        if applied_stock:
+            result["stock_applied"] = applied_stock
+        if failed_stock:
+            result["stock_failed"] = failed_stock
+            result["warning"] = (
+                "Some stock parameters could not be applied — parameter "
+                "names vary by Fusion build; inspect via cam_get_operation_info"
+            )
+        return result
+
+    @staticmethod
+    def _set_cam_parameter(target, param_name, value, by_string=False):
+        """Set a CAM parameter on a setup or operation. Returns success.
+
+        Raises ``ValueError`` for a non-finite numeric value — that is a bad
+        argument, not an unavailable parameter name, and the two callers would
+        otherwise report it as the latter.
+
+        CAMParameter.value is read-only on current Fusion builds — values
+        must be assigned via the ``expression`` property.  Enum parameters
+        (e.g. tool_coolant) take quoted lowercase strings ('flood').
+        """
+        # Judged outside the try so a bad value classifies as INVALID_INPUT instead
+        # of being reported as False - which both callers read as "that parameter
+        # name is unavailable" and would answer by retrying the same value.
+        value = _param_units.require_finite(value)
+        try:
+            params = getattr(target, "parameters", None)
+            if params is None:
+                return False
+            p = params.itemByName(param_name)
+            if p is None:
+                return False
+            p.expression = f"'{value}'" if by_string else str(value)
+            return True
+        except Exception as exc:
+            log.debug("CAM parameter %s=%r failed: %s", param_name, value, exc)
+            return False
+
+    def cam_create_operation(
+        self,
+        setup_name: str,
+        strategy: str,
+        name: str | None = None,
+        tool_number: int | None = None,
+        tool_diameter: float | None = None,
+        stepdown: float | None = None,
+        stepover: float | None = None,
+        feed_rate: float | None = None,
+        spindle_speed: float | None = None,
+        coolant: str = "flood",
+    ):
+        # Judged before the operation is created, so a refusal's hint ("nothing
+        # was written") stays true: a bad value is not an unavailable name.
+        for _numeric in (tool_number, stepdown, stepover, feed_rate, spindle_speed):
+            _param_units.require_finite(_numeric)
+
+        cam = self._get_cam()
+        setup = self._find_setup(cam, setup_name)
+
+        if tool_diameter is not None:
+            raise RuntimeError(
+                "tool_diameter cannot be set on an operation — tool geometry "
+                "comes from a tool in the CAM tool library. Select the tool "
+                "via tool_number instead."
+            )
+
+        op_input = setup.operations.createInput(strategy)
+        if name:
+            op_input.name = name
+
+        op = setup.operations.add(op_input)
+        if op is None:
+            raise RuntimeError(
+                f"Fusion rejected strategy '{strategy}' for setup '{setup_name}'"
+            )
+
+        # Operation parameters (stepdown, feeds, speeds...) only exist on
+        # the created operation, keyed by strategy-dependent names.
+        applied = {}
+        failed = {}
+        for param_name, value, by_string in (
+            ("tool_number", tool_number, False),
+            ("maximumStepdown", stepdown, False),
+            ("maximumStepover", stepover, False),
+            ("tool_feedCutting", feed_rate, False),
+            ("tool_spindleSpeed", spindle_speed, False),
+            ("tool_coolant", coolant, True),
+        ):
+            if value is None:
+                continue
+            if self._set_cam_parameter(op, param_name, value, by_string):
+                applied[param_name] = value
+            else:
+                failed[param_name] = value
+
+        result = {"name": op.name, "setup": setup_name, "strategy": strategy}
+        if applied:
+            result["parameters_applied"] = applied
+        if failed:
+            result["parameters_failed"] = failed
+            result["warning"] = (
+                "Some parameters are not available for this strategy — "
+                "check available names via cam_get_operation_info"
+            )
+        return result
+
+    def cam_generate_toolpath(
+        self,
+        setup_name: str | None = None,
+        operation_name: str | None = None,
+        generate_all: bool = False,
+    ):
+        cam = self._get_cam()
+
+        if generate_all:
+            future = cam.generateAllToolpaths(False)
+            self._wait_future(future)
+            return {"generated": True, "scope": "all"}
+
+        if operation_name and setup_name:
+            setup = self._find_setup(cam, setup_name)
+            op = self._find_operation(setup, operation_name)
+            future = cam.generateToolpath(op)
+            self._wait_future(future)
+            return {
+                "generated": True,
+                "scope": "operation",
+                "operation": operation_name,
+            }
+
+        if setup_name:
+            setup = self._find_setup(cam, setup_name)
+            ops = adsk.core.ObjectCollection.create()
+            for i in range(setup.operations.count):
+                ops.add(setup.operations.item(i))
+            future = cam.generateToolpath(ops)
+            self._wait_future(future)
+            return {"generated": True, "scope": "setup", "setup": setup_name}
+
+        raise RuntimeError("Provide setup_name, operation_name, or generate_all=true")
+
+    def cam_post_process(
+        self,
+        setup_name: str,
+        operation_name: str | None = None,
+        post_processor: str = "fanuc",
+        output_folder: str | None = None,
+        output_units: str = "mm",
+    ):
+        cam = self._get_cam()
+        setup = self._find_setup(cam, setup_name)
+
+        if not output_folder:
+            output_folder = os.path.join(os.path.expanduser("~"), "Desktop")
+
+        # Accept a full path to a .cps file, or resolve a short name against
+        # the legacy local post folder when the build still provides one.
+        if post_processor.endswith(".cps") or os.path.sep in post_processor:
+            post_config = post_processor
+        else:
+            post_folder = getattr(cam, "genericPostFolder", None)
+            if not post_folder:
+                raise RuntimeError(
+                    "This Fusion build has no local generic post folder "
+                    "(posts are cloud-library based). Pass the full path to "
+                    "the .cps file in 'post_processor' instead of a short "
+                    "name."
+                )
+            post_config = os.path.join(post_folder, f"{post_processor}.cps")
+
+        if not os.path.isfile(post_config):
+            raise RuntimeError(f"Post processor not found: {post_config}")
+
+        units = (
+            adsk.cam.PostOutputUnitOptions.MillimetersOutput
+            if output_units == "mm"
+            else adsk.cam.PostOutputUnitOptions.InchesOutput
+        )
+
+        post_input = adsk.cam.PostProcessInput.create(
+            setup_name, post_config, output_folder, units
+        )
+        post_input.isOpenInEditor = False
+
+        if operation_name:
+            op = self._find_operation(setup, operation_name)
+            cam.postProcess(op, post_input)
+        else:
+            cam.postProcess(setup, post_input)
+
+        return {
+            "setup": setup_name,
+            "post_processor": post_processor,
+            "output_folder": output_folder,
+            "units": output_units,
+        }
