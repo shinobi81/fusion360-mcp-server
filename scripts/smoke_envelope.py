@@ -1,11 +1,24 @@
-"""Mock-mode smoke test: print the new envelope shapes end-to-end."""
+"""Mock-mode smoke test: print the new envelope shapes end-to-end.
 
+Run it with ``uv run python scripts/smoke_envelope.py``.  The output is reconfigured to
+UTF-8 first: the formatted envelope contains ``→`` between the before/after deltas, and
+a Windows console defaults to cp1252, where printing one raises UnicodeEncodeError -
+this script could not run on the project's primary OS until that line existed.
+"""
+
+import io
 import json
+import sys
 
 from mcp import types
 
 from fusion360_mcp.mock import mock_command
 from fusion360_mcp.server import _format_result
+
+if isinstance(sys.stdout, io.TextIOWrapper):
+    # Not every stdout is a TextIOWrapper (pytest replaces it, IDEs wrap it), and
+    # only that class has reconfigure.
+    sys.stdout.reconfigure(encoding="utf-8")
 
 
 def dump(label, name, params=None):
