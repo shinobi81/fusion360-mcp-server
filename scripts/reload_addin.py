@@ -11,8 +11,13 @@ So the check is not "do the files look right" but "does the running class have e
 the methods the files declare".  Those methods need not sit on one class in one file: a
 base plus a mixin per domain is the layout the check is built for, so it reads one
 module at a time (``COMMAND_MODULES``) and one class at a time, up ``cls.__mro__``.  A
-merge that adds or removes a method is caught, and the loaded file's path is printed - a
-copy in the AddIns folder masquerading as the checkout is visible rather than assumed.
+merge that adds or removes a method is caught.
+
+The loaded file's path is asked for and printed **before** anything that changes state
+is sent: ``reload_handler`` re-executes whichever tree the running add-in loaded, not
+the one the reader is standing in, so a copy in the AddIns folder masquerading as the
+checkout is refused - nothing reloaded, exit 1, both trees named - rather than narrated
+afterwards.  ``--check`` changes nothing and stops on the same mismatch.
 
     uv run python scripts/reload_addin.py            # reload, then verify
     uv run python scripts/reload_addin.py --check    # verify only, change nothing
@@ -155,6 +160,19 @@ def loaded_class(connection: Fusion360Connection) -> dict:
     return reply["result"]
 
 
+def is_this_checkout(path: str | None) -> bool:
+    """Whether the file the add-in reports loading is this checkout's handler.
+
+    Only ``command_handler`` has a path of its own: the domain modules are reached
+    through it, so a different ``command_handler.py`` is a different tree, and one the
+    reload must not touch.  An empty *path* - a module that cannot say where it came
+    from - is not this checkout either: it cannot be identified, so it is refused.
+    """
+    if not path:
+        return False
+    return Path(path).resolve() == HANDLER.resolve()
+
+
 def main(argv: list[str] | None = None) -> int:
     # A literal, not the module docstring's first line: under ``python -OO``
     # ``__doc__`` is ``None``, and ``(None or "").splitlines()[0]`` raises IndexError
@@ -181,6 +199,22 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
+        # Asked first, and the answer decides whether anything else is sent: a reload
+        # re-executes the modules of whichever tree the add-in loaded, so a bare run
+        # from another checkout used to rewrite that tree and report it on the way out.
+        loaded = loaded_class(connection)
+        print(f"add-in loaded: {loaded['file'] or '(a file it cannot name)'}")
+        if not is_this_checkout(loaded["file"]):
+            print(
+                f"not this checkout: {SERVER} - the running add-in loaded "
+                f"{loaded['file'] or 'a file it cannot name'}; reloading it would "
+                "re-execute that tree's modules. Nothing was reloaded. Start the "
+                "add-in from this checkout, or run this script from the tree it "
+                "loaded.",
+                file=sys.stderr,
+            )
+            return 1
+
         if not args.check:
             # ``reload_handler`` is absent from ``mock._MUTATION_MOCKS``, so
             # ``send_command`` may retry it. That is safe here and only here: a reload
@@ -194,9 +228,13 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"reload refused: {reply}", file=sys.stderr)
                 return 1
             print(f"reloaded: {', '.join(RELOAD_ORDER)}")
-            print("  not reloaded: event_bridge, socket_server")
-
-        loaded = loaded_class(connection)
+            print(
+                "  not reloaded: event_bridge, socket_server "
+                "(restart the add-in for those)"
+            )
+            # Read again: the comparison is against the class the reload produced, not
+            # the one it replaced, which is the whole point of reloading first.
+            loaded = loaded_class(connection)
     except (FusionError, ConnectionError) as exc:
         # A fused add-in raises rather than replying: a TIMEOUT or UNKNOWN_COMMAND
         # arrives as FusionError, and a dropped socket as ConnectionError. Both are
@@ -217,12 +255,7 @@ def main(argv: list[str] | None = None) -> int:
     declared = declared_methods(sources)
     missing, extra = compare(declared, set(loaded["methods"]))
 
-    print(f"add-in loaded: {loaded['file']}")
     print(f"comparing with: {', '.join(sources)} in {SERVER}")
-    # Only ``command_handler`` has a path of its own: the domain modules are reached
-    # through it, so a different command_handler.py loaded is a different tree.
-    if loaded["file"] and Path(loaded["file"]).resolve() != HANDLER.resolve():
-        print("  (a different file is loaded - is an AddIns copy in use?)")
     if missing:
         print(f"MISSING from the running class: {', '.join(sorted(missing))}")
     if extra:

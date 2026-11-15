@@ -90,21 +90,27 @@ uv run python scripts/reload_addin.py            # reload, then verify
 uv run python scripts/reload_addin.py --check    # verify only, change nothing
 ```
 
-It sends `reload_handler`, which re-executes the modules in `RELOAD_ORDER` - the
-sibling modules a handler module imports at module scope, then the command modules
-`COMMAND_MODULES` lists, `command_handler` last - and prints that list whenever it
-reloads; `--check` re-executes nothing, so it prints no list. It then compares the
-running class's **method names**, read up its `__mro__`, with the methods the command
-modules declare, printing the loaded path. `COMMAND_MODULES` is the one list of command
+It asks the add-in which file it loaded and prints that path before it sends anything,
+and goes no further unless the path is this checkout's `command_handler.py`: a copy in
+an AddIns folder is a failure, not a note. Unless you passed `--check` it then sends
+`reload_handler`, which re-executes the modules in `RELOAD_ORDER` - the sibling modules
+a handler module imports at module scope, then the command modules `COMMAND_MODULES`
+lists, `command_handler` last - and prints that list, then the line naming the two
+modules it does not reload; `--check` re-executes nothing, so it prints neither. It
+then compares the running class's **method names**, read up its `__mro__`, with the
+methods the command modules declare. `COMMAND_MODULES` is the one list of command
 modules, and `tests/test_reload_addin.py` fails if the add-in's copy of the reload order
 drifts from the script's, or if a module that declares commands is in neither. Exit 1
-means the sets differ. What "ok" therefore means is narrow, and the script's own output
-says so: editing a method *body* changes no name and still prints ok, so reload whenever
-you have pulled, not only when the check complains.
+means the sets differ, or the loaded path was another tree's. What "ok" therefore means
+is narrow, and the script's own output says so: editing a method *body* changes no name
+and still prints ok, so reload whenever you have pulled, not only when the check
+complains.
 
-Two things it cannot cover, both printed on every run: `event_bridge.py` and
-`socket_server.py` are not reloaded (restart the add-in for those), and the check needs
-an **open document** - it rides on `execute_code`, which resolves the active design.
+What it cannot cover: `event_bridge.py` and `socket_server.py` are not reloaded, and that
+line is printed only by a reload - restart the add-in for those. The check also needs an
+**open document**, a precondition rather than a printed line: it rides on `execute_code`,
+which resolves the active design, so with none open it fails and says so instead of
+reporting.
 
 ## The policy
 

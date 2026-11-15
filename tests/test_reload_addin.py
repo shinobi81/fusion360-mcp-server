@@ -128,15 +128,22 @@ def test_every_file_declaring_a_command_class_is_named_in_the_tuple():
     disagree about.  Edits to it never reach Fusion (``event_bridge`` reloads only
     ``RELOAD_ORDER``) and the check still says ok.  The files come from the directory,
     not from the tuple: the directory is the list that grows by itself.
+
+    Every ``.py``, not ``handler_*.py``: the prefix is a convention, and a registry
+    entry that does not follow it declares its class just the same.  Globbing the name
+    would report such a module as "declaring no command class", which is false, so the
+    convention would survive as an unstated rule the failure message denies.  Only
+    module-level classes count: ``event_bridge`` builds its ``MainThreadHandler``
+    inside a function, and no module registers a command class nested in one.
     """
     module = _script()
     server = REPO_ROOT / "addon" / "server"
     declaring = {
         path.name
-        for path in [*server.glob("handler_*.py"), server / "command_handler.py"]
+        for path in sorted(server.glob("*.py"))
         if any(
             isinstance(node, ast.ClassDef) and module._is_command_class(node.name)
-            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+            for node in ast.parse(path.read_text(encoding="utf-8")).body
         )
     }
     named = {f"{stem}.py" for stem in module.COMMAND_MODULES}
@@ -188,10 +195,16 @@ def test_identical_sets_report_nothing():
     assert _script().compare({"a", "b"}, {"a", "b"}) == (set(), set())
 
 
-def test_a_module_without_a_command_class_is_refused():
-    """A check that silently found no class would pass vacuously for ever."""
-    with pytest.raises(SystemExit):
-        _script().declared_methods(
+def test_a_module_without_a_command_class_is_refused(one_command_module):
+    """A check that silently found no class would pass vacuously for ever.
+
+    Against the real tuple this test passed for the other reason: ``COMMAND_MODULES``
+    names ten modules and the map held one, so ``declared_methods`` raised at "named
+    but never read" before it read ``SomethingElse`` at all.  One module, present, so
+    the absence check passes and this is the branch that fires.
+    """
+    with pytest.raises(SystemExit, match="no command class"):
+        one_command_module.declared_methods(
             {"command_handler.py": "class SomethingElse:\n    pass\n"}
         )
 
@@ -256,7 +269,8 @@ def test_loaded_class_unwraps_execute_codes_envelope(monkeypatch):
 
 
 def test_main_exits_1_when_the_running_class_lags_the_file(monkeypatch, capsys):
-    connection = FakeConnection([])
+    module = _script()
+    connection = FakeConnection([], file=str(module.HANDLER))
     module = _patched(monkeypatch, connection)
 
     rc = module.main(["--check"])
@@ -291,6 +305,51 @@ def test_main_says_what_a_reload_does_not_cover(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert f"reloaded: {', '.join(module.RELOAD_ORDER)}" in out
     assert "not reloaded: event_bridge, socket_server" in out
+
+
+def test_the_loaded_path_is_asked_for_before_the_reload(monkeypatch):
+    """The order is the fix: the reload acts on whichever tree is running.
+
+    Read afterwards, the path only narrates what has already happened - which is how
+    another checkout's modules were re-executed by a bare run from this one.  The
+    third call is the class the reload produced, which is the one to compare.
+    """
+    module = _script()
+    connection = FakeConnection(sorted(_declared(module)), file=str(module.HANDLER))
+    module = _patched(monkeypatch, connection)
+
+    assert module.main([]) == 0
+    assert connection.sent == ["execute_code", "reload_handler", "execute_code"]
+
+
+@pytest.mark.parametrize("argv", [[], ["--check"]], ids=["reload", "check"])
+def test_a_foreign_checkout_is_refused_before_anything_changes(
+    monkeypatch, capsys, argv
+):
+    """An AddIns copy answers with a matching class set - the path is the only signal.
+
+    The names can agree while the tree does not, so a mismatch is a failure in both
+    modes: rewriting that tree's modules is the accident this refusal exists to stop,
+    and ``--check`` reports it without sending anything either.
+    """
+    module = _script()
+    connection = FakeConnection(
+        sorted(_declared(module)),
+        file="C:/Users/someone/AppData/Roaming/Autodesk/AddIns/Fusion360MCP/addon/"
+        "server/command_handler.py",
+    )
+    module = _patched(monkeypatch, connection)
+
+    rc = module.main(argv)
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert connection.sent == ["execute_code"], "nothing but the question is sent"
+    # The answer printed before anything else, then the refusal naming both trees.
+    assert "add-in loaded: C:/Users/someone/" in captured.out
+    assert "not this checkout" in captured.err
+    assert "AddIns/Fusion360MCP" in captured.err
+    assert str(module.SERVER) in captured.err
 
 
 def test_the_sibling_modules_are_named_in_the_reload_order():
