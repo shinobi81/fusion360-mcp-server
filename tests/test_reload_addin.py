@@ -1,16 +1,30 @@
-"""The reload script's comparison: what the file declares vs what Fusion runs.
+"""The reload script's comparison: what the files declare vs what Fusion runs.
 
 The socket half is exercised by running the script (it needs a live add-in); the
 comparison is the part that can be wrong in a way nobody notices, so it is tested
 here.  It went wrong once already: ``dir(cls)`` lists the class's attribute tables
 as well as its methods, so the first version reported every ``_VIEW_DIRS`` and
 ``_MUTATION_COMMANDS`` as "extra in the running class".
+
+The same hazard returns once ``CommandHandler`` is a base plus one mixin per domain:
+``vars(cls)`` alone then sees none of the mixins' methods, and reading only
+``command_handler.py`` declares none of them either.  The file half reads every module
+in ``COMMAND_MODULES`` and the running half walks ``cls.__mro__``, so both halves cross
+the inheritance line - the pair of tests at the bottom run each half against the real
+add-in.
 """
 
 from __future__ import annotations
 
+import ast
 import importlib.util
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
+
+from tests.fakes.design import FakeDesign
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -22,6 +36,21 @@ def _script():
     assert spec is not None and spec.loader is not None, f"cannot load {path}"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def one_command_module(monkeypatch):
+    """``_script()`` with a one-module tuple: these tests hand-build a source map.
+
+    ``declared_methods`` requires every module ``COMMAND_MODULES`` names to appear in
+    the map it is given, and the real tuple gains a module per task while these maps
+    stay hand-written.  Pinning it here keeps the requirement itself tested - by
+    ``test_a_command_module_the_tuple_forgets_is_reported``, which sets its own tuple -
+    without these tests restating the layout of ``addon/server``.
+    """
+    module = _script()
+    monkeypatch.setattr(module, "COMMAND_MODULES", ("command_handler",))
     return module
 
 
@@ -49,20 +78,102 @@ class Other:
 """
 
 
-def test_only_the_handlers_own_methods_are_declared():
-    """Methods, not attributes; this class, not the module."""
-    declared = _script().declared_methods(SOURCE)
+def test_only_the_handlers_own_methods_are_declared(one_command_module):
+    """Methods, not attributes; the command classes, not the module."""
+    declared = one_command_module.declared_methods({"command_handler.py": SOURCE})
 
     assert declared == {"extract", "_helper"}
     assert "not_a_handler_method" not in declared
 
 
-def test_dunders_and_attribute_tables_are_ignored():
+def test_dunders_and_attribute_tables_are_ignored(one_command_module):
     """``dir()`` sees ``_CONSTANTS`` and ``__init__``; the comparison must not."""
-    declared = _script().declared_methods(SOURCE)
+    declared = one_command_module.declared_methods({"command_handler.py": SOURCE})
 
     assert "_CONSTANTS" not in declared
     assert not [name for name in declared if name.startswith("__")]
+
+
+def test_inherited_methods_count_as_declared(one_command_module):
+    """A helper in the base counts as the running class's, because it is inherited."""
+    sources = {
+        "handler_base.py": "class HandlerBase:\n    def helper(self): pass\n",
+        "handler_sketch.py": (
+            "class SketchCommands:\n    def create_sketch(self): pass\n"
+        ),
+        "command_handler.py": "class CommandHandler(SketchCommands):\n    pass\n",
+    }
+
+    assert one_command_module.declared_methods(sources) == {"helper", "create_sketch"}
+
+
+def test_a_command_module_the_tuple_forgets_is_reported(monkeypatch):
+    """A name in the tuple that no source answers must stop the check, not shrink it."""
+    module = _script()
+    monkeypatch.setattr(
+        module, "COMMAND_MODULES", ("handler_sketch", "command_handler")
+    )
+    sources = {"command_handler.py": "class CommandHandler:\n    pass\n"}
+
+    with pytest.raises(SystemExit, match="handler_sketch"):
+        module.declared_methods(sources)
+
+
+def test_every_file_declaring_a_command_class_is_named_in_the_tuple():
+    """The other direction: a module the tuple never names is invisible to both halves.
+
+    ``declared_methods`` reports a name it cannot read and a module that declares no
+    command class, and ``main`` compares that set with the running class - so a module
+    that declares commands and appears in neither list gives the comparison nothing to
+    disagree about.  Edits to it never reach Fusion (``event_bridge`` reloads only
+    ``RELOAD_ORDER``) and the check still says ok.  The files come from the directory,
+    not from the tuple: the directory is the list that grows by itself.
+
+    Every ``.py``, not ``handler_*.py``: the prefix is a convention, and a registry
+    entry that does not follow it declares its class just the same.  Globbing the name
+    would report such a module as "declaring no command class", which is false, so the
+    convention would survive as an unstated rule the failure message denies.  Only
+    module-level classes count: ``event_bridge`` builds its ``MainThreadHandler``
+    inside a function, and no module registers a command class nested in one.
+    """
+    module = _script()
+    server = REPO_ROOT / "addon" / "server"
+    declaring = {
+        path.name
+        for path in sorted(server.glob("*.py"))
+        if any(
+            isinstance(node, ast.ClassDef) and module._is_command_class(node.name)
+            for node in ast.parse(path.read_text(encoding="utf-8")).body
+        )
+    }
+    named = {f"{stem}.py" for stem in module.COMMAND_MODULES}
+
+    unregistered = sorted(declaring - named)
+    assert unregistered == [], (
+        f"not in COMMAND_MODULES: {', '.join(unregistered)} - each declares a command "
+        "class, so reload_handler never re-executes it and its edits never reach "
+        "Fusion"
+    )
+    unreadable = sorted(named - declaring)
+    assert unreadable == [], (
+        f"named in COMMAND_MODULES, declaring no command class: "
+        f"{', '.join(unreadable)} - the comparison would be vacuous for each of them"
+    )
+
+
+def test_the_command_modules_are_reloaded_base_first_and_command_handler_last():
+    """The order is load-bearing, and both copies of the tuple say so in a comment.
+
+    ``reload_handler`` re-executes each module in turn.  A module re-executed *after*
+    its importer leaves the importer holding the old class object, so the base has to
+    be built before the domains that inherit from it and ``command_handler`` - the
+    module that imports all of them - has to be last.  Reordered, the reload succeeds
+    and Fusion keeps serving a class assembled from the previous load.
+    """
+    module = _script()
+
+    assert module.COMMAND_MODULES[0] == "handler_base"
+    assert module.COMMAND_MODULES[-1] == "command_handler"
 
 
 def test_a_method_the_file_declares_is_missing_from_the_running_class():
@@ -84,12 +195,18 @@ def test_identical_sets_report_nothing():
     assert _script().compare({"a", "b"}, {"a", "b"}) == (set(), set())
 
 
-def test_a_file_without_the_class_is_refused():
-    """A check that silently found no class would pass vacuously for ever."""
-    import pytest
+def test_a_module_without_a_command_class_is_refused(one_command_module):
+    """A check that silently found no class would pass vacuously for ever.
 
-    with pytest.raises(SystemExit):
-        _script().declared_methods("class SomethingElse:\n    pass\n")
+    Against the real tuple this test passed for the other reason: ``COMMAND_MODULES``
+    names ten modules and the map held one, so ``declared_methods`` raised at "named
+    but never read" before it read ``SomethingElse`` at all.  One module, present, so
+    the absence check passes and this is the branch that fires.
+    """
+    with pytest.raises(SystemExit, match="no command class"):
+        one_command_module.declared_methods(
+            {"command_handler.py": "class SomethingElse:\n    pass\n"}
+        )
 
 
 class FakeConnection:
@@ -100,6 +217,7 @@ class FakeConnection:
         self.file = file
         self.raises = raises
         self.sent: list[str] = []
+        self.params: dict = {}
         self.connected = False
 
     def connect(self) -> bool:
@@ -111,6 +229,7 @@ class FakeConnection:
 
     def send_command(self, command: str, params=None) -> dict:
         self.sent.append(command)
+        self.params = params or {}
         if self.raises is not None:
             raise self.raises
         if command == "reload_handler":
@@ -122,6 +241,14 @@ class FakeConnection:
             "result": {"file": self.file, "methods": self.methods},
             "output": "",
         }
+
+
+def _declared(module) -> set[str]:
+    """Every command method the checkout's command modules declare."""
+    paths = [module.SERVER / f"{stem}.py" for stem in module.COMMAND_MODULES]
+    return module.declared_methods(
+        {path.name: path.read_text(encoding="utf-8") for path in paths}
+    )
 
 
 def _patched(monkeypatch, connection: FakeConnection):
@@ -142,7 +269,8 @@ def test_loaded_class_unwraps_execute_codes_envelope(monkeypatch):
 
 
 def test_main_exits_1_when_the_running_class_lags_the_file(monkeypatch, capsys):
-    connection = FakeConnection([])
+    module = _script()
+    connection = FakeConnection([], file=str(module.HANDLER))
     module = _patched(monkeypatch, connection)
 
     rc = module.main(["--check"])
@@ -153,9 +281,7 @@ def test_main_exits_1_when_the_running_class_lags_the_file(monkeypatch, capsys):
 
 def test_main_exits_0_when_the_sets_match(monkeypatch, capsys):
     module = _script()
-    source = module.HANDLER.read_text(encoding="utf-8")
-    declared = sorted(module.declared_methods(source))
-    connection = FakeConnection(declared, file=str(module.HANDLER))
+    connection = FakeConnection(sorted(_declared(module)), file=str(module.HANDLER))
     module = _patched(monkeypatch, connection)
 
     rc = module.main(["--check"])
@@ -169,18 +295,114 @@ def test_main_exits_0_when_the_sets_match(monkeypatch, capsys):
 def test_main_says_what_a_reload_does_not_cover(monkeypatch, capsys):
     """The success line must not read as "everything is current"."""
     module = _script()
-    source = module.HANDLER.read_text(encoding="utf-8")
-    declared = sorted(module.declared_methods(source))
-    module = _patched(monkeypatch, FakeConnection(declared, file=str(module.HANDLER)))
+    connection = FakeConnection(sorted(_declared(module)), file=str(module.HANDLER))
+    module = _patched(monkeypatch, connection)
 
     module.main([])
 
+    # Derived, not retyped: this is the tuple ``main`` prints, so a module added to
+    # the reload should not need a second edit here to keep the test honest.
     out = capsys.readouterr().out
-    assert (
-        "reloaded: hints, rules, hole_geometry, parameter_units, "
-        "mutation_commands, command_handler"
-    ) in out
+    assert f"reloaded: {', '.join(module.RELOAD_ORDER)}" in out
     assert "not reloaded: event_bridge, socket_server" in out
+
+
+def test_the_loaded_path_is_asked_for_before_the_reload(monkeypatch):
+    """The order is the fix: the reload acts on whichever tree is running.
+
+    Read afterwards, the path only narrates what has already happened - which is how
+    another checkout's modules were re-executed by a bare run from this one.  The
+    third call is the class the reload produced, which is the one to compare.
+    """
+    module = _script()
+    connection = FakeConnection(sorted(_declared(module)), file=str(module.HANDLER))
+    module = _patched(monkeypatch, connection)
+
+    assert module.main([]) == 0
+    assert connection.sent == ["execute_code", "reload_handler", "execute_code"]
+
+
+@pytest.mark.parametrize("argv", [[], ["--check"]], ids=["reload", "check"])
+def test_a_foreign_checkout_is_refused_before_anything_changes(
+    monkeypatch, capsys, argv
+):
+    """An AddIns copy answers with a matching class set - the path is the only signal.
+
+    The names can agree while the tree does not, so a mismatch is a failure in both
+    modes: rewriting that tree's modules is the accident this refusal exists to stop,
+    and ``--check`` reports it without sending anything either.
+    """
+    module = _script()
+    connection = FakeConnection(
+        sorted(_declared(module)),
+        file="C:/Users/someone/AppData/Roaming/Autodesk/AddIns/Fusion360MCP/addon/"
+        "server/command_handler.py",
+    )
+    module = _patched(monkeypatch, connection)
+
+    rc = module.main(argv)
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert connection.sent == ["execute_code"], "nothing but the question is sent"
+    # The answer printed before anything else, then the refusal naming both trees.
+    assert "add-in loaded: C:/Users/someone/" in captured.out
+    assert "not this checkout" in captured.err
+    assert "AddIns/Fusion360MCP" in captured.err
+    assert str(module.SERVER) in captured.err
+
+
+def test_the_sibling_modules_are_named_in_the_reload_order():
+    """The line above is derived from ``RELOAD_ORDER``, so it cannot pin it.
+
+    Comparing the printed line with the tuple it was built from agrees with itself:
+    drop ``hints`` from *both* copies of ``RELOAD_ORDER`` and every other test in this
+    file stays green while Fusion keeps serving the pre-pull ``hints``.  So the
+    siblings are named here, and ``COMMAND_MODULES`` is spliced in rather than
+    retyped - a new domain module is one edit in ``COMMAND_MODULES``, not two here.
+    """
+    module = _script()
+
+    # ``expected`` first, not last: SIM300 reads the upper-case attribute name as the
+    # constant and flags ``module.RELOAD_ORDER == (...)`` as the Yoda form.
+    expected = (
+        "hints",
+        "rules",
+        "hole_geometry",
+        "parameter_units",
+        "mutation_commands",
+        *module.COMMAND_MODULES,
+    )
+    assert expected == module.RELOAD_ORDER
+
+
+def test_the_command_line_survives_an_interpreter_that_strips_docstrings():
+    """``-OO`` empties ``__doc__``, and ``main`` used to subscript its first line.
+
+    ``(None or "").splitlines()`` is ``[]``, so ``[0]`` raised IndexError before the
+    script did anything: a traceback instead of a usage line, for a description that
+    does not need to come from the docstring.  ``--help`` because it exits inside
+    ``argparse``: the real command line stops at "not connected", so it would never
+    reach the description, and on a machine running Fusion it would reload the add-in.
+    """
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-OO",
+            str(REPO_ROOT / "scripts" / "reload_addin.py"),
+            "--help",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+
+    assert result.returncode == 0, (
+        "`python -OO scripts/reload_addin.py --help` must exit 0: -OO empties "
+        f"__doc__; stderr={result.stderr!r}"
+    )
 
 
 def test_a_fused_addin_is_reported_not_raised(monkeypatch, capsys):
@@ -195,6 +417,69 @@ def test_a_fused_addin_is_reported_not_raised(monkeypatch, capsys):
     assert "did not answer" in capsys.readouterr().err
 
 
+def test_the_add_in_reloads_what_this_script_prints():
+    """Two hand-maintained lists, because the add-in cannot import the dev tree.
+
+    ``reload_handler`` re-executes its own copy in its own order, so a module added to
+    one list and not the other reads as reloaded here and stays stale in Fusion.  The
+    add-in's tuple is compared whole, not just its length: the order is the dependency
+    order.
+    """
+    from addon.server import event_bridge
+
+    assert event_bridge.RELOAD_ORDER == _script().RELOAD_ORDER
+
+
+def test_the_add_in_names_the_same_command_modules_in_the_same_order():
+    """``RELOAD_ORDER`` is derived from this tuple, so the test above cannot pin it.
+
+    Both copies build their printed order from their own ``COMMAND_MODULES``, which
+    means the additive test passes as long as the two derived lists agree - a copy
+    whose tuple was edited without its order following it, or the other way round,
+    is invisible there.  Pinning the tuples closes that gap, and a divergence in
+    either direction leaves one of the two lists naming a module the other never
+    reloads.
+    """
+    from addon.server import event_bridge
+
+    assert event_bridge.COMMAND_MODULES == _script().COMMAND_MODULES
+
+
+def test_the_code_it_sends_reports_the_class_through_its_mro(
+    handler_module, bound_handler, monkeypatch
+):
+    """Run Fusion's half of the check here, against the real class.
+
+    That string only ever executes inside Fusion, so nothing else in the suite notices
+    it failing to parse, reading the wrong namespace, or reporting what ``vars(cls)``
+    alone sees.  The second half swaps in a subclass with one mixin - the shape the
+    split produces - where ``vars(cls)``, what the string did before, reports none of
+    the inherited methods.
+    """
+    module = _script()
+    handler = bound_handler(FakeDesign())
+    connection = FakeConnection([])
+
+    module.loaded_class(connection)
+    code = connection.params["code"]
+
+    reported = handler.execute_code(code)["result"]
+    assert reported["file"].endswith("command_handler.py")
+    assert set(reported["methods"]) == _declared(module)
+
+    class Mixin:
+        def inherited_probe(self):
+            return None
+
+    class Mixed(handler_module.CommandHandler, Mixin):
+        pass
+
+    monkeypatch.setattr(handler_module, "CommandHandler", Mixed)
+    inherited = set(handler.execute_code(code)["result"]["methods"])
+
+    assert inherited == set(reported["methods"]) | {"inherited_probe"}
+
+
 def test_the_declared_names_are_the_running_classs_callables(handler_module):
     """Offline tie between the AST side and the runtime side.
 
@@ -205,12 +490,12 @@ def test_the_declared_names_are_the_running_classs_callables(handler_module):
     import inspect
 
     module = _script()
-    source = (module.HANDLER).read_text(encoding="utf-8")
-    declared = module.declared_methods(source)
+    declared = _declared(module)
 
     live = {
         name
-        for name in vars(handler_module.CommandHandler)
+        for klass in handler_module.CommandHandler.__mro__
+        for name in vars(klass)
         if callable(getattr(handler_module.CommandHandler, name))
         and not name.startswith("__")
     }

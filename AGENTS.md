@@ -48,7 +48,9 @@ and the atheris targets: `docs/TESTING.md`.
 
 ## Adding a tool
 
-1. Handler method in `addon/server/command_handler.py`, and its name in `_COMMAND_NAMES`
+1. Handler method in the module that owns the domain — one of the `handler_*.py` modules
+   `COMMAND_MODULES` lists, not `command_handler.py`, which composes them and declares
+   nothing — and its name in `HandlerBase._COMMAND_NAMES`
    — `__init__` builds `self._commands` from that set, so a name with no method cannot be
    listed and a method with no name is unreachable
 2. Tool definition in `src/fusion360_mcp/tools.py` (`name` must match the command exactly)
@@ -215,7 +217,8 @@ say whether a feature did _something_, a render whether it did the _right_ thing
 - "Not connected" means the add-in is not running: Fusion → Shift+S → Add-Ins → Run.
 - A timeout means the main thread is blocked (modal dialog, heavy computation).
 - If a merge looks live but Fusion behaves as before, the add-in is running the class it
-  loaded at start-up: `uv run python scripts/reload_addin.py` reloads it and proves the
-  running class matches the file (see `docs/TESTING.md`).
+  loaded at start-up: `uv run python scripts/reload_addin.py` reloads it and then proves
+  the running class answers exactly the methods the command modules declare (see
+  `docs/TESTING.md`).
 - After any error, call `get_scene_info` to check whether the operation partially applied.
 - Logs are written to `~/fusion360mcp.log` by the add-in.
