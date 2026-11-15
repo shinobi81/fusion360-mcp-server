@@ -111,7 +111,7 @@ def test_a_canonical_file_without_an_import_line_is_refused(tmp_path):
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="no 'import ' line"):
+    with pytest.raises(ValueError, match="has no import line"):
         SYNC.render(canonical, HEADER)
 
 

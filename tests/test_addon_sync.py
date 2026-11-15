@@ -5,8 +5,8 @@ import from this package, so a couple of tables are duplicated:
 
 * ``src/fusion360_mcp/hints.py``, ``src/fusion360_mcp/_mutation_commands.py`` and
   ``src/fusion360_mcp/_rules.py`` are generated from the add-in's files by
-  ``scripts/sync_mirrors.py``;
-  ``test_the_mirrors_are_generated`` runs it with ``--check``.
+  ``scripts/sync_mirrors.py``; ``test_no_mirror_is_stale`` runs it with ``--check``,
+  and the header check reads that script's ``MIRRORS`` so a fourth entry is covered.
 * ``CommandHandler._COMMAND_NAMES``  ↔  ``tools.py``'s tool names
 * ``tools.VIEW_PRESETS``  ↔  ``CommandHandler._VIEW_DIRS``
 
@@ -19,13 +19,26 @@ other.
 from __future__ import annotations
 
 import ast
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 COMMAND_HANDLER = REPO_ROOT / "addon" / "server" / "command_handler.py"
 MUTATION_COMMANDS = REPO_ROOT / "addon" / "server" / "mutation_commands.py"
+
+
+def _declared_mirrors() -> tuple[Path, ...]:
+    """The mirror paths ``MIRRORS`` declares (``scripts`` is not a package)."""
+    path = REPO_ROOT / "scripts" / "sync_mirrors.py"
+    spec = importlib.util.spec_from_file_location("_sync_mirrors_paths", path)
+    assert spec is not None and spec.loader is not None, f"cannot load {path}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return tuple(mirror for _canonical, mirror, _header in module.MIRRORS)
 
 
 def _set_literal(value: ast.expr) -> set[str]:
@@ -95,16 +108,27 @@ def _view_dirs() -> set[str]:
     return _extract_class_attr_set(COMMAND_HANDLER, "CommandHandler", "_VIEW_DIRS")
 
 
-def test_the_mirrors_are_generated():
-    """Every mirror carries the generated header, and none is stale."""
-    for mirror in ("hints.py", "_mutation_commands.py", "_rules.py"):
-        path = REPO_ROOT / "src" / "fusion360_mcp" / mirror
-        text = path.read_text(encoding="utf-8")
-        assert "GENERATED, do not edit" in text.split("\n\n")[0], mirror
-    subprocess.run(
+@pytest.mark.parametrize("mirror", _declared_mirrors(), ids=str)
+def test_every_declared_mirror_carries_the_generated_header(mirror):
+    """Read from ``MIRRORS``, so a fourth mirror cannot be added without the header."""
+    text = (REPO_ROOT / mirror).read_text(encoding="utf-8")
+
+    assert "GENERATED, do not edit" in text.split("\n\n")[0], mirror
+
+
+def test_no_mirror_is_stale():
+    """``--check`` is the guard; its diff belongs in the assertion, not the stream."""
+    result = subprocess.run(
         [sys.executable, "scripts/sync_mirrors.py", "--check"],
         cwd=REPO_ROOT,
-        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, (
+        "a mirror is stale - run `uv run python scripts/sync_mirrors.py`:\n"
+        + result.stdout
+        + result.stderr
     )
 
 
@@ -163,10 +187,6 @@ def test_export_view_sheet_offers_the_presets_without_current():
     assert set(enum) == _view_dirs()
 
 
-# Commands the add-in dispatches that are intentionally not MCP tools.
-_DISPATCH_ONLY = {"reload_handler"}
-
-
 def test_tools_match_addon_dispatch():
     """Every MCP tool must have an add-in handler, and vice versa.
 
@@ -176,9 +196,8 @@ def test_tools_match_addon_dispatch():
     from fusion360_mcp.tools import TOOLS
 
     tool_names = {t["name"] for t in TOOLS}
-    dispatch = (
-        _extract_class_attr_set(COMMAND_HANDLER, "CommandHandler", "_COMMAND_NAMES")
-        - _DISPATCH_ONLY
+    dispatch = _extract_class_attr_set(
+        COMMAND_HANDLER, "CommandHandler", "_COMMAND_NAMES"
     )
     assert tool_names == dispatch, (
         f"tools.py and CommandHandler._COMMAND_NAMES have drifted.\n"

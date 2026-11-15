@@ -283,7 +283,7 @@ def test_render_view_offers_every_preset_the_handler_handles():
 
 
 def test_every_edge_selector_schema_advertises_one_tuple():
-    """fillet, chamfer and offset_faces take the same four selectors."""
+    """fillet and chamfer take the same four selectors."""
     enums = {
         tuple(tool["inputSchema"]["properties"]["edge_selection"]["enum"])
         for tool in TOOLS

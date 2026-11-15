@@ -671,10 +671,12 @@ def test_a_documented_lint_command_missing_a_directory_is_a_finding():
 
 
 def test_a_demonstration_command_is_not_read_as_the_gate():
+    """A targeted run, a bare invocation, and a shuffled gate are not findings."""
     pages = {
         "README.md": "uv run ruff check --select B010 src/ tests/\n"
         "uv run ruff --version\n"
         "uv run ruff check\n"
+        "uv run ruff check tests/ src/ fuzz/ addon/ scripts/\n"
     }
 
     assert _documented_ruff_findings(pages, [CI_CHECK, CI_FORMAT]) == []

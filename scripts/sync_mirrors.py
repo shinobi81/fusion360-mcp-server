@@ -9,10 +9,11 @@ canonical: this renders each ``src/`` mirror from it, so a change is made once.
     uv run python scripts/sync_mirrors.py --check   # exit 1 if any is stale
 
 A mirror is a fixed header plus the canonical file from its first import line — the
-first line starting with ``import `` or ``from `` — to EOF.  The canonical docstring is
-the only thing that does not reach the mirror, and it is dropped by design; anything
-else above that line is refused rather than dropped.  ``--check`` prints a unified diff
-of each drifted mirror and is what the test suite runs.
+first line starting with ``import `` or ``from `` — to EOF.  The canonical docstring,
+and any comments or blank lines above that import, do not reach the mirror: they are
+dropped by design, so editing the docstring cannot drift it.  Any other statement
+above the import line is refused rather than dropped.  ``--check`` prints a unified
+diff of each drifted mirror and is what the test suite runs.
 """
 
 from __future__ import annotations
@@ -94,10 +95,11 @@ def _is_docstring(node: ast.stmt) -> bool:
 
 
 def _refuse_code_above_the_imports(canonical: Path, preamble: list[str]) -> None:
-    """Refuse a preamble that is anything but the canonical docstring.
+    """Refuse a preamble holding a statement that is not the canonical docstring.
 
     The mirror starts at the import line, so a table placed above it would reach the
     add-in and nowhere else - which is the silent drop this generator exists to prevent.
+    A comment or a blank line is not a statement and is dropped with the docstring.
     """
     text = "".join(preamble)
     if not text.strip():
@@ -128,7 +130,7 @@ def render(canonical: Path, header: str) -> str:
         if line.startswith(_IMPORT_PREFIXES):
             _refuse_code_above_the_imports(canonical, lines[:index])
             return header + "".join(lines[index:])
-    raise ValueError(f"{canonical} has no 'import ' line: nothing to mirror")
+    raise ValueError(f"{canonical} has no import line: nothing to mirror")
 
 
 def main(argv: list[str] | None = None) -> int:

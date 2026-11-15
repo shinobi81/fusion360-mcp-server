@@ -758,9 +758,9 @@ def test_a_bad_body_name_is_reported_before_a_bad_selector(bound_handler):
 def test_an_unknown_selection_is_refused_before_the_body_is_read(select):
     """An empty body and a bad selection together hear about the selection.
 
-    ``_select_edges`` used to read the body first, so this call raised "has no edges to
-    select from".  Only a body with nothing to select makes the order visible; with any
-    edges on it the enum check answers either way, as the test above shows.
+    Only a body with nothing to select makes the order visible, so this pins which
+    refusal wins when both are wrong; see
+    ``test_an_unknown_selection_is_classified_too``.
     """
     with pytest.raises(RuntimeError) as raised:
         select([], "diagonal")
