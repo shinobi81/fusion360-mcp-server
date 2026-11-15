@@ -3,8 +3,9 @@
   // fight them: MD013 would demand 80-column tables, and MD060 only asks for
   // pipe alignment. Prose is wrapped at 88 to match ruff's line-length.
   // A pull request template is a fragment, not a document: it has no H1.
-  // The two superpowers paths are git-ignored local scratch (SDD ledger, plans),
-  // so CI never checks them out and the local gate must not lint them.
+  // The two superpowers paths are git-ignored local scratch — `docs/superpowers/` and
+  // `.superpowers/` are both in .gitignore — so CI never checks them out and the local
+  // gate must not lint them.
   "ignores": [
     ".github/PULL_REQUEST_TEMPLATE.md",
     ".superpowers",

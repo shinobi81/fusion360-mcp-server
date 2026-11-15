@@ -40,8 +40,16 @@ different populations:
   an add-in regression would buy slack for `src/`.
 
 Both live in `addopts`/CI rather than in one file's scope, so a subset is run with
-`--no-cov`. The statements that are uncovered on purpose are the ones
-`--cov-report=term-missing` prints on every run.
+`--no-cov`. The uncovered statements are all printed by `--cov-report=term-missing`; the
+four below are by design, named by symbol because line numbers drift on every edit and a
+stale one reads as a waiver for code that no longer exists:
+
+- `server.py`'s `bbox_before` branch: no mock sets it.
+- The unreachable prompt fallback: clients only ask for prompts `list_prompts`
+  advertised.
+- The two lines inside `arun()` (`async with stdio_server()` and the `app.run` it
+  awaits); `anyio.run(arun)` itself runs in the tests.
+- `__main__.py`'s click entry point.
 
 The measured total is deliberately not written down in any document that describes the
 current tree: it moves whenever a test reaches new lines, so a quoted figure is a claim

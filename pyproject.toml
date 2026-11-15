@@ -69,7 +69,7 @@ addopts = "--cov --cov-report=term-missing --cov-fail-under=59"
 # configuration: a `pyrightconfig.json` would take precedence, and a test fails on one.
 [tool.pyright]
 exclude = ["addon", "build", ".venv", "node_modules"]
-typeCheckingMode = "basic"
+typeCheckingMode = "basic"  # pinned: the checked set cannot change by omission
 # Resolve imports from the project venv, otherwise third-party packages read
 # as unresolved no matter what is installed.
 venvPath = "."

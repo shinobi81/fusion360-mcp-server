@@ -608,8 +608,8 @@ def _add_joint(p: dict) -> dict:
 
 # value_kind -> (motion, attribute, unit), mirroring what the add-in resolves
 # from the joint's motion type. The mock holds no design, so it resolves from the
-# kind; one rotationValue/degrees pair for every kind would give the slide values
-# that are centimetres the wrong unit.
+# kind; a rotationValue/degrees pair for every kind would give the slide values,
+# which are lengths in centimetres, the wrong unit.
 _MOCK_JOINT_VALUES: dict[str, tuple[str, str, str]] = {
     "rotation": ("RevoluteJointMotion", "rotationValue", "deg"),
     "slide": ("SliderJointMotion", "slideValue", "cm"),
@@ -795,8 +795,8 @@ def _curve_index_error(p: dict, fields: tuple[str, ...]) -> dict | None:
     Mock mode has no sketch, so it cannot know whether an index is past the end -
     but a negative index, a fractional one and a boolean are invalid in *every*
     sketch, and the handler refuses them before it touches geometry.  Echoing one
-    would teach a sequence Fusion answers differently: Python wraps ``-1`` to the
-    last curve, so an echoed ``-1`` names a curve nobody asked for and reports
+    would teach a sequence Fusion answers differently: ``-1`` wraps to the last
+    curve, so the add-in handed one dimensioned a curve nobody named and reported
     success (measured live).
 
     Every mock handler that takes a curve index calls this - the six the add-in

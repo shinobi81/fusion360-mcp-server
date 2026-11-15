@@ -25,7 +25,8 @@ Thumbs.db
 
 .worktrees
 
-# local planning notes — design/spec docs stay out of the repo
+# local planning notes — design/spec docs and the SDD ledger stay out of the repo
+.superpowers/
 docs/superpowers/
 
 # review/PR scratch files: a 'git add -A' must not swallow these.

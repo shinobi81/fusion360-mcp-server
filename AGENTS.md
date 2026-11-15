@@ -53,8 +53,8 @@ and the atheris targets: `docs/TESTING.md`.
 2. Tool definition in `src/fusion360_mcp/tools.py` (`name` must match the command exactly)
 3. Mock handler in `src/fusion360_mcp/mock.py` + `_DISPATCH` entry
 4. Mutations also go in `addon/server/mutation_commands.py`, the one canonical set, then
-   `uv run python scripts/sync_mirrors.py` regenerates the mirror the add-in and mock mode
-   both read; `tests/test_addon_sync.py` fails while either mirror is stale
+   `uv run python scripts/sync_mirrors.py` regenerates the `src/` mirror that mock mode
+   and the connection read; `tests/test_addon_sync.py` fails while either mirror is stale
 5. Annotations: `readOnlyHint`, `destructiveHint`, `idempotentHint`
 6. A row in `docs/TOOLS.md` and the name in the index in this file — the index is
    guarded, the description is not
@@ -92,13 +92,13 @@ The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
 ## Merging
 
 `main` takes PRs only, and merging needs an approving review a solo author cannot give
-themselves, so the merge is `gh pr merge <n> --squash --admin`. **`--admin` bypasses the
+themselves, so the merge is `gh pr merge <pr> --squash --admin`. **`--admin` bypasses the
 entire ruleset**, including `required_review_thread_resolution`, so the check is yours:
 
 ```bash
 python scripts/check_review_threads.py <pr>   # exit 0 = mergeable, 1 = threads open
 gh pr view <pr> --json reviews --jq '.reviews[] | "\(.author.login) [\(.state)]\n\(.body)"'
-gh pr merge <n> --squash --admin            # only after the two commands above are clean
+gh pr merge <pr> --squash --admin             # only after the two commands above are clean
 ```
 
 The `threads` CI job runs the same script, so open threads show up as a failing check. A
@@ -155,16 +155,19 @@ Four measured behaviours, worth reading instead of guessing:
   plus `ignored_z` and a `note` when a non-zero `z` was discarded. To move geometry, move
   the plane: `create_sketch(z_offset=...)`.
 - **`revolve`'s axis is model space and must be coplanar with the profile.** Measured on
-  Fusion 2706.1.17: a direction is normalised, so its magnitude does not matter, and an
-  axis leaving the sketch plane is refused as `AXIS_OUT_OF_PLANE`. Read
+  Fusion 2706.1.17: `axis_origin_*` and `axis_direction_*` are model-space centimetres,
+  a direction is normalised so its magnitude does not matter, and an axis leaving the
+  sketch plane is refused as `AXIS_OUT_OF_PLANE`. Read
   `axis_model_start`/`axis_model_end` to confirm where it ran; an origin off the plane
   also carries `axis_snapped_to_sketch_plane: true`.
-- **A `cut`, `join` or `intersect` hits every body the profile reaches — name `target_body`
-  unless that is what you want.** Left out, the choice is Fusion's own inference
-  (`participantBodies` empty); `target_body` sets that property and copies nothing.
-  Measured on Fusion 2706: a loft whose sections spanned the seam between two touching
-  blocks cut **both**. A body that does not exist is `BODY_NOT_FOUND`; naming one with
-  `operation="new_body"` is `INVALID_INPUT`, since a new body is the feature's output.
+- **On `extrude`/`revolve`/`sweep`/`loft`, a `cut`, `join` or `intersect` hits every body
+  the profile reaches — name `target_body` unless that is what you want.** Left out, the
+  choice is Fusion's own inference (`participantBodies` empty); `target_body` sets that
+  property and copies nothing. Measured on Fusion 2706: a loft whose sections spanned the
+  seam between two touching blocks cut **both**. A body that does not exist is
+  `BODY_NOT_FOUND`; naming one with `operation="new_body"` is `INVALID_INPUT`, since a
+  new body is the feature's output, and a mistyped `operation` is refused before any of
+  that — it invalidates the whole call.
 - **`undo` steps the timeline back and says whether it could verify that.** Measured on
   Fusion 2706: on a parametric design the marker moves back one step synchronously and the
   reply is `{undone: true, verified: true, marker_position: n, timeline_count: m}` — the
