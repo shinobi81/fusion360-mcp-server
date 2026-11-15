@@ -87,24 +87,24 @@ def test_no_add_in_file_names_an_except_tuple_without_brackets(path):
 
 
 @pytest.mark.parametrize(
-    "label, body",
+    "body",
     [
-        ("parenthesised", "except (TypeError, ValueError):"),
-        ("single exception", "except OSError:"),
-        ("aliased tuple", "except (TypeError, ValueError) as exc:"),
-        ("starred", "except* (TypeError, ValueError):"),
-        ("wrapped across lines", "except (\n    TypeError,\n):"),
+        pytest.param("except (TypeError, ValueError):", id="parenthesised"),
+        pytest.param("except OSError:", id="no comma"),
+        pytest.param("except (TypeError, ValueError) as exc:", id="aliased"),
+        pytest.param("except* (TypeError, ValueError):", id="starred"),
+        pytest.param("except (\n    TypeError,\n):", id="wrapped"),
     ],
-    ids=lambda label: label,
 )
-def test_the_checker_accepts_every_bracketed_form(label, body):
-    """Every bracketed header the checker must pass, named by the id.
+def test_the_checker_accepts_a_header_without_a_top_level_comma(body):
+    """What these pin is one property: the comma is not at the header top level.
 
-    ``except*`` is in here because the checker tokenises, not parses: whether
-    Fusion's interpreter accepts PEP 654 is not the claim being pinned.
+    That is why `except OSError:` (no comma at all) and `except*` (PEP 654
+    grouping, which Fusion interpreter may not even parse) belong here: the
+    checker tokenises rather than parses, and must not false-positive on either.
     """
     source = "try:\n    pass\n" + body + "\n    pass\n"
-    assert unparenthesised_except_tuples(source) == [], label
+    assert unparenthesised_except_tuples(source) == [], body
 
 
 @pytest.mark.parametrize(
@@ -112,9 +112,15 @@ def test_the_checker_accepts_every_bracketed_form(label, body):
     ["except TypeError, ValueError:", "except* TypeError, ValueError:"],
 )
 def test_the_checker_trips_on_the_forbidden_form(body):
-    """The guard own test: a checker that cannot fail protects nothing."""
+    """The guard's own test: a checker that cannot fail protects nothing."""
     source = "try:\n    pass\n" + body + "\n    pass\n"
     assert unparenthesised_except_tuples(source) == [3], body
+
+
+def test_the_checker_ignores_the_phrase_inside_a_docstring():
+    """Prose must not block every pull request."""
+    source = '"""Turns `except A, B:` into something else."""\n'
+    assert unparenthesised_except_tuples(source) == []
 
 
 def test_the_checker_ignores_the_phrase_in_a_comment():
