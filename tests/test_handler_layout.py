@@ -1,19 +1,23 @@
-"""The split's two invariants: every command has one home, and the shell is empty.
+"""The split's three invariants: one home per command, one per helper, an empty shell.
 
 ``command_handler.py`` used to declare all 97 commands in one class. It is now a
 shell - ``HandlerBase`` plus one class per domain - so the layout is what keeps the
-modules honest, and both halves of that layout are asserted here:
+modules honest, and all three halves of that layout are asserted here:
 
 * every name in ``HandlerBase._COMMAND_NAMES`` is declared by **exactly one** class
   in the handler's MRO. Two declarations is a copy nobody deleted, which the mixin
   order would silently resolve; none is a command the dispatch table names and no
   module answers, which ``__init__`` would only fail on once Fusion loads it.
+* no *other* method name is declared by two classes either. A helper copied into a
+  second domain rather than moved to ``handler_base`` breaks the same rule in the
+  place ``_COMMAND_NAMES`` cannot see it, and the reload check compares sets of
+  names, so it agrees with itself either way.
 * ``CommandHandler``'s body declares nothing. Anything left there is a command in the
   old file, where the domain that owns it cannot find it.
 
-The first test resolves through ``cls.__mro__`` and ``vars`` the way
+The first two resolve through ``cls.__mro__`` and ``vars`` the way
 ``scripts/reload_addin.py`` reads the running class, because the question is what the
-composed handler answers - not what a file contains. The second reads the source with
+composed handler answers - not what a file contains. The third reads the source with
 ``ast``, because "declares nothing" is a property of the file.
 """
 
@@ -27,13 +31,15 @@ COMMAND_HANDLER = (
 )
 
 
-def command_owners(handler_class) -> dict[str, list[str]]:
-    """``{command name: [declaring class, ...]}`` for the handler's whole MRO.
+def method_owners(handler_class) -> dict[str, list[str]]:
+    """``{method name: [declaring class, ...]}`` for every method the MRO declares.
 
     ``vars`` per class rather than ``dir``: ``dir`` lists what the class answers, so
     a name declared twice would appear once and the duplicate would be invisible -
     which is the thing this reports. A class is named by its qualname and module, so
-    a failure says which two homes a command has.
+    a failure says which two homes a name has. Dunders and the classes' attribute
+    tables are left out: ``__init__`` is ``HandlerBase``'s by design, and
+    ``_COMMAND_NAMES`` is data, not a method.
     """
     return {
         name: [
@@ -41,16 +47,22 @@ def command_owners(handler_class) -> dict[str, list[str]]:
             for klass in handler_class.__mro__
             if name in vars(klass)
         ]
-        for name in handler_class._COMMAND_NAMES
+        for klass in handler_class.__mro__
+        for name in vars(klass)
+        if callable(getattr(handler_class, name)) and not name.startswith("__")
     }
 
 
 def test_every_command_resolves_to_exactly_one_module(handler_module):
     """Each of the 97 commands is declared once, and by a class the handler mixes in."""
     handler_class = handler_module.CommandHandler
-    owners = command_owners(handler_class)
+    declared = method_owners(handler_class)
+    # ``get``, not a filter: the MRO is what ``declared`` is keyed by, so a command
+    # nothing declares is absent from it, and only ``_COMMAND_NAMES`` knows it was
+    # supposed to exist. Empty here means every name below went unchecked.
+    owners = {name: declared.get(name, []) for name in handler_class._COMMAND_NAMES}
 
-    assert len(owners) == len(handler_class._COMMAND_NAMES)
+    assert owners, "``_COMMAND_NAMES`` names no command: nothing is checked below"
     homed = {name: found for name, found in owners.items() if len(found) == 1}
     assert homed == owners, (
         "commands declared by other than exactly one class: "
@@ -59,6 +71,24 @@ def test_every_command_resolves_to_exactly_one_module(handler_module):
             for name, found in owners.items()
             if len(found) != 1
         )
+    )
+
+
+def test_no_helper_is_declared_by_two_classes(handler_module):
+    """A helper in two domains is the same drift, in the place commands cannot see it.
+
+    ``handler_base`` exists so a helper two domains call has one home; a copy left
+    behind in a domain is dead code the mixin order hides, and because the reload check
+    compares *sets* of method names, it reports ok for exactly that shape.
+    """
+    duplicated = {
+        name: found
+        for name, found in method_owners(handler_module.CommandHandler).items()
+        if len(found) > 1
+    }
+
+    assert duplicated == {}, "methods declared by more than one class: " + ", ".join(
+        f"{name} -> {found}" for name, found in duplicated.items()
     )
 
 
