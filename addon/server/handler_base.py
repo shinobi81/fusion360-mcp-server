@@ -447,49 +447,6 @@ class HandlerBase:
             )
         return points.item(index)
 
-    def _mismatch_message(
-        self,
-        face_diameter: float,
-        thread_diameter: float,
-        designation: str,
-        is_internal: bool,
-        thread_type: str,
-    ) -> str:
-        """What to tell a caller whose face and designation disagree.
-
-        The message names the diameter it measured, so the answer says what was seen
-        rather than only what was expected.  It does not recommend the designation it
-        has just refused: the recommendation is the nearest standard thread, which on
-        nominal-sized stock *is* the one asked for.  And ``is_internal`` may be the
-        wrong flag rather than the designation, which is a different repair.
-        """
-        parts = [
-            f"The face is {face_diameter * 10:.2f} mm across but {designation} is "
-            f"{thread_diameter * 10:.2f} mm: Fusion would resize the body to match "
-            "the thread."
-        ]
-        ok, recommended, recommended_class = self._recommended_thread(
-            face_diameter, is_internal, thread_type
-        )
-        if ok and recommended != designation:
-            parts.append(f"{recommended} ({recommended_class}) matches that diameter.")
-
-        # A wrong flag is diagnosed without building a second ThreadInfo: if asking
-        # the *other* polarity for this diameter returns the designation the caller
-        # already asked for, the flag is the mistake, not the thread.
-        ok_other, recommended_other, _ = self._recommended_thread(
-            face_diameter, not is_internal, thread_type
-        )
-        if ok_other and recommended_other == designation:
-            kind = "internal" if not is_internal else "external"
-            parts.append(
-                f"This face sizes up as {kind} ({designation}) - check "
-                f"is_internal={str(not is_internal).lower()}."
-            )
-
-        parts.append("Pass allow_resize=true to accept the resize.")
-        return " ".join(parts)
-
     def _set_suppressed(self, feature_name: str, suppressed: bool) -> dict:
         """Flip one timeline entry's ``isSuppressed``, by feature name.
 
