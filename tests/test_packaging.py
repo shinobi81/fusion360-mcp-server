@@ -770,12 +770,14 @@ TYPE_CHECK_GATE = "uv run mypy src"
 
 TYPE_CHECK_DOCUMENTS = (
     "README.md",
+    "CONTRIBUTING.md",
+    "AGENTS.md",
     "docs/TESTING.md",
     ".github/PULL_REQUEST_TEMPLATE.md",
 )
-"""Pages that state the type gate.  ``GATE_DOCUMENTS`` covers the ``ruff`` commands,
-and these three are the pages that name this one - so a reflow that drops the line from
-any of them has to fail here."""
+"""Pages that state the type gate - the same five ``GATE_DOCUMENTS`` names, in its
+order, because all five name the command; a reflow that drops the line from any of them
+fails here."""
 
 
 def _documents_command(text: str, command: str) -> bool:
@@ -789,13 +791,13 @@ def _documents_command(text: str, command: str) -> bool:
 
 
 def test_every_type_gate_document_names_the_command_ci_runs():
-    """The type gate is one command in one step and three pages state it.
+    """The type gate is one command in one step, and all five gate documents state it.
 
     `[tool.mypy]` with no command running it was a checker that reported nothing, so the
     step and the pages that teach it are one gate: a reflow that drops the line from a
-    page teaches the gate back, and `GATE_DOCUMENTS` reads the two `ruff` commands only,
-    so nothing noticed.  The pages are named here rather than swept, because two of the
-    five gate documents do not carry this command and must not be made to.
+    page teaches the gate back.  `GATE_DOCUMENTS` reads the two `ruff` commands only, so
+    nothing noticed; the same five pages all state this one, so the guard reads them by
+    name - a page that merely mentions `mypy` in prose does not teach the gate.
     """
     commands = _ci_step_commands("Type check")
 
