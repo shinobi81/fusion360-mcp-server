@@ -290,8 +290,7 @@ def _edge_selector_error(p: dict) -> dict | None:
     Mock mode cannot search a body, so it cannot tell which edges a selection
     matches — but the *combination* rules, the element types and the enum are pure
     parameter checks that ``_select_edges`` makes before it examines an edge.
-    Echoing an accepted call here would teach a sequence Fusion refuses, which is
-    the fiction #34 removed from the CAM mocks.
+    Echoing an accepted call here would teach a sequence Fusion refuses.
 
     These fire inside ``_select_edges``, not before the body lookup: ``fillet``
     resolves ``body_name`` first, so a call with both a bad body and a bad selector
@@ -609,8 +608,8 @@ def _add_joint(p: dict) -> dict:
 
 # value_kind -> (motion, attribute, unit), mirroring what the add-in resolves
 # from the joint's motion type. The mock holds no design, so it resolves from the
-# kind instead; without this it reported rotationValue/degrees for every kind,
-# including the slide values that are lengths in centimetres.
+# kind; one rotationValue/degrees pair for every kind would give the slide values
+# that are centimetres the wrong unit.
 _MOCK_JOINT_VALUES: dict[str, tuple[str, str, str]] = {
     "rotation": ("RevoluteJointMotion", "rotationValue", "deg"),
     "slide": ("SliderJointMotion", "slideValue", "cm"),
@@ -797,8 +796,8 @@ def _curve_index_error(p: dict, fields: tuple[str, ...]) -> dict | None:
     but a negative index, a fractional one and a boolean are invalid in *every*
     sketch, and the handler refuses them before it touches geometry.  Echoing one
     would teach a sequence Fusion answers differently: Python wraps ``-1`` to the
-    last curve, so the real add-in used to dimension a curve nobody named and
-    report success (measured live).
+    last curve, so an echoed ``-1`` names a curve nobody asked for and reports
+    success (measured live).
 
     Every mock handler that takes a curve index calls this - the six the add-in
     guards - so mock mode cannot answer ``ok`` for an index real mode refuses.
@@ -882,8 +881,8 @@ def _entity_shape_error(
 
     Mock mode has no sketch, so it cannot know an index is past the end - but it
     does know which types take one entity and which take two, and that is a shape
-    check, not a geometry one.  ``addParallel(e1, None)`` used to reach Fusion and
-    report success; mock mode should not teach the same call.
+    check, not a geometry one.  ``addParallel(e1, None)`` reaches Fusion and reports
+    success; mock mode should not teach the same call.
     """
     kind = p.get(type_field)
     needs_two = table.get(kind) if isinstance(kind, str) else None
@@ -1367,7 +1366,7 @@ def _cam_create_operation(p: dict) -> dict:
     # Same order as the handler: the numeric guards fire before the refusal, and
     # the refusal fires before any operation exists.  tool_diameter is not a
     # parameter at all -- tool geometry comes from the CAM tool library -- and
-    # echoing it back here described an operation Fusion would never create.
+    # echoing it back here would describe an operation Fusion never creates.
     for key in ("tool_number", "stepdown", "stepover", "feed_rate", "spindle_speed"):
         refusal = _non_finite_error(p.get(key))
         if refusal is not None:

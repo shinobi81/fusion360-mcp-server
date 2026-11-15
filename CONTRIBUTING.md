@@ -68,7 +68,8 @@ Guidelines that actually get followed here:
   reason, then fix it. Tests here assert on real behaviour (what the Fusion API is asked
   to do), not on mock internals.
 - **Keep the mock in step.** Every tool has a handler in `src/fusion360_mcp/mock.py`;
-  `tests/test_addon_sync.py` fails if a command exists in one place but not the other.
+  `tests/test_mock.py` fails if one is missing, and `tests/test_addon_sync.py` if the
+  command list and `tools.py` drift apart.
 - **Errors are data.** Return `{"ok": false, "error_kind": ..., "hints": [...]}`, don't
   raise through the bridge. New failure modes get a rule in `addon/server/hints.py` — the
   canonical table, since the add-in cannot import this package — then
@@ -98,6 +99,8 @@ error that motivated it.
 - `addon/` is excluded from pyright/mypy on purpose: it reaches Fusion's `adsk` API
   through a lazy adapter, and `adsk` cannot be resolved outside Fusion. Don't add type
   ignores for it.
+- Comments state the constraint or the measured fact, never the edit that introduced
+  it.
 
 ## Releasing
 

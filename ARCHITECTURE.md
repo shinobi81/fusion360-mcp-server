@@ -39,15 +39,17 @@ explains most of the system's design:
 | `src/fusion360_mcp/server.py` | MCP surface: stdio transport, tools, resources, prompts, result formatting |
 | `src/fusion360_mcp/connection.py` | TCP client, newline-delimited JSON, per-command timeouts |
 | `src/fusion360_mcp/tools.py` | tool schemas — the contract agents read |
-| `src/fusion360_mcp/hints.py` | error-kind table (generated from the add-in's by `scripts/sync_mirrors.py`, guarded by a test) |
+| `src/fusion360_mcp/hints.py` | error-kind table (generated from the add-in's by `scripts/sync_mirrors.py`) |
+| `src/fusion360_mcp/_mutation_commands.py` | mutation-command set (generated the same way) |
 | `src/fusion360_mcp/mock.py` | `--mode mock` responses, so the envelope is testable without Fusion |
 | `addon/server/socket_server.py` | listener, per-client threads, framing, malformed-input handling |
 | `addon/server/event_bridge.py` | CustomEvent bridge and the work queue |
 | `addon/server/command_handler.py` | every command, executing on the main thread |
 
 `addon/` and `src/` are separate installables: the add-in is copied into Fusion's AddIns
-directory and cannot import from the package, which is why the hint table exists twice
-and why a test asserts the two are identical.
+directory and cannot import from the package, which is why the hint table and the mutation
+list exist twice — each `src/` copy is generated from the add-in's file, and the generated
+mirror check (`tests/test_addon_sync.py`, `sync_mirrors.py --check`) fails on a stale one.
 
 ## The error envelope
 

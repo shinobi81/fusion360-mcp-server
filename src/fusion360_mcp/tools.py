@@ -30,8 +30,7 @@ _POINT3 = {
 EDGE_SELECTIONS = ("all", "top", "bottom", "vertical")
 
 # ``render_view``'s camera presets: "current" (leave the camera where it is) plus every
-# key of the add-in's ``CommandHandler._VIEW_DIRS``, in that order.  The handler has
-# always handled the isometric diagonals; this tuple is what advertises them.
+# key of the add-in's ``CommandHandler._VIEW_DIRS``, in that order.
 # ``tests/test_addon_sync.py`` asserts the two agree.
 VIEW_PRESETS = (
     "current",
@@ -48,7 +47,7 @@ VIEW_PRESETS = (
 )
 
 # fillet and chamfer take the same four edge selectors; only the size argument
-# differs (a radius or a distance), so the rest is stated once.
+# differs (a radius or a distance).
 _EDGE_SELECTOR = {
     "edge_selection": {
         "type": "string",
@@ -80,10 +79,9 @@ _EDGE_SELECTOR = {
 }
 
 # The joint geometry arguments are the same on both joint tools; only the
-# key_point wording differs (add_joint measured what Fusion refuses, the
-# as-built one did not have to).  The sub-dicts are shared between the two
-# schemas and never mutated - the annotations pass below only writes on the tool
-# dict itself - which is what makes stating them once safe.
+# key_point wording differs (add_joint's was measured against Fusion's refusals,
+# the as-built one did not have to be).  The sub-dicts are shared and never mutated:
+# the annotations pass below writes only on the tool dict itself.
 _JOINT_TYPE = {
     "type": "string",
     "enum": [

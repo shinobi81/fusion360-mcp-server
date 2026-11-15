@@ -40,8 +40,8 @@ different populations:
   an add-in regression would buy slack for `src/`.
 
 Both live in `addopts`/CI rather than in one file's scope, so a subset is run with
-`--no-cov`. The statements that are uncovered on purpose are listed in the comment above
-`addopts`.
+`--no-cov`. The statements that are uncovered on purpose are the ones
+`--cov-report=term-missing` prints on every run.
 
 The measured total is deliberately not written down in any document that describes the
 current tree: it moves whenever a test reaches new lines, so a quoted figure is a claim

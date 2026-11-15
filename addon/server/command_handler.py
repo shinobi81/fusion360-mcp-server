@@ -17,8 +17,8 @@ import traceback
 from contextlib import redirect_stdout, suppress
 from typing import Any, Callable, ClassVar
 
-# One import site for Autodesk's API: resolved lazily, so this module imports outside
-# Fusion.  Only the import line changed; every ``adsk.`` use below is untouched.
+# One import site for Autodesk's API, resolved lazily so this module imports outside
+# Fusion; every ``adsk.`` use below goes through the adapter.
 from . import fusion_api as adsk
 from . import get_logger
 from . import hints as _hints
@@ -338,15 +338,13 @@ class CommandHandler:
     # Joint types whose two direction arguments are (something, primary) rather
     # than (primary, something), so the caller's `axis` is passed second.
     #
-    # ball: takes (pitchDirection, yawDirection) and rejects a pitch parallel to
-    # the joint axis with "Invalid parameter pitchDirection", so the perpendicular
-    # one goes first (verified on 2705).
-    #
-    # pin_slot: measured on 2706, `setAsPinSlotJointMotion(a, b)` makes `a` the
-    # ROTATION axis and `b` the slide. Passing the caller's axis first - which is
-    # what this did - made `axis` the rotation and left the slide on the
-    # perpendicular default. The result's `directions` field is what exposed it:
-    # `axis_world` said -X while Fusion reported slideDirection [0,0,1].
+    # ball takes (pitchDirection, yawDirection) and rejects a pitch parallel to the
+    # joint axis with "Invalid parameter pitchDirection" (verified on 2705), so the
+    # perpendicular one goes first.  Measured on 2706, `setAsPinSlotJointMotion(a, b)`
+    # makes `a` the ROTATION axis and `b` the slide: passing the caller's axis first
+    # makes `axis` the rotation and leaves the slide on the perpendicular default,
+    # which the result's `directions` field exposes - `axis_world` said -X while
+    # Fusion reported slideDirection [0,0,1].
     _JOINT_REVERSED_DIRECTION_ARGUMENTS = frozenset({"ball", "pin_slot"})
 
     # How far an edge's extent may sit from a plane and still count as lying in
@@ -1384,10 +1382,10 @@ class CommandHandler:
     def _point_by_index(self, sketch, points, index, field: str):
         """The sketch point *index* names, or a refusal that says which one missed.
 
-        ``midpoint``'s first entity is a POINT, and it used to be validated against
-        the curve list: a point index that was also inside the curve list named the
-        wrong item, and a point index one past it was refused with a message about
-        curves - advice for a different collection.
+        ``midpoint``'s first entity is a POINT, so it is read against the point
+        collection: validated against the curve list, a point index that is also
+        inside that list names the wrong item, and one past it is refused with advice
+        about curves - a different collection.
 
         ``points`` is Fusion's collection (``count``/``item``), not a list: that is
         the surface it offers, and it is what the fake models.
@@ -1412,8 +1410,8 @@ class CommandHandler:
 
     #: What each constraint resolves: the kind of ``entity_one`` (a curve for every
     #: type except ``midpoint``, whose first entity is a sketch point), and whether
-    #: a second entity is needed.  A table because ``addParallel(e1, None)`` used to
-    #: reach Fusion and come back ``ok: true``.
+    #: a second entity is needed.  A table because Fusion accepts a missing second
+    #: entity: ``addParallel(e1, None)`` reaches the API and reports ``ok: true``.
     _CONSTRAINT_ENTITIES: ClassVar[dict[str, tuple[str, bool]]] = {
         "coincident": ("curve", True),
         "parallel": ("curve", True),
@@ -1468,8 +1466,8 @@ class CommandHandler:
             else None
         )
 
-        # Refuse before the call, not inside Fusion: addParallel(e1, None) used to
-        # reach the API and report success.
+        # Refuse before the call, not inside Fusion: addParallel(e1, None) reaches
+        # the API and reports success.
         if (point if first_kind == "point" else e1) is None:
             raise RuntimeError(
                 f"a {constraint_type} constraint needs entity_one "
@@ -3335,9 +3333,9 @@ class CommandHandler:
         temp_brep = adsk.fusion.TemporaryBRepManager.get()
 
         # The oriented box's point is its CENTRE (adsk.core.OrientedBoundingBox3D),
-        # so the caller's centre goes in unchanged.  It used to go in as
-        # ``center_z + height / 2``, which centred X and Y and *based* Z: a box
-        # asked for at centre 1 came out spanning 1..3, while its name said centre.
+        # so the caller's centre goes in unchanged.  Adding ``height / 2`` would base
+        # Z while centring X and Y: a box asked for at centre 1 would span 1..3 while
+        # its name said centre.
         orient = adsk.core.OrientedBoundingBox3D.create(
             adsk.core.Point3D.create(center_x, center_y, center_z),
             adsk.core.Vector3D.create(1, 0, 0),
@@ -3807,10 +3805,10 @@ class CommandHandler:
 
         inp = joints.createInput(geometries[0], geometries[1])
 
-        # Set the requested motion explicitly. Previously only "rigid" was
-        # handled, so every other type silently produced an inferred (usually
-        # rigid) joint while reporting success.  The frame matters here: `axis`
-        # names a MODEL axis, and Fusion's enum names a JOINT one.
+        # Set the requested motion explicitly: Fusion infers a rigid joint when no
+        # motion is set and still reports success, so a type left unhandled silently
+        # produces one.  The frame matters here: `axis` names a MODEL axis, and
+        # Fusion's enum names a JOINT one.
         #
         # Only a motion that takes a direction needs the frame: a rigid joint
         # resolves no axis, so a degenerate frame it never reads must not refuse
@@ -3962,8 +3960,8 @@ class CommandHandler:
         """The ``JointDirections`` member whose joint axis best matches *axis*.
 
         Returns ``(member, world_vector)``. Without a *frame* the caller's axis is
-        passed through literally, which is the old behaviour and only correct when
-        the joint's frame happens to equal the model's.
+        passed through literally, which is only correct when the joint's frame
+        happens to equal the model's.
 
         No member can point along a world axis the frame does not contain, so the
         closest one is chosen and the sign it actually gives is reported: on the
@@ -4074,9 +4072,9 @@ class CommandHandler:
         as_built = root.asBuiltJoints
         inp = as_built.createInput(occ1, occ2, geometry)
 
-        # Honour joint_type; previously every request produced a rigid joint
-        # because no motion was ever set.  The frame comes from the geometry, and
-        # a rigid as-built joint has none, which is why it is optional.
+        # Honour joint_type: with no motion set, every request produces a rigid
+        # joint.  The frame comes from the geometry, and a rigid as-built joint has
+        # none, which is why it is optional.
         frame = self._joint_frame(geometry) if geometry is not None else None
         self._apply_joint_motion(inp, joint_type, axis, second_axis, frame)
 
@@ -4681,13 +4679,12 @@ class CommandHandler:
 
         ruled = root.features.ruledSurfaceFeatures
         # The shipped signature is createInput(profile, distance, angle, type) and
-        # it takes a Profile, not an edge: the two-argument edge form this used to
-        # call raised "Wrong number or type of arguments" on every invocation.
-        # Measured on 2706: a sketch profile does NOT work here - a closed rectangle
-        # answers "3 : face profiles not supported" and a bare sketch line "3 :
-        # invalid profile for Ruled Surface Feature", despite the SDK's wording
-        # ("defines the sketch geometry or edges").  A sheet body's free edge is the
-        # only source.
+        # it takes a Profile, not an edge: the two-argument edge form raises "Wrong
+        # number or type of arguments" on every invocation.  Measured on 2706: a
+        # sketch profile does NOT work here - a closed rectangle answers
+        # "3 : face profiles not supported" and a bare sketch line "3 : invalid
+        # profile for Ruled Surface Feature", despite the SDK's wording ("defines the
+        # sketch geometry or edges").  A sheet body's free edge is the only source.
         profile = root.createBRepEdgeProfile(edge, True)
         ruled_type = {
             "tangent": adsk.fusion.RuledSurfaceTypes.TangentRuledSurfaceType,
@@ -5554,9 +5551,9 @@ class CommandHandler:
         """
         eye_dir, up_vec = spec
         # _design(), not activeProduct: in the Manufacture workspace the active
-        # product is CAM and has no rootComponent, which is the read this PR
-        # removed from _snapshot.  A view still renders without a design - the
-        # target then stays at the origin - so a missing design is not fatal here.
+        # product is CAM and has no rootComponent.  A view still renders without a
+        # design - the target then stays at the origin - so a missing design is not
+        # fatal here.
         try:
             design = self._design()
         except RuntimeError:

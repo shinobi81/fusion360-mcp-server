@@ -141,7 +141,7 @@ class Fusion360MCPServer:
     def _accept_loop(self):
         """Inner loop: accepts clients until the socket errors out."""
         # Narrowed once, up front: ``_socket`` is None until ``_bind_socket`` runs and
-        # again after ``_close_socket``, and the reader below used to index an Optional
+        # again after ``_close_socket``, and the reader below must not index an Optional
         # (pyright's reportOptionalMemberAccess - invisible in CI because `addon/` is
         # excluded there).  A None here means nothing was bound, so the outer loop
         # restarts rather than this one spinning.
