@@ -7,6 +7,10 @@ JSON Schema that the MCP SDK validates before forwarding arguments.
 
 import mcp.types as types
 
+# The add-in's validator owns the accepted edge selectors, so the schema advertises its
+# set instead of restating it: a fifth value cannot land in one place only.
+from ._rules import EDGE_SELECTIONS
+
 # Sketch curves are planar: Fusion interprets their points in the sketch's own
 # frame, so a z here adds to the plane's offset instead of replacing it.
 _SKETCH_PLANE_Z = (
@@ -25,12 +29,33 @@ _POINT3 = {
     "maxItems": 3,
 }
 
+# ``render_view``'s camera presets: "current" (leave the camera where it is) plus every
+# key of the add-in's ``CommandHandler._VIEW_DIRS``, in that order.
+# ``tests/test_addon_sync.py`` asserts the two agree.
+VIEW_PRESETS = (
+    "current",
+    "iso",
+    "iso_ne",
+    "iso_nw",
+    "iso_sw",
+    "front",
+    "back",
+    "top",
+    "bottom",
+    "right",
+    "left",
+)
+
+# ``export_view_sheet``'s presets: ``VIEW_PRESETS`` without "current", because there is
+# no view to render where the camera already is — the handler refuses it.
+VIEW_SHEET_VIEWS = tuple(view for view in VIEW_PRESETS if view != "current")
+
 # fillet and chamfer take the same four edge selectors; only the size argument
-# differs (a radius or a distance), so the rest is stated once.
+# differs (a radius or a distance).
 _EDGE_SELECTOR = {
     "edge_selection": {
         "type": "string",
-        "enum": ["all", "top", "bottom", "vertical"],
+        "enum": list(EDGE_SELECTIONS),
         "default": "all",
     },
     "edge_indices": {
@@ -58,10 +83,9 @@ _EDGE_SELECTOR = {
 }
 
 # The joint geometry arguments are the same on both joint tools; only the
-# key_point wording differs (add_joint measured what Fusion refuses, the
-# as-built one did not have to).  The sub-dicts are shared between the two
-# schemas and never mutated - the annotations pass below only writes on the tool
-# dict itself - which is what makes stating them once safe.
+# key_point wording differs (add_joint's was measured against Fusion's refusals,
+# the as-built one did not have to be).  The sub-dicts are shared and never mutated:
+# the annotations pass below writes only on the tool dict itself.
 _JOINT_TYPE = {
     "type": "string",
     "enum": [
@@ -886,18 +910,7 @@ TOOLS: list[dict] = [
             "type": "array",
             "items": {
                 "type": "string",
-                "enum": [
-                    "iso",
-                    "iso_ne",
-                    "iso_nw",
-                    "iso_sw",
-                    "front",
-                    "back",
-                    "top",
-                    "bottom",
-                    "right",
-                    "left",
-                ],
+                "enum": list(VIEW_SHEET_VIEWS),
             },
             "description": (
                 "Ordered list of views to render (default: iso, front, top, right)."
@@ -2402,16 +2415,7 @@ TOOLS: list[dict] = [
         ),
         view={
             "type": "string",
-            "enum": [
-                "current",
-                "iso",
-                "front",
-                "back",
-                "top",
-                "bottom",
-                "left",
-                "right",
-            ],
+            "enum": list(VIEW_PRESETS),
             "default": "current",
             "description": ("Camera preset; 'current' preserves the existing view"),
         },

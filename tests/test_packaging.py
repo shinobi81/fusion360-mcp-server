@@ -11,7 +11,8 @@ describe, when the add-in's Fusion manifest declares a version the release does
 not, when it changes the id it declares, when that add-in is renamed in one place and
 not the others, when a documented install snippet pins a release other than the one
 being cut or the quick start stops installing the add-in from it, when a document names
-a lint command CI does not run, when the release stops checking that both artifacts
+a lint command CI does not run, when a page that states the type gate stops naming the
+command CI runs, when the release stops checking that both artifacts
 carry the add-in, when the build stops mapping the add-in into the package, maps an
 add-on package the tree does not hold or leaves a package it does hold out of the wheel,
 or is told to include package data, when `SECURITY.md` answers the supported-versions
@@ -157,22 +158,22 @@ def _ci_lines() -> list[str]:
     return CI_WORKFLOW.read_text(encoding="utf-8").splitlines()
 
 
-def _ci_lint_step_start(lines: list[str]) -> int | None:
+def _ci_step_start(lines: list[str], name: str) -> int | None:
     return next(
-        (i for i, line in enumerate(lines) if line.strip() == "- name: Lint"),
+        (i for i, line in enumerate(lines) if line.strip() == f"- name: {name}"),
         None,
     )
 
 
-def _ci_lint_step_lines() -> list[str]:
-    """The lines of ci.yml's ``- name: Lint`` step, header to the next step.
+def _ci_step_lines(name: str) -> list[str]:
+    """The lines of ci.yml's ``- name: <name>`` step, header to the next step.
 
     Scoped to the step rather than to the file: a command that exists somewhere in
     the workflow gates nothing when the job around it never runs.  Returns ``[]``
-    when the step is gone, which the test reports.
+    when the step is gone, which the caller reports.
     """
     lines = _ci_lines()
-    start = _ci_lint_step_start(lines)
+    start = _ci_step_start(lines, name)
     if start is None:
         return []
     indent = len(lines[start]) - len(lines[start].lstrip())
@@ -189,6 +190,11 @@ def _ci_lint_step_lines() -> list[str]:
     return [lines[start], *rest[:end]]
 
 
+def _ci_lint_step_lines() -> list[str]:
+    """The `Lint` step, which every `ruff` guard in this module is scoped to."""
+    return _ci_step_lines("Lint")
+
+
 def _ci_lint_job_preamble() -> list[str]:
     """The `Lint` step's job header plus every key between it and the step.
 
@@ -197,7 +203,7 @@ def _ci_lint_job_preamble() -> list[str]:
     name the job and reject a conditional one in the same breath.
     """
     lines = _ci_lines()
-    start = _ci_lint_step_start(lines)
+    start = _ci_step_start(lines, "Lint")
     if start is None:
         return []
     job = next(
@@ -213,17 +219,32 @@ def _ci_lint_job_preamble() -> list[str]:
     return lines[job:start]
 
 
-def _ci_ruff_commands() -> list[str]:
-    """The `uv run ruff …` shell lines the `Lint` step executes.
+def _ci_step_commands(name: str) -> list[str]:
+    """The ``uv run`` commands a step executes, in file order.
 
-    Deliberately a line scan, not a YAML parse: PyYAML is not a dependency, and
-    each command is a single line inside the `run:` block.  Comment lines fail
-    the `startswith`, so a commented-out command cannot satisfy the guard.
+    Deliberately a line scan, not a YAML parse: PyYAML is not a dependency, and each
+    command is a single line - either the value of a ``run:`` key or one line of a
+    ``run: |`` block.  Comment lines fail the ``uv run`` test, so a commented-out
+    command cannot satisfy a guard.
     """
+    commands = []
+    for line in _ci_step_lines(name):
+        stripped = line.strip()
+        if stripped.startswith("run:"):
+            inline = stripped.removeprefix("run:").strip()
+            if inline.startswith("uv run"):
+                commands.append(inline)
+        elif stripped.startswith("uv run"):
+            commands.append(stripped)
+    return commands
+
+
+def _ci_ruff_commands() -> list[str]:
+    """The `uv run ruff …` shell lines the `Lint` step executes."""
     return [
-        stripped
-        for line in _ci_lint_step_lines()
-        if (stripped := line.strip()).startswith("uv run ruff")
+        command
+        for command in _ci_step_commands("Lint")
+        if command.startswith("uv run ruff")
     ]
 
 
@@ -487,8 +508,8 @@ Nothing in this repository reads the value, and Fusion's own persisted registrat
 record (``%APPDATA%/Autodesk/Autodesk Fusion 360/<install>/JSLoadedScriptsinfo``)
 keys an installed add-in on its name and the path of its entry module, not on this
 id - so there is no second copy to compare against and no install to check from here.
-The pin buys exactly one thing, and states it: an edit to the constant, in a review
-that has to say why, instead of a stray value in a manifest nobody reads.
+The pin buys exactly one thing, and states it: an edit to the constant accompanied by
+a stated reason, instead of a stray value in a manifest nobody reads.
 """
 
 
@@ -514,7 +535,7 @@ def test_the_add_in_manifest_keeps_the_id_it_declares():
         f"addon/Fusion360MCP.manifest declares the id {facts['id']!r}, not "
         f"{ADD_IN_INSTALL_ID!r}. No install can be checked from here, so this pin "
         "exists to make an id change deliberate: if the change is intended, update "
-        "ADD_IN_INSTALL_ID and say why in the PR."
+        "ADD_IN_INSTALL_ID and say why in the change."
     )
 
 
@@ -545,13 +566,6 @@ with the next line.  Loosening either half makes the sweep read other people's w
 def _ci_directories(ci: list[str]) -> set[str]:
     """The top-level directories the CI lint commands name."""
     return {token for command in ci for token in command.split() if token.endswith("/")}
-
-
-def _sorted_command(command: str) -> str:
-    """*command* with its directory arguments sorted, so argument order is not drift."""
-    head, *tokens = command.split()
-    others = [token for token in tokens if not token.endswith("/")]
-    return " ".join([head, *others, *sorted(t for t in tokens if t.endswith("/"))])
 
 
 def _ruff_gate_command(args: list[str], directories: set[str]) -> str | None:
@@ -637,8 +651,7 @@ def _undocumented_gate_commands(pages: dict[str, str], ci: list[str]) -> list[st
     """One finding per gate document that does not name each gate CI runs.
 
     Both halves, not just "a command": a page that keeps the linter line and drops the
-    formatter line states the gate CI ran before #80, which is how four unformatted
-    files reached `main`.
+    formatter line teaches a gate that let four unformatted files reach `main`.
     """
     directories = _ci_directories(ci)
     required: dict[str, str] = {}
@@ -679,10 +692,12 @@ def test_a_documented_lint_command_missing_a_directory_is_a_finding():
 
 
 def test_a_demonstration_command_is_not_read_as_the_gate():
+    """A targeted run, a bare invocation, and a shuffled gate are not findings."""
     pages = {
         "README.md": "uv run ruff check --select B010 src/ tests/\n"
         "uv run ruff --version\n"
         "uv run ruff check\n"
+        "uv run ruff check tests/ src/ fuzz/ addon/ scripts/\n"
     }
 
     assert _documented_ruff_findings(pages, [CI_CHECK, CI_FORMAT]) == []
@@ -697,14 +712,8 @@ def test_the_apply_form_must_be_the_gate_without_check():
     assert "AGENTS.md:1" in finding
 
 
-def test_a_trailing_comment_is_not_part_of_the_command():
-    pages = {"AGENTS.md": "uv run ruff check src/ tests/ fuzz/ addon/ scripts/  # CI\n"}
-
-    assert _documented_ruff_findings(pages, [CI_CHECK, CI_FORMAT]) == []
-
-
 def test_every_gate_document_documents_both_halves_of_the_gate():
-    """A page naming only the linter states half a gate, which is the pre-#80 gate.
+    """A page naming only the linter states half a gate.
 
     `ruff check` alone let four unformatted files reach `main`, so a document that stops
     naming `format --check` teaches that half back - quieter than a wrong command, and
@@ -724,7 +733,7 @@ def test_every_gate_document_documents_both_halves_of_the_gate():
 def test_every_documented_lint_command_is_the_one_ci_runs():
     """Contributors copy the lint line, so a drifted one runs a gate CI does not.
 
-    #80's reviewer caught the drift by eye; nothing read these lines, so the next edit
+    The drift was caught by eye; nothing read these lines, so the next edit
     could move any of the five documents back to a three-directory gate.  The sweep is
     automatic over tracked markdown, and `GATE_DOCUMENTS` keeps the pages that must say
     it from going quiet, which is the shape that let the README's install pins rot.
@@ -756,31 +765,71 @@ def test_every_documented_lint_command_is_the_one_ci_runs():
     )
 
 
-def test_one_space_before_a_comment_is_still_a_comment():
-    """People write `…# note` with one space; cutting on two spaces dropped the claim.
+TYPE_CHECK_GATE = "uv run mypy src"
+"""What ci.yml's `Type check` step must run, and what the pages below must name."""
 
-    Dropping it is not harmless: the page then counts as one that no longer documents
-    the gate, so a correct line reports as drift.
+TYPE_CHECK_DOCUMENTS = (
+    "README.md",
+    "CONTRIBUTING.md",
+    "AGENTS.md",
+    "docs/TESTING.md",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+)
+"""Pages that state the type gate - the same five ``GATE_DOCUMENTS`` names, in its
+order, because all five name the command; a reflow that drops the line from any of them
+fails here."""
+
+
+def _documents_command(text: str, command: str) -> bool:
+    """Whether *text* names *command*, and not merely a narrower command.
+
+    A command ends at a backtick, whitespace or the end of the text, so a targeted run
+    such as ``uv run mypy src/foo.py`` cannot satisfy the guard.  One trailing slash is
+    tolerated, because it is the same command to a shell.
     """
-    line = "uv run ruff check src/ tests/ fuzz/ addon/ scripts/ # CI\n"
-
-    expected = [(1, _sorted_command(CI_CHECK))]
-
-    assert _ruff_gate_claims(line, _ci_directories([CI_CHECK])) == expected
+    return re.search(re.escape(command) + r"/?(?:`|\s|$)", text) is not None
 
 
-def test_prose_after_a_command_is_not_part_of_it():
-    line = "uv run ruff check src/ tests/ fuzz/ addon/ scripts/ (what CI runs)\n"
+def test_every_type_gate_document_names_the_command_ci_runs():
+    """The type gate is one command in one step, and all five gate documents state it.
 
-    expected = [(1, _sorted_command(CI_CHECK))]
+    `[tool.mypy]` with no command running it was a checker that reported nothing, so the
+    step and the pages that teach it are one gate: a reflow that drops the line from a
+    page teaches the gate back.  `GATE_DOCUMENTS` reads the two `ruff` commands only, so
+    nothing noticed; the same five pages all state this one, so the guard reads them by
+    name - a page that merely mentions `mypy` in prose does not teach the gate.
+    """
+    commands = _ci_step_commands("Type check")
 
-    assert _ruff_gate_claims(line, _ci_directories([CI_CHECK])) == expected
+    assert commands == [TYPE_CHECK_GATE], (
+        f"ci.yml's `Type check` step must run exactly `{TYPE_CHECK_GATE}`; if the step "
+        f"was reshaped, teach this guard rather than dropping it: {commands}"
+    )
+    missing = [
+        name
+        for name in TYPE_CHECK_DOCUMENTS
+        if not _documents_command(
+            (REPO_ROOT / name).read_text(encoding="utf-8"), TYPE_CHECK_GATE
+        )
+    ]
+
+    assert missing == [], (
+        f"these pages no longer name the type gate `{TYPE_CHECK_GATE}`, so a "
+        f"contributor following them does not run it: {missing}"
+    )
 
 
-def test_directory_order_is_not_part_of_the_command():
-    reordered = {"README.md": "uv run ruff check scripts/ src/ tests/ fuzz/ addon/\n"}
+def test_a_targeted_type_check_does_not_satisfy_the_gate():
+    """A page naming one file has not named the gate, so the match must end.
 
-    assert _documented_ruff_findings(reordered, [CI_CHECK, CI_FORMAT]) == []
+    Without the trailing-boundary rule this is a substring test, and a document that
+    shows `uv run mypy src/fusion360_mcp/mock.py` would keep the guard quiet.
+    """
+    targeted = "uv run mypy src/fusion360_mcp/mock.py\n"
+
+    assert _documents_command(f"{TYPE_CHECK_GATE}\n", TYPE_CHECK_GATE)
+    assert _documents_command(f"- [ ] `{TYPE_CHECK_GATE}`\n", TYPE_CHECK_GATE)
+    assert not _documents_command(targeted, TYPE_CHECK_GATE)
 
 
 def test_a_ci_command_the_classifier_cannot_read_is_reported_not_mirrored():

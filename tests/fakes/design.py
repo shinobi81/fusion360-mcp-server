@@ -631,9 +631,8 @@ class FakeHoleFeature(FakeDeletable):
     named, because that is what Fusion reports: measured on 2706, a cut naming a
     body it never reaches still lists that body.  It is not a ``FakeCollection``
     on purpose - that would reparent bodies that already live in ``bRepBodies`` -
-    and it is not evidence of what was cut, which is why ``#44`` removed the
-    response field built on it.  A handler that reports from it is reporting its
-    own input back.
+    and it is not evidence of what was cut, so no response field is built on it.
+    A handler that reports from it is reporting its own input back.
 
     ``cut_body_names`` is the fake's own record of which bodies the feature was
     left to reach.  With participants named it repeats them (there is nothing

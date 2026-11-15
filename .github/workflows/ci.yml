@@ -62,6 +62,12 @@ jobs:
           uv run ruff check src/ tests/ fuzz/ addon/ scripts/
           uv run ruff format --check src/ tests/ fuzz/ scripts/
 
+      # Types are a gate here, not documentation: `[tool.mypy]` with no command
+      # running it was a checker that reported nothing.  `src/` only — `addon/`
+      # reaches Fusion's `adsk`, which no checker resolves.
+      - name: Type check
+        run: uv run mypy src
+
       - name: Test
         run: uv run pytest -v
 

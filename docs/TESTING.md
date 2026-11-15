@@ -14,6 +14,7 @@ uv run pytest -q --no-cov tests/test_tools.py   # one file, without the coverage
 uv run pytest -q -k revolve              # by name
 uv run ruff check src/ tests/ fuzz/ addon/ scripts/      # what CI runs
 uv run ruff format --check src/ tests/ fuzz/ scripts/    # what CI runs (addon/ is exempt)
+uv run mypy src                          # what CI runs (src/ only; addon/ is exempt)
 ```
 
 Nothing in the suite needs Fusion, a network, or a display. The packaging guards in
@@ -40,8 +41,16 @@ different populations:
   an add-in regression would buy slack for `src/`.
 
 Both live in `addopts`/CI rather than in one file's scope, so a subset is run with
-`--no-cov`. The statements that are uncovered on purpose are listed in the comment above
-`addopts`.
+`--no-cov`. The uncovered statements are all printed by `--cov-report=term-missing`; the
+four below are by design, named by symbol because line numbers drift on every edit and a
+stale one reads as a waiver for code that no longer exists:
+
+- `server.py`'s `bbox_before` branch: no mock sets it.
+- The unreachable prompt fallback: clients only ask for prompts `list_prompts`
+  advertised.
+- The two lines inside `arun()` (`async with stdio_server()` and the `app.run` it
+  awaits); `anyio.run(arun)` itself runs in the tests.
+- `__main__.py`'s click entry point.
 
 The measured total is deliberately not written down in any document that describes the
 current tree: it moves whenever a test reaches new lines, so a quoted figure is a claim
@@ -79,12 +88,13 @@ uv run python scripts/reload_addin.py            # reload, then verify
 uv run python scripts/reload_addin.py --check    # verify only, change nothing
 ```
 
-It sends `reload_handler` (which reloads `hints`, `hole_geometry`, `parameter_units` and
-`command_handler`, in that order) and then compares the running class's **method names**
-with the methods the file declares, printing the loaded path. Exit 1 means the sets
-differ. What "ok" therefore means is narrow, and the script's own output says so:
-editing a method *body* changes no name and still prints ok, so reload whenever you
-have pulled, not only when the check complains.
+It sends `reload_handler` (which reloads `hints`, `rules`, `hole_geometry`,
+`parameter_units`, `mutation_commands` and `command_handler`, in that order) and then
+compares the running class's **method names** with the methods the file declares,
+printing the loaded path. Exit 1 means the sets differ. What "ok" therefore means is
+narrow, and the script's own output says so: editing a method *body* changes no name
+and still prints ok, so reload whenever you have pulled, not only when the check
+complains.
 
 Two things it cannot cover, both printed on every run: `event_bridge.py` and
 `socket_server.py` are not reloaded (restart the add-in for those), and the check needs

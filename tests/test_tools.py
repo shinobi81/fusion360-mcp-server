@@ -1,5 +1,6 @@
 """Tests for the tool registry."""
 
+from fusion360_mcp import tools
 from fusion360_mcp.tools import TOOLS, get_tool_by_name, get_tool_list
 
 
@@ -162,7 +163,7 @@ def test_get_tool_by_name_edge_cases():
 #: ``tools.py`` is far too large to review line by line, so a dropped argument was
 #: a silent change to the contract every agent reads.  A count catches a drop or an
 #: addition; a *rename* keeps the count and shows up in the schema diff instead.
-#: Regenerated with a dict comprehension over ``TOOLS`` - see the PR that added it.
+#: Regenerate it with a dict comprehension over ``TOOLS`` when a tool's shape moves.
 _TOOL_ARGUMENT_COUNTS = {
     "get_scene_info": 0,
     "get_object_info": 1,
@@ -269,3 +270,39 @@ def test_each_tool_declares_the_number_of_arguments_it_does_today():
     current = {t["name"]: len(t["inputSchema"]["properties"]) for t in TOOLS}
 
     assert current == _TOOL_ARGUMENT_COUNTS
+
+
+def test_export_view_sheet_lists_every_preset_but_current():
+    """Its enum, in order, is the wire contract: these ten and no "current".
+
+    The tuple is derived from ``VIEW_PRESETS``, so a comparison against the derived
+    value would pass on any derivation.  This pins what a client validates against,
+    including the order the sheet renders in; ``export_view_sheet`` refuses
+    "current", which is why it is absent.
+    """
+    schema = get_tool_by_name("export_view_sheet")
+    assert schema is not None
+
+    assert schema["inputSchema"]["properties"]["views"]["items"]["enum"] == [
+        "iso",
+        "iso_ne",
+        "iso_nw",
+        "iso_sw",
+        "front",
+        "back",
+        "top",
+        "bottom",
+        "right",
+        "left",
+    ]
+
+
+def test_every_edge_selector_schema_advertises_one_tuple():
+    """fillet and chamfer take the same four selectors."""
+    enums = {
+        tuple(tool["inputSchema"]["properties"]["edge_selection"]["enum"])
+        for tool in TOOLS
+        if "edge_selection" in tool["inputSchema"]["properties"]
+    }
+
+    assert enums == {tools.EDGE_SELECTIONS}

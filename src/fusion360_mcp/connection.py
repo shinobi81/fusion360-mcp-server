@@ -40,10 +40,9 @@ def default_port() -> int:
 
     Tolerating a bad value is the contract: a typo in an environment variable
     should not stop the server from starting when the default is perfectly
-    usable.  This is the only parser in *this package* - the CLI used to re-parse
-    it with ``int(...)``, which raised instead, so the same typo killed one entry
-    point and not the other.  The add-in parses it too, cannot import this, and
-    carries the same tolerance by hand.
+    usable.  This is the only parser in *this package*: a second one that raised
+    instead would let the same typo kill one entry point and not the other.  The
+    add-in parses it too, cannot import this, and carries the same tolerance by hand.
     """
     raw = os.environ.get("FUSION_MCP_PORT", "9876")
     try:

@@ -112,9 +112,8 @@ def test_a_partial_length_is_a_value_input_in_centimetres(bound_handler):
 def test_the_default_class_follows_internal_or_external(bound_handler):
     """ISO 965 gives internal threads 6H and external ones 6g.
 
-    The parameter is live for the first time in this PR, so a single ``"6g"``
-    default would have asked Fusion for an external tolerance class on every
-    internal thread the caller did not spell out.
+    One default cannot serve both: a single ``"6g"`` default asks Fusion for an
+    external tolerance class on every internal thread the caller did not spell out.
     """
     internal, _ = _design_with_a_bore("M10x1.5", is_internal=True)
     bound_handler(internal).create_thread("Body1", face_index=0, is_internal=True)

@@ -39,15 +39,19 @@ explains most of the system's design:
 | `src/fusion360_mcp/server.py` | MCP surface: stdio transport, tools, resources, prompts, result formatting |
 | `src/fusion360_mcp/connection.py` | TCP client, newline-delimited JSON, per-command timeouts |
 | `src/fusion360_mcp/tools.py` | tool schemas — the contract agents read |
-| `src/fusion360_mcp/hints.py` | error-kind table (mirror of the add-in's, kept in sync by a test) |
+| `src/fusion360_mcp/hints.py` | error-kind table (generated from the add-in's by `scripts/sync_mirrors.py`) |
+| `src/fusion360_mcp/_mutation_commands.py` | mutation-command set (generated the same way) |
+| `src/fusion360_mcp/_rules.py` | validation the add-in and mock mode share: refusals, and the sketch-plane `z` note (generated the same way) |
 | `src/fusion360_mcp/mock.py` | `--mode mock` responses, so the envelope is testable without Fusion |
 | `addon/server/socket_server.py` | listener, per-client threads, framing, malformed-input handling |
 | `addon/server/event_bridge.py` | CustomEvent bridge and the work queue |
 | `addon/server/command_handler.py` | every command, executing on the main thread |
 
 `addon/` and `src/` are separate installables: the add-in is copied into Fusion's AddIns
-directory and cannot import from the package, which is why the hint table exists twice
-and why a test asserts the two are identical.
+directory and cannot import from the package, which is why the hint table, the mutation
+list and the validation rules exist twice — each `src/` copy is generated from the add-in's
+file, and the generated mirror check (`tests/test_addon_sync.py`, `sync_mirrors.py
+--check`) fails on a stale one.
 
 ## The error envelope
 
@@ -58,9 +62,10 @@ Failures are data, not exceptions:
 ```
 
 `error_kind` comes from `hints.py`, matched by regex against the exception text, in
-order — first match wins. Adding a failure mode means adding a rule in both mirrors plus
-a test; several kinds exist purely so an agent can branch instead of parsing prose
-(`TIMEOUT`, `NOT_ENTITLED`, `DESIGN_TYPE_MISMATCH`).
+order — first match wins. Adding a failure mode means adding a rule to
+`addon/server/hints.py` and running `uv run python scripts/sync_mirrors.py` to regenerate
+`src/fusion360_mcp/hints.py`, plus a test; several kinds exist purely so an agent can
+branch instead of parsing prose (`TIMEOUT`, `NOT_ENTITLED`, `DESIGN_TYPE_MISMATCH`).
 
 Mutations additionally carry `deltas` (body count, mass, bbox before/after) so a no-op
 is visible without a render.

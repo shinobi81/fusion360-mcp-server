@@ -233,6 +233,38 @@ def test_an_unknown_selection_is_classified_too(select):
     assert any("edge_selection is one of" in hint for hint in hints), hints
 
 
+#: The edges each advertised selector must pick from ``BRANCH_BODY``.  ``vertical`` is
+#: the ``else`` of the dispatch chain, so a selector with no branch of its own would be
+#: answered by that filter instead of failing — this table is what notices.
+SELECTION_BRANCHES = {
+    "all": [0, 1, 2],
+    "bottom": [0],
+    "top": [2],
+    "vertical": [1],
+}
+
+#: Three edges, one per distinguishing position: bottom plane, vertical, top plane.
+BRANCH_BODY = [
+    ((0, 0, 0), (4, 0, 0)),
+    ((0, 0, 0), (0, 0, 4)),
+    ((0, 0, 4), (4, 0, 4)),
+]
+
+
+def test_every_advertised_edge_selection_has_a_branch_of_its_own():
+    """A fifth selector must get a branch, not the vertical filter's answer."""
+    from fusion360_mcp import tools
+
+    assert set(SELECTION_BRANCHES) == set(tools.EDGE_SELECTIONS)
+
+
+@pytest.mark.parametrize(("selection", "expected"), sorted(SELECTION_BRANCHES.items()))
+def test_each_advertised_selection_reaches_its_own_branch(select, selection, expected):
+    coll = select(BRANCH_BODY, selection)
+
+    assert [edge.index for edge in coll] == expected
+
+
 def test_an_edge_whose_sample_is_at_the_top_but_sags_is_not_top(bound_handler):
     """The case a single sample cannot see, modelled the way Fusion behaves.
 
@@ -676,26 +708,66 @@ def test_mock_still_accepts_one_selector_at_a_time():
 
 
 def test_the_edge_selection_enum_agrees_in_all_three_places():
-    """Mock mode refuses an unknown selection against its *own* copy of the enum.
+    """The schema advertises the validator's set, not a second copy of it.
 
-    Three copies exist — this one, the handler's message, and ``tools.py``'s
-    schema — so a fifth selection added to one of them would make mock mode
-    refuse a call real mode accepts.  Same idea as ``test_addon_sync.py``.
+    Three places read one tuple: the add-in's ``rules.EDGE_SELECTIONS`` refuses an
+    unknown selection, its generated mirror carries the same tuple, and ``tools.py``
+    imports that mirror for the schema enum — so a fifth selection is one edit, and
+    mock mode refuses it because it refuses with the same function.
     """
-    from fusion360_mcp import mock, tools
+    from addon.server import rules
+    from fusion360_mcp import _rules, tools
 
     advertised = set()
     for tool in tools.TOOLS:
         enum = tool["inputSchema"]["properties"].get("edge_selection", {}).get("enum")
         if enum:
             advertised.add(tuple(enum))
-    assert advertised == {tuple(mock._EDGE_SELECTIONS)}, (
-        "tools.py and the mock disagree about the edge_selection enum: "
-        f"{advertised} vs {mock._EDGE_SELECTIONS}"
+    assert advertised == {tools.EDGE_SELECTIONS}, (
+        "tools.py's schemas disagree about the edge_selection enum: "
+        f"{advertised} vs {tools.EDGE_SELECTIONS}"
     )
+    assert tools.EDGE_SELECTIONS is _rules.EDGE_SELECTIONS
+    assert tuple(rules.EDGE_SELECTIONS) == tuple(_rules.EDGE_SELECTIONS)
 
 
-# ── refusals the review asked for ─────────────────────────────────────
+# ── refusals, and which one wins when a call is wrong twice ───────────
+
+
+def test_a_bad_body_name_is_reported_before_a_bad_selector(bound_handler):
+    """``BODY_NOT_FOUND`` wins: ``fillet`` resolves the body before ``_select_edges``.
+
+    Both orders are defensible, so this pins the one the add-in has.  Mock mode can only
+    answer the other way — it has no bodies to look up — and that difference is the
+    reason the two sides are not asserted equal here.
+    """
+    body = body_with_edges("Plate", [((0, 0, 0), (1, 0, 0))])
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    with pytest.raises(RuntimeError) as raised:
+        handler.fillet(0.1, body_name="Nope", edge_indices=[0], edge_points=[[0, 0, 0]])
+    assert classify(raised.value)[0] == "BODY_NOT_FOUND"
+
+    refused = mock_command(
+        "fillet",
+        {"body_name": "Nope", "edge_indices": [0], "edge_points": [[0, 0, 0]]},
+    )
+    assert (refused["ok"], refused["error_kind"]) == (False, "INVALID_INPUT")
+
+
+def test_an_unknown_selection_is_refused_before_the_body_is_read(select):
+    """An empty body and a bad selection together hear about the selection.
+
+    Only a body with nothing to select makes the order visible, so this pins which
+    refusal wins when both are wrong; see
+    ``test_an_unknown_selection_is_classified_too``.
+    """
+    with pytest.raises(RuntimeError) as raised:
+        select([], "diagonal")
+
+    kind, hints = classify(raised.value)
+    assert kind == "INVALID_INPUT"
+    assert any("edge_selection is one of" in hint for hint in hints), hints
 
 
 def test_a_nan_tolerance_cannot_be_used_to_accept_a_far_point(select):

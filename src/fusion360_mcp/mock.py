@@ -16,55 +16,20 @@ must not read as work done.
 import math
 from typing import Any
 
+from ._mutation_commands import MUTATION_COMMANDS
+from ._rules import (
+    edge_selector_refusal,
+    rule_type_refusal,
+    sketch_plane_z_note,
+    target_body_refusal,
+)
+from .hints import Refusal
 from .hints import classify as _classify
 
-# Mutation commands that get a synthetic deltas payload in mock mode.
-# Keep in sync with CommandHandler._MUTATION_COMMANDS in the addon.
-_MUTATION_MOCKS: frozenset[str] = frozenset(
-    {
-        "extrude",
-        "revolve",
-        "sweep",
-        "loft",
-        "fillet",
-        "chamfer",
-        "shell",
-        "mirror",
-        "create_hole",
-        "rectangular_pattern",
-        "circular_pattern",
-        "create_thread",
-        "draft_faces",
-        "split_body",
-        "split_face",
-        "offset_faces",
-        "scale_body",
-        "suppress_feature",
-        "unsuppress_feature",
-        "move_body",
-        "boolean_operation",
-        "create_box",
-        "create_cylinder",
-        "create_sphere",
-        "create_torus",
-        "thicken_surface",
-        "patch_surface",
-        "stitch_surfaces",
-        "ruled_surface",
-        "trim_surface",
-        "create_flange",
-        "create_bend",
-        "flat_pattern",
-        "unfold",
-        "delete_all",
-        "undo",
-        "set_parameter",
-        "execute_code",
-        "auto_constrain",
-        "create_ucs",
-        "set_color",
-    }
-)
+# Mutation commands that get a synthetic deltas payload in mock mode.  The set is
+# the add-in's, mirrored into this package, so mock mode cannot attach deltas to a
+# command real mode treats as read-only.
+_MUTATION_MOCKS = MUTATION_COMMANDS
 
 _MOCK_DELTAS = {
     "body_count_before": 0,
@@ -78,21 +43,36 @@ _MOCK_DELTAS = {
 }
 
 
+def _error_envelope(error_kind: str, hints: list[str], message: str) -> dict:
+    """The envelope the addon returns when a command fails."""
+    return {
+        "ok": False,
+        "error_kind": error_kind,
+        "error_message": message,
+        "hints": hints,
+        "traceback": f"MockError: {message}",
+        "mode": "mock",
+    }
+
+
 def _mock_error(message: str) -> dict:
-    """The envelope the addon returns when a command fails.
+    """The envelope for a failure mock mode reports by its message.
 
     ``error_kind`` and ``hints`` come from the same rules the addon classifies
     with, so mock mode reports a failure the way real mode would.
     """
-    kind, hint_list = _classify(message)
-    return {
-        "ok": False,
-        "error_kind": kind,
-        "error_message": message,
-        "hints": hint_list,
-        "traceback": f"MockError: {message}",
-        "mode": "mock",
-    }
+    error_kind, hints = _classify(message)
+    return _error_envelope(error_kind, hints, message)
+
+
+def _refusal_error(refusal: Refusal) -> dict:
+    """The envelope for a refusal ``rules`` already named.
+
+    ``classify`` reads the kind off the refusal rather than matching its message
+    again, so mock mode reports what the add-in decided instead of a guess at it.
+    """
+    error_kind, hints = _classify(refusal)
+    return _error_envelope(error_kind, hints, str(refusal))
 
 
 def _non_finite_error(value: Any) -> dict | None:
@@ -234,11 +214,7 @@ def _sketch_plane_fields(z_values: list) -> dict:
         return {}
     return {
         "ignored_z": dropped[0] if len(dropped) == 1 else dropped,
-        "note": (
-            "Sketch curves lie in the sketch plane, so the z component was "
-            "dropped instead of being added to the plane's own offset. "
-            "Use create_sketch(z_offset=...) to move the plane itself."
-        ),
+        "note": sketch_plane_z_note(),
     }
 
 
@@ -279,19 +255,12 @@ def _draw_line(p: dict) -> dict:
 def _target_body_error(p: dict) -> dict | None:
     """The add-in's refusal of ``target_body`` on a new body, or None.
 
-    Mirrors ``CommandHandler._resolve_target_body``, wording included, because
+    ``target_body_refusal`` is the handler's own check, wording included, because
     the hint rule matches on it.  An unknown body name is *not* refused here:
     mock mode has no design to look it up in.
     """
-    if p.get("target_body") is None:
-        return None
-    if p.get("operation", "new_body") == "new_body":
-        return _mock_error(
-            "Invalid input: target_body applies only to cut, join or "
-            "intersect \u2014 new_body builds a body of its own, so there is "
-            "nothing to target"
-        )
-    return None
+    refusal = target_body_refusal(p, p.get("operation", "new_body"))
+    return None if refusal is None else _refusal_error(refusal)
 
 
 def _extrude(p: dict) -> dict:
@@ -320,64 +289,23 @@ def _revolve(p: dict) -> dict:
     }
 
 
-# The same four the handler accepts and tools.py advertises.  A fifth value added
-# in one place and not the others would make mock mode refuse a valid call, so
-# tests/test_addon_edge_selection.py asserts the three agree.
-_EDGE_SELECTIONS = ("all", "top", "bottom", "vertical")
-
-
 def _edge_selector_error(p: dict) -> dict | None:
     """The add-in's refusals of an edge-selector combination, or None.
 
     Mock mode cannot search a body, so it cannot tell which edges a selection
-    matches — but the *combination* rules, the element types and the enum are pure
-    parameter checks that ``_select_edges`` makes before it examines an edge.
-    Echoing an accepted call here would teach a sequence Fusion refuses, which is
-    the fiction #34 removed from the CAM mocks.
+    matches — but the *combination* rules, the element types and the four
+    ``edge_selection`` values are pure parameter checks that ``_select_edges`` makes
+    before it examines an edge, and ``edge_selector_refusal`` is where both sides
+    make them: mock mode refuses a fifth value because it is the same check.
+    Echoing an accepted call here would teach a sequence Fusion refuses.
 
     These fire inside ``_select_edges``, not before the body lookup: ``fillet``
     resolves ``body_name`` first, so a call with both a bad body and a bad selector
     answers ``BODY_NOT_FOUND`` in real mode and ``INVALID_INPUT`` here.  Mock mode
     has no bodies to look up, so that difference cannot be removed.
     """
-    indices = p.get("edge_indices")
-    points = p.get("edge_points")
-    selection = p.get("edge_selection", "all")
-
-    if indices is not None and points is not None:
-        return _mock_error(
-            "Pass only one of edge_indices and edge_points — they name the "
-            "same edges two ways, so one would be ignored"
-        )
-    if (indices is not None or points is not None) and selection != "all":
-        return _mock_error(
-            f"edge_selection '{selection}' cannot be combined with "
-            "edge_indices or edge_points — pass one selector, not two"
-        )
-    if indices is not None and not indices:
-        return _mock_error(
-            "edge_indices was empty — name at least one edge, or omit it to "
-            "use edge_selection"
-        )
-    if points is not None and not points:
-        return _mock_error(
-            "edge_points was empty — name at least one point, or omit it to "
-            "use edge_selection"
-        )
-    for index in indices or []:
-        if isinstance(index, bool) or not isinstance(index, int):
-            return _mock_error(
-                f"Edge index {index!r} is out of range — indices are whole "
-                "numbers from list_edges"
-            )
-    for point in points or []:
-        if not isinstance(point, (list, tuple)) or len(point) != 3:
-            return _mock_error("edge point needs three coordinates")
-    if selection not in _EDGE_SELECTIONS:
-        return _mock_error(
-            f"Unknown edge_selection '{selection}' — use all/top/bottom/vertical"
-        )
-    return None
+    refusal = edge_selector_refusal(p)
+    return None if refusal is None else _refusal_error(refusal)
 
 
 def _selected_edge_count(p: dict) -> int:
@@ -651,8 +579,8 @@ def _add_joint(p: dict) -> dict:
 
 # value_kind -> (motion, attribute, unit), mirroring what the add-in resolves
 # from the joint's motion type. The mock holds no design, so it resolves from the
-# kind instead; without this it reported rotationValue/degrees for every kind,
-# including the slide values that are lengths in centimetres.
+# kind; a rotationValue/degrees pair for every kind would give the slide values,
+# which are lengths in centimetres, the wrong unit.
 _MOCK_JOINT_VALUES: dict[str, tuple[str, str, str]] = {
     "rotation": ("RevoluteJointMotion", "rotationValue", "deg"),
     "slide": ("SliderJointMotion", "slideValue", "cm"),
@@ -838,9 +766,9 @@ def _curve_index_error(p: dict, fields: tuple[str, ...]) -> dict | None:
     Mock mode has no sketch, so it cannot know whether an index is past the end -
     but a negative index, a fractional one and a boolean are invalid in *every*
     sketch, and the handler refuses them before it touches geometry.  Echoing one
-    would teach a sequence Fusion answers differently: Python wraps ``-1`` to the
-    last curve, so the real add-in used to dimension a curve nobody named and
-    report success (measured live).
+    would teach a sequence Fusion answers differently: ``-1`` wraps to the last
+    curve, so a caller of ``-1`` dimensioned the last curve and got ``ok: true``
+    (measured live).
 
     Every mock handler that takes a curve index calls this - the six the add-in
     guards - so mock mode cannot answer ``ok`` for an index real mode refuses.
@@ -924,8 +852,8 @@ def _entity_shape_error(
 
     Mock mode has no sketch, so it cannot know an index is past the end - but it
     does know which types take one entity and which take two, and that is a shape
-    check, not a geometry one.  ``addParallel(e1, None)`` used to reach Fusion and
-    report success; mock mode should not teach the same call.
+    check, not a geometry one.  ``addParallel(e1, None)`` reaches Fusion and reports
+    success; mock mode should not teach the same call.
     """
     kind = p.get(type_field)
     needs_two = table.get(kind) if isinstance(kind, str) else None
@@ -1322,10 +1250,9 @@ def _ruled_surface(p: dict) -> dict:
     # The handler refuses an unknown rule_type; a mock that echoed it with ok:true
     # would let an agent rehearse a call Fusion rejects (mock.py's own rule).
     rule_type = p.get("rule_type", "normal")
-    if rule_type not in ("normal", "tangent"):
-        return _mock_error(
-            f"Unknown rule_type {rule_type!r} - use 'normal' or 'tangent'"
-        )
+    refusal = rule_type_refusal(rule_type)
+    if refusal is not None:
+        return _refusal_error(refusal)
     return {
         "feature_name": "Ruled Surface1",
         "body_name": p.get("body_name", "Body1"),
@@ -1409,7 +1336,7 @@ def _cam_create_operation(p: dict) -> dict:
     # Same order as the handler: the numeric guards fire before the refusal, and
     # the refusal fires before any operation exists.  tool_diameter is not a
     # parameter at all -- tool geometry comes from the CAM tool library -- and
-    # echoing it back here described an operation Fusion would never create.
+    # echoing it back here would describe an operation Fusion never creates.
     for key in ("tool_number", "stepdown", "stepover", "feed_rate", "spindle_speed"):
         refusal = _non_finite_error(p.get(key))
         if refusal is not None:

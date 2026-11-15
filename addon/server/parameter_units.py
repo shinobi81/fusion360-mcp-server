@@ -24,7 +24,7 @@ def require_finite(value: _T) -> _T:
 
     Only a number is judged.  ``math.isfinite`` raises ``TypeError`` on anything
     else, no hints rule matches that, and the caller would see ``UNKNOWN`` with
-    no hints for a value that used to work: ``create_parameter(value="2.5")``
+    no hints for a value Fusion accepts: ``create_parameter(value="2.5")``
     reaches Fusion as ``createByString("2.5 mm")``, which is fine.
 
     The value is returned unchanged, so the signature is a ``TypeVar``: a caller

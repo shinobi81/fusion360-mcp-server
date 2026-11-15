@@ -37,11 +37,8 @@ Upstream = "https://github.com/faust-machines/fusion360-mcp-server"
 fusion360-mcp-server = "fusion360_mcp:main"
 
 [tool.setuptools]
-# `addon/` is outside `src/`, so `packages.find` never sees it: these mappings are what
-# put the add-in into the wheel as `fusion360_mcp/addon/`, which is what
-# `--install-addon` copies into Fusion. `packages` is explicit because a find directive
-# and an explicit list cannot coexist, so a new package under `src/` must be listed here
-# (a test fails when one is not).
+# `addon/` is outside `src/`, so these mappings are what put it into the wheel; a new
+# package under `src/` must be listed in `packages` (a test fails when one is not).
 package-dir = { "" = "src", "fusion360_mcp.addon" = "addon", "fusion360_mcp.addon.server" = "addon/server" }
 packages = ["fusion360_mcp", "fusion360_mcp.addon", "fusion360_mcp.addon.server"]
 
@@ -63,47 +60,30 @@ select = ["E", "F", "I", "RUF", "B", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Measured on every run so a regression shows up in the diff, and floored just under the
-# measured total: the number is printed by the test job, never written down here.
-#
-# The combined total is dominated by the add-in, where CAM, view-sheet export and
-# viewport-render only run inside Fusion (body STL/STEP and f3d export are covered
-# offline) - so the add-in's half is low on purpose and `src/` keeps its own gate (CI:
-# `coverage report --include="src/fusion360_mcp/*" --fail-under=95`), which an add-in
-# regression cannot buy slack for.
-#
-# This lives in addopts, so run a subset with `--no-cov` (see AGENTS.md): the floor is
-# about the whole suite, not one file.
-#
-# Permanently uncovered, by design: `server.py`'s `bbox_before` branch (no mock sets it),
-# the unreachable prompt fallback (clients only ask for prompts `list_prompts`
-# advertised), the two lines inside `arun()` (`async with stdio_server()` and the
-# `app.run` it awaits; `anyio.run(arun)` itself runs in the tests), and `__main__.py`'s
-# click entry point.  Named by symbol rather than by line number: the numbers drifted on
-# every edit, and a stale one reads as a waiver for code that no longer exists.
+# Floored just under the measured combined total: the number is printed by the test job,
+# never written down here.  A subset run needs `--no-cov`.
 addopts = "--cov --cov-report=term-missing --cov-fail-under=59"
 
-# The add-in imports Fusion's `adsk`, which no static type checker can resolve, and each
-# unresolved import cascades into dozens of false errors - so `addon/` is excluded from
-# type checking (ruff and the suite still cover it).
-#
-# This block is pyright's **only** configuration: a `pyrightconfig.json` would silently
-# take precedence over it, which is how `pythonVersion` once said 3.10 while the rest of
-# the project had moved on. `tests/test_packaging.py` fails if one reappears. `.venv` and
-# `node_modules` are installed trees rather than source, and `typeCheckingMode` is pinned
-# so the checked set cannot change by omission.
+# The add-in imports Fusion's `adsk`, which no static type checker can resolve, so
+# `addon/` is excluded (ruff and the suite still cover it).  This block is pyright's only
+# configuration: a `pyrightconfig.json` would take precedence, and a test fails on one.
 [tool.pyright]
 exclude = ["addon", "build", ".venv", "node_modules"]
-typeCheckingMode = "basic"
+typeCheckingMode = "basic"  # pinned: the checked set cannot change by omission
 # Resolve imports from the project venv, otherwise third-party packages read
 # as unresolved no matter what is installed.
 venvPath = "."
 venv = ".venv"
-# The support window, restated because pyright cannot infer it from
-# `requires-python`.  It must equal the floor exactly: lower reports errors on
-# supported code, higher accepts syntax we do not support.
+# The support window, restated because pyright cannot infer it from `requires-python`.
+# It must equal the floor exactly: lower reports errors on supported code, higher accepts
+# syntax we do not support.
 pythonVersion = "3.14"
 
+# Run by `uv run mypy src` in the `test` CI job: a checker nothing invokes reports
+# nothing.  `src/` only — `addon/` reaches Fusion's `adsk`, which no checker can
+# resolve, and the suite covers it instead.  `check_untyped_defs` is left off, so a
+# body with no annotations is not analysed: "0 errors" is a floor, not a claim about
+# those bodies.
 [tool.mypy]
 exclude = ["^addon/", "^build/"]
 ignore_missing_imports = true
@@ -114,19 +94,11 @@ dev = [
     "pytest-cov>=6.0",
     "hypothesis>=6.100",
     "ruff>=0.6",
+    "mypy>=2.4.1",
 ]
-# Not in `dev`: `ci.yml` syncs `--dev` on three platforms and atheris publishes no
-# Windows wheel, so the marker keeps the group empty off Linux and asking for it on a
-# workstation cannot fail the sync. Sync it with
-# `uv sync --locked --only-group fuzz --python 3.14`, or a fuzz target stops at
-# `import atheris` with nothing to say why.
-#
-# The marker's own floor is not the operative one - uv locks every version inside
-# `requires-python`, and atheris 3.1.0's newest wheel is cp314, which is why the
-# command names `--python 3.14`. The group is empty, not broken, where the marker
-# excludes it; and on 3.15 atheris publishes neither wheel nor sdist, so a sync
-# there fails loudly at resolve time - which is the behaviour you want. Do not
-# hardcode a `< 3.15` cap: it goes stale the day a cp315 wheel lands.
+# Not in `dev`: atheris publishes no Windows wheel and `ci.yml` syncs `--dev` on three
+# platforms, so the marker keeps the group empty off Linux.  Sync it with
+# `uv sync --locked --only-group fuzz --python 3.14`; no upper cap, so a cp315 wheel works.
 fuzz = [
     "atheris==3.1.0; sys_platform == 'linux' and python_full_version >= '3.12'",
 ]

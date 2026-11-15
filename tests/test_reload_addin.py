@@ -176,7 +176,10 @@ def test_main_says_what_a_reload_does_not_cover(monkeypatch, capsys):
     module.main([])
 
     out = capsys.readouterr().out
-    assert "reloaded: hints, hole_geometry, parameter_units, command_handler" in out
+    assert (
+        "reloaded: hints, rules, hole_geometry, parameter_units, "
+        "mutation_commands, command_handler"
+    ) in out
     assert "not reloaded: event_bridge, socket_server" in out
 
 
@@ -214,3 +217,26 @@ def test_the_declared_names_are_the_running_classs_callables(handler_module):
 
     assert declared == live
     assert inspect.isfunction(handler_module.CommandHandler.create_thread)
+
+
+def test_dispatch_is_built_once_per_instance(handler_module):
+    """A fresh instance carries a fresh table, so a reload cannot leave it stale.
+
+    The table used to be a lazily-populated class attribute, which made a reload
+    depend on a line that reset it.  Building it in ``__init__`` removes both the
+    reset and the window where an instance answers from a table built from another
+    instance's bound methods.
+
+    The identity check alone passes on an empty table, so this also asserts the table
+    has entries and that each one is the method of the name it is filed under: an
+    emptied ``_COMMAND_NAMES`` builds an empty table and dispatches nothing.
+    """
+    handler = handler_module.CommandHandler()
+    other = handler_module.CommandHandler()
+
+    assert handler._commands, "an empty dispatch table answers no command"
+    assert other._commands is not handler._commands
+    for name, method in handler._commands.items():
+        assert method.__self__ is handler, name
+        assert method == getattr(handler, name), name
+    assert not hasattr(type(handler), "_COMMANDS"), "the lazy class table is gone"

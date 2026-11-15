@@ -237,20 +237,23 @@ class EventBridge:
 
         Called on the main thread (from drain_queue).  Sibling modules
         are reloaded first, in dependency order, so command_handler picks
-        up their changes too.
+        up their changes too.  A module command_handler imports at module
+        scope is only re-read from sys.modules, so it belongs in this list.
         """
         import importlib
 
         from . import command_handler as ch_mod
         from . import hints as hints_mod
         from . import hole_geometry as hole_mod
+        from . import mutation_commands as mutation_mod
         from . import parameter_units as units_mod
+        from . import rules as rules_mod
 
-        for mod in (hints_mod, hole_mod, units_mod, ch_mod):
+        for mod in (hints_mod, rules_mod, hole_mod, units_mod, mutation_mod, ch_mod):
             importlib.reload(mod)
+        # A fresh instance builds its own dispatch table, so a reloaded handler
+        # cannot answer from the previous one's bound methods.
         self._handler = ch_mod.CommandHandler()
-        # Reset lazy dispatch table so it picks up new commands
-        self._handler.__class__._COMMANDS = None
         log.info("CommandHandler reloaded")
 
     # ------------------------------------------------------------------

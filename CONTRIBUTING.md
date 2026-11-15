@@ -23,6 +23,7 @@ uv sync --locked               # python deps into .venv; refuses a stale lock
 uv run pytest -q               # suite runs without Fusion
 uv run ruff check src/ tests/ fuzz/ addon/ scripts/  # what CI runs
 uv run ruff format --check src/ tests/ fuzz/ scripts/  # what CI runs (addon/ is exempt)
+uv run mypy src                # what CI runs; addon/ is excluded (adsk is unresolvable)
 ```
 
 Optional, for live testing against Fusion:
@@ -68,10 +69,13 @@ Guidelines that actually get followed here:
   reason, then fix it. Tests here assert on real behaviour (what the Fusion API is asked
   to do), not on mock internals.
 - **Keep the mock in step.** Every tool has a handler in `src/fusion360_mcp/mock.py`;
-  `tests/test_addon_sync.py` fails if a command exists in one place but not the other.
+  `tests/test_mock.py` fails if one is missing, and `tests/test_addon_sync.py` if the
+  command list and `tools.py` drift apart.
 - **Errors are data.** Return `{"ok": false, "error_kind": ..., "hints": [...]}`, don't
-  raise through the bridge. New failure modes get a rule in `addon/server/hints.py`
-  **and** `src/fusion360_mcp/hints.py` — they are mirrors, and a test enforces that.
+  raise through the bridge. New failure modes get a rule in `addon/server/hints.py` — the
+  canonical table, since the add-in cannot import this package — then
+  `uv run python scripts/sync_mirrors.py` regenerates `src/fusion360_mcp/hints.py`.
+  `tests/test_addon_sync.py` fails while the generated copy is stale.
 - **Units are centimetres.** Fusion's internal unit. Not millimetres.
 
 ## Commit messages
@@ -96,6 +100,8 @@ error that motivated it.
 - `addon/` is excluded from pyright/mypy on purpose: it reaches Fusion's `adsk` API
   through a lazy adapter, and `adsk` cannot be resolved outside Fusion. Don't add type
   ignores for it.
+- Comments state the constraint or the measured fact, never the edit that introduced
+  it.
 
 ## Releasing
 

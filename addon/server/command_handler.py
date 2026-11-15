@@ -15,15 +15,17 @@ import tempfile
 import time
 import traceback
 from contextlib import redirect_stdout, suppress
-from typing import Any, ClassVar
+from typing import Any, Callable, ClassVar
 
-# One import site for Autodesk's API: resolved lazily, so this module imports outside
-# Fusion.  Only the import line changed; every ``adsk.`` use below is untouched.
+# One import site for Autodesk's API, resolved lazily so this module imports outside
+# Fusion; every ``adsk.`` use below goes through the adapter.
 from . import fusion_api as adsk
 from . import get_logger
 from . import hints as _hints
 from . import hole_geometry as _hole_geom
 from . import parameter_units as _param_units
+from . import rules as _rules
+from .mutation_commands import MUTATION_COMMANDS
 
 log = get_logger("handler")
 
@@ -51,13 +53,13 @@ class CommandHandler:
     def __init__(self):
         self.app = adsk.core.Application.get()
         self.ui = self.app.userInterface
+        self._commands: dict[str, Callable[..., Any]] = {
+            name: getattr(self, name) for name in self._COMMAND_NAMES
+        }
 
     # ------------------------------------------------------------------
     # Dispatch
     # ------------------------------------------------------------------
-
-    _COMMANDS: ClassVar[dict[str, Any] | None] = None  # populated lazily
-
     # Canonical camera presets, (eye_dir, up_vec) in Fusion's Z-up world.
     # Shared by render_view and export_view_sheet.
     _VIEW_DIRS: ClassVar[dict[str, Any]] = {
@@ -75,9 +77,39 @@ class CommandHandler:
 
     # Commands that can change body mass / bbox / body count.  Only these
     # get before/after snapshots so agents can sanity-check without a render.
-    _MUTATION_COMMANDS = frozenset(
+    # The set itself is canonical in `mutation_commands.py`, which the server
+    # package mirrors and mock mode imports.
+    _MUTATION_COMMANDS = MUTATION_COMMANDS
+
+    # The dispatch table: command name -> method of this class.  A class
+    # attribute rather than a literal, so a name that has no method cannot be
+    # listed (`__init__` resolves it) and a reloaded handler cannot inherit a
+    # table built by another instance.
+    _COMMAND_NAMES: ClassVar[frozenset[str]] = frozenset(
         {
-            # feature ops
+            "new_document",
+            "get_scene_info",
+            "get_object_info",
+            "list_edges",
+            "get_bounding_box",
+            "list_components",
+            # sketch
+            "create_sketch",
+            "draw_rectangle",
+            "draw_circle",
+            "draw_line",
+            "draw_arc",
+            "draw_spline",
+            "create_polygon",
+            "draw_circles",
+            "add_constraint",
+            "auto_constrain",
+            "add_dimension",
+            "offset_curve",
+            "trim_curve",
+            "extend_curve",
+            "project_geometry",
+            # features
             "extrude",
             "revolve",
             "sweep",
@@ -97,162 +129,86 @@ class CommandHandler:
             "scale_body",
             "suppress_feature",
             "unsuppress_feature",
-            # body ops
+            # body operations
             "move_body",
+            "rename_body",
+            "export_stl",
+            "export_step",
+            "export_f3d",
+            "export_view_sheet",
+            "export",
+            "import_mesh",
+            "create_box_parametric",
             "boolean_operation",
-            # primitives
+            "delete_all",
+            "undo",
+            # direct primitives
             "create_box",
             "create_cylinder",
             "create_sphere",
             "create_torus",
-            # surface / sheet metal (can produce / thicken bodies)
-            "thicken_surface",
+            # construction geometry
+            "create_construction_plane",
+            "create_construction_axis",
+            "create_ucs",
+            # assembly
+            "create_component",
+            "add_joint",
+            "set_joint_value",
+            "create_as_built_joint",
+            "create_rigid_group",
+            # inspection / analysis
+            "measure_distance",
+            "measure_angle",
+            "get_physical_properties",
+            "create_section_analysis",
+            "check_interference",
+            "compare_meshes",
+            # appearance
+            "set_appearance",
+            "set_color",
+            # parameters
+            "get_parameters",
+            "create_parameter",
+            "set_parameter",
+            "delete_parameter",
+            # surface operations
             "patch_surface",
             "stitch_surfaces",
+            "thicken_surface",
             "ruled_surface",
             "trim_surface",
+            # sheet metal
             "create_flange",
             "create_bend",
             "flat_pattern",
             "unfold",
-            # scene-wide
-            "delete_all",
-            "undo",
-            # parametric & agent-authored changes
-            "set_parameter",
+            # code execution
             "execute_code",
-            # sketch constraint mutation
-            "auto_constrain",
-            # construction geometry / appearance
-            "create_ucs",
-            "set_color",
+            # CAM
+            "cam_list_setups",
+            "cam_list_operations",
+            "cam_get_operation_info",
+            "cam_create_setup",
+            "cam_create_operation",
+            "cam_generate_toolpath",
+            "cam_post_process",
+            # health
+            "ping",
+            # design type safety
+            "get_design_type",
+            "set_design_type",
+            # perception
+            "render_view",
         }
     )
 
     def execute_command(self, command: dict) -> dict:
         """Route *command* to the correct handler; return a response dict."""
-        if self._COMMANDS is None:
-            self.__class__._COMMANDS = {
-                # scene / query
-                "new_document": self.new_document,
-                "get_scene_info": self.get_scene_info,
-                "get_object_info": self.get_object_info,
-                "list_edges": self.list_edges,
-                "get_bounding_box": self.get_bounding_box,
-                "list_components": self.list_components,
-                # sketch
-                "create_sketch": self.create_sketch,
-                "draw_rectangle": self.draw_rectangle,
-                "draw_circle": self.draw_circle,
-                "draw_line": self.draw_line,
-                "draw_arc": self.draw_arc,
-                "draw_spline": self.draw_spline,
-                "create_polygon": self.create_polygon,
-                "draw_circles": self.draw_circles,
-                "add_constraint": self.add_constraint,
-                "auto_constrain": self.auto_constrain,
-                "add_dimension": self.add_dimension,
-                "offset_curve": self.offset_curve,
-                "trim_curve": self.trim_curve,
-                "extend_curve": self.extend_curve,
-                "project_geometry": self.project_geometry,
-                # features
-                "extrude": self.extrude,
-                "revolve": self.revolve,
-                "sweep": self.sweep,
-                "loft": self.loft,
-                "fillet": self.fillet,
-                "chamfer": self.chamfer,
-                "shell": self.shell,
-                "mirror": self.mirror,
-                "create_hole": self.create_hole,
-                "rectangular_pattern": self.rectangular_pattern,
-                "circular_pattern": self.circular_pattern,
-                "create_thread": self.create_thread,
-                "draft_faces": self.draft_faces,
-                "split_body": self.split_body,
-                "split_face": self.split_face,
-                "offset_faces": self.offset_faces,
-                "scale_body": self.scale_body,
-                "suppress_feature": self.suppress_feature,
-                "unsuppress_feature": self.unsuppress_feature,
-                # body operations
-                "move_body": self.move_body,
-                "rename_body": self.rename_body,
-                "export_stl": self.export_stl,
-                "export_step": self.export_step,
-                "export_f3d": self.export_f3d,
-                "export_view_sheet": self.export_view_sheet,
-                "export": self.export,
-                "import_mesh": self.import_mesh,
-                "create_box_parametric": self.create_box_parametric,
-                "boolean_operation": self.boolean_operation,
-                "delete_all": self.delete_all,
-                "undo": self.undo,
-                # direct primitives
-                "create_box": self.create_box,
-                "create_cylinder": self.create_cylinder,
-                "create_sphere": self.create_sphere,
-                "create_torus": self.create_torus,
-                # construction geometry
-                "create_construction_plane": self.create_construction_plane,
-                "create_construction_axis": self.create_construction_axis,
-                "create_ucs": self.create_ucs,
-                # assembly
-                "create_component": self.create_component,
-                "add_joint": self.add_joint,
-                "set_joint_value": self.set_joint_value,
-                "create_as_built_joint": self.create_as_built_joint,
-                "create_rigid_group": self.create_rigid_group,
-                # inspection / analysis
-                "measure_distance": self.measure_distance,
-                "measure_angle": self.measure_angle,
-                "get_physical_properties": self.get_physical_properties,
-                "create_section_analysis": self.create_section_analysis,
-                "check_interference": self.check_interference,
-                "compare_meshes": self.compare_meshes,
-                # appearance
-                "set_appearance": self.set_appearance,
-                "set_color": self.set_color,
-                # parameters
-                "get_parameters": self.get_parameters,
-                "create_parameter": self.create_parameter,
-                "set_parameter": self.set_parameter,
-                "delete_parameter": self.delete_parameter,
-                # surface operations
-                "patch_surface": self.patch_surface,
-                "stitch_surfaces": self.stitch_surfaces,
-                "thicken_surface": self.thicken_surface,
-                "ruled_surface": self.ruled_surface,
-                "trim_surface": self.trim_surface,
-                # sheet metal
-                "create_flange": self.create_flange,
-                "create_bend": self.create_bend,
-                "flat_pattern": self.flat_pattern,
-                "unfold": self.unfold,
-                # code execution
-                "execute_code": self.execute_code,
-                # CAM
-                "cam_list_setups": self.cam_list_setups,
-                "cam_list_operations": self.cam_list_operations,
-                "cam_get_operation_info": self.cam_get_operation_info,
-                "cam_create_setup": self.cam_create_setup,
-                "cam_create_operation": self.cam_create_operation,
-                "cam_generate_toolpath": self.cam_generate_toolpath,
-                "cam_post_process": self.cam_post_process,
-                # health
-                "ping": self.ping,
-                # design type safety
-                "get_design_type": self.get_design_type,
-                "set_design_type": self.set_design_type,
-                # perception
-                "render_view": self.render_view,
-            }
-
         cmd_type = command.get("type")
         params = command.get("params", {})
 
-        commands = self._COMMANDS or {}
+        commands = self._commands
         handler = commands.get(cmd_type or "")
         if handler is None:
             # Infrastructure-level failure (not an application error) —
@@ -383,15 +339,13 @@ class CommandHandler:
     # Joint types whose two direction arguments are (something, primary) rather
     # than (primary, something), so the caller's `axis` is passed second.
     #
-    # ball: takes (pitchDirection, yawDirection) and rejects a pitch parallel to
-    # the joint axis with "Invalid parameter pitchDirection", so the perpendicular
-    # one goes first (verified on 2705).
-    #
-    # pin_slot: measured on 2706, `setAsPinSlotJointMotion(a, b)` makes `a` the
-    # ROTATION axis and `b` the slide. Passing the caller's axis first - which is
-    # what this did - made `axis` the rotation and left the slide on the
-    # perpendicular default. The result's `directions` field is what exposed it:
-    # `axis_world` said -X while Fusion reported slideDirection [0,0,1].
+    # ball takes (pitchDirection, yawDirection) and rejects a pitch parallel to the
+    # joint axis with "Invalid parameter pitchDirection" (verified on 2705), so the
+    # perpendicular one goes first.  Measured on 2706, `setAsPinSlotJointMotion(a, b)`
+    # makes `a` the ROTATION axis and `b` the slide: passing the caller's axis first
+    # makes `axis` the rotation and leaves the slide on the perpendicular default,
+    # which the result's `directions` field exposes - `axis_world` said -X while
+    # Fusion reported slideDirection [0,0,1].
     _JOINT_REVERSED_DIRECTION_ARGUMENTS = frozenset({"ball", "pin_slot"})
 
     # How far an edge's extent may sit from a plane and still count as lying in
@@ -542,15 +496,15 @@ class CommandHandler:
         Fusion 2706: a loft whose sections spanned the seam between two touching
         blocks cut *both* of them, and a caller had no way to cut one.  Resolution
         happens before any geometry is created, so a refusal leaves nothing behind.
+
+        The target-body refusal is ``rules``': mock mode answers a ``target_body``
+        beside a new body with the same sentence and the same kind.
         """
+        refusal = _rules.target_body_refusal({"target_body": target_body}, operation)
+        if refusal is not None:
+            raise refusal
         if target_body is None:
             return None
-        if operation == "new_body":
-            raise RuntimeError(
-                "Invalid input: target_body applies only to cut, join or "
-                "intersect — new_body builds a body of its own, so there is "
-                "nothing to target"
-            )
         return self._body_by_name(target_body)
 
     @staticmethod
@@ -589,17 +543,18 @@ class CommandHandler:
         decided, and guessing would round whatever the other selector happened to
         match.  Only "all" is compatible with a silence, because "all" is the
         default and so means "unset".
+
+        The parameters are judged from the parameters alone, by ``rules``; the body is
+        resolved first, so a bad body still wins.
         """
-        if indices is not None and points is not None:
-            raise RuntimeError(
-                "Pass only one of edge_indices and edge_points — they name the "
-                "same edges two ways, so one would be ignored"
-            )
-        if (indices is not None or points is not None) and selection != "all":
-            raise RuntimeError(
-                f"edge_selection '{selection}' cannot be combined with "
-                "edge_indices or edge_points — pass one selector, not two"
-            )
+        if refusal := _rules.edge_selector_refusal(
+            {
+                "edge_selection": selection,
+                "edge_indices": indices,
+                "edge_points": points,
+            }
+        ):
+            raise refusal
 
         coll = adsk.core.ObjectCollection.create()
 
@@ -631,10 +586,11 @@ class CommandHandler:
         elif selection in ("top", "bottom"):
             for edge in self._edges_in_extreme_plane(body, selection):
                 coll.add(edge)
-        elif selection == "vertical":
-            # The edge's own box, not its two ends: an end-to-end test calls every
-            # closed edge vertical, because a Circle3D's two vertices are the same
-            # point (measured on Fusion 2706).
+        else:
+            # "vertical", the last of the four the validator accepts — so this is not
+            # a guess.  The edge's own box, not its two ends: an end-to-end test calls
+            # every closed edge vertical, because a Circle3D's two vertices are the
+            # same point (measured on Fusion 2706).
             for edge in roundable:
                 box = edge.boundingBox
                 if (
@@ -642,10 +598,6 @@ class CommandHandler:
                     and abs(box.maxPoint.y - box.minPoint.y) <= self._EDGE_PLANE_EPSILON
                 ):
                     coll.add(edge)
-        else:
-            raise RuntimeError(
-                f"Unknown edge_selection '{selection}' — use all/top/bottom/vertical"
-            )
 
         if coll.count == 0:
             raise RuntimeError(f"No edges matched selection '{selection}'")
@@ -733,16 +685,13 @@ class CommandHandler:
         body changes.  A stale index that is merely in range would round the wrong
         edge and report success, which is why only the out-of-range case can be
         caught here — and why ``list_edges`` is the intended way to get them.
+
+        ``rules.edge_selector_refusal`` has already refused a non-integer index and an
+        empty list, so the range is what is left to check.
         """
         count = body.edges.count
         wanted: list[int] = []
-        for raw in indices:
-            if isinstance(raw, bool) or not isinstance(raw, int):
-                raise RuntimeError(
-                    f"Edge index {raw!r} is out of range — indices are whole "
-                    "numbers from list_edges"
-                )
-            index = raw
+        for index in indices:
             if not 0 <= index < count:
                 valid = (
                     f"the valid indices run 0..{count - 1}"
@@ -755,11 +704,6 @@ class CommandHandler:
                 )
             if index not in wanted:
                 wanted.append(index)
-        if not wanted:
-            raise RuntimeError(
-                "edge_indices was empty — name at least one edge, or omit it to "
-                "use edge_selection"
-            )
         return [body.edges.item(index) for index in wanted]
 
     def _edges_by_points(self, body, points, tolerance: float) -> list:
@@ -811,10 +755,6 @@ class CommandHandler:
             )
 
         for point in points:
-            if len(point) != 3:
-                raise RuntimeError(
-                    f"Each edge point needs three coordinates, got {len(point)}"
-                )
             x, y, z = (_param_units.require_finite(c) for c in point)
             target = adsk.core.Point3D.create(x, y, z)
             best = None
@@ -874,11 +814,6 @@ class CommandHandler:
             if id(edge) not in chosen_ids:
                 chosen_ids.add(id(edge))
                 chosen.append(edge)
-        if not chosen:
-            raise RuntimeError(
-                "edge_points was empty — name at least one point, or omit it to "
-                "use edge_selection"
-            )
         return chosen
 
     def _select_faces(self, body, selection: str):
@@ -1160,11 +1095,7 @@ class CommandHandler:
         dropped = [z for z in z_values if z]
         if dropped:
             result["ignored_z"] = dropped[0] if len(dropped) == 1 else dropped
-            result["note"] = (
-                "Sketch curves lie in the sketch plane, so the z component was "
-                "dropped instead of being added to the plane's own offset. "
-                "Use create_sketch(z_offset=...) to move the plane itself."
-            )
+            result["note"] = _rules.sketch_plane_z_note()
         return result
 
     def create_sketch(self, plane: str = "xy", z_offset: float | None = None):
@@ -1429,10 +1360,10 @@ class CommandHandler:
     def _point_by_index(self, sketch, points, index, field: str):
         """The sketch point *index* names, or a refusal that says which one missed.
 
-        ``midpoint``'s first entity is a POINT, and it used to be validated against
-        the curve list: a point index that was also inside the curve list named the
-        wrong item, and a point index one past it was refused with a message about
-        curves - advice for a different collection.
+        ``midpoint``'s first entity is a POINT, so it is read against the point
+        collection: validated against the curve list, a point index that is also
+        inside that list names the wrong item, and one past it is refused with advice
+        about curves - a different collection.
 
         ``points`` is Fusion's collection (``count``/``item``), not a list: that is
         the surface it offers, and it is what the fake models.
@@ -1457,8 +1388,8 @@ class CommandHandler:
 
     #: What each constraint resolves: the kind of ``entity_one`` (a curve for every
     #: type except ``midpoint``, whose first entity is a sketch point), and whether
-    #: a second entity is needed.  A table because ``addParallel(e1, None)`` used to
-    #: reach Fusion and come back ``ok: true``.
+    #: a second entity is needed.  A table because Fusion accepts a missing second
+    #: entity: ``addParallel(e1, None)`` reaches the API and reports ``ok: true``.
     _CONSTRAINT_ENTITIES: ClassVar[dict[str, tuple[str, bool]]] = {
         "coincident": ("curve", True),
         "parallel": ("curve", True),
@@ -1513,8 +1444,8 @@ class CommandHandler:
             else None
         )
 
-        # Refuse before the call, not inside Fusion: addParallel(e1, None) used to
-        # reach the API and report success.
+        # Refuse before the call, not inside Fusion: addParallel(e1, None) reaches
+        # the API and reports success.
         if (point if first_kind == "point" else e1) is None:
             raise RuntimeError(
                 f"a {constraint_type} constraint needs entity_one "
@@ -2433,13 +2364,13 @@ class CommandHandler:
     def _thread_fits(face_diameter: float, thread_diameter: float) -> bool:
         """Whether the face is the size the designation describes, near enough.
 
-        A *relative* band alone is wrong, and the first version of this shipped one.
-        Callers model the nominal diameter while Fusion reports the middle of the
-        tolerance band, and the gap between the two is roughly constant in absolute
-        terms - 0.073 mm on an M3, 0.116 mm on an M6, 0.209 mm on an M20 - so a
-        percentage gate tightens as the thread shrinks and refused Ø3.00 mm stock
-        against M3x0.5, the canonical small-thread call. The floor keeps that
-        accepted; Ø20 against M6 is 14.1 cm apart and still refused.
+        A *relative* band alone is wrong: callers model the nominal diameter while
+        Fusion reports the middle of the tolerance band, and the gap between the two
+        is roughly constant in absolute terms - 0.073 mm on an M3, 0.116 mm on an M6,
+        0.209 mm on an M20 - so a percentage gate tightens as the thread shrinks and
+        would refuse Ø3.00 mm stock against M3x0.5, the canonical small-thread call.
+        The floor keeps that accepted; Ø20 against M6 is 14.1 cm apart and still
+        refused.
         """
         return abs(face_diameter - thread_diameter) <= max(
             0.02 * thread_diameter, 0.012
@@ -2455,11 +2386,11 @@ class CommandHandler:
     ) -> str:
         """What to tell a caller whose face and designation disagree.
 
-        Three things a first version got wrong: it could recommend the designation it
-        had just refused (the recommendation is the nearest standard thread, which on
-        nominal-sized stock *is* the one asked for), it never considered that
-        ``is_internal`` might be the wrong flag rather than the designation, and it
-        said nothing about which diameter it had measured.
+        The message names the diameter it measured, so the answer says what was seen
+        rather than only what was expected.  It does not recommend the designation it
+        has just refused: the recommendation is the nearest standard thread, which on
+        nominal-sized stock *is* the one asked for.  And ``is_internal`` may be the
+        wrong flag rather than the designation, which is a different repair.
         """
         parts = [
             f"The face is {face_diameter * 10:.2f} mm across but {designation} is "
@@ -3380,9 +3311,9 @@ class CommandHandler:
         temp_brep = adsk.fusion.TemporaryBRepManager.get()
 
         # The oriented box's point is its CENTRE (adsk.core.OrientedBoundingBox3D),
-        # so the caller's centre goes in unchanged.  It used to go in as
-        # ``center_z + height / 2``, which centred X and Y and *based* Z: a box
-        # asked for at centre 1 came out spanning 1..3, while its name said centre.
+        # so the caller's centre goes in unchanged.  Adding ``height / 2`` would base
+        # Z while centring X and Y: a box asked for at centre 1 would span 1..3 while
+        # its name said centre.
         orient = adsk.core.OrientedBoundingBox3D.create(
             adsk.core.Point3D.create(center_x, center_y, center_z),
             adsk.core.Vector3D.create(1, 0, 0),
@@ -3852,10 +3783,10 @@ class CommandHandler:
 
         inp = joints.createInput(geometries[0], geometries[1])
 
-        # Set the requested motion explicitly. Previously only "rigid" was
-        # handled, so every other type silently produced an inferred (usually
-        # rigid) joint while reporting success.  The frame matters here: `axis`
-        # names a MODEL axis, and Fusion's enum names a JOINT one.
+        # Set the requested motion explicitly: Fusion infers a rigid joint when no
+        # motion is set and still reports success, so a type left unhandled silently
+        # produces one.  The frame matters here: `axis` names a MODEL axis, and
+        # Fusion's enum names a JOINT one.
         #
         # Only a motion that takes a direction needs the frame: a rigid joint
         # resolves no axis, so a degenerate frame it never reads must not refuse
@@ -3969,7 +3900,7 @@ class CommandHandler:
         ``secondary`` in all four), a cylinder whose bore is world X, and a cone.
         The frame that matters is the one on the geometry passed to
         ``createInput``: a joint's own ``geometryOrOriginOne`` carries a permuted
-        frame, which is what made an earlier reading look inconsistent.
+        frame.
 
         Every direction the caller can ask for is therefore resolved against these
         three vectors.
@@ -3980,9 +3911,9 @@ class CommandHandler:
         is then told ``axis_world`` is ``[0, 0, 0]`` and the joint is built around
         whichever ``JointDirections`` member the tie happened to produce.  Only the
         member reaches Fusion; the vector is what the response reports.
-        Measured shape of the failure before this guard: a frame whose secondary
-        axis was ``[0, 0, 0]`` answered ``axis_world`` ``[0, 0, 0]`` for
-        ``axis="y"`` and picked an axis the geometry never had.
+        Measured failure without this guard: a frame whose secondary axis was
+        ``[0, 0, 0]`` answered ``axis_world`` ``[0, 0, 0]`` for ``axis="y"`` and
+        picked an axis the geometry never had.
         """
         frame = {
             "x": _vector(geometry.secondaryAxisVector),
@@ -4007,8 +3938,8 @@ class CommandHandler:
         """The ``JointDirections`` member whose joint axis best matches *axis*.
 
         Returns ``(member, world_vector)``. Without a *frame* the caller's axis is
-        passed through literally, which is the old behaviour and only correct when
-        the joint's frame happens to equal the model's.
+        passed through literally, which is only correct when the joint's frame
+        happens to equal the model's.
 
         No member can point along a world axis the frame does not contain, so the
         closest one is chosen and the sign it actually gives is reported: on the
@@ -4119,9 +4050,9 @@ class CommandHandler:
         as_built = root.asBuiltJoints
         inp = as_built.createInput(occ1, occ2, geometry)
 
-        # Honour joint_type; previously every request produced a rigid joint
-        # because no motion was ever set.  The frame comes from the geometry, and
-        # a rigid as-built joint has none, which is why it is optional.
+        # Honour joint_type: with no motion set, every request produces a rigid
+        # joint.  The frame comes from the geometry, and a rigid as-built joint has
+        # none, which is why it is optional.
         frame = self._joint_frame(geometry) if geometry is not None else None
         self._apply_joint_motion(inp, joint_type, axis, second_axis, frame)
 
@@ -4726,24 +4657,23 @@ class CommandHandler:
 
         ruled = root.features.ruledSurfaceFeatures
         # The shipped signature is createInput(profile, distance, angle, type) and
-        # it takes a Profile, not an edge: the two-argument edge form this used to
-        # call raised "Wrong number or type of arguments" on every invocation.
-        # Measured on 2706: a sketch profile does NOT work here - a closed rectangle
-        # answers "3 : face profiles not supported" and a bare sketch line "3 :
-        # invalid profile for Ruled Surface Feature", despite the SDK's wording
-        # ("defines the sketch geometry or edges").  A sheet body's free edge is the
-        # only source.
+        # it takes a Profile, not an edge: the two-argument edge form raises "Wrong
+        # number or type of arguments" on every invocation.  Measured on 2706: a
+        # sketch profile does NOT work here - a closed rectangle answers
+        # "3 : face profiles not supported" and a bare sketch line "3 : invalid
+        # profile for Ruled Surface Feature", despite the SDK's wording ("defines the
+        # sketch geometry or edges").  A sheet body's free edge is the only source.
         profile = root.createBRepEdgeProfile(edge, True)
+        # The schema's enum is advisory: a socket caller is not the schema, and mock
+        # mode applies the same check, so both sides refuse the same value.
+        refusal = _rules.rule_type_refusal(rule_type)
+        if refusal is not None:
+            raise refusal
+        # ``rule_type_refusal`` accepts these keys, so anything else is already refused.
         ruled_type = {
             "tangent": adsk.fusion.RuledSurfaceTypes.TangentRuledSurfaceType,
             "normal": adsk.fusion.RuledSurfaceTypes.NormalRuledSurfaceType,
-        }.get(rule_type)
-        if ruled_type is None:
-            # The schema's enum is advisory: a socket caller is not the schema, and
-            # a bare KeyError classified as UNKNOWN tells it nothing.
-            raise RuntimeError(
-                f"Unknown rule_type {rule_type!r} - use 'normal' or 'tangent'"
-            )
+        }[rule_type]
         inp = ruled.createInput(
             profile,
             adsk.core.ValueInput.createByReal(distance),
@@ -5599,9 +5529,9 @@ class CommandHandler:
         """
         eye_dir, up_vec = spec
         # _design(), not activeProduct: in the Manufacture workspace the active
-        # product is CAM and has no rootComponent, which is the read this PR
-        # removed from _snapshot.  A view still renders without a design - the
-        # target then stays at the origin - so a missing design is not fatal here.
+        # product is CAM and has no rootComponent.  A view still renders without a
+        # design - the target then stays at the origin - so a missing design is not
+        # fatal here.
         try:
             design = self._design()
         except RuntimeError:

@@ -247,6 +247,47 @@ def test_a_reload_after_the_adapter_change_still_swaps_the_handler():
             bridge.stop()
 
 
+def test_a_reloaded_rules_module_still_builds_the_current_refusal():
+    """``rules`` reaches ``hints.Refusal`` through the module, not by name.
+
+    A by-name ``from .hints import Refusal`` keeps whichever class object was imported
+    first.  Once ``reload_handler`` replaces ``hints.Refusal``, ``hints.classify``'s
+    ``isinstance`` miss sends every refusal down the regex table - and that table
+    answers the same today, so nothing else would ever report the drift.  ``hints`` is
+    reloaded before ``rules``, so a by-name import would re-bind the fresh class and
+    pass at that order - the binding is asserted directly instead, so the order cannot
+    hide it.
+    """
+    from addon.server import event_bridge, hints, rules
+    from tests.fakes.app import FakeApplication
+    from tests.fakes.runtime import fake_runtime
+
+    class Handler:
+        def execute_command(self, command):
+            return {"ok": True}
+
+    with fake_runtime():
+        bridge = event_bridge.EventBridge(FakeApplication.get(), Handler())
+        try:
+            bridge.reload_handler()
+
+            assert rules._hints is hints, (
+                "rules must reach the class through the hints module object; a "
+                "by-name import survives today's reload order and drifts later"
+            )
+            refusal = rules.edge_selector_refusal(
+                {"edge_indices": [0], "edge_points": [[0.0, 0.0, 0.0]]}
+            )
+
+            assert isinstance(refusal, hints.Refusal), (
+                "rules built a stale Refusal class, so classify would fall back to "
+                "the regex table"
+            )
+            assert hints.classify(refusal)[0] == "INVALID_INPUT"
+        finally:
+            bridge.stop()
+
+
 def test_a_resolved_name_survives_adsk_leaving_sys_modules(monkeypatch):
     """The cache is a module attribute, not a lookup: resolution happens once.
 
