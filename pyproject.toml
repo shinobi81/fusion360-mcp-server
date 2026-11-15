@@ -74,6 +74,9 @@ typeCheckingMode = "basic"  # pinned: the checked set cannot change by omission
 # as unresolved no matter what is installed.
 venvPath = "."
 venv = ".venv"
+# The editable install is a `.pth` finder, which pyright does not follow, so `src/` has
+# to be named or every test import reads as unresolved.
+extraPaths = ["src"]
 # The support window, restated because pyright cannot infer it from `requires-python`.
 # It must equal the floor exactly: lower reports errors on supported code, higher accepts
 # syntax we do not support.

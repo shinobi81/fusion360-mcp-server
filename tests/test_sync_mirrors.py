@@ -13,6 +13,8 @@ The ``--check`` guard against a stale committed mirror is ``tests/test_addon_syn
 from __future__ import annotations
 
 import importlib.util
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -121,6 +123,40 @@ def test_every_mirror_the_tree_has_is_declared(canonical, mirror):
     pairs = {(canonical, mirror) for canonical, mirror, _ in SYNC.MIRRORS}
 
     assert (canonical, mirror) in pairs
+
+
+def test_check_survives_an_interpreter_that_strips_docstrings():
+    """``-OO`` empties every ``__doc__`` and drops docstrings from ``ast.parse``.
+
+    Two readings in ``--check`` depended on that.  The ``argparse`` description
+    subscripted ``(__doc__ or "").splitlines()``, which raises ``IndexError`` on the
+    empty list ``-OO`` produces.  And ``_refuse_code_above_the_imports`` parses the
+    preamble, where ``-OO`` leaves a tree with the canonical docstring already
+    stripped - so the guard saw the file's own docstring as code above the import and
+    refused it.  A docstring is not a statement to the optimising interpreter, and this
+    guard must still see it, which is why the parse is pinned to ``optimize=0``.  Run
+    the real command line, because either reading only breaks in a process launched with
+    the flag.
+    """
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-OO",
+            str(REPO_ROOT / "scripts" / "sync_mirrors.py"),
+            "--check",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+
+    assert result.returncode == 0, (
+        "`python -OO scripts/sync_mirrors.py --check` must exit 0: -OO empties "
+        f"__doc__ and strips docstrings from ast.parse; stdout={result.stdout!r} "
+        f"stderr={result.stderr!r}"
+    )
 
 
 def test_writing_creates_a_mirror_that_does_not_exist_yet(tmp_path, monkeypatch):

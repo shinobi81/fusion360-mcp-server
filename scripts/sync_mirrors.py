@@ -105,7 +105,9 @@ def _refuse_code_above_the_imports(canonical: Path, preamble: list[str]) -> None
     if not text.strip():
         return
     try:
-        statements = ast.parse(text).body
+        # ``optimize=0``: under ``-OO`` ``ast.parse`` drops docstrings from the tree, so
+        # the canonical docstring would read as code above the import and be refused.
+        statements = ast.parse(text, optimize=0).body
     except SyntaxError as exc:
         raise ValueError(
             f"{canonical}: line {exc.lineno} is above the first import and is not a "
@@ -134,7 +136,7 @@ def render(canonical: Path, header: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description="Render the package-side mirrors.")
     parser.add_argument(
         "--check",
         action="store_true",
