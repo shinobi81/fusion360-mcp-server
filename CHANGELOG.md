@@ -11,8 +11,7 @@ and published; they are the fork history.
 
 A patch release whose payload is documentation and the guards that keep it honest. No
 tool, parameter, response field or `error_kind` changed, and no line of the add-in's
-code changed: the only code that moved is in `tests/`, and inside the two artifacts only
-the manifest's version string and `README.md`'s six install pins differ from 0.8.1's.
+code changed: the only code that moved is in `tests/`.
 
 ### Fixed
 
@@ -45,10 +44,10 @@ the manifest's version string and `README.md`'s six install pins differ from 0.8
 - **Three records that could drift from the release are now read**: `SECURITY.md`'s
   supported-versions rows, the sync flag on every documented command, and the
   changelog's first heading, its date shape and its compare link. The sync flag is the
-  sweep - every tracked markdown page plus every workflow, with `SYNC_DOCUMENTS` naming
-  the four pages that must keep showing the command, so a reflow cannot empty it. The
-  other two read their one file each, and fail rather than pass when the row, heading or
-  link they look for is gone. (#101)
+  sweep - every tracked markdown page but the changelog, plus every workflow, with
+  `SYNC_DOCUMENTS` naming the four pages that must keep showing the command, so a reflow
+  cannot empty it. The other two read their one file each, and fail rather than pass
+  when the row, heading or link they look for is gone. (#101)
 
 ## [0.8.1] - 2026-11-14
 
