@@ -10,10 +10,9 @@ and published; they are the fork history.
 ## [0.8.2] - 2026-11-15
 
 A patch release whose payload is documentation and the guards that keep it honest. No
-tool, parameter, response field or `error_kind` changed, no line of the add-in's code
-changed, and the wheel and sdist carry exactly what 0.8.1's did: the only code that
-moved is in `tests/`, and the only shipped text that moved is in the repository's own
-pages.
+tool, parameter, response field or `error_kind` changed, and no line of the add-in's
+code changed: the only code that moved is in `tests/`, and inside the two artifacts only
+the manifest's version string and `README.md`'s six install pins differ from 0.8.1's.
 
 ### Fixed
 
@@ -23,7 +22,6 @@ pages.
   that question to. It says `0.8.x` now, and a test reads both rows against the series
   `pyproject.toml` states, so the Yes row must be that series and the No row everything
   below it. (#101)
-
 - **`SECURITY.md`'s three design notes rendered as one bullet.** The `-` markers sat
   inside the paragraph - the shape the file had since it arrived in #5 - and
   markdownlint parses that as a single well-formed item, so no gate saw it. Three
@@ -37,7 +35,6 @@ pages.
   comment beside `pyproject.toml`'s dependency groups. `--frozen` installs whatever the
   lock says and never compares it with `pyproject.toml`, so a release PR that moved the
   version and forgot `uv lock` would have installed cleanly and stayed green. (#101)
-
 - **`tests/test_packaging.py`'s docstring names the claims it guards again** - the four
   build-shape tests #94 added (the add-in's mapping into the wheel, `src/`'s package
   list, the add-on subpackages, `include-package-data`) and the quick-start half of the
@@ -47,9 +44,11 @@ pages.
 
 - **Three records that could drift from the release are now read**: `SECURITY.md`'s
   supported-versions rows, the sync flag on every documented command, and the
-  changelog's first heading, its date shape and its compare link. Each is a sweep of
-  every tracked markdown page plus every workflow, and a named list that must keep
-  showing the thing, so a reflow cannot empty the check. (#101)
+  changelog's first heading, its date shape and its compare link. The sync flag is the
+  sweep - every tracked markdown page plus every workflow, with `SYNC_DOCUMENTS` naming
+  the four pages that must keep showing the command, so a reflow cannot empty it. The
+  other two read their one file each, and fail rather than pass when the row, heading or
+  link they look for is gone. (#101)
 
 ## [0.8.1] - 2026-11-14
 
