@@ -7,6 +7,77 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.8.5] - 2026-11-15
+
+Three merged PRs that remove duplication rather than add features, plus the
+release-review work they forced. Two things a caller can observe: `render_view` accepts
+three camera presets it was already handling, and mock mode's malformed-edge-point
+refusal now uses the add-in's wording. Everything else is internal or tooling.
+
+### Added
+
+- **`uv run mypy src` is a required check** in the `test` CI job - `src/` only, because
+  `addon/` reaches Fusion's `adsk`, which no checker can resolve. `[tool.mypy]` had been
+  configured since 0.7 with nothing invoking it: a checker nothing runs reports nothing.
+  Zero errors when it was wired up, and no `# type: ignore` was needed.
+  `check_untyped_defs` stays off, so the result is a floor, not a claim about
+  unannotated bodies.
+
+- **`render_view`'s `view` enum gains `iso_ne`, `iso_nw` and `iso_sw`** - `_VIEW_DIRS`
+  had handled all three since the presets were written, so the schema was refusing calls
+  the add-in answered.
+
+### Changed
+
+- **`addon/server/command_handler.py` is a 32-line shell.** The 5,639-line class (97
+  commands and 61 helpers) is now nine modules: a `HandlerBase` holding dispatch, the
+  command tables and the helpers two domains call, plus one mixin per domain
+  (`handler_sketch`, `handler_features`, `handler_primitives`, `handler_scene`,
+  `handler_assembly`, `handler_surface`, `handler_export`, `handler_cam`). Bodies moved
+  verbatim. The add-in's reload proof was reworked **before** any move, because it
+  compared `vars(cls)` - deliberately, so an inherited method would not read as drift -
+  which is exactly what a mixin split changes: it now walks `cls.__mro__` and reads a
+  module list, and the string Fusion executes is itself executed in the suite.
+
+- **`render_view`'s `view` enum reorders `left`/`right`** to `_VIEW_DIRS` key order. No
+  handler behaviour depends on the order; a client reading the enum positionally would
+  notice.
+
+- **mock mode's malformed-edge-point refusal uses the add-in's wording** - "Each edge
+  point needs three coordinates, got N" rather than "edge point needs three
+  coordinates". The two copies had drifted and one shared function can only say one;
+  `error_kind` and `hints` are unchanged.
+
+- **`scripts/reload_addin.py` asks which add-in it is talking to before it reloads**,
+  and refuses when the loaded path is not this checkout's. It used to send the reload
+  first and report the path afterwards, on stdout, with a success exit - so a bare run
+  from the wrong checkout re-executed another tree's modules and mentioned it later.
+
+- **`scripts/sync_mirrors.py` and `scripts/reload_addin.py` survive `python -OO`.** Two
+  separate bugs: a `__doc__` subscript, and `ast.parse` dropping docstrings so the
+  mirror guard read a canonical's docstring as code above its cut and refused it. The
+  guard now parses with `optimize=0` - it asks about the file, not the interpreter.
+
+### Fixed
+
+- **a non-list `edge_indices`/`edge_points` is refused, not crashed on.** A bare number
+  raised `TypeError` out of the add-in's validator, so it reached the agent as `UNKNOWN`
+  with no hints, and mock mode raised through `mock_command` with no envelope at all.
+  Both answer `INVALID_INPUT` naming the field, and `hints.py` has a rule for it in both
+  mirrors.
+
+- **pyright can resolve `src/`** (`extraPaths`), so the editor stops reporting roughly
+  200 false "unresolved import" errors over five real ones. The five are fixed, not
+  silenced.
+
+### Removed
+
+- **`CommandHandler._COMMANDS`**, the lazily-built class attribute. It cached the
+  *first* instance's bound methods for every later instance, which is why `event_bridge`
+  had to reset it on reload. Dispatch is now built per instance from `_COMMAND_NAMES`.
+
+- **`scripts/reload_addin.py --file`**, undocumented and unused.
+
 ## [0.8.4] - 2026-11-15
 
 Three merged PRs, and the review of them. The behaviour change is in `create_thread`:
@@ -881,6 +952,7 @@ reporting a result it had only echoed back.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.8.5]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.4...v0.8.5
 [0.8.4]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.1...v0.8.2
