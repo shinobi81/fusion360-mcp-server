@@ -4669,6 +4669,7 @@ class CommandHandler:
         refusal = _rules.rule_type_refusal(rule_type)
         if refusal is not None:
             raise refusal
+        # ``rule_type_refusal`` accepts these keys, so anything else is already refused.
         ruled_type = {
             "tangent": adsk.fusion.RuledSurfaceTypes.TangentRuledSurfaceType,
             "normal": adsk.fusion.RuledSurfaceTypes.NormalRuledSurfaceType,

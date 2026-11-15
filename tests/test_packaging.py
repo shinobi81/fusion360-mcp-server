@@ -11,7 +11,8 @@ describe, when the add-in's Fusion manifest declares a version the release does
 not, when it changes the id it declares, when that add-in is renamed in one place and
 not the others, when a documented install snippet pins a release other than the one
 being cut or the quick start stops installing the add-in from it, when a document names
-a lint command CI does not run, when the release stops checking that both artifacts
+a lint command CI does not run, when a page that states the type gate stops naming the
+command CI runs, when the release stops checking that both artifacts
 carry the add-in, when the build stops mapping the add-in into the package, maps an
 add-on package the tree does not hold or leaves a package it does hold out of the wheel,
 or is told to include package data, when `SECURITY.md` answers the supported-versions
@@ -157,22 +158,22 @@ def _ci_lines() -> list[str]:
     return CI_WORKFLOW.read_text(encoding="utf-8").splitlines()
 
 
-def _ci_lint_step_start(lines: list[str]) -> int | None:
+def _ci_step_start(lines: list[str], name: str) -> int | None:
     return next(
-        (i for i, line in enumerate(lines) if line.strip() == "- name: Lint"),
+        (i for i, line in enumerate(lines) if line.strip() == f"- name: {name}"),
         None,
     )
 
 
-def _ci_lint_step_lines() -> list[str]:
-    """The lines of ci.yml's ``- name: Lint`` step, header to the next step.
+def _ci_step_lines(name: str) -> list[str]:
+    """The lines of ci.yml's ``- name: <name>`` step, header to the next step.
 
     Scoped to the step rather than to the file: a command that exists somewhere in
     the workflow gates nothing when the job around it never runs.  Returns ``[]``
-    when the step is gone, which the test reports.
+    when the step is gone, which the caller reports.
     """
     lines = _ci_lines()
-    start = _ci_lint_step_start(lines)
+    start = _ci_step_start(lines, name)
     if start is None:
         return []
     indent = len(lines[start]) - len(lines[start].lstrip())
@@ -189,6 +190,11 @@ def _ci_lint_step_lines() -> list[str]:
     return [lines[start], *rest[:end]]
 
 
+def _ci_lint_step_lines() -> list[str]:
+    """The `Lint` step, which every `ruff` guard in this module is scoped to."""
+    return _ci_step_lines("Lint")
+
+
 def _ci_lint_job_preamble() -> list[str]:
     """The `Lint` step's job header plus every key between it and the step.
 
@@ -197,7 +203,7 @@ def _ci_lint_job_preamble() -> list[str]:
     name the job and reject a conditional one in the same breath.
     """
     lines = _ci_lines()
-    start = _ci_lint_step_start(lines)
+    start = _ci_step_start(lines, "Lint")
     if start is None:
         return []
     job = next(
@@ -213,17 +219,32 @@ def _ci_lint_job_preamble() -> list[str]:
     return lines[job:start]
 
 
-def _ci_ruff_commands() -> list[str]:
-    """The `uv run ruff …` shell lines the `Lint` step executes.
+def _ci_step_commands(name: str) -> list[str]:
+    """The ``uv run`` commands a step executes, in file order.
 
-    Deliberately a line scan, not a YAML parse: PyYAML is not a dependency, and
-    each command is a single line inside the `run:` block.  Comment lines fail
-    the `startswith`, so a commented-out command cannot satisfy the guard.
+    Deliberately a line scan, not a YAML parse: PyYAML is not a dependency, and each
+    command is a single line - either the value of a ``run:`` key or one line of a
+    ``run: |`` block.  Comment lines fail the ``uv run`` test, so a commented-out
+    command cannot satisfy a guard.
     """
+    commands = []
+    for line in _ci_step_lines(name):
+        stripped = line.strip()
+        if stripped.startswith("run:"):
+            inline = stripped.removeprefix("run:").strip()
+            if inline.startswith("uv run"):
+                commands.append(inline)
+        elif stripped.startswith("uv run"):
+            commands.append(stripped)
+    return commands
+
+
+def _ci_ruff_commands() -> list[str]:
+    """The `uv run ruff …` shell lines the `Lint` step executes."""
     return [
-        stripped
-        for line in _ci_lint_step_lines()
-        if (stripped := line.strip()).startswith("uv run ruff")
+        command
+        for command in _ci_step_commands("Lint")
+        if command.startswith("uv run ruff")
     ]
 
 
@@ -742,6 +763,71 @@ def test_every_documented_lint_command_is_the_one_ci_runs():
         "these documents no longer state every command the gate runs, so a contributor "
         f"following them would not run the gate: {undocumented}"
     )
+
+
+TYPE_CHECK_GATE = "uv run mypy src"
+"""What ci.yml's `Type check` step must run, and what the pages below must name."""
+
+TYPE_CHECK_DOCUMENTS = (
+    "README.md",
+    "docs/TESTING.md",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+)
+"""Pages that state the type gate.  ``GATE_DOCUMENTS`` covers the ``ruff`` commands,
+and these three are the pages that name this one - so a reflow that drops the line from
+any of them has to fail here."""
+
+
+def _documents_command(text: str, command: str) -> bool:
+    """Whether *text* names *command*, and not merely a narrower command.
+
+    A command ends at a backtick, whitespace or the end of the text, so a targeted run
+    such as ``uv run mypy src/foo.py`` cannot satisfy the guard.  One trailing slash is
+    tolerated, because it is the same command to a shell.
+    """
+    return re.search(re.escape(command) + r"/?(?:`|\s|$)", text) is not None
+
+
+def test_every_type_gate_document_names_the_command_ci_runs():
+    """The type gate is one command in one step and three pages state it.
+
+    `[tool.mypy]` with no command running it was a checker that reported nothing, so the
+    step and the pages that teach it are one gate: a reflow that drops the line from a
+    page teaches the gate back, and `GATE_DOCUMENTS` reads the two `ruff` commands only,
+    so nothing noticed.  The pages are named here rather than swept, because two of the
+    five gate documents do not carry this command and must not be made to.
+    """
+    commands = _ci_step_commands("Type check")
+
+    assert commands == [TYPE_CHECK_GATE], (
+        f"ci.yml's `Type check` step must run exactly `{TYPE_CHECK_GATE}`; if the step "
+        f"was reshaped, teach this guard rather than dropping it: {commands}"
+    )
+    missing = [
+        name
+        for name in TYPE_CHECK_DOCUMENTS
+        if not _documents_command(
+            (REPO_ROOT / name).read_text(encoding="utf-8"), TYPE_CHECK_GATE
+        )
+    ]
+
+    assert missing == [], (
+        f"these pages no longer name the type gate `{TYPE_CHECK_GATE}`, so a "
+        f"contributor following them does not run it: {missing}"
+    )
+
+
+def test_a_targeted_type_check_does_not_satisfy_the_gate():
+    """A page naming one file has not named the gate, so the match must end.
+
+    Without the trailing-boundary rule this is a substring test, and a document that
+    shows `uv run mypy src/fusion360_mcp/mock.py` would keep the guard quiet.
+    """
+    targeted = "uv run mypy src/fusion360_mcp/mock.py\n"
+
+    assert _documents_command(f"{TYPE_CHECK_GATE}\n", TYPE_CHECK_GATE)
+    assert _documents_command(f"- [ ] `{TYPE_CHECK_GATE}`\n", TYPE_CHECK_GATE)
+    assert not _documents_command(targeted, TYPE_CHECK_GATE)
 
 
 def test_a_ci_command_the_classifier_cannot_read_is_reported_not_mirrored():
