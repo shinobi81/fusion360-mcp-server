@@ -28,14 +28,12 @@ def bound_handler(handler_module):
     """``bound_handler(design, app=None)`` -> a CommandHandler for that design."""
 
     def factory(design, app=None, ui=None):
-        handler = handler_module.CommandHandler.__new__(handler_module.CommandHandler)
+        # Construct, rather than ``__new__``: ``__init__`` builds the dispatch table,
+        # and a second copy of that comprehension would pass a handler that cannot
+        # dispatch.
+        handler = handler_module.CommandHandler()
         handler._design = lambda: design
         handler._root = lambda: design.rootComponent
-        # ``__init__`` builds the dispatch table; this fixture skips it, so build the
-        # same one here - a handler that cannot dispatch is not a handler.
-        handler._commands = {
-            name: getattr(handler, name) for name in handler._COMMAND_NAMES
-        }
         # ``execute_code`` hands both to the script's namespace, so a handler
         # without them fails on the attributes rather than on the behaviour the
         # test is about.

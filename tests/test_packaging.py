@@ -790,6 +790,17 @@ def _documents_command(text: str, command: str) -> bool:
     return re.search(re.escape(command) + r"/?(?:`|\s|$)", text) is not None
 
 
+def test_the_type_gate_guard_covers_every_gate_document():
+    """A page that teaches a gate must not escape the type gate's guard.
+
+    The two tuples answer the same question - which pages tell a contributor what CI
+    runs - so they hold the same names.  ``GATE_DOCUMENTS`` is the older, wider set:
+    a page added there and not here would silently stop being checked for the type
+    command, which is how the gate came to be documented in three of five pages.
+    """
+    assert set(TYPE_CHECK_DOCUMENTS) == set(GATE_DOCUMENTS)
+
+
 def test_every_type_gate_document_names_the_command_ci_runs():
     """The type gate is one command in one step, and all five gate documents state it.
 
