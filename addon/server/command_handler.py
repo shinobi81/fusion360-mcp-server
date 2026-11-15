@@ -1967,7 +1967,10 @@ class CommandHandler:
         line = sketch.sketchCurves.sketchLines.addByTwoPoints(start_pt, end_pt)
         line.isConstruction = True
 
-        report = {
+        # Annotated because the values are three different types - two lists, a
+        # bool and a string - and an inferred dict[str, list] makes the later
+        # writes look wrong to a type checker (they are not; it is a report).
+        report: dict[str, object] = {
             "axis_model_start": cls._model_point(frame, start_pt.x, start_pt.y),
             "axis_model_end": cls._model_point(frame, end_pt.x, end_pt.y),
         }
