@@ -447,14 +447,10 @@ class TestAnnotationConsistency:
         missing = _IDEMPOTENT - tool_names
         assert not missing, f"Idempotent set references nonexistent tools: {missing}"
 
-    def test_read_only_implies_idempotent(self):
-        """Every read-only tool should also be idempotent."""
-        from fusion360_mcp.tools import _IDEMPOTENT, _READ_ONLY
-
-        not_idempotent = _READ_ONLY - _IDEMPOTENT
-        assert not not_idempotent, (
-            f"Read-only tools not marked idempotent: {not_idempotent}"
-        )
+    # `test_read_only_implies_idempotent` lived here and was deleted with the
+    # dedupe that made it true by construction: `_IDEMPOTENT = _READ_ONLY | {...}`
+    # in tools.py cannot produce a read-only tool that is not idempotent, so the
+    # test could not fail.  The two direction checks above still guard the sets.
 
     def test_destructive_not_read_only(self):
         """No tool should be both destructive and read-only."""

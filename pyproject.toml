@@ -81,9 +81,9 @@ testpaths = ["tests"]
 # about the whole suite, not one file.
 #
 # Permanently uncovered, by design: `server.py`'s `bbox_before` branch (never set by a
-# mock), the two lines inside main()'s stdio coroutine (`app.run`, and the `anyio.run`
-# call that awaits it), and `__main__.py`'s click entry point.  Named by symbol rather
-# than by line number: the numbers drifted on every edit, and a stale one reads as a
+# mock), the two lines inside `arun()` (`async with stdio_server()` and the `app.run` it
+# awaits; `anyio.run(arun)` itself runs in the tests), and `__main__.py`'s click entry
+# point.  Named by symbol rather than by line number: the numbers drifted on every edit, and a stale one reads as a
 # waiver for code that no longer exists.
 addopts = "--cov --cov-report=term-missing --cov-fail-under=59"
 

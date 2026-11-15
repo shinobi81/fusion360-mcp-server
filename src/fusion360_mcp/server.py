@@ -237,68 +237,79 @@ def build_server(mode: str, host: str, port: int) -> Server:
             ),
         ]
 
-    # Resource templates are matched by the same table the read dispatches on,
-    # so a template can never be advertised without being renderable.
+    # One table per kind of resource: the read dispatches on it and
+    # list_resource_templates() advertises it, so a template cannot be advertised
+    # without being renderable.
     _RESOURCES = {
         "fusion360://design": ("get_scene_info", None),
         "fusion360://parameters": ("get_parameters", None),
     }
-    _RESOURCE_TEMPLATES = (
-        (re.compile(r"^fusion360://body/(.+)$"), "get_object_info"),
-        (re.compile(r"^fusion360://component/(.+)$"), "get_object_info"),
-    )
-
-    def _read(command: str, params: dict | None = None) -> dict:
-        """The add-in's answer, or ``{"error": ...}`` after dropping the socket.
-
-        One boundary for six reads instead of six copies of it: a failure must
-        reset the connection exactly once, and a resource must degrade to an
-        error document rather than raise into the protocol.
-        """
-        try:
-            return _send(mode, command, params, host=host, port=port)
-        except Exception as exc:
-            reset_connection()
-            return {"error": str(exc)}
-
-    @app.read_resource()
-    async def read_resource(uri: AnyUrl) -> str:
-        uri_str = str(uri)
-        if uri_str == "fusion360://status":
-            result = _read("ping")
-            payload = (
-                {"connected": False, "error": result["error"]}
-                if "error" in result
-                else {"connected": True, "ping": result}
-            )
-            return json.dumps(payload, indent=2)
-
-        if command := _RESOURCES.get(uri_str):
-            return json.dumps(_read(*command), indent=2)
-
-        for pattern, handler_name in _RESOURCE_TEMPLATES:
-            if found := pattern.match(uri_str):
-                result = _read(handler_name, {"name": found.group(1)})
-                return json.dumps(result, indent=2)
-
-        raise ValueError(f"Unknown resource: {uri_str}")
-
-    @app.list_resource_templates()
-    async def list_resource_templates() -> list[types.ResourceTemplate]:
-        return [
+    _RESOURCE_TEMPLATES = {
+        re.compile(r"^fusion360://body/(.+)$"): (
+            "get_object_info",
             types.ResourceTemplate(
                 uriTemplate="fusion360://body/{name}",
                 name="Body Info",
                 description="Detailed info about a named body",
                 mimeType="application/json",
             ),
+        ),
+        re.compile(r"^fusion360://component/(.+)$"): (
+            "get_object_info",
             types.ResourceTemplate(
                 uriTemplate="fusion360://component/{name}",
                 name="Component Info",
                 description="Info about a named component",
                 mimeType="application/json",
             ),
-        ]
+        ),
+    }
+
+    def _read(
+        command: str, params: dict | None = None
+    ) -> tuple[dict | None, str | None]:
+        """``(result, None)`` from the add-in, or ``(None, error)`` after dropping it.
+
+        One boundary for five reads instead of five copies of it: a failure must
+        reset the connection exactly once, and a resource must degrade to an error
+        document rather than raise into the protocol.  The failure is returned
+        beside the payload, not as a key inside it: a successful result that
+        happens to carry an "error" field would otherwise read as a dead socket.
+        """
+        try:
+            return _send(mode, command, params, host=host, port=port), None
+        except Exception as exc:
+            reset_connection()
+            return None, str(exc)
+
+    @app.read_resource()
+    async def read_resource(uri: AnyUrl) -> str:
+        uri_str = str(uri)
+        if uri_str == "fusion360://status":
+            result, error = _read("ping")
+            payload = (
+                {"connected": False, "error": error}
+                if error is not None
+                else {"connected": True, "ping": result}
+            )
+            return json.dumps(payload, indent=2)
+
+        if command := _RESOURCES.get(uri_str):
+            result, error = _read(*command)
+            return json.dumps(result if error is None else {"error": error}, indent=2)
+
+        for pattern, (handler_name, _template) in _RESOURCE_TEMPLATES.items():
+            if found := pattern.match(uri_str):
+                result, error = _read(handler_name, {"name": found.group(1)})
+                return json.dumps(
+                    result if error is None else {"error": error}, indent=2
+                )
+
+        raise ValueError(f"Unknown resource: {uri_str}")
+
+    @app.list_resource_templates()
+    async def list_resource_templates() -> list[types.ResourceTemplate]:
+        return [template for _command, template in _RESOURCE_TEMPLATES.values()]
 
     # ── prompts ───────────────────────────────────────────────────────
 
