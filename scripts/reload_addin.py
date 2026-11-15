@@ -42,6 +42,7 @@ HANDLER = SERVER / "command_handler.py"
 #: ``tests/test_reload_addin.py`` fails if the two disagree.
 COMMAND_MODULES: tuple[str, ...] = (
     "handler_base",
+    "handler_assembly",
     "handler_sketch",
     "handler_features",
     "handler_primitives",

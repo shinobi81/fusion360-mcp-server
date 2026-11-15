@@ -31,6 +31,7 @@ TIMER_INTERVAL_MS = 200  # backup polling interval
 #: that list; ``tests/test_reload_addin.py`` fails when the two disagree.
 COMMAND_MODULES = (
     "handler_base",
+    "handler_assembly",
     "handler_sketch",
     "handler_features",
     "handler_primitives",
