@@ -233,6 +233,38 @@ def test_an_unknown_selection_is_classified_too(select):
     assert any("edge_selection is one of" in hint for hint in hints), hints
 
 
+#: The edges each advertised selector must pick from ``BRANCH_BODY``.  ``vertical`` is
+#: the ``else`` of the dispatch chain, so a selector with no branch of its own would be
+#: answered by that filter instead of failing — this table is what notices.
+SELECTION_BRANCHES = {
+    "all": [0, 1, 2],
+    "bottom": [0],
+    "top": [2],
+    "vertical": [1],
+}
+
+#: Three edges, one per distinguishing position: bottom plane, vertical, top plane.
+BRANCH_BODY = [
+    ((0, 0, 0), (4, 0, 0)),
+    ((0, 0, 0), (0, 0, 4)),
+    ((0, 0, 4), (4, 0, 4)),
+]
+
+
+def test_every_advertised_edge_selection_has_a_branch_of_its_own():
+    """A fifth selector must get a branch, not the vertical filter's answer."""
+    from fusion360_mcp import tools
+
+    assert set(SELECTION_BRANCHES) == set(tools.EDGE_SELECTIONS)
+
+
+@pytest.mark.parametrize(("selection", "expected"), sorted(SELECTION_BRANCHES.items()))
+def test_each_advertised_selection_reaches_its_own_branch(select, selection, expected):
+    coll = select(BRANCH_BODY, selection)
+
+    assert [edge.index for edge in coll] == expected
+
+
 def test_an_edge_whose_sample_is_at_the_top_but_sags_is_not_top(bound_handler):
     """The case a single sample cannot see, modelled the way Fusion behaves.
 

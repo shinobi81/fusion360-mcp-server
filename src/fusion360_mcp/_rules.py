@@ -68,11 +68,13 @@ def edge_selector_refusal(params: Mapping[str, Any]) -> Refusal | None:
                 "from list_edges",
             )
     for point in points or []:
-        coordinates = len(point) if isinstance(point, (list, tuple)) else point
-        if coordinates != 3:
+        # Shape before count: a bare number is not a point, and ``len`` of one is a
+        # TypeError — so ``3`` must not read as "three coordinates".
+        if not isinstance(point, (list, tuple)) or len(point) != 3:
+            got = len(point) if isinstance(point, (list, tuple)) else repr(point)
             return Refusal(
                 "INVALID_INPUT",
-                f"Each edge point needs three coordinates, got {coordinates}",
+                f"Each edge point needs three coordinates, got {got}",
             )
     if selection not in EDGE_SELECTIONS:
         return Refusal(

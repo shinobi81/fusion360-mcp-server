@@ -814,12 +814,6 @@ class CommandHandler:
             if id(edge) not in chosen_ids:
                 chosen_ids.add(id(edge))
                 chosen.append(edge)
-        if not chosen:
-            raise _hints.Refusal(
-                "INVALID_INPUT",
-                "edge_points was empty — name at least one point, or omit it to "
-                "use edge_selection",
-            )
         return chosen
 
     def _select_faces(self, body, selection: str):

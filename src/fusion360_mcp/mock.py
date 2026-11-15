@@ -284,19 +284,15 @@ def _revolve(p: dict) -> dict:
     }
 
 
-# The same four the handler accepts, imported from the schema that advertises them:
-# a fifth value added to one side and not the other would make mock mode refuse a
-# valid call.
-
-
 def _edge_selector_error(p: dict) -> dict | None:
     """The add-in's refusals of an edge-selector combination, or None.
 
     Mock mode cannot search a body, so it cannot tell which edges a selection
-    matches — but the *combination* rules, the element types and the enum are pure
-    parameter checks that ``_select_edges`` makes before it examines an edge, and
-    ``edge_selector_refusal`` is where both sides make them.  Echoing an accepted
-    call here would teach a sequence Fusion refuses.
+    matches — but the *combination* rules, the element types and the four
+    ``edge_selection`` values are pure parameter checks that ``_select_edges`` makes
+    before it examines an edge, and ``edge_selector_refusal`` is where both sides
+    make them: mock mode refuses a fifth value because it is the same check.
+    Echoing an accepted call here would teach a sequence Fusion refuses.
 
     These fire inside ``_select_edges``, not before the body lookup: ``fillet``
     resolves ``body_name`` first, so a call with both a bad body and a bad selector

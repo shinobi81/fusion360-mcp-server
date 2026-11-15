@@ -28,6 +28,8 @@ BAD_EDGE_SELECTORS = [
     {"edge_indices": [True]},
     {"edge_points": [[0, 0]]},
     {"edge_points": [0]},
+    # A bare 3 is not a point: it must not read as "three coordinates" either.
+    {"edge_points": [3]},
 ]
 
 

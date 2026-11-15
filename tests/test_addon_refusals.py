@@ -79,10 +79,11 @@ def test_the_kind_a_refusal_carries_wins_over_the_table():
 
 # ── the wire contract: a converted message classifies as it did ───────
 
-#: The seven messages converted to ``Refusal``, verbatim from ``command_handler``.
-#: The seven handler tests below compare the message they catch against these
-#: entries, so a message edited in the handler fails here instead of silently
-#: re-routing to another rule's hints.
+#: The seven messages converted to ``Refusal``, verbatim from ``addon/server/rules.py``
+#: and ``command_handler`` (``rule_type``, the one still raised in the handler).  The
+#: seven handler tests below compare the message they catch against these entries, so
+#: a message edited at its source fails here instead of silently re-routing to another
+#: rule's hints.
 CONVERTED = [
     "Pass only one of edge_indices and edge_points — they name the same edges "
     "two ways, so one would be ignored",
