@@ -2133,9 +2133,9 @@ class CommandHandler:
         # Judged before the body is looked up: a wall Fusion cannot honour is the
         # caller's value, not the design's problem.  NaN and infinity are deliverable
         # over the socket (json.loads accepts both), and Fusion answers a wall of
-        # zero or less with "3 : Some input argument is invalid." (measured on 2706;
-        # the "2 : InternalValidationError" in §24.5 comes from *reading*
-        # insideThickness before it is set, not from a bad wall).
+        # zero or less with "3 : Some input argument is invalid." (measured on 2706).
+        # The neighbouring "2 : InternalValidationError" comes from *reading*
+        # insideThickness before it is set, not from a bad wall.
         try:
             thickness = _param_units.require_finite(thickness)
         except ValueError as exc:

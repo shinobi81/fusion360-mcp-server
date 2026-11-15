@@ -1,28 +1,21 @@
 """Prove that a built wheel or sdist carries the add-in, byte for byte.
 
-A tag install copies the add-in out of the *artifact*, not out of a checkout, so the
-files it installs have to be the ones git tracks.  Nothing in the build says so: they
-arrive through the `package-dir` mapping in `pyproject.toml`, and a mapping that loses
-an entry, or a stale file left behind in `addon/`, ships an installer that either
-refuses outright or installs an add-in missing a module Fusion imports at load time.
+A tag install copies the add-in out of the *artifact*, so the files it installs must be
+the ones git tracks - and nothing in the build says so.  They arrive through the
+`package-dir` mapping in `pyproject.toml`, where a lost entry or a stale file in
+`addon/` ships an installer that refuses, or one missing a module Fusion imports at
+load time.  So this reads the artifact back and compares it with `git ls-files addon`:
+missing, extra and byte-different are each findings, and so is a tracked file the
+installer's whitelist skips - a file that ships and is never installed reads as
+shipped, which is the silent half of the same bug.
 
-So this reads the artifact back and compares it against `git ls-files addon`.  A name
-missing, a name extra, and a name whose bytes differ are each a finding, and so is a
-tracked file the installer's whitelist would skip - a file that ships and is never
-installed reads as shipped, which is the silent half of the same bug.
+Both artifacts are checked because both are published, and the sdist rebuilds the same
+mapping into a wheel.
 
-Both artifacts are checked because both are published: `uvx --from ...@vX.Y.Z.tar.gz`
-builds a wheel through this same mapping, so an sdist that quietly lacked the add-in
-would only be found by whoever installed from a tarball.
-
-An argument may name a directory instead of a file, and the artifacts inside it are
-what gets read: the documented local command points at `dist`, because a shell that
-does not expand `dist/*.whl` - PowerShell and cmd, on this project's primary OS - would
-otherwise hand the literal glob to the check and get "cannot be read" instead.  A
-directory stands for one build output, and the release publishes both artifacts, so a
-directory holding only one of them is cannot check: checking the half that is there
-would pass a release whose other half was never built.  A file argument is a
-maintainer naming one artifact to read, and that stays one artifact.
+A directory argument stands for one build output (the documented local command points
+at `dist`, because PowerShell and cmd do not expand `dist/*.whl`); it must hold both
+artifacts, since checking the half that is present would pass a release whose other
+half was never built.  A file argument is a maintainer naming one artifact to read.
 
 Stdlib only, and 3.12-compatible syntax: the release job runs it on the runner's own
 Python, which is not this package's floor.

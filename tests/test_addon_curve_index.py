@@ -53,7 +53,7 @@ def four_curve_design() -> tuple[FakeDesign, FakeSketch]:
     return FakeDesign(sketches=[sketch]), sketch
 
 
-# ── the two handlers §23.2 named ──────────────────────────────────────
+# ── the two handlers that had no curve-index guard ────────────────────
 
 
 def test_add_constraint_refuses_an_index_past_the_last_curve(bound_handler):
@@ -109,8 +109,8 @@ def test_add_dimension_refuses_an_index_past_the_last_curve(bound_handler):
     assert kind == "INVALID_INPUT"
     # A phrase unique to the new rule: the generic INVALID_INPUT rule would give
     # different hints, so this is what proves the rule matched rather than the
-    # fallback (§19.4 - a rule sharing an error_kind with a generic one is
-    # invisible unless a test asserts its own wording).
+    # fallback: a rule that shares an error_kind with a generic one is invisible
+    # unless a test asserts its own wording.
     assert any("0-based" in hint for hint in hints), hints
 
 

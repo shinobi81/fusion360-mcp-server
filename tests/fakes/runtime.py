@@ -6,7 +6,7 @@ injects it into that adapter, and ``fake_runtime`` restores the adapter when the
 module finishes - a fake left behind would be handed to the next module that imports
 adsk-dependent code instead of failing loudly.
 
-Two rules keep the fakes honest (design §7):
+Two rules keep the fakes honest:
 
 * they model **state** — a test asserts on the geometry Fusion would build, not
   on which method was called;

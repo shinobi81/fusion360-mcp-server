@@ -56,142 +56,17 @@ def test_get_tool_by_name_missing():
     assert get_tool_by_name("nonexistent_tool") is None
 
 
-def test_expected_tools_present():
-    """Verify the full set of commands we expect."""
-    names = {t["name"] for t in TOOLS}
-    expected = {
-        # documents
-        "new_document",
-        # scene / query
-        "get_scene_info",
-        "get_object_info",
-        "list_edges",
-        "get_bounding_box",
-        # sketch
-        "create_sketch",
-        "draw_rectangle",
-        "draw_circle",
-        "draw_line",
-        # features
-        "extrude",
-        "revolve",
-        "fillet",
-        "chamfer",
-        "shell",
-        "mirror",
-        # body ops
-        "move_body",
-        "export_stl",
-        "boolean_operation",
-        # scene control
-        "delete_all",
-        "undo",
-        # code execution
-        "execute_code",
-        # health
-        "ping",
-        # new geometry
-        "sweep",
-        "loft",
-        "create_polygon",
-        "draw_circles",
-        "draw_arc",
-        "create_hole",
-        "rectangular_pattern",
-        "circular_pattern",
-        # assembly
-        "create_component",
-        "add_joint",
-        "set_joint_value",
-        "list_components",
-        # export
-        "export_step",
-        "export_f3d",
-        "export_view_sheet",
-        "export",
-        # import
-        "import_mesh",
-        # parameters
-        "get_parameters",
-        "create_parameter",
-        "set_parameter",
-        "delete_parameter",
-        # sketch constraints & dimensions
-        "add_constraint",
-        "auto_constrain",
-        "add_dimension",
-        # construction geometry
-        "create_construction_plane",
-        "create_construction_axis",
-        "create_ucs",
-        # splines
-        "draw_spline",
-        # sketch curve operations
-        "offset_curve",
-        "trim_curve",
-        "extend_curve",
-        # advanced features
-        "create_thread",
-        "draft_faces",
-        "split_body",
-        "split_face",
-        "offset_faces",
-        "scale_body",
-        # direct primitives
-        "create_box",
-        "create_cylinder",
-        "create_sphere",
-        "create_torus",
-        "create_box_parametric",
-        # assembly (extended)
-        "create_as_built_joint",
-        "create_rigid_group",
-        # inspection / analysis
-        "measure_distance",
-        "measure_angle",
-        "get_physical_properties",
-        "create_section_analysis",
-        "check_interference",
-        "compare_meshes",
-        # appearance
-        "set_appearance",
-        "set_color",
-        # project geometry
-        "project_geometry",
-        # timeline control
-        "suppress_feature",
-        "unsuppress_feature",
-        # surface operations
-        "patch_surface",
-        "stitch_surfaces",
-        "thicken_surface",
-        "ruled_surface",
-        "trim_surface",
-        # sheet metal
-        "create_flange",
-        "create_bend",
-        "flat_pattern",
-        "unfold",
-        # CAM / manufacturing
-        "cam_create_setup",
-        "cam_create_operation",
-        "cam_generate_toolpath",
-        "cam_post_process",
-        "cam_list_setups",
-        "cam_list_operations",
-        "cam_get_operation_info",
-        # design type safety
-        "get_design_type",
-        "set_design_type",
-        # utility
-        "rename_body",
-        # perception
-        "render_view",
-    }
-    missing = expected - names
-    assert not missing, f"Missing tools: {missing}"
-    extra = names - expected
-    assert not extra, f"Unexpected tools: {extra}"
+def test_the_tool_count_is_pinned():
+    """97 tools, and the number is the only thing this file pins by hand.
+
+    The set of names used to be copied here - a 136-line literal that had to be
+    edited whenever a tool was added, and whose only real invariant (every tool
+    has an add-in handler and a mock) is already asserted twice:
+    ``tests/test_addon_sync.py::test_tools_match_addon_dispatch`` and
+    ``tests/test_mock.py::TestMockDispatchCoverage``.  A list that restates the
+    registry can only ever fail when the registry changes, which is not a bug.
+    """
+    assert len(TOOLS) == 97
 
 
 def test_all_tools_have_annotations():

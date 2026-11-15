@@ -86,46 +86,40 @@ def test_no_add_in_file_names_an_except_tuple_without_brackets(path):
     )
 
 
-def test_the_checker_trips_on_the_forbidden_form():
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param("except (TypeError, ValueError):", id="parenthesised"),
+        pytest.param("except OSError:", id="no comma"),
+        pytest.param("except (TypeError, ValueError) as exc:", id="aliased"),
+        pytest.param("except* (TypeError, ValueError):", id="starred"),
+        pytest.param("except (\n    TypeError,\n):", id="wrapped"),
+    ],
+)
+def test_the_checker_accepts_a_header_without_a_top_level_comma(body):
+    """What these pin is one property: the comma is not at the header top level.
+
+    That is why `except OSError:` (no comma at all) and `except*` (PEP 654
+    grouping, which Fusion interpreter may not even parse) belong here: the
+    checker tokenises rather than parses, and must not false-positive on either.
+    """
+    source = "try:\n    pass\n" + body + "\n    pass\n"
+    assert unparenthesised_except_tuples(source) == [], body
+
+
+@pytest.mark.parametrize(
+    "body",
+    ["except TypeError, ValueError:", "except* TypeError, ValueError:"],
+)
+def test_the_checker_trips_on_the_forbidden_form(body):
     """The guard's own test: a checker that cannot fail protects nothing."""
-    source = "try:\n    pass\nexcept TypeError, ValueError:\n    pass\n"
-    assert unparenthesised_except_tuples(source) == [3]
-
-
-def test_the_checker_accepts_the_parenthesised_form():
-    source = "try:\n    pass\nexcept (TypeError, ValueError):\n    pass\n"
-    assert unparenthesised_except_tuples(source) == []
-
-
-def test_the_checker_accepts_a_single_exception():
-    source = "try:\n    pass\nexcept OSError:\n    pass\n"
-    assert unparenthesised_except_tuples(source) == []
-
-
-def test_the_checker_accepts_an_alias_after_a_tuple():
-    source = "try:\n    pass\nexcept (TypeError, ValueError) as exc:\n    pass\n"
-    assert unparenthesised_except_tuples(source) == []
+    source = "try:\n    pass\n" + body + "\n    pass\n"
+    assert unparenthesised_except_tuples(source) == [3], body
 
 
 def test_the_checker_ignores_the_phrase_inside_a_docstring():
     """Prose must not block every pull request."""
     source = '"""Turns `except A, B:` into something else."""\n'
-    assert unparenthesised_except_tuples(source) == []
-
-
-def test_the_checker_trips_on_the_starred_form_too():
-    """``except*`` is PEP 654's grouping syntax and takes the same header."""
-    source = "try:\n    pass\nexcept* TypeError, ValueError:\n    pass\n"
-    assert unparenthesised_except_tuples(source) == [3]
-
-
-def test_the_checker_accepts_a_bracketed_starred_form():
-    source = "try:\n    pass\nexcept* (TypeError, ValueError):\n    pass\n"
-    assert unparenthesised_except_tuples(source) == []
-
-
-def test_the_checker_accepts_a_tuple_wrapped_across_lines():
-    source = "try:\n    pass\nexcept (\n    TypeError,\n    ValueError,\n):\n    pass\n"
     assert unparenthesised_except_tuples(source) == []
 
 

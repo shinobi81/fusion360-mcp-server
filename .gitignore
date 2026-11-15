@@ -29,9 +29,8 @@ Thumbs.db
 docs/superpowers/
 
 # review/PR scratch files: a 'git add -A' must not swallow these.
-# `.pr[-_]body*` and `.pr[-_]diff*` were too narrow: a review pass writes
-# `.pr_pass1…` and `.pr_evidence…` too, and 0.8.2's release branch committed two of
-# them before the `docs` job caught them. The pattern is deliberately broad: it covers
+# The pattern is deliberately broad: a review pass also writes `.pr_pass1…` and
+# `.pr_evidence…`, and narrower ones (`*.pr_body*`) have let files through. It covers
 # any `.pr-`/`.pr_` path at any depth, not only the review's, so a future verbatim file
 # of that shape must be force-added rather than silently tracked.
 .review-diff*

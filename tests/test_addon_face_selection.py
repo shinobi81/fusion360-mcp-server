@@ -242,7 +242,7 @@ def test_shell_refuses_a_thickness_fusion_cannot_honour(bound_handler, thickness
     The schema says ``minimum: 0.001``, but the socket takes anything a client
     sends - ``json.loads`` accepts ``NaN`` and ``Infinity`` - and Fusion answers a
     wall it cannot honour with ``3 : Some input argument is invalid.``, which used to
-    arrive as UNKNOWN with no hints (filed in §24.5).  Refusing here names the field
+    arrive as UNKNOWN with no hints.  Refusing here names the field
     and the unit.
     """
     design = _design(box_faces())

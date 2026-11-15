@@ -426,7 +426,7 @@ def _shell(p: dict) -> dict:
     # Same order as the handler: the wall is judged before the selection, so a call
     # wrong in both ways reports the same first error here as in Fusion.  Fusion
     # answers a wall of zero or less with an opaque "3 : Some input argument is
-    # invalid." (§24.5), which is why the handler - and this - refuse it first.
+    # invalid.", which is why the handler - and this - refuse it first.
     thickness = p.get("thickness", 0.1)
     refusal = _non_finite_error(thickness)
     if refusal is not None:
