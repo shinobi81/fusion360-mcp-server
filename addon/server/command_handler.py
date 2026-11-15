@@ -3900,7 +3900,7 @@ class CommandHandler:
         ``secondary`` in all four), a cylinder whose bore is world X, and a cone.
         The frame that matters is the one on the geometry passed to
         ``createInput``: a joint's own ``geometryOrOriginOne`` carries a permuted
-        frame, which is what made an earlier reading look inconsistent.
+        frame.
 
         Every direction the caller can ask for is therefore resolved against these
         three vectors.

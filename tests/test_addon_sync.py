@@ -137,8 +137,8 @@ def test_the_mutation_list_has_one_source():
 
     The old guard compared two hand-written literals.  There is one literal now —
     the add-in's module, which the package's copy is generated from — so what is
-    left to assert is that both import sites reach it.  The content is guarded by
-    ``test_no_mirror_is_stale``.
+    left to assert is that both import sites reach it.  The content is pinned by
+    ``test_the_mutation_set_is_exactly_these_commands``.
     """
     from fusion360_mcp import _mutation_commands, mock
     from fusion360_mcp.connection import _MUTATION_COMMANDS
