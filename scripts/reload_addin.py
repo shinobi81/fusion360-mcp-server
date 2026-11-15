@@ -120,8 +120,10 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if not args.check:
+            # Flat, unlike execute_code's {"executed": ..., "result": ...} envelope:
+            # the bridge answers reload_handler with {"ok": True, "reloaded": True}.
             reply = connection.send_command("reload_handler")
-            if not reply.get("ok") or not reply["result"].get("reloaded"):
+            if not reply.get("ok") or not reply.get("reloaded"):
                 print(f"reload refused: {reply}", file=sys.stderr)
                 return 1
             print("reloaded: hints, hole_geometry, parameter_units, command_handler")
