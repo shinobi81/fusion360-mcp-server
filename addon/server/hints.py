@@ -291,6 +291,19 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # Found live on 2706: a ruled surface needs a FREE (open) edge, and every
+        # edge of a solid is shared by two faces, so Fusion answers "3 : invalid
+        # free edge". Unclassified it reached the caller as UNKNOWN with no hints.
+        r"invalid free edge",
+        "INVALID_INPUT",
+        [
+            "A ruled surface extends a free edge - a sheet body's boundary, not "
+            "a solid's edge, which two faces share.",
+            "Patch or stitch the sketch into a surface body first, then rule one "
+            "of its boundary edges.",
+        ],
+    ),
+    (
         # Fusion's own refusal when a cut reaches no body — found live on a sweep
         # whose profile sat outside every block. It classified as UNKNOWN with no
         # hints, so the caller learned nothing about why nothing was cut.
