@@ -2412,9 +2412,11 @@ TOOLS: list[dict] = [
         },
     ),
 ]
+
 # ── tool annotations ──────────────────────────────────────────────────
 # Applied after definition for cleanliness. Classifies each tool by its
 # side-effect profile so MCP clients can auto-approve safe operations.
+
 _READ_ONLY = {
     "get_scene_info",
     "get_object_info",
@@ -2444,6 +2446,7 @@ _IDEMPOTENT = _READ_ONLY | {
     "set_design_type",
     "rename_body",
 }
+
 for _t in TOOLS:
     _name = _t["name"]
     _t["annotations"] = {
