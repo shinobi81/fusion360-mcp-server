@@ -23,9 +23,12 @@ from typing import ClassVar
 from .bodies import FakeBody, FakeFace
 from .collection import FakeCollection, FakeDeletable, FakeItemCollection
 from .features import (
+    FakeAnalyses,
     FakeDraftFeatures,
     FakeFeature,
     FakeInterference,
+    FakeRuledSurfaceFeatures,
+    FakeThreadFeatures,
 )
 from .runtime import DIRECT, PARAMETRIC, FakePoint3D, FakeValueInput
 from .sketch import FakeSketches, FakeSketchPoint
@@ -710,6 +713,8 @@ class FakeFeatures:
         self.shellFeatures = FakeShellFeatures()
         self.holeFeatures = FakeHoleFeatures(design)
         self.baseFeatures = FakeBaseFeatures()
+        self.threadFeatures = FakeThreadFeatures()
+        self.ruledSurfaceFeatures = FakeRuledSurfaceFeatures()
 
     def createPath(self, curve):
         """``features.createPath``: a sweep needs a Path around the curve."""
@@ -1044,6 +1049,16 @@ class FakeRoot:
         self.xYConstructionPlane = planes.xYConstructionPlane
         self.yZConstructionPlane = planes.yZConstructionPlane
         self.xZConstructionPlane = planes.xZConstructionPlane
+        self.analyses = FakeAnalyses()
+
+    def createBRepEdgeProfile(self, edges, chain_edges: bool = True):
+        """``Component.createBRepEdgeProfile``: a ruled surface is built from a Profile.
+
+        Its first argument is a Profile, not an edge - that is the mistake that
+        made ``ruled_surface`` raise on every call - so the profile records what
+        it was built from and the handler hands *it* to ``createInput``.
+        """
+        return type("FakeProfile", (), {"edges": edges, "chainEdges": chain_edges})()
 
     @property
     def allOccurrences(self) -> FakeCollection:

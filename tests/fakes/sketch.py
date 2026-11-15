@@ -384,6 +384,13 @@ class FakeSketchDimensions:
         return self._record("addDiameterDimension", (e1, text_point))
 
 
+class FakeProjectedCurves:
+    """What the retired ``Sketch.project`` returns: an ObjectCollection with a count."""
+
+    def __init__(self, count: int):
+        self.count = count
+
+
 class FakeSketch:
     """A sketch: transform, recorded curve calls, line objects, profiles."""
 
@@ -402,6 +409,8 @@ class FakeSketch:
         self.version = 0
         self.lines: list[FakeLine] = []
         self.curve_calls: list[tuple[str, dict]] = []
+        #: ``(entities, is_linked)`` per projection, so a test reads what it asked for.
+        self.projected: list[tuple[list, bool | None]] = []
         self.sketchCurves = FakeSketchCurves(self)
         self.sketchPoints = FakeSketchPoints()
         self.geometricConstraints = FakeGeometricConstraints()
@@ -450,6 +459,27 @@ class FakeSketch:
             + point.y * t.y_axis[2]
             + point.z * t.z_axis[2],
         )
+
+    def project2(self, entities, is_linked: bool) -> list:
+        """``Sketch.project2(entities, isLinked)``: replaces the retired ``project``.
+
+        The retired one-argument form cannot express linkage, which is why
+        ``project_geometry``'s ``is_linked`` argument did nothing.  Both the
+        two-argument arity and the list-of-entities input are Fusion's, so a
+        handler that calls the retired method or passes a bare edge fails here.
+        """
+        if not isinstance(entities, (list, tuple)):
+            raise TypeError(
+                "Wrong number or type of arguments for overloaded function "
+                "'Sketch_project2'"
+            )
+        self.projected.append((list(entities), is_linked))
+        return [FakeSketchPoint(FakePoint3D()) for _ in entities]
+
+    def project(self, entity) -> FakeProjectedCurves:
+        """The retired form, kept so a regression shows up as linkage=None."""
+        self.projected.append(([entity], None))
+        return FakeProjectedCurves(1)
 
 
 def _cross(

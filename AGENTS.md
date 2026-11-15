@@ -147,6 +147,7 @@ record why not — in the thread — before merging.
 | `ping`             | Health check (no Fusion API, instant)                                       |
 | `get_scene_info`   | Design name, bodies, sketches, features, camera                             |
 | `get_object_info`  | Detailed info about a named body or sketch                                  |
+| `list_edges`       | Every edge of a body with its index, for the `edge_indices` selectors       |
 | `list_components`  | List all components in the design                                           |
 | `get_bounding_box` | Axis-aligned bounding box for a body or component (min/max/size/center, cm) |
 

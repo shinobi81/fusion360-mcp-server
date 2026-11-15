@@ -20,13 +20,30 @@ from .mock import _MUTATION_MOCKS as _MUTATION_COMMANDS
 
 log = logging.getLogger("fusion360_mcp.connection")
 
-# The loopback literal, not "localhost": on Windows "localhost" resolves to
-# ::1 first, and every connect attempt then spends ~2s failing over to IPv4
-# before it reaches the add-in. That is paid on each reconnect.
-_DEFAULT_HOST = os.environ.get("FUSION_MCP_HOST", "127.0.0.1")
+
+def default_host() -> str:
+    """The add-in's host: ``FUSION_MCP_HOST``, else the loopback literal.
+
+    The literal, not "localhost": on Windows "localhost" resolves to ::1 first,
+    and every connect attempt then spends ~2s failing over to IPv4 before it
+    reaches the add-in. That is paid on each reconnect.
+
+    A function because the CLI reads it per invocation, while the connection
+    object's default is fixed at import; both read through here so there is one
+    answer to "what is the default host".
+    """
+    return os.environ.get("FUSION_MCP_HOST", "127.0.0.1")
 
 
-def _default_port() -> int:
+def default_port() -> int:
+    """``FUSION_MCP_PORT`` as an int, or 9876 with a warning if it is not one.
+
+    Tolerating a bad value is the contract: a typo in an environment variable
+    should not stop the server from starting when the default is perfectly
+    usable.  This is also the only place the variable is parsed - the CLI used to
+    re-parse it with ``int(...)``, which *raised* instead, so the same typo killed
+    one entry point and not the other.
+    """
     raw = os.environ.get("FUSION_MCP_PORT", "9876")
     try:
         return int(raw)
@@ -35,7 +52,8 @@ def _default_port() -> int:
         return 9876
 
 
-_DEFAULT_PORT = _default_port()
+_DEFAULT_HOST = default_host()
+_DEFAULT_PORT = default_port()
 _RECV_BUF = 65536
 # Must exceed the add-in's 30s bridge timeout so a structured TIMEOUT
 # response arrives before the client gives up.

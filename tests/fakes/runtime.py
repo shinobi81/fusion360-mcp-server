@@ -283,6 +283,21 @@ def _dimension_orientations() -> types.SimpleNamespace:
     )
 
 
+def _ruled_surface_types() -> types.SimpleNamespace:
+    """``RuledSurfaceTypes``: the members ``RuledSurfaceFeatures.createInput`` takes.
+
+    Measured on 2706 - the enum is ``RuledSurfaceTypes``, not ``RuledSurfaceRuleType``,
+    and the third member is ``DirectionRuledSurfaceType``, which needs a direction
+    entity the tool does not take.  Their values are the attribute names so a test
+    can assert which one was passed.
+    """
+    return types.SimpleNamespace(
+        TangentRuledSurfaceType="TangentRuledSurfaceType",
+        NormalRuledSurfaceType="NormalRuledSurfaceType",
+        DirectionRuledSurfaceType="DirectionRuledSurfaceType",
+    )
+
+
 def _primitives() -> types.ModuleType:
     """``tests.fakes.bodies``, imported here rather than at module scope.
 
@@ -324,6 +339,8 @@ def install() -> None:
         JointKeyPointTypes=_joint_key_points(),
         JointGeometry=FakeJointGeometry,
         DimensionOrientations=_dimension_orientations(),
+        RuledSurfaceTypes=_ruled_surface_types(),
+        ThreadInfo=importlib.import_module("tests.fakes.features").FakeThreadInfo,
         TemporaryBRepManager=_primitives().FakeTemporaryBRepManager,
     )
     cam = module("adsk.cam")
