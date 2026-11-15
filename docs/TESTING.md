@@ -67,6 +67,24 @@ Because `adsk` still cannot resolve offline, `addon/` is excluded from pyright a
 in `pyproject.toml` on purpose. Do not "fix" it with type ignores: ruff plus the suite
 still cover the directory.
 
+## Checking the running add-in
+
+The add-in loads `command_handler` from the checkout and keeps it in memory, so a
+`git pull` changes what is on disk and nothing about what Fusion executes. `inspect`
+cannot tell you either: `getsource` reads the *file*, so a stale class describes itself
+with the new code - a live check can pass for days after a merge that was never loaded.
+
+```bash
+uv run python scripts/reload_addin.py            # reload, then verify
+uv run python scripts/reload_addin.py --check    # verify only, change nothing
+```
+
+It sends `reload_handler` (which reloads `hints`, `hole_geometry`, `parameter_units` and
+`command_handler`, in that order) and then compares the running class's callables with
+the methods the file declares, printing the loaded path. Exit 1 means the class is not
+that file. A change in `event_bridge.py` or `socket_server.py` is not covered - those
+still need the add-in stopped and started.
+
 ## The policy
 
 New functionality arrives with tests in the same pull request, and a bug fix starts with
