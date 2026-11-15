@@ -297,9 +297,11 @@ _RULES: list[tuple[str, str, list[str]]] = [
         r"not cylindrical",
         "INVALID_INPUT",
         [
+            # One literal per hint: two adjacent ones read as a missing comma to
+            # CodeQL, and it cannot tell a wrapped sentence from a bug.
             "A thread needs a cylindrical face; nothing was written.",
-            "Use get_object_info to see the body's faces, then pass a cylindrical "
-            "face_index.",
+            "Use get_object_info to list the body's faces.",
+            "Then pass a cylindrical face_index.",
         ],
     ),
     (
