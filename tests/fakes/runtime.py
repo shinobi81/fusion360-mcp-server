@@ -269,6 +269,16 @@ def _feature_operations() -> types.SimpleNamespace:
     )
 
 
+def _mesh_refinement_settings() -> types.SimpleNamespace:
+    """``MeshRefinementSettings``: the one member ``export_stl`` asks for.
+
+    Fusion offers five levels; only ``MeshRefinementMedium`` is reachable from the
+    handler, so only it is modelled - a member nobody calls would be a guess about
+    Fusion's naming rather than a measurement.
+    """
+    return types.SimpleNamespace(MeshRefinementMedium="medium")
+
+
 def _dimension_orientations() -> types.SimpleNamespace:
     """``DimensionOrientations``: the three ``addDistanceDimension`` orientations.
 
@@ -341,6 +351,7 @@ def install() -> None:
         DimensionOrientations=_dimension_orientations(),
         RuledSurfaceTypes=_ruled_surface_types(),
         ThreadInfo=importlib.import_module("tests.fakes.features").FakeThreadInfo,
+        MeshRefinementSettings=_mesh_refinement_settings(),
         TemporaryBRepManager=_primitives().FakeTemporaryBRepManager,
     )
     cam = module("adsk.cam")

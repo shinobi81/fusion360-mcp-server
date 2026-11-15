@@ -7,6 +7,7 @@ and its ``deleteMe()`` really removes it from the root's collection.
 
 from __future__ import annotations
 
+import itertools
 import math
 
 from .collection import FakeCollection, FakeDeletable
@@ -399,6 +400,10 @@ class FakeFace:
         return FakeJointGeometry(**self.joint_frame)
 
 
+_BODY_TOKENS = itertools.count(1)
+"""One identity per fake body, so two bodies never share an ``entityToken``."""
+
+
 class FakeBody(FakeDeletable):
     """A body with the attributes the handlers read, and real deletion."""
 
@@ -417,6 +422,12 @@ class FakeBody(FakeDeletable):
         self.boundingBox = bounding_box or FakeBoundingBox()
         self.faces = faces if faces is not None else FakeCollection([FakeFace()])
         self.edges = edges if edges is not None else FakeEdges([])
+        #: Fusion's stable per-body id, distinct per body - a shared ``None`` would
+        #: make every sibling look like the export target, and the sweep would hide
+        #: nothing while the test read as green.
+        self.entityToken = f"token-{next(_BODY_TOKENS)}"
+        #: ``None`` when the body sits directly in the root component.
+        self.assemblyContext: object | None = None
 
 
 def body_with_faces(name: str, normals: list[tuple[float, float, float]]) -> FakeBody:

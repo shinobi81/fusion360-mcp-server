@@ -50,7 +50,8 @@ it replace `.venv/Scripts/fusion360-mcp-server.exe` while a running MCP server h
 
 **Coverage is two gates, not one.** `pytest` measures `src/fusion360_mcp` _and_
 `addon/server`, and the floor in `addopts` (59) is set just under the combined total —
-the add-in's CAM, export and viewport families only run inside Fusion, so its own number
+the add-in's CAM, view-sheet export and viewport families only run inside Fusion (body
+STL/STEP and f3d export are covered offline), so its own number
 is low on purpose. The server keeps its own gate: CI runs
 `uv run coverage report --include="src/fusion360_mcp/*" --fail-under=95` after pytest, so
 an add-in regression cannot buy slack for `src/`. Run both before opening a PR that
