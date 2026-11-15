@@ -165,18 +165,45 @@ def _format_result(
     return content
 
 
-def build_server(mode: str, host: str, port: int) -> Server:
-    """Build the MCP server: tool, resource, template and prompt handlers.
+# ── resources ────────────────────────────────────────────────────────
+# One table per kind of resource: the read dispatches on it and
+# list_resource_templates() advertises it, so a template cannot be advertised
+# without being renderable.  Both live here rather than in a handler because two
+# registrations read the same table.
+_RESOURCES = {
+    "fusion360://design": ("get_scene_info", None),
+    "fusion360://parameters": ("get_parameters", None),
+}
+_RESOURCE_TEMPLATES = {
+    re.compile(r"^fusion360://body/(.+)$"): (
+        "get_object_info",
+        types.ResourceTemplate(
+            uriTemplate="fusion360://body/{name}",
+            name="Body Info",
+            description="Detailed info about a named body",
+            mimeType="application/json",
+        ),
+    ),
+    re.compile(r"^fusion360://component/(.+)$"): (
+        "get_object_info",
+        types.ResourceTemplate(
+            uriTemplate="fusion360://component/{name}",
+            name="Component Info",
+            description="Info about a named component",
+            mimeType="application/json",
+        ),
+    ),
+}
 
-    Extracted from :func:`main` so the wiring is reachable without the CLI:
-    an in-process client session can drive it through the real protocol.
-    ``mode``/``host``/``port`` are captured by the handlers and forwarded to
-    :func:`_send`.
-    """
 
-    app = Server("fusion360-mcp-server")
+# ── registration ─────────────────────────────────────────────────────
+# One function per family, so the wiring reads a family at a time and
+# :func:`build_server` is four calls.  ``mode``/``host``/``port`` belong to the two
+# families that reach Fusion; templates and prompts are static.
 
-    # ── tools ────────────────────────────────────────────────────────
+
+def _register_tools(app: Server, mode: str, host: str, port: int) -> None:
+    """Advertise the tool list, and route each call through :func:`_send`."""
 
     @app.list_tools()
     async def list_tools() -> list[types.Tool]:
@@ -213,7 +240,9 @@ def build_server(mode: str, host: str, port: int) -> Server:
 
         return _format_result(name, result)
 
-    # ── resources ────────────────────────────────────────────────────
+
+def _register_resources(app: Server, mode: str, host: str, port: int) -> None:
+    """The three fixed URIs, read from the add-in or degraded to an error."""
 
     @app.list_resources()
     async def list_resources() -> list[types.Resource]:
@@ -237,34 +266,6 @@ def build_server(mode: str, host: str, port: int) -> Server:
                 mimeType="application/json",
             ),
         ]
-
-    # One table per kind of resource: the read dispatches on it and
-    # list_resource_templates() advertises it, so a template cannot be advertised
-    # without being renderable.
-    _RESOURCES = {
-        "fusion360://design": ("get_scene_info", None),
-        "fusion360://parameters": ("get_parameters", None),
-    }
-    _RESOURCE_TEMPLATES = {
-        re.compile(r"^fusion360://body/(.+)$"): (
-            "get_object_info",
-            types.ResourceTemplate(
-                uriTemplate="fusion360://body/{name}",
-                name="Body Info",
-                description="Detailed info about a named body",
-                mimeType="application/json",
-            ),
-        ),
-        re.compile(r"^fusion360://component/(.+)$"): (
-            "get_object_info",
-            types.ResourceTemplate(
-                uriTemplate="fusion360://component/{name}",
-                name="Component Info",
-                description="Info about a named component",
-                mimeType="application/json",
-            ),
-        ),
-    }
 
     def _read(
         command: str, params: dict | None = None
@@ -308,95 +309,110 @@ def build_server(mode: str, host: str, port: int) -> Server:
 
         raise ValueError(f"Unknown resource: {uri_str}")
 
+
+def _register_templates(app: Server) -> None:
+    """Advertise the templates the read dispatches on, so both tables agree."""
+
     @app.list_resource_templates()
     async def list_resource_templates() -> list[types.ResourceTemplate]:
         return [template for _command, template in _RESOURCE_TEMPLATES.values()]
 
-    # ── prompts ───────────────────────────────────────────────────────
 
-    def _prompt(name: str, description: str, *args: types.PromptArgument):
-        return types.Prompt(
-            name=name,
-            description=description,
-            arguments=list(args),
+# ── prompts ─────────────────────────────────────────────────────────
+
+
+def _prompt(name: str, description: str, *args: types.PromptArgument):
+    return types.Prompt(
+        name=name,
+        description=description,
+        arguments=list(args),
+    )
+
+
+def _dimensions(what: str) -> list[types.PromptArgument]:
+    """The three box/enclosure arguments, which differ only in their noun."""
+    return [
+        types.PromptArgument(
+            name=factor, description=f"{what} {factor} in cm", required=False
         )
+        for factor in ("length", "width", "height")
+    ]
 
-    def _dimensions(what: str) -> list[types.PromptArgument]:
-        """The three box/enclosure arguments, which differ only in their noun."""
-        return [
+
+def _render_box(args: dict) -> str:
+    return (
+        "Create a parametric box in Fusion 360:\n"
+        + "1. create_sketch on xy plane\n"
+        + f"2. draw_rectangle width={args.get('width', '5')} "
+        + f"height={args.get('length', '10')}\n"
+        + f"3. extrude height={args.get('height', '3')}\n"
+        + "4. get_scene_info to verify"
+    )
+
+
+def _render_bolt(args: dict) -> str:
+    desig = args.get("designation", "M10x1.5")
+    return (
+        f"Model a threaded bolt ({desig}):\n"
+        + "1. create_sketch on xy plane\n"
+        + "2. draw_circle for bolt shaft\n"
+        + "3. extrude to bolt length\n"
+        + f"4. create_thread designation={desig}\n"
+        + "5. Create hex head sketch + extrude\n"
+        + "6. chamfer head edges"
+    )
+
+
+def _render_enclosure(args: dict) -> str:
+    length = args.get("length", "20")
+    width = args.get("width", "10")
+    height = args.get("height", "5")
+    return (
+        f"Create a sheet metal enclosure ({length}x{width}x{height} cm):\n"
+        + "1. create_sketch on xy plane\n"
+        + f"2. draw_rectangle {width}x{length}\n"
+        + "3. extrude to sheet thickness\n"
+        + "4. create_flange on each edge\n"
+        + "5. flat_pattern to verify unfold"
+    )
+
+
+# name -> (what the client sees, how the text is rendered).  One table, so a
+# prompt cannot be advertised without a renderer or the reverse.
+_PROMPTS = {
+    "create-box": (
+        _prompt(
+            "create-box",
+            "Guide for creating a parametric box in Fusion 360",
+            *_dimensions("Box"),
+        ),
+        _render_box,
+    ),
+    "model-threaded-bolt": (
+        _prompt(
+            "model-threaded-bolt",
+            "Step-by-step guide for modeling a threaded bolt in Fusion 360",
             types.PromptArgument(
-                name=factor, description=f"{what} {factor} in cm", required=False
-            )
-            for factor in ("length", "width", "height")
-        ]
-
-    def _render_box(args: dict) -> str:
-        return (
-            "Create a parametric box in Fusion 360:\n"
-            + "1. create_sketch on xy plane\n"
-            + f"2. draw_rectangle width={args.get('width', '5')} "
-            + f"height={args.get('length', '10')}\n"
-            + f"3. extrude height={args.get('height', '3')}\n"
-            + "4. get_scene_info to verify"
-        )
-
-    def _render_bolt(args: dict) -> str:
-        desig = args.get("designation", "M10x1.5")
-        return (
-            f"Model a threaded bolt ({desig}):\n"
-            + "1. create_sketch on xy plane\n"
-            + "2. draw_circle for bolt shaft\n"
-            + "3. extrude to bolt length\n"
-            + f"4. create_thread designation={desig}\n"
-            + "5. Create hex head sketch + extrude\n"
-            + "6. chamfer head edges"
-        )
-
-    def _render_enclosure(args: dict) -> str:
-        length = args.get("length", "20")
-        width = args.get("width", "10")
-        height = args.get("height", "5")
-        return (
-            f"Create a sheet metal enclosure ({length}x{width}x{height} cm):\n"
-            + "1. create_sketch on xy plane\n"
-            + f"2. draw_rectangle {width}x{length}\n"
-            + "3. extrude to sheet thickness\n"
-            + "4. create_flange on each edge\n"
-            + "5. flat_pattern to verify unfold"
-        )
-
-    # name -> (what the client sees, how the text is rendered).  One table, so a
-    # prompt cannot be advertised without a renderer or the reverse.
-    _PROMPTS = {
-        "create-box": (
-            _prompt(
-                "create-box",
-                "Guide for creating a parametric box in Fusion 360",
-                *_dimensions("Box"),
+                name="designation",
+                description="Thread designation (e.g. M10x1.5)",
+                required=False,
             ),
-            _render_box,
         ),
-        "model-threaded-bolt": (
-            _prompt(
-                "model-threaded-bolt",
-                "Step-by-step guide for modeling a threaded bolt in Fusion 360",
-                types.PromptArgument(
-                    name="designation",
-                    description="Thread designation (e.g. M10x1.5)",
-                    required=False,
-                ),
-            ),
-            _render_bolt,
+        _render_bolt,
+    ),
+    "sheet-metal-enclosure": (
+        _prompt(
+            "sheet-metal-enclosure",
+            "Guide for creating a sheet metal enclosure",
+            *_dimensions("Enclosure"),
         ),
-        "sheet-metal-enclosure": (
-            _prompt(
-                "sheet-metal-enclosure",
-                "Guide for creating a sheet metal enclosure",
-                *_dimensions("Enclosure"),
-            ),
-            _render_enclosure,
-        ),
-    }
+        _render_enclosure,
+    ),
+}
+
+
+def _register_prompts(app: Server) -> None:
+    """Advertise the workflow prompts, and render one on request."""
 
     @app.list_prompts()
     async def list_prompts() -> list[types.Prompt]:
@@ -424,6 +440,20 @@ def build_server(mode: str, host: str, port: int) -> Server:
             ],
         )
 
+
+def build_server(mode: str, host: str, port: int) -> Server:
+    """Build the MCP server: tool, resource, template and prompt handlers.
+
+    Extracted from :func:`main` so the wiring is reachable without the CLI:
+    an in-process client session can drive it through the real protocol.
+    ``mode``/``host``/``port`` are forwarded to :func:`_send`.
+    """
+
+    app = Server("fusion360-mcp-server")
+    _register_tools(app, mode, host, port)
+    _register_resources(app, mode, host, port)
+    _register_templates(app)
+    _register_prompts(app)
     return app
 
 

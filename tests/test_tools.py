@@ -163,7 +163,7 @@ def test_get_tool_by_name_edge_cases():
 #: ``tools.py`` is far too large to review line by line, so a dropped argument was
 #: a silent change to the contract every agent reads.  A count catches a drop or an
 #: addition; a *rename* keeps the count and shows up in the schema diff instead.
-#: Regenerated with a dict comprehension over ``TOOLS`` - see the PR that added it.
+#: Regenerate it with a dict comprehension over ``TOOLS`` when a tool's shape moves.
 _TOOL_ARGUMENT_COUNTS = {
     "get_scene_info": 0,
     "get_object_info": 1,

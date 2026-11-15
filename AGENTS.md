@@ -28,6 +28,7 @@ uv run pytest -q --no-cov tests/test_tools.py   # subset: the coverage floor
 uv run ruff check src/ tests/ fuzz/ addon/ scripts/  # lint (this is what CI runs)
 uv run ruff format --check src/ tests/ fuzz/ scripts/    # format gate (what CI runs)
 uv run ruff format src/ tests/ fuzz/ scripts/  # apply it; addon/ is exempt
+uv run mypy src                # type gate (what CI runs); addon/ is excluded
 npx --yes markdownlint-cli2 "**/*.md" "#.venv" "#node_modules"
 ```
 

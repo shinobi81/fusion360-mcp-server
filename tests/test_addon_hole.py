@@ -124,9 +124,9 @@ def test_the_response_is_not_derived_from_feature_bodies(bound_handler):
     """``Feature.bodies`` echoes the participants, so it is not a result.
 
     Measured on 2706: a cut naming a body it never reaches still lists that body,
-    so ``cut_bodies`` - the field ``#44`` removed - was the input dressed up as an
-    answer.  The fake keeps ``bodies`` doing exactly that.  The response's key set
-    is locked deliberately: a new field means asking whether it derives from
+    so a ``cut_bodies`` field would be the input dressed up as an answer.  The fake
+    keeps ``bodies`` doing exactly that.  The response's key set is locked
+    deliberately: a new field means asking whether it derives from
     ``bodies``, and the value check below pins that ``feature_name`` comes from the
     feature rather than from the body it named.
     """

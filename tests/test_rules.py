@@ -108,6 +108,29 @@ def test_a_zero_sketch_plane_z_carries_no_note_on_either_side(bare_handler):
     assert mock._sketch_plane_fields([0]) == {}
 
 
+def test_the_point_shape_refusal_names_the_count_it_found():
+    """Pinned as literal text, not as a hint match.
+
+    ``hints.py`` classifies this by matching "needs three coordinates", so a reworded
+    message that keeps the phrase would still classify and still pass a loose test.  The
+    count is what tells the caller which point was wrong: a two-element point and a bare
+    number are different mistakes, and one sentence reports both.
+    """
+    short = rules.edge_selector_refusal({"edge_points": [[0, 0]]})
+    bare = rules.edge_selector_refusal({"edge_points": [3]})
+
+    assert short is not None
+    assert bare is not None
+    assert (short.error_kind, str(short)) == (
+        "INVALID_INPUT",
+        "Each edge point needs three coordinates, got 2",
+    )
+    assert (bare.error_kind, str(bare)) == (
+        "INVALID_INPUT",
+        "Each edge point needs three coordinates, got 3",
+    )
+
+
 def test_the_mirror_carries_the_same_validation():
     """``--check`` pins the mirror's bytes; this pins the behaviour mock mode imports.
 

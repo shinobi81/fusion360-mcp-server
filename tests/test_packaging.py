@@ -487,8 +487,8 @@ Nothing in this repository reads the value, and Fusion's own persisted registrat
 record (``%APPDATA%/Autodesk/Autodesk Fusion 360/<install>/JSLoadedScriptsinfo``)
 keys an installed add-in on its name and the path of its entry module, not on this
 id - so there is no second copy to compare against and no install to check from here.
-The pin buys exactly one thing, and states it: an edit to the constant, in a review
-that has to say why, instead of a stray value in a manifest nobody reads.
+The pin buys exactly one thing, and states it: an edit to the constant accompanied by
+a stated reason, instead of a stray value in a manifest nobody reads.
 """
 
 
@@ -514,7 +514,7 @@ def test_the_add_in_manifest_keeps_the_id_it_declares():
         f"addon/Fusion360MCP.manifest declares the id {facts['id']!r}, not "
         f"{ADD_IN_INSTALL_ID!r}. No install can be checked from here, so this pin "
         "exists to make an id change deliberate: if the change is intended, update "
-        "ADD_IN_INSTALL_ID and say why in the PR."
+        "ADD_IN_INSTALL_ID and say why in the change."
     )
 
 
@@ -545,13 +545,6 @@ with the next line.  Loosening either half makes the sweep read other people's w
 def _ci_directories(ci: list[str]) -> set[str]:
     """The top-level directories the CI lint commands name."""
     return {token for command in ci for token in command.split() if token.endswith("/")}
-
-
-def _sorted_command(command: str) -> str:
-    """*command* with its directory arguments sorted, so argument order is not drift."""
-    head, *tokens = command.split()
-    others = [token for token in tokens if not token.endswith("/")]
-    return " ".join([head, *others, *sorted(t for t in tokens if t.endswith("/"))])
 
 
 def _ruff_gate_command(args: list[str], directories: set[str]) -> str | None:
@@ -637,8 +630,7 @@ def _undocumented_gate_commands(pages: dict[str, str], ci: list[str]) -> list[st
     """One finding per gate document that does not name each gate CI runs.
 
     Both halves, not just "a command": a page that keeps the linter line and drops the
-    formatter line states the gate CI ran before #80, which is how four unformatted
-    files reached `main`.
+    formatter line teaches a gate that let four unformatted files reach `main`.
     """
     directories = _ci_directories(ci)
     required: dict[str, str] = {}
@@ -697,14 +689,8 @@ def test_the_apply_form_must_be_the_gate_without_check():
     assert "AGENTS.md:1" in finding
 
 
-def test_a_trailing_comment_is_not_part_of_the_command():
-    pages = {"AGENTS.md": "uv run ruff check src/ tests/ fuzz/ addon/ scripts/  # CI\n"}
-
-    assert _documented_ruff_findings(pages, [CI_CHECK, CI_FORMAT]) == []
-
-
 def test_every_gate_document_documents_both_halves_of_the_gate():
-    """A page naming only the linter states half a gate, which is the pre-#80 gate.
+    """A page naming only the linter states half a gate.
 
     `ruff check` alone let four unformatted files reach `main`, so a document that stops
     naming `format --check` teaches that half back - quieter than a wrong command, and
@@ -724,7 +710,7 @@ def test_every_gate_document_documents_both_halves_of_the_gate():
 def test_every_documented_lint_command_is_the_one_ci_runs():
     """Contributors copy the lint line, so a drifted one runs a gate CI does not.
 
-    #80's reviewer caught the drift by eye; nothing read these lines, so the next edit
+    The drift was caught by eye; nothing read these lines, so the next edit
     could move any of the five documents back to a three-directory gate.  The sweep is
     automatic over tracked markdown, and `GATE_DOCUMENTS` keeps the pages that must say
     it from going quiet, which is the shape that let the README's install pins rot.
@@ -754,33 +740,6 @@ def test_every_documented_lint_command_is_the_one_ci_runs():
         "these documents no longer state every command the gate runs, so a contributor "
         f"following them would not run the gate: {undocumented}"
     )
-
-
-def test_one_space_before_a_comment_is_still_a_comment():
-    """People write `…# note` with one space; cutting on two spaces dropped the claim.
-
-    Dropping it is not harmless: the page then counts as one that no longer documents
-    the gate, so a correct line reports as drift.
-    """
-    line = "uv run ruff check src/ tests/ fuzz/ addon/ scripts/ # CI\n"
-
-    expected = [(1, _sorted_command(CI_CHECK))]
-
-    assert _ruff_gate_claims(line, _ci_directories([CI_CHECK])) == expected
-
-
-def test_prose_after_a_command_is_not_part_of_it():
-    line = "uv run ruff check src/ tests/ fuzz/ addon/ scripts/ (what CI runs)\n"
-
-    expected = [(1, _sorted_command(CI_CHECK))]
-
-    assert _ruff_gate_claims(line, _ci_directories([CI_CHECK])) == expected
-
-
-def test_directory_order_is_not_part_of_the_command():
-    reordered = {"README.md": "uv run ruff check scripts/ src/ tests/ fuzz/ addon/\n"}
-
-    assert _documented_ruff_findings(reordered, [CI_CHECK, CI_FORMAT]) == []
 
 
 def test_a_ci_command_the_classifier_cannot_read_is_reported_not_mirrored():

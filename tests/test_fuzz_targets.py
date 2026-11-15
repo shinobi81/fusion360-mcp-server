@@ -119,13 +119,12 @@ def test_an_http_request_dispatches_nothing():
 def test_a_peer_that_closed_first_is_still_end_of_input(monkeypatch):
     """macOS answers ENOTCONN when the peer closed before we signal EOF.
 
-    Reported by CI: the HTTP payload makes the handler reply and close its end at
-    once, and on darwin `shutdown(SHUT_WR)` then raised
-    `OSError: [Errno 57] Socket is not connected` out of the target. The macOS job
-    for one commit failed and passed on a rerun of it - `80691cc`, the head of the
-    sibling PR that was open at the time; this branch is cut from `main` @ 83bffb7.
-    Windows returns quietly from the same call (measured), so no run here reaches
-    it without being told what the other platform does.
+    The HTTP payload makes the handler reply and close its end at once, and on
+    darwin `shutdown(SHUT_WR)` then raises
+    `OSError: [Errno 57] Socket is not connected` out of the target - on one run and
+    not the next, which is how it reads as a flake until it is reproduced. Windows
+    returns quietly from the same call (measured), so no run here reaches it without
+    being told what the other platform does.
 
     A peer that is already gone has already ended the stream, which is the only
     thing shutdown was for, so the error is end-of-input rather than a finding: the

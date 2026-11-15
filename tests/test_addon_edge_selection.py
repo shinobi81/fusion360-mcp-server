@@ -731,7 +731,43 @@ def test_the_edge_selection_enum_agrees_in_all_three_places():
     assert tuple(rules.EDGE_SELECTIONS) == tuple(_rules.EDGE_SELECTIONS)
 
 
-# ── refusals the review asked for ─────────────────────────────────────
+# ── refusals, and which one wins when a call is wrong twice ───────────
+
+
+def test_a_bad_body_name_is_reported_before_a_bad_selector(bound_handler):
+    """``BODY_NOT_FOUND`` wins: ``fillet`` resolves the body before ``_select_edges``.
+
+    Both orders are defensible, so this pins the one the add-in has.  Mock mode can only
+    answer the other way — it has no bodies to look up — and that difference is the
+    reason the two sides are not asserted equal here.
+    """
+    body = body_with_edges("Plate", [((0, 0, 0), (1, 0, 0))])
+    handler = bound_handler(FakeDesign(bodies=[body]))
+
+    with pytest.raises(RuntimeError) as raised:
+        handler.fillet(0.1, body_name="Nope", edge_indices=[0], edge_points=[[0, 0, 0]])
+    assert classify(raised.value)[0] == "BODY_NOT_FOUND"
+
+    refused = mock_command(
+        "fillet",
+        {"body_name": "Nope", "edge_indices": [0], "edge_points": [[0, 0, 0]]},
+    )
+    assert (refused["ok"], refused["error_kind"]) == (False, "INVALID_INPUT")
+
+
+def test_an_unknown_selection_is_refused_before_the_body_is_read(select):
+    """An empty body and a bad selection together hear about the selection.
+
+    ``_select_edges`` used to read the body first, so this call raised "has no edges to
+    select from".  Only a body with nothing to select makes the order visible; with any
+    edges on it the enum check answers either way, as the test above shows.
+    """
+    with pytest.raises(RuntimeError) as raised:
+        select([], "diagonal")
+
+    kind, hints = classify(raised.value)
+    assert kind == "INVALID_INPUT"
+    assert any("edge_selection is one of" in hint for hint in hints), hints
 
 
 def test_a_nan_tolerance_cannot_be_used_to_accept_a_far_point(select):

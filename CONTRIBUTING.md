@@ -23,6 +23,7 @@ uv sync --locked               # python deps into .venv; refuses a stale lock
 uv run pytest -q               # suite runs without Fusion
 uv run ruff check src/ tests/ fuzz/ addon/ scripts/  # what CI runs
 uv run ruff format --check src/ tests/ fuzz/ scripts/  # what CI runs (addon/ is exempt)
+uv run mypy src                # what CI runs; addon/ is excluded (adsk is unresolvable)
 ```
 
 Optional, for live testing against Fusion:

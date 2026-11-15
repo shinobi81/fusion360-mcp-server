@@ -231,8 +231,8 @@ def test_a_revolute_joint_reports_its_rotation_axis_and_no_slide(joint):
 def test_a_planar_joint_reports_two_slide_directions(joint):
     """Measured: planar exposes normal + primary/secondary slide — it DOES slide.
 
-    A single ``slide_direction`` field would have reported null for it, which is
-    what the review caught before this shipped.
+    A single ``slide_direction`` field reports null for planar, so the response
+    carries one field per direction Fusion exposes.
     """
     _, result, _ = joint(axis="z", joint_type="planar")
 
