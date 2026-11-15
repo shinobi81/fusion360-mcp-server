@@ -25,12 +25,34 @@ _POINT3 = {
     "maxItems": 3,
 }
 
+# The four edge selectors fillet and chamfer accept.  ``mock.py`` refuses an unknown
+# one against this same tuple, so a fifth value cannot land in one place only.
+EDGE_SELECTIONS = ("all", "top", "bottom", "vertical")
+
+# ``render_view``'s camera presets: "current" (leave the camera where it is) plus every
+# key of the add-in's ``CommandHandler._VIEW_DIRS``, in that order.  The handler has
+# always handled the isometric diagonals; this tuple is what advertises them.
+# ``tests/test_addon_sync.py`` asserts the two agree.
+VIEW_PRESETS = (
+    "current",
+    "iso",
+    "iso_ne",
+    "iso_nw",
+    "iso_sw",
+    "front",
+    "back",
+    "top",
+    "bottom",
+    "right",
+    "left",
+)
+
 # fillet and chamfer take the same four edge selectors; only the size argument
 # differs (a radius or a distance), so the rest is stated once.
 _EDGE_SELECTOR = {
     "edge_selection": {
         "type": "string",
-        "enum": ["all", "top", "bottom", "vertical"],
+        "enum": list(EDGE_SELECTIONS),
         "default": "all",
     },
     "edge_indices": {
@@ -2402,16 +2424,7 @@ TOOLS: list[dict] = [
         ),
         view={
             "type": "string",
-            "enum": [
-                "current",
-                "iso",
-                "front",
-                "back",
-                "top",
-                "bottom",
-                "left",
-                "right",
-            ],
+            "enum": list(VIEW_PRESETS),
             "default": "current",
             "description": ("Camera preset; 'current' preserves the existing view"),
         },

@@ -16,55 +16,14 @@ must not read as work done.
 import math
 from typing import Any
 
+from ._mutation_commands import MUTATION_COMMANDS
 from .hints import classify as _classify
+from .tools import EDGE_SELECTIONS
 
-# Mutation commands that get a synthetic deltas payload in mock mode.
-# Keep in sync with CommandHandler._MUTATION_COMMANDS in the addon.
-_MUTATION_MOCKS: frozenset[str] = frozenset(
-    {
-        "extrude",
-        "revolve",
-        "sweep",
-        "loft",
-        "fillet",
-        "chamfer",
-        "shell",
-        "mirror",
-        "create_hole",
-        "rectangular_pattern",
-        "circular_pattern",
-        "create_thread",
-        "draft_faces",
-        "split_body",
-        "split_face",
-        "offset_faces",
-        "scale_body",
-        "suppress_feature",
-        "unsuppress_feature",
-        "move_body",
-        "boolean_operation",
-        "create_box",
-        "create_cylinder",
-        "create_sphere",
-        "create_torus",
-        "thicken_surface",
-        "patch_surface",
-        "stitch_surfaces",
-        "ruled_surface",
-        "trim_surface",
-        "create_flange",
-        "create_bend",
-        "flat_pattern",
-        "unfold",
-        "delete_all",
-        "undo",
-        "set_parameter",
-        "execute_code",
-        "auto_constrain",
-        "create_ucs",
-        "set_color",
-    }
-)
+# Mutation commands that get a synthetic deltas payload in mock mode.  The set is
+# the add-in's, mirrored into this package, so mock mode cannot attach deltas to a
+# command real mode treats as read-only.
+_MUTATION_MOCKS = MUTATION_COMMANDS
 
 _MOCK_DELTAS = {
     "body_count_before": 0,
@@ -320,10 +279,9 @@ def _revolve(p: dict) -> dict:
     }
 
 
-# The same four the handler accepts and tools.py advertises.  A fifth value added
-# in one place and not the others would make mock mode refuse a valid call, so
-# tests/test_addon_edge_selection.py asserts the three agree.
-_EDGE_SELECTIONS = ("all", "top", "bottom", "vertical")
+# The same four the handler accepts, imported from the schema that advertises them:
+# a fifth value added to one side and not the other would make mock mode refuse a
+# valid call.
 
 
 def _edge_selector_error(p: dict) -> dict | None:
@@ -373,7 +331,7 @@ def _edge_selector_error(p: dict) -> dict | None:
     for point in points or []:
         if not isinstance(point, (list, tuple)) or len(point) != 3:
             return _mock_error("edge point needs three coordinates")
-    if selection not in _EDGE_SELECTIONS:
+    if selection not in EDGE_SELECTIONS:
         return _mock_error(
             f"Unknown edge_selection '{selection}' — use all/top/bottom/vertical"
         )

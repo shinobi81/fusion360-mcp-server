@@ -1,14 +1,15 @@
-"""Drift guards: assert addon-side and package-side mirrors stay in sync.
+"""Drift guards: assert addon-side and package-side tables stay in agreement.
 
 The Fusion add-in is installed into Fusion's AddIns folder and cannot
-import from this package, so a few tables are duplicated:
+import from this package, so a couple of tables are duplicated:
 
-* ``src/fusion360_mcp/hints.py`` is generated from ``addon/server/hints.py``
-  by ``scripts/sync_mirrors.py``; ``test_the_hints_mirror_is_generated`` runs it
-  with ``--check``.
-* ``CommandHandler._MUTATION_COMMANDS``  ↔  ``mock.py:_MUTATION_MOCKS``
+* ``src/fusion360_mcp/hints.py`` and ``src/fusion360_mcp/_mutation_commands.py``
+  are generated from the add-in's files by ``scripts/sync_mirrors.py``;
+  ``test_the_mirrors_are_generated`` runs it with ``--check``.
+* ``CommandHandler._COMMAND_NAMES``  ↔  ``tools.py``'s tool names
+* ``tools.VIEW_PRESETS``  ↔  ``CommandHandler._VIEW_DIRS``
 
-If they drift, agents see different error envelopes / delta payloads
+If they drift, agents see different error envelopes / delta payloads / enums
 depending on whether they're running against Fusion or mock mode.  These
 tests fail loudly the moment a maintainer updates one side without the
 other.
@@ -22,6 +23,21 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+COMMAND_HANDLER = REPO_ROOT / "addon" / "server" / "command_handler.py"
+MUTATION_COMMANDS = REPO_ROOT / "addon" / "server" / "mutation_commands.py"
+
+
+def _set_literal(value: ast.expr) -> set[str]:
+    """The strings in a ``{...}`` / ``frozenset({...})`` literal."""
+    # frozenset({...})  →  unwrap the set literal arg
+    if (
+        isinstance(value, ast.Call)
+        and isinstance(value.func, ast.Name)
+        and value.func.id == "frozenset"
+        and value.args
+    ):
+        return set(ast.literal_eval(value.args[0]))
+    return set(ast.literal_eval(value))
 
 
 def _extract_class_attr_set(path: Path, class_name: str, attr: str) -> set[str]:
@@ -29,6 +45,7 @@ def _extract_class_attr_set(path: Path, class_name: str, attr: str) -> set[str]:
 
     The invariant is "this table matches that schema", which is a property of the
     source rather than of running it, so the literal is read instead of imported.
+    A dict literal reads as its keys, which is what ``_VIEW_DIRS`` is asked for.
     """
     tree = ast.parse(path.read_text())
     for cls in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
@@ -46,22 +63,43 @@ def _extract_class_attr_set(path: Path, class_name: str, attr: str) -> set[str]:
                 continue
             if not any(isinstance(t, ast.Name) and t.id == attr for t in targets):
                 continue
-            # frozenset({...})  →  unwrap the set literal arg
-            if (
-                isinstance(value, ast.Call)
-                and isinstance(value.func, ast.Name)
-                and value.func.id == "frozenset"
-                and value.args
-            ):
-                return set(ast.literal_eval(value.args[0]))
-            return set(ast.literal_eval(value))
+            return _set_literal(value)
     raise AssertionError(f"{class_name}.{attr} not found in {path}")
 
 
-def test_the_hints_mirror_is_generated():
-    mirror_path = REPO_ROOT / "src" / "fusion360_mcp" / "hints.py"
-    mirror = mirror_path.read_text(encoding="utf-8")
-    assert "GENERATED, do not edit" in mirror.split("\n\n")[0]
+def _extract_module_attr_set(path: Path, attr: str) -> set[str]:
+    """``path``'s module-level ``attr`` literal — the same read, one scope up."""
+
+    def found(target: ast.expr, value: ast.expr | None) -> set[str] | None:
+        if isinstance(target, ast.Name) and target.id == attr and value is not None:
+            return _set_literal(value)
+        return None
+
+    tree = ast.parse(path.read_text())
+    for stmt in tree.body:
+        # Annotated (``attr: frozenset[str] = frozenset({...})``) and plain
+        # assignments are the same invariant; see ``_extract_class_attr_set``.
+        hit = None
+        if isinstance(stmt, ast.AnnAssign):
+            hit = found(stmt.target, stmt.value)
+        elif isinstance(stmt, ast.Assign) and stmt.targets:
+            hit = found(stmt.targets[0], stmt.value)
+        if hit is not None:
+            return hit
+    raise AssertionError(f"{attr} not found at module level in {path}")
+
+
+def _view_dirs() -> set[str]:
+    """The camera presets ``CommandHandler._VIEW_DIRS`` declares."""
+    return _extract_class_attr_set(COMMAND_HANDLER, "CommandHandler", "_VIEW_DIRS")
+
+
+def test_the_mirrors_are_generated():
+    """Both mirrors carry the generated header, and neither is stale."""
+    for mirror in ("hints.py", "_mutation_commands.py"):
+        path = REPO_ROOT / "src" / "fusion360_mcp" / mirror
+        text = path.read_text(encoding="utf-8")
+        assert "GENERATED, do not edit" in text.split("\n\n")[0], mirror
     subprocess.run(
         [sys.executable, "scripts/sync_mirrors.py", "--check"],
         cwd=REPO_ROOT,
@@ -69,44 +107,59 @@ def test_the_hints_mirror_is_generated():
     )
 
 
-def test_mutation_sets_in_sync():
-    """Addon mutation set and mock mutation set must be identical."""
-    from fusion360_mcp.mock import _MUTATION_MOCKS
+def test_the_mutation_list_has_one_source():
+    """One literal, two import sites.
 
-    addon_set = _extract_class_attr_set(
-        REPO_ROOT / "addon" / "server" / "command_handler.py",
-        "CommandHandler",
-        "_MUTATION_COMMANDS",
+    The old guard compared two hand-written literals.  There is one literal now —
+    the add-in's module, which the package's copy is generated from — so what is
+    left to assert is that both import sites reach it.  The content is guarded by
+    ``test_the_mirrors_are_generated``.
+    """
+    from fusion360_mcp import _mutation_commands, mock
+    from fusion360_mcp.connection import _MUTATION_COMMANDS
+
+    assert mock._MUTATION_MOCKS is _mutation_commands.MUTATION_COMMANDS
+    assert _MUTATION_COMMANDS is mock._MUTATION_MOCKS
+
+
+def test_every_mutation_command_is_a_command():
+    """A name in the mutation list with no handler changes nothing and says so.
+
+    It would still reach `mock_command` through the alias, so mock mode would report
+    deltas for a command the add-in answers with UNKNOWN_COMMAND.
+    """
+    commands = _extract_class_attr_set(
+        COMMAND_HANDLER, "CommandHandler", "_COMMAND_NAMES"
     )
-    mock_set = set(_MUTATION_MOCKS)
-    assert addon_set == mock_set, (
-        f"_MUTATION_COMMANDS (addon) and _MUTATION_MOCKS (mock.py) have drifted.\n"
-        f"  only in addon: {sorted(addon_set - mock_set)}\n"
-        f"  only in mock:  {sorted(mock_set - addon_set)}"
-    )
+    mutations = _extract_module_attr_set(MUTATION_COMMANDS, "MUTATION_COMMANDS")
+
+    assert mutations <= commands, f"not commands: {sorted(mutations - commands)}"
 
 
-def _extract_command_dispatch_keys(path: Path) -> set[str]:
-    """Pull the string keys of the ``_COMMANDS`` dict literal out of the
-    add-in's command_handler via AST: the table is the contract, and reading a
-    literal needs neither Fusion nor the fake runtime."""
-    tree = ast.parse(path.read_text())
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign):
-            continue
-        if not any(
-            isinstance(t, ast.Attribute) and t.attr == "_COMMANDS" for t in node.targets
-        ):
-            continue
-        if isinstance(node.value, ast.Dict):
-            keys = {
-                k.value
-                for k in node.value.keys
-                if isinstance(k, ast.Constant) and isinstance(k.value, str)
-            }
-            if keys:
-                return keys
-    raise AssertionError(f"_COMMANDS dict literal not found in {path}")
+def test_the_advertised_view_presets_are_the_ones_the_handler_handles():
+    """``render_view``'s enum, ``_VIEW_DIRS`` and ``VIEW_PRESETS`` are one set.
+
+    The four isometric diagonals were handled and unadvertised, so a caller that
+    asked for ``iso_ne`` was refused by the schema and understood by the handler.
+    """
+    from fusion360_mcp import tools
+
+    assert set(tools.VIEW_PRESETS) == _view_dirs() | {"current"}
+
+
+def test_export_view_sheet_offers_the_presets_without_current():
+    """Its schema lists ``_VIEW_DIRS`` alone, so it does not take ``VIEW_PRESETS``.
+
+    "current" is not a view to render — ``export_view_sheet`` refuses it — so
+    adopting the wider tuple here would advertise a refusal.
+    """
+    from fusion360_mcp import tools
+
+    tool = tools.get_tool_by_name("export_view_sheet")
+    assert tool is not None
+    enum = tool["inputSchema"]["properties"]["views"]["items"]["enum"]
+
+    assert set(enum) == _view_dirs()
 
 
 # Commands the add-in dispatches that are intentionally not MCP tools.
@@ -123,13 +176,11 @@ def test_tools_match_addon_dispatch():
 
     tool_names = {t["name"] for t in TOOLS}
     dispatch = (
-        _extract_command_dispatch_keys(
-            REPO_ROOT / "addon" / "server" / "command_handler.py"
-        )
+        _extract_class_attr_set(COMMAND_HANDLER, "CommandHandler", "_COMMAND_NAMES")
         - _DISPATCH_ONLY
     )
     assert tool_names == dispatch, (
-        f"tools.py and CommandHandler._COMMANDS have drifted.\n"
+        f"tools.py and CommandHandler._COMMAND_NAMES have drifted.\n"
         f"  tools without handler: {sorted(tool_names - dispatch)}\n"
         f"  handlers without tool: {sorted(dispatch - tool_names)}"
     )

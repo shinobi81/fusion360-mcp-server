@@ -176,7 +176,10 @@ def test_main_says_what_a_reload_does_not_cover(monkeypatch, capsys):
     module.main([])
 
     out = capsys.readouterr().out
-    assert "reloaded: hints, hole_geometry, parameter_units, command_handler" in out
+    assert (
+        "reloaded: hints, hole_geometry, parameter_units, "
+        "mutation_commands, command_handler"
+    ) in out
     assert "not reloaded: event_bridge, socket_server" in out
 
 
@@ -214,3 +217,19 @@ def test_the_declared_names_are_the_running_classs_callables(handler_module):
 
     assert declared == live
     assert inspect.isfunction(handler_module.CommandHandler.create_thread)
+
+
+def test_dispatch_is_built_once_per_instance(handler_module):
+    """A fresh instance carries a fresh table, so a reload cannot leave it stale.
+
+    The table used to be a lazily-populated class attribute, which made a reload
+    depend on a line that reset it.  Building it in ``__init__`` removes both the
+    reset and the window where an instance answers from a table built from another
+    instance's bound methods.
+    """
+    handler = handler_module.CommandHandler()
+
+    assert handler._commands == {
+        name: getattr(handler, name) for name in handler._COMMAND_NAMES
+    }
+    assert not hasattr(type(handler), "_COMMANDS"), "the lazy class table is gone"

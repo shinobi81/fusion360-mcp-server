@@ -15,7 +15,7 @@ import tempfile
 import time
 import traceback
 from contextlib import redirect_stdout, suppress
-from typing import Any, ClassVar
+from typing import Any, Callable, ClassVar
 
 # One import site for Autodesk's API: resolved lazily, so this module imports outside
 # Fusion.  Only the import line changed; every ``adsk.`` use below is untouched.
@@ -24,6 +24,7 @@ from . import get_logger
 from . import hints as _hints
 from . import hole_geometry as _hole_geom
 from . import parameter_units as _param_units
+from .mutation_commands import MUTATION_COMMANDS
 
 log = get_logger("handler")
 
@@ -51,13 +52,13 @@ class CommandHandler:
     def __init__(self):
         self.app = adsk.core.Application.get()
         self.ui = self.app.userInterface
+        self._commands: dict[str, Callable[..., Any]] = {
+            name: getattr(self, name) for name in self._COMMAND_NAMES
+        }
 
     # ------------------------------------------------------------------
     # Dispatch
     # ------------------------------------------------------------------
-
-    _COMMANDS: ClassVar[dict[str, Any] | None] = None  # populated lazily
-
     # Canonical camera presets, (eye_dir, up_vec) in Fusion's Z-up world.
     # Shared by render_view and export_view_sheet.
     _VIEW_DIRS: ClassVar[dict[str, Any]] = {
@@ -75,9 +76,39 @@ class CommandHandler:
 
     # Commands that can change body mass / bbox / body count.  Only these
     # get before/after snapshots so agents can sanity-check without a render.
-    _MUTATION_COMMANDS = frozenset(
+    # The set itself is canonical in `mutation_commands.py`, which the server
+    # package mirrors and mock mode imports.
+    _MUTATION_COMMANDS = MUTATION_COMMANDS
+
+    # The dispatch table: command name -> method of this class.  A class
+    # attribute rather than a literal, so a name that has no method cannot be
+    # listed (`__init__` resolves it) and a reloaded handler cannot inherit a
+    # table built by another instance.
+    _COMMAND_NAMES: ClassVar[frozenset[str]] = frozenset(
         {
-            # feature ops
+            "new_document",
+            "get_scene_info",
+            "get_object_info",
+            "list_edges",
+            "get_bounding_box",
+            "list_components",
+            # sketch
+            "create_sketch",
+            "draw_rectangle",
+            "draw_circle",
+            "draw_line",
+            "draw_arc",
+            "draw_spline",
+            "create_polygon",
+            "draw_circles",
+            "add_constraint",
+            "auto_constrain",
+            "add_dimension",
+            "offset_curve",
+            "trim_curve",
+            "extend_curve",
+            "project_geometry",
+            # features
             "extrude",
             "revolve",
             "sweep",
@@ -97,162 +128,86 @@ class CommandHandler:
             "scale_body",
             "suppress_feature",
             "unsuppress_feature",
-            # body ops
+            # body operations
             "move_body",
+            "rename_body",
+            "export_stl",
+            "export_step",
+            "export_f3d",
+            "export_view_sheet",
+            "export",
+            "import_mesh",
+            "create_box_parametric",
             "boolean_operation",
-            # primitives
+            "delete_all",
+            "undo",
+            # direct primitives
             "create_box",
             "create_cylinder",
             "create_sphere",
             "create_torus",
-            # surface / sheet metal (can produce / thicken bodies)
-            "thicken_surface",
+            # construction geometry
+            "create_construction_plane",
+            "create_construction_axis",
+            "create_ucs",
+            # assembly
+            "create_component",
+            "add_joint",
+            "set_joint_value",
+            "create_as_built_joint",
+            "create_rigid_group",
+            # inspection / analysis
+            "measure_distance",
+            "measure_angle",
+            "get_physical_properties",
+            "create_section_analysis",
+            "check_interference",
+            "compare_meshes",
+            # appearance
+            "set_appearance",
+            "set_color",
+            # parameters
+            "get_parameters",
+            "create_parameter",
+            "set_parameter",
+            "delete_parameter",
+            # surface operations
             "patch_surface",
             "stitch_surfaces",
+            "thicken_surface",
             "ruled_surface",
             "trim_surface",
+            # sheet metal
             "create_flange",
             "create_bend",
             "flat_pattern",
             "unfold",
-            # scene-wide
-            "delete_all",
-            "undo",
-            # parametric & agent-authored changes
-            "set_parameter",
+            # code execution
             "execute_code",
-            # sketch constraint mutation
-            "auto_constrain",
-            # construction geometry / appearance
-            "create_ucs",
-            "set_color",
+            # CAM
+            "cam_list_setups",
+            "cam_list_operations",
+            "cam_get_operation_info",
+            "cam_create_setup",
+            "cam_create_operation",
+            "cam_generate_toolpath",
+            "cam_post_process",
+            # health
+            "ping",
+            # design type safety
+            "get_design_type",
+            "set_design_type",
+            # perception
+            "render_view",
         }
     )
 
     def execute_command(self, command: dict) -> dict:
         """Route *command* to the correct handler; return a response dict."""
-        if self._COMMANDS is None:
-            self.__class__._COMMANDS = {
-                # scene / query
-                "new_document": self.new_document,
-                "get_scene_info": self.get_scene_info,
-                "get_object_info": self.get_object_info,
-                "list_edges": self.list_edges,
-                "get_bounding_box": self.get_bounding_box,
-                "list_components": self.list_components,
-                # sketch
-                "create_sketch": self.create_sketch,
-                "draw_rectangle": self.draw_rectangle,
-                "draw_circle": self.draw_circle,
-                "draw_line": self.draw_line,
-                "draw_arc": self.draw_arc,
-                "draw_spline": self.draw_spline,
-                "create_polygon": self.create_polygon,
-                "draw_circles": self.draw_circles,
-                "add_constraint": self.add_constraint,
-                "auto_constrain": self.auto_constrain,
-                "add_dimension": self.add_dimension,
-                "offset_curve": self.offset_curve,
-                "trim_curve": self.trim_curve,
-                "extend_curve": self.extend_curve,
-                "project_geometry": self.project_geometry,
-                # features
-                "extrude": self.extrude,
-                "revolve": self.revolve,
-                "sweep": self.sweep,
-                "loft": self.loft,
-                "fillet": self.fillet,
-                "chamfer": self.chamfer,
-                "shell": self.shell,
-                "mirror": self.mirror,
-                "create_hole": self.create_hole,
-                "rectangular_pattern": self.rectangular_pattern,
-                "circular_pattern": self.circular_pattern,
-                "create_thread": self.create_thread,
-                "draft_faces": self.draft_faces,
-                "split_body": self.split_body,
-                "split_face": self.split_face,
-                "offset_faces": self.offset_faces,
-                "scale_body": self.scale_body,
-                "suppress_feature": self.suppress_feature,
-                "unsuppress_feature": self.unsuppress_feature,
-                # body operations
-                "move_body": self.move_body,
-                "rename_body": self.rename_body,
-                "export_stl": self.export_stl,
-                "export_step": self.export_step,
-                "export_f3d": self.export_f3d,
-                "export_view_sheet": self.export_view_sheet,
-                "export": self.export,
-                "import_mesh": self.import_mesh,
-                "create_box_parametric": self.create_box_parametric,
-                "boolean_operation": self.boolean_operation,
-                "delete_all": self.delete_all,
-                "undo": self.undo,
-                # direct primitives
-                "create_box": self.create_box,
-                "create_cylinder": self.create_cylinder,
-                "create_sphere": self.create_sphere,
-                "create_torus": self.create_torus,
-                # construction geometry
-                "create_construction_plane": self.create_construction_plane,
-                "create_construction_axis": self.create_construction_axis,
-                "create_ucs": self.create_ucs,
-                # assembly
-                "create_component": self.create_component,
-                "add_joint": self.add_joint,
-                "set_joint_value": self.set_joint_value,
-                "create_as_built_joint": self.create_as_built_joint,
-                "create_rigid_group": self.create_rigid_group,
-                # inspection / analysis
-                "measure_distance": self.measure_distance,
-                "measure_angle": self.measure_angle,
-                "get_physical_properties": self.get_physical_properties,
-                "create_section_analysis": self.create_section_analysis,
-                "check_interference": self.check_interference,
-                "compare_meshes": self.compare_meshes,
-                # appearance
-                "set_appearance": self.set_appearance,
-                "set_color": self.set_color,
-                # parameters
-                "get_parameters": self.get_parameters,
-                "create_parameter": self.create_parameter,
-                "set_parameter": self.set_parameter,
-                "delete_parameter": self.delete_parameter,
-                # surface operations
-                "patch_surface": self.patch_surface,
-                "stitch_surfaces": self.stitch_surfaces,
-                "thicken_surface": self.thicken_surface,
-                "ruled_surface": self.ruled_surface,
-                "trim_surface": self.trim_surface,
-                # sheet metal
-                "create_flange": self.create_flange,
-                "create_bend": self.create_bend,
-                "flat_pattern": self.flat_pattern,
-                "unfold": self.unfold,
-                # code execution
-                "execute_code": self.execute_code,
-                # CAM
-                "cam_list_setups": self.cam_list_setups,
-                "cam_list_operations": self.cam_list_operations,
-                "cam_get_operation_info": self.cam_get_operation_info,
-                "cam_create_setup": self.cam_create_setup,
-                "cam_create_operation": self.cam_create_operation,
-                "cam_generate_toolpath": self.cam_generate_toolpath,
-                "cam_post_process": self.cam_post_process,
-                # health
-                "ping": self.ping,
-                # design type safety
-                "get_design_type": self.get_design_type,
-                "set_design_type": self.set_design_type,
-                # perception
-                "render_view": self.render_view,
-            }
-
         cmd_type = command.get("type")
         params = command.get("params", {})
 
-        commands = self._COMMANDS or {}
+        commands = self._commands
         handler = commands.get(cmd_type or "")
         if handler is None:
             # Infrastructure-level failure (not an application error) —

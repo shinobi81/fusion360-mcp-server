@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # below the header docstring.
 _IMPORT_PREFIXES = ("import ", "from ")
 
-_HEADER_PREAMBLE = (
+_HINTS_HEADER = (
     '"""Error classification for Fusion API failures — GENERATED, do not edit.\n'
     "\n"
     "Rendered by ``scripts/sync_mirrors.py`` from ``addon/server/hints.py``: the\n"
@@ -41,13 +41,30 @@ _HEADER_PREAMBLE = (
     "\n"
 )
 
+_MUTATION_HEADER = (
+    '"""Which commands change the model — GENERATED, do not edit.\n'
+    "\n"
+    "Rendered by ``scripts/sync_mirrors.py`` from\n"
+    "``addon/server/mutation_commands.py``: the add-in is installed into Fusion's\n"
+    "AddIns folder and cannot import this package, so its copy is canonical.  Edit\n"
+    "that file and run ``uv run python scripts/sync_mirrors.py``; hand edits here are\n"
+    "overwritten.\n"
+    '"""\n'
+    "\n"
+)
+
 # (canonical, mirror, header).  Paths are relative to the repository root; the header
 # is the whole module docstring of the generated file.
 MIRRORS: tuple[tuple[Path, Path, str], ...] = (
     (
         Path("addon/server/hints.py"),
         Path("src/fusion360_mcp/hints.py"),
-        _HEADER_PREAMBLE,
+        _HINTS_HEADER,
+    ),
+    (
+        Path("addon/server/mutation_commands.py"),
+        Path("src/fusion360_mcp/_mutation_commands.py"),
+        _MUTATION_HEADER,
     ),
 )
 
@@ -110,7 +127,10 @@ def main(argv: list[str] | None = None) -> int:
     stale: list[Path] = []
     for canonical, mirror, header in MIRRORS:
         rendered = render(ROOT / canonical, header)
-        on_disk = (ROOT / mirror).read_text(encoding="utf-8")
+        path = ROOT / mirror
+        # A mirror that does not exist yet reads as empty, so adding an entry and
+        # running this creates it rather than raising FileNotFoundError.
+        on_disk = path.read_text(encoding="utf-8") if path.exists() else ""
         if on_disk == rendered:
             continue
         stale.append(mirror)
@@ -126,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             # ``newline="\n"``: the host's line ending would otherwise reach
             # the tree, which ``.gitattributes`` normalises to LF.
-            (ROOT / mirror).write_text(rendered, encoding="utf-8", newline="\n")
+            path.write_text(rendered, encoding="utf-8", newline="\n")
             print(f"wrote {mirror} from {canonical}")
 
     if args.check and stale:

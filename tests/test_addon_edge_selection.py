@@ -676,11 +676,11 @@ def test_mock_still_accepts_one_selector_at_a_time():
 
 
 def test_the_edge_selection_enum_agrees_in_all_three_places():
-    """Mock mode refuses an unknown selection against its *own* copy of the enum.
+    """Mock mode refuses an unknown selection against the schema's own tuple.
 
-    Three copies exist — this one, the handler's message, and ``tools.py``'s
-    schema — so a fifth selection added to one of them would make mock mode
-    refuse a call real mode accepts.  Same idea as ``test_addon_sync.py``.
+    Two copies remain — the handler's message, and ``tools.py``'s schema — and mock
+    mode imports the second rather than restating it, so a fifth selection added to
+    the schema reaches mock mode too.  Same idea as ``test_addon_sync.py``.
     """
     from fusion360_mcp import mock, tools
 
@@ -689,10 +689,11 @@ def test_the_edge_selection_enum_agrees_in_all_three_places():
         enum = tool["inputSchema"]["properties"].get("edge_selection", {}).get("enum")
         if enum:
             advertised.add(tuple(enum))
-    assert advertised == {tuple(mock._EDGE_SELECTIONS)}, (
-        "tools.py and the mock disagree about the edge_selection enum: "
-        f"{advertised} vs {mock._EDGE_SELECTIONS}"
+    assert advertised == {tools.EDGE_SELECTIONS}, (
+        "tools.py's schemas disagree about the edge_selection enum: "
+        f"{advertised} vs {tools.EDGE_SELECTIONS}"
     )
+    assert mock.EDGE_SELECTIONS is tools.EDGE_SELECTIONS
 
 
 # ── refusals the review asked for ─────────────────────────────────────

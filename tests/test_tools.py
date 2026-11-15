@@ -1,5 +1,6 @@
 """Tests for the tool registry."""
 
+from fusion360_mcp import tools
 from fusion360_mcp.tools import TOOLS, get_tool_by_name, get_tool_list
 
 
@@ -269,3 +270,24 @@ def test_each_tool_declares_the_number_of_arguments_it_does_today():
     current = {t["name"]: len(t["inputSchema"]["properties"]) for t in TOOLS}
 
     assert current == _TOOL_ARGUMENT_COUNTS
+
+
+def test_render_view_offers_every_preset_the_handler_handles():
+    """The four isometric diagonals the handler has always handled were unadvertised."""
+    schema = get_tool_by_name("render_view")
+    assert schema is not None
+
+    assert set(schema["inputSchema"]["properties"]["view"]["enum"]) == set(
+        tools.VIEW_PRESETS
+    )
+
+
+def test_every_edge_selector_schema_advertises_one_tuple():
+    """fillet, chamfer and offset_faces take the same four selectors."""
+    enums = {
+        tuple(tool["inputSchema"]["properties"]["edge_selection"]["enum"])
+        for tool in TOOLS
+        if "edge_selection" in tool["inputSchema"]["properties"]
+    }
+
+    assert enums == {tools.EDGE_SELECTIONS}

@@ -110,3 +110,23 @@ def test_the_hint_table_is_one_of_the_mirrors():
     pairs = {(canonical, mirror) for canonical, mirror, _ in SYNC.MIRRORS}
 
     assert (Path("addon/server/hints.py"), Path("src/fusion360_mcp/hints.py")) in pairs
+
+
+def test_writing_creates_a_mirror_that_does_not_exist_yet(tmp_path, monkeypatch):
+    """Adding a MIRRORS entry is the documented way to start a mirror.
+
+    The write path read the mirror before deciding it was stale, so a new entry
+    raised FileNotFoundError instead of creating the file.
+    """
+    canonical = tmp_path / "canonical.py"
+    canonical.write_text('"""C."""\n\nimport re\n\nRULES = [1]\n', encoding="utf-8")
+    monkeypatch.setattr(SYNC, "ROOT", tmp_path)
+    monkeypatch.setattr(
+        SYNC, "MIRRORS", ((Path("canonical.py"), Path("mirror.py"), HEADER),)
+    )
+
+    assert SYNC.main([]) == 0
+    assert (tmp_path / "mirror.py").read_text(encoding="utf-8") == (
+        HEADER + "import re\n\nRULES = [1]\n"
+    )
+    assert SYNC.main(["--check"]) == 0
