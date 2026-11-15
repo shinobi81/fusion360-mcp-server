@@ -259,7 +259,7 @@ Every `add_joint` result carries the measurements behind that:
 | `export_stl`        | Export body as STL (supports bodies inside components)                                                                               |
 | `export_step`       | Export body as STEP (supports bodies inside components)                                                                              |
 | `export_f3d`        | Export design as Fusion archive                                                                                                      |
-| `export_view_sheet` | Export multi-view PNG sheet (iso/front/top/right) for visual inspection                                                              |
+| `export_view_sheet` | Export multi-view PNG sheet (iso/front/top/right) for visual inspection, plus a shareable HTML sheet |
 | `export`            | Unified dispatcher — routes to `export_stl`/`export_step`/`export_f3d` based on explicit `format` or file-extension inference        |
 
 ## CAM / Manufacturing
