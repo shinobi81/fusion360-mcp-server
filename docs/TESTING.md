@@ -80,10 +80,15 @@ uv run python scripts/reload_addin.py --check    # verify only, change nothing
 ```
 
 It sends `reload_handler` (which reloads `hints`, `hole_geometry`, `parameter_units` and
-`command_handler`, in that order) and then compares the running class's callables with
-the methods the file declares, printing the loaded path. Exit 1 means the class is not
-that file. A change in `event_bridge.py` or `socket_server.py` is not covered - those
-still need the add-in stopped and started.
+`command_handler`, in that order) and then compares the running class's **method names**
+with the methods the file declares, printing the loaded path. Exit 1 means the sets
+differ. What "ok" therefore means is narrow, and the script's own output says so:
+editing a method *body* changes no name and still prints ok, so reload whenever you
+have pulled, not only when the check complains.
+
+Two things it cannot cover, both printed on every run: `event_bridge.py` and
+`socket_server.py` are not reloaded (restart the add-in for those), and the check needs
+an **open document** - it rides on `execute_code`, which resolves the active design.
 
 ## The policy
 

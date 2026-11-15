@@ -27,14 +27,14 @@ import ast
 import sys
 from pathlib import Path
 
-from fusion360_mcp.connection import Fusion360Connection
+from fusion360_mcp.connection import Fusion360Connection, FusionError
 
 HANDLER = (
     Path(__file__).resolve().parent.parent / "addon" / "server" / "command_handler.py"
 )
 
 
-def declared_methods(source: str) -> set[str]:
+def declared_methods(source: str, path: Path = HANDLER) -> set[str]:
     """The methods ``CommandHandler`` declares in *source*, ignoring dunders."""
     tree = ast.parse(source)
     for node in ast.walk(tree):
@@ -45,9 +45,7 @@ def declared_methods(source: str) -> set[str]:
                 if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
                 and not item.name.startswith("__")
             }
-    raise SystemExit(
-        f"{HANDLER} declares no CommandHandler; this check would be vacuous"
-    )
+    raise SystemExit(f"{path} declares no CommandHandler; this check would be vacuous")
 
 
 def compare(declared: set[str], loaded: set[str]) -> tuple[set[str], set[str]]:
@@ -62,12 +60,12 @@ def compare(declared: set[str], loaded: set[str]) -> tuple[set[str], set[str]]:
 
 def loaded_class(connection: Fusion360Connection) -> dict:
     """Ask the add-in which file it loaded and which methods its class has."""
-    # Callables only: ``dir()`` also lists the class's attribute tables
-    # (_VIEW_DIRS, _MUTATION_COMMANDS, ...), which the file declares as plain
-    # assignments - the first version of this compared two different things and
-    # reported every table as "extra in the running class".
+    # ``vars(cls)`` with a callable test, not ``dir(cls)``: the latter also lists the
+    # class's attribute tables (_VIEW_DIRS, _MUTATION_COMMANDS, ...) - the first
+    # version counted those as "extra" methods - and walks the MRO, so an inherited
+    # method would read as drift the day this class gains a base.
     code = (
-        "import inspect, sys\n"
+        "import sys\n"
         "mods = [m for n, m in sys.modules.items()\n"
         '        if n.endswith("command_handler") and getattr(m, "__file__", None)]\n'
         "if not mods:\n"
@@ -77,15 +75,16 @@ def loaded_class(connection: Fusion360Connection) -> dict:
         '    "file": mods[0].__file__,\n'
         '    "methods": sorted(\n'
         "        name\n"
-        "        for name, value in inspect.getmembers(cls)\n"
-        '        if callable(value) and not name.startswith("__")\n'
+        "        for name in vars(cls)\n"
+        '        if callable(getattr(cls, name)) and not name.startswith("__")\n'
         "    ),\n"
         "}\n"
     )
     reply = connection.send_command("execute_code", {"code": code})
     if not reply.get("ok"):
         raise SystemExit(
-            f"the add-in could not report its class: {reply.get('error_message')}"
+            f"the add-in could not report its class: {reply.get('error_message')} "
+            "(execute_code needs an open document - it reads the active design)"
         )
     return reply["result"]
 
@@ -120,23 +119,37 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if not args.check:
-            # Flat, unlike execute_code's {"executed": ..., "result": ...} envelope:
-            # the bridge answers reload_handler with {"ok": True, "reloaded": True}.
+            # ``reload_handler`` is absent from ``mock._MUTATION_MOCKS``, so
+            # ``send_command`` may retry it. That is safe here and only here: a reload
+            # is idempotent, which is exactly what the no-retry rule for mutations
+            # exists to protect.
+            #
+            # Flat reply, unlike execute_code's {"executed": ..., "result": ...}
+            # envelope: the bridge answers with {"ok": True, "reloaded": True}.
             reply = connection.send_command("reload_handler")
             if not reply.get("ok") or not reply.get("reloaded"):
                 print(f"reload refused: {reply}", file=sys.stderr)
                 return 1
             print("reloaded: hints, hole_geometry, parameter_units, command_handler")
+            print("  not reloaded: event_bridge, socket_server")
 
         loaded = loaded_class(connection)
+    except (FusionError, ConnectionError) as exc:
+        # A fused add-in raises rather than replying: a TIMEOUT or UNKNOWN_COMMAND
+        # arrives as FusionError, and a dropped socket as ConnectionError. Both are
+        # "could not check", not a traceback for the reader.
+        print(f"the add-in did not answer: {exc}", file=sys.stderr)
+        return 1
     finally:
         connection.disconnect()
 
-    declared = declared_methods(args.file.read_text(encoding="utf-8"))
+    declared = declared_methods(args.file.read_text(encoding="utf-8"), args.file)
     missing, extra = compare(declared, set(loaded["methods"]))
 
     print(f"add-in loaded: {loaded['file']}")
     print(f"comparing with: {args.file}")
+    if loaded["file"] and Path(loaded["file"]).resolve() != args.file.resolve():
+        print("  (a different file is loaded - is an AddIns copy in use?)")
     if missing:
         print(f"MISSING from the running class: {', '.join(sorted(missing))}")
     if extra:
@@ -150,7 +163,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    print(f"ok: {len(declared)} methods, running class matches the file")
+    print(f"ok: {len(declared)} method names match; bodies are not compared")
+    print("    (edit a method body and this still says ok until you reload)")
     return 0
 
 
