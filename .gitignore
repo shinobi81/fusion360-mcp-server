@@ -28,7 +28,9 @@ Thumbs.db
 # local planning notes — design/spec docs stay out of the repo
 docs/superpowers/
 
-# review/PR scratch files: a 'git add -A' must not swallow these
+# review/PR scratch files: a 'git add -A' must not swallow these.
+# `.pr[-_]body*` and `.pr[-_]diff*` were too narrow: a review pass writes
+# `.pr_pass1…` and `.pr_evidence…` too, and 0.8.2's release branch committed two of
+# them before the `docs` job caught them.
 .review-diff*
-.pr[-_]body*
-.pr[-_]diff*
+.pr[-_]*

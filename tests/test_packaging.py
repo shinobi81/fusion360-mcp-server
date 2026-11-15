@@ -16,9 +16,9 @@ carry the add-in, when the build stops mapping the add-in into the package, maps
 add-on package the tree does not hold or leaves a package it does hold out of the wheel,
 or is told to include package data, when `SECURITY.md` answers the supported-versions
 question with a series nobody is on, when a workflow or a documented command syncs from
-a lock nobody checks - or when `SECURITY.md`, `AGENTS.md`, `CONTRIBUTING.md`,
-`README.md` or `docs/TESTING.md` stops showing that command - or when the changelog
-opens at a release other than the one being cut.
+a lock nobody checks - or when one of the pages `SYNC_DOCUMENTS` names stops showing
+that command - or when the changelog opens at a release other than the one being
+cut.
 """
 
 from __future__ import annotations
