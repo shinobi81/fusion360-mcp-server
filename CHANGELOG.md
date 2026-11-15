@@ -7,6 +7,73 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.8.3] - 2026-11-15
+
+Three tools that had never worked now do, and the rest of the release is the dedupe
+that was hiding them. Everything below was checked against Fusion 2706 in a scratch
+document, emptied again afterwards; no tool was renamed and no response field was
+removed, so a caller reading the old keys is unaffected.
+
+### Fixed
+
+- **`create_thread` never created a thread.** It handed a `ThreadDataQuery` to
+  `ThreadFeatures.createInput`, which takes a `ThreadInfo` - measured on 2706 as
+  "argument 3 of type `ThreadInfo`" - so every call returned an error envelope and
+  mock mode was the only mode it worked in. It builds the `ThreadInfo` now, so
+  `is_internal`, `thread_type`, `thread_designation` and `thread_class` reach the
+  feature: verified live as `6g` for an external thread and `6H` for an internal one,
+  which is what ISO 965 assigns. Fusion sizes the body to the designation - an `M6x1`
+  cosmetic thread on a Ø20 mm shaft leaves a Ø5.88 mm one - and the tool says so.
+- **`ruled_surface` could not call the API it documented.** It passed a raw edge and
+  two arguments to `createInput`, whose shipped signature is
+  `createInput(profile, distance, angle, type)` with a **Profile** first; every call
+  raised. It builds the profile with `createBRepEdgeProfile` now and maps `rule_type`
+  to `RuledSurfaceTypes`. Verified live on a sheet body's boundary edge: the surface
+  appeared and the bounding box grew by exactly the distance asked for.
+- **`project_geometry` called the retired `Sketch.project`,** which cannot express
+  linkage, so its `is_linked` argument did nothing. It calls `project2` now; verified
+  live, the projected curves carry `isLinked = False` and `True` on the sketch
+  entities themselves.
+- **Every mutation in the Manufacture workspace silently lost its `deltas`.**
+  `_snapshot` read `app.activeProduct`, which is the CAM product there and has no
+  `rootComponent`, so the snapshot returned nothing and no delta was attached - the
+  signal this project tells agents to rely on. It goes through `_design()`, and so
+  does `_orient_camera`, which had the same read one method away and made
+  `render_view(view=...)` raise there.
+- **`create_section_analysis` reported no name**, discarding the analysis `add()`
+  returned, so the section it had just made could not be referenced. It reports
+  `analysis_name`.
+- **`AGENTS.md` said "Available tools (97)" and listed 96** - `list_edges` was absent,
+  and nothing read the page. A guard now pins both directions against the registry.
+- **`FUSION_MCP_PORT` had two parsers with two failure modes.** The server warns and
+  falls back to 9876, the CLI default raised at start-up, and the add-in raised too.
+  All three tolerate a typo now, and the add-in logs the fallback.
+- **A ruled surface on a solid's edge returned `UNKNOWN` with no hints.** Fusion
+  answers "invalid free edge" (every edge of a solid is shared by two faces) and no
+  rule matched it; a rule in both mirrors says what a free edge is and how to
+  get one.
+- **Exporting to a bare filename raised.** `os.makedirs(os.path.dirname(path))` fails
+  on an empty dirname, in the STL/STEP path and in the f3d one.
+
+### Changed
+
+- **`tools.py` 3,101 -> 2,479 lines.** fillet/chamfer, the two joint tools and the four
+  profile-based features had hand-copied schema blocks; they share them now, and every
+  entry is a `_tool(...)` call instead of a five-level dict literal. The wire format is
+  unchanged: all 97 `(name, title, description, inputSchema, annotations)` tuples were
+  compared with `json.dumps(sort_keys=True)` before and after.
+- **`server.py`'s resource reads have one failure boundary** instead of five copies of
+  it, and the resource templates are advertised from the table that renders them. The
+  prompt texts are unchanged and still asserted through a real client session.
+- **The add-in has one extreme-plane rule, one `_sketch()` resolver, one `_sweep`,**
+  and one `_export_body` for STL and STEP - which is now tested (export had no test
+  that could reach it before) rather than merged on trust.
+- **`AGENTS.md`'s tool catalogue is an index** (448 -> 296 lines) pointing at
+  `docs/TOOLS.md`, which is now the single place a tool's description lives.
+- **Tests and prose:** 1,072 -> 1,119 tests, combined coverage 64% -> 68% (`src/`
+  99%), and comments that narrated past incidents now state the constraint. Ten
+  comments cited section numbers of files that are git-excluded or gitignored.
+
 ## [0.8.2] - 2026-11-15
 
 A patch release whose payload is documentation and the guards that keep it honest. No
@@ -766,6 +833,7 @@ reporting a result it had only echoed back.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.8.3]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.7.3...v0.8.0
