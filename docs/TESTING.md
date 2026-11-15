@@ -88,13 +88,16 @@ uv run python scripts/reload_addin.py            # reload, then verify
 uv run python scripts/reload_addin.py --check    # verify only, change nothing
 ```
 
-It sends `reload_handler` (which reloads `hints`, `rules`, `hole_geometry`,
-`parameter_units`, `mutation_commands` and `command_handler`, in that order) and then
-compares the running class's **method names** with the methods the file declares,
-printing the loaded path. Exit 1 means the sets differ. What "ok" therefore means is
-narrow, and the script's own output says so: editing a method *body* changes no name
-and still prints ok, so reload whenever you have pulled, not only when the check
-complains.
+It sends `reload_handler`, which re-executes the modules in `RELOAD_ORDER` - the
+sibling modules a handler module imports at module scope, then the command modules,
+`command_handler` last - and prints that list on every run. It then compares the
+running class's **method names**, read up its `__mro__`, with the methods the command
+modules declare, printing the loaded path. `COMMAND_MODULES` is the one list of
+command modules, and `tests/test_reload_addin.py` fails if the add-in's copy of the
+reload order drifts from the script's. Exit 1 means the sets differ. What "ok"
+therefore means is narrow, and the script's own output says so: editing a method *body*
+changes no name and still prints ok, so reload whenever you have pulled, not only when
+the check complains.
 
 Two things it cannot cover, both printed on every run: `event_bridge.py` and
 `socket_server.py` are not reloaded (restart the add-in for those), and the check needs

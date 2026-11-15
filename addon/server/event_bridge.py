@@ -24,6 +24,25 @@ log = get_logger("bridge")
 CUSTOM_EVENT_ID = "Fusion360MCP_BridgeEvent"
 TIMER_INTERVAL_MS = 200  # backup polling interval
 
+#: The modules under ``server/`` that declare command methods, in reload order:
+#: anything the next module inherits from first, ``command_handler`` last, because a
+#: module re-executed after its importer leaves the importer holding the old class.
+#: The add-in cannot import ``scripts/reload_addin.py``, so this is its own copy of
+#: that list; ``tests/test_reload_addin.py`` fails when the two disagree.
+COMMAND_MODULES = ("command_handler",)
+
+#: Everything ``reload_handler`` re-executes, in dependency order: the sibling modules
+#: a command module imports at module scope, then ``COMMAND_MODULES``.  A new domain
+#: module is one entry here.
+RELOAD_ORDER = (
+    "hints",
+    "rules",
+    "hole_geometry",
+    "parameter_units",
+    "mutation_commands",
+    *COMMAND_MODULES,
+)
+
 
 class WorkItem:
     """One unit of work submitted from a socket thread."""
@@ -233,27 +252,23 @@ class EventBridge:
     # ------------------------------------------------------------------
 
     def reload_handler(self):
-        """Reimport handler modules and replace the active handler instance.
+        """Reimport the handler modules and replace the active handler instance.
 
-        Called on the main thread (from drain_queue).  Sibling modules
-        are reloaded first, in dependency order, so command_handler picks
-        up their changes too.  A module command_handler imports at module
-        scope is only re-read from sys.modules, so it belongs in this list.
+        Called on the main thread (from drain_queue).  ``RELOAD_ORDER`` is the
+        dependency order: a module is re-read from sys.modules unless it is listed,
+        and a module the next one imports at module scope is re-executed before its
+        importer re-binds it - ``command_handler`` is last so ``CommandHandler`` is
+        composed from the freshly loaded base and mixins.
         """
         import importlib
 
-        from . import command_handler as ch_mod
-        from . import hints as hints_mod
-        from . import hole_geometry as hole_mod
-        from . import mutation_commands as mutation_mod
-        from . import parameter_units as units_mod
-        from . import rules as rules_mod
-
-        for mod in (hints_mod, rules_mod, hole_mod, units_mod, mutation_mod, ch_mod):
-            importlib.reload(mod)
+        for stem in RELOAD_ORDER:
+            importlib.reload(importlib.import_module(f".{stem}", __package__))
         # A fresh instance builds its own dispatch table, so a reloaded handler
         # cannot answer from the previous one's bound methods.
-        self._handler = ch_mod.CommandHandler()
+        self._handler = importlib.import_module(
+            ".command_handler", __package__
+        ).CommandHandler()
         log.info("CommandHandler reloaded")
 
     # ------------------------------------------------------------------

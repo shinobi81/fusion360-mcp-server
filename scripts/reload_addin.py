@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reload the add-in's handler modules, then prove the running class is that file.
+"""Reload the add-in's handler modules, then prove the running class is those files.
 
 The add-in loads ``command_handler`` from the checkout and keeps it in memory, so a
 ``git pull`` changes what is on disk and nothing about what Fusion executes.  Worse,
@@ -7,17 +7,20 @@ The add-in loads ``command_handler`` from the checkout and keeps it in memory, s
 answers with the new file even when the loaded class is old, which is how a live check
 can pass for days after a merge that was never loaded.
 
-So the check is not "does the file look right" but "does the running class have
-exactly the methods the file declares".  A merge that adds or removes a method is
-caught, and the loaded file's path is printed - a copy in the AddIns folder masquerading
-as the checkout is visible rather than assumed.
+So the check is not "do the files look right" but "does the running class have exactly
+the methods the files declare".  Those methods need not sit on one class in one file: a
+base plus a mixin per domain is the layout the check is built for, so it reads one
+module at a time (``COMMAND_MODULES``) and one class at a time, up ``cls.__mro__``.  A
+merge that adds or removes a method is caught, and the loaded file's path is printed - a
+copy in the AddIns folder masquerading as the checkout is visible rather than assumed.
 
     uv run python scripts/reload_addin.py            # reload, then verify
     uv run python scripts/reload_addin.py --check    # verify only, change nothing
 
-``reload_handler`` reloads ``hints``, ``rules``, ``hole_geometry``, ``parameter_units``,
-``mutation_commands`` and ``command_handler``.  It does **not** reload ``event_bridge``
-or ``socket_server``: a change in either still needs the add-in stopped and started.
+``reload_handler`` re-executes ``RELOAD_ORDER``: the sibling modules a handler module
+imports at module scope, then ``COMMAND_MODULES``, that list being base first and
+``command_handler`` last.  It does **not** reload ``event_bridge`` or ``socket_server``:
+a change in either still needs the add-in stopped and started.
 """
 
 from __future__ import annotations
@@ -29,41 +32,90 @@ from pathlib import Path
 
 from fusion360_mcp.connection import Fusion360Connection, FusionError
 
-HANDLER = (
-    Path(__file__).resolve().parent.parent / "addon" / "server" / "command_handler.py"
+SERVER = Path(__file__).resolve().parent.parent / "addon" / "server"
+HANDLER = SERVER / "command_handler.py"
+
+#: The modules under ``addon/server/`` that declare command methods, in reload order:
+#: anything the next module inherits from first, ``command_handler`` last, because a
+#: module re-executed after its importer leaves the importer holding the old class.
+#: The add-in keeps its own copy - it cannot import this file - and
+#: ``tests/test_reload_addin.py`` fails if the two disagree.
+COMMAND_MODULES: tuple[str, ...] = ("command_handler",)
+
+#: Every module ``reload_handler`` re-executes, in order.  The printed success line is
+#: this tuple, so a module added to the reload is named in one place.
+RELOAD_ORDER: tuple[str, ...] = (
+    "hints",
+    "rules",
+    "hole_geometry",
+    "parameter_units",
+    "mutation_commands",
+    *COMMAND_MODULES,
 )
 
 
-def declared_methods(source: str, path: Path = HANDLER) -> set[str]:
-    """The methods ``CommandHandler`` declares in *source*, ignoring dunders."""
-    tree = ast.parse(source)
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and node.name == "CommandHandler":
-            return {
-                item.name
-                for item in node.body
-                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
-                and not item.name.startswith("__")
-            }
-    raise SystemExit(f"{path} declares no CommandHandler; this check would be vacuous")
+def _is_command_class(name: str) -> bool:
+    """Whether a class called *name* declares methods the running class answers.
+
+    "Ends with ``Commands``" alone is not enough: a base class is not named that way,
+    and its methods are on ``CommandHandler`` too, so they would read as drift.
+    """
+    return "Handler" in name or name.endswith("Commands")
+
+
+def declared_methods(sources: dict[str, str]) -> set[str]:
+    """The command methods *sources* declare, dunders excluded.
+
+    *sources* maps a filename under ``addon/server/`` to its text.  Every module in
+    ``COMMAND_MODULES`` has to be in it, and has to declare a command class: a check
+    that quietly read five of six modules, or found no class in one of them, would pass
+    for ever without comparing the commands it exists to compare.
+    """
+    required = {f"{stem}.py" for stem in COMMAND_MODULES}
+    absent = sorted(required - set(sources))
+    if absent:
+        raise SystemExit(
+            f"{', '.join(absent)} named in COMMAND_MODULES but never read; "
+            "this check would be vacuous"
+        )
+
+    declared: set[str] = set()
+    for filename, source in sources.items():
+        classes = [
+            node
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.ClassDef) and _is_command_class(node.name)
+        ]
+        if not classes and filename in required:
+            raise SystemExit(
+                f"{filename} declares no command class; this check would be vacuous"
+            )
+        declared.update(
+            item.name
+            for node in classes
+            for item in node.body
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and not item.name.startswith("__")
+        )
+    return declared
 
 
 def compare(declared: set[str], loaded: set[str]) -> tuple[set[str], set[str]]:
-    """``(missing, extra)`` - what the file has that the running class does not.
+    """``(missing, extra)`` - what the files have that the running class does not.
 
-    ``missing`` is the dangerous direction: the file is newer and Fusion is executing
-    the old class.  ``extra`` means the add-in is running code that is no longer on
-    disk, which is the same problem seen from the other side.
+    ``missing`` is the dangerous direction: a file is newer and Fusion is executing the
+    old class.  ``extra`` means the add-in is running code that is no longer on disk,
+    which is the same problem seen from the other side.
     """
     return declared - loaded, loaded - declared
 
 
 def loaded_class(connection: Fusion360Connection) -> dict:
     """Ask the add-in which file it loaded and which methods its class has."""
-    # ``vars(cls)`` with a callable test, not ``dir(cls)``: the latter also lists the
-    # class's attribute tables (_VIEW_DIRS, _MUTATION_COMMANDS, ...) - the first
-    # version counted those as "extra" methods - and walks the MRO, so an inherited
-    # method would read as drift the day this class gains a base.
+    # ``cls.__mro__`` with ``vars``, not ``dir(cls)`` alone: a method inherited from a
+    # base or a mixin has to count, and taking ``vars`` per class is what keeps the
+    # class's attribute tables (_VIEW_DIRS, _MUTATION_COMMANDS, ...) out - ``dir()``
+    # lists those, and the first version reported them as "extra".
     code = (
         "import sys\n"
         "mods = [m for n, m in sys.modules.items()\n"
@@ -74,9 +126,12 @@ def loaded_class(connection: Fusion360Connection) -> dict:
         "{\n"
         '    "file": mods[0].__file__,\n'
         '    "methods": sorted(\n'
-        "        name\n"
-        "        for name in vars(cls)\n"
-        '        if callable(getattr(cls, name)) and not name.startswith("__")\n'
+        "        {\n"
+        "            name\n"
+        "            for klass in cls.__mro__\n"
+        "            for name in vars(klass)\n"
+        '            if callable(getattr(cls, name)) and not name.startswith("__")\n'
+        "        }\n"
         "    ),\n"
         "}\n"
     )
@@ -98,12 +153,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--host", default=None, help="add-in host")
     parser.add_argument("--port", type=int, default=None, help="add-in port")
-    parser.add_argument(
-        "--file",
-        type=Path,
-        default=HANDLER,
-        help=f"the file to compare against (default: {HANDLER})",
-    )
     args = parser.parse_args(argv)
 
     connection = Fusion360Connection(
@@ -130,10 +179,7 @@ def main(argv: list[str] | None = None) -> int:
             if not reply.get("ok") or not reply.get("reloaded"):
                 print(f"reload refused: {reply}", file=sys.stderr)
                 return 1
-            print(
-                "reloaded: hints, rules, hole_geometry, parameter_units, "
-                "mutation_commands, command_handler"
-            )
+            print(f"reloaded: {', '.join(RELOAD_ORDER)}")
             print("  not reloaded: event_bridge, socket_server")
 
         loaded = loaded_class(connection)
@@ -146,12 +192,22 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         connection.disconnect()
 
-    declared = declared_methods(args.file.read_text(encoding="utf-8"), args.file)
+    sources: dict[str, str] = {}
+    for stem in COMMAND_MODULES:
+        path = SERVER / f"{stem}.py"
+        # A module named but missing is left out of the mapping rather than raised on
+        # here: ``declared_methods`` names every one of them in a single line, instead
+        # of the reader meeting a FileNotFoundError traceback half-way through.
+        if path.is_file():
+            sources[path.name] = path.read_text(encoding="utf-8")
+    declared = declared_methods(sources)
     missing, extra = compare(declared, set(loaded["methods"]))
 
     print(f"add-in loaded: {loaded['file']}")
-    print(f"comparing with: {args.file}")
-    if loaded["file"] and Path(loaded["file"]).resolve() != args.file.resolve():
+    print(f"comparing with: {', '.join(sources)} in {SERVER}")
+    # Only ``command_handler`` has a path of its own: the domain modules are reached
+    # through it, so a different command_handler.py loaded is a different tree.
+    if loaded["file"] and Path(loaded["file"]).resolve() != HANDLER.resolve():
         print("  (a different file is loaded - is an AddIns copy in use?)")
     if missing:
         print(f"MISSING from the running class: {', '.join(sorted(missing))}")
@@ -159,7 +215,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"EXTRA in the running class:     {', '.join(sorted(extra))}")
     if missing or extra:
         print(
-            "\nThe running class is not this file. Reload with "
+            "\nThe running class is not these files. Reload with "
             "`uv run python scripts/reload_addin.py`, or restart the add-in if the "
             "change is in event_bridge.py or socket_server.py.",
             file=sys.stderr,
