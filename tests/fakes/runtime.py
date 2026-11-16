@@ -408,6 +408,20 @@ def _ruled_surface_types() -> types.SimpleNamespace:
     )
 
 
+def _pattern_distance_types() -> types.SimpleNamespace:
+    """``PatternDistanceType``: the member ``rectangular_pattern`` asks for.
+
+    Fusion offers a spacing and an extent form; only
+    ``SpacingPatternDistanceType`` is reachable from the handler, so only it is
+    modelled - a member nobody calls would be a guess about Fusion's naming
+    rather than a measurement.  The value is the attribute name so a test can
+    assert which one reached the input without a lookup table.
+    """
+    return types.SimpleNamespace(
+        SpacingPatternDistanceType="SpacingPatternDistanceType",
+    )
+
+
 def _primitives() -> types.ModuleType:
     """``tests.fakes.bodies``, imported here rather than at module scope.
 
@@ -459,6 +473,7 @@ def install() -> None:
         JointGeometry=FakeJointGeometry,
         DimensionOrientations=_dimension_orientations(),
         RuledSurfaceTypes=_ruled_surface_types(),
+        PatternDistanceType=_pattern_distance_types(),
         ThreadInfo=importlib.import_module("tests.fakes.features").FakeThreadInfo,
         ThreadDataQuery=importlib.import_module(
             "tests.fakes.features"

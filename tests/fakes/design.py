@@ -26,11 +26,14 @@ from .bodies import FakeBody, FakeFace
 from .collection import FakeCollection, FakeDeletable, FakeItemCollection
 from .features import (
     FakeAnalyses,
+    FakeCircularPatternFeatures,
     FakeDraftFeatures,
     FakeExportManager,
     FakeFeature,
     FakeInterference,
+    FakeMirrorFeatures,
     FakeProfile,
+    FakeRectangularPatternFeatures,
     FakeRuledSurfaceFeatures,
     FakeThreadFeatures,
 )
@@ -782,6 +785,9 @@ class FakeFeatures:
         self.baseFeatures = FakeBaseFeatures()
         self.threadFeatures = FakeThreadFeatures()
         self.ruledSurfaceFeatures = FakeRuledSurfaceFeatures()
+        self.mirrorFeatures = FakeMirrorFeatures(design)
+        self.rectangularPatternFeatures = FakeRectangularPatternFeatures()
+        self.circularPatternFeatures = FakeCircularPatternFeatures()
 
     def createPath(self, curve):
         """``features.createPath``: a sweep needs a Path around the curve."""
