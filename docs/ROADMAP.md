@@ -76,3 +76,41 @@ and `test_addon_sources.py` reads the add-in's tokens because both PEP 758 spell
 the same. Each asserts on data rather than on behaviour.
 
 Nothing else is queued behind this section; sections 1 and 2 are both closed.
+
+## 3. The add-in's untested half - open
+
+The combined coverage floor is 59 and `addon/server` sits at 60, so the floor is not the
+problem the number describes: it was set low on purpose, because the add-in's CAM, view
+sheet and viewport families only run inside Fusion. The cost is that a large share of the
+add-in has never been executed by anything, and a module nobody runs is a module where a
+refusal's wording, a missing `participantBodies` or a renamed API call can sit unnoticed.
+
+Measured on 0.8.5 (`coverage report --include="addon/server/*"`):
+
+| Module | Cover | What the missing lines reach |
+| --- | --- | --- |
+| `handler_cam` | 17% | setups, operations, toolpaths, post-processing |
+| `handler_surface` | 22% | patch, stitch, thicken, ruled, trim |
+| `handler_export` | 23% | STL/STEP/F3D, view sheets, the generic `export` |
+| `handler_scene` | 41% | scene description, measurement, bounding box, object info |
+| `socket_server` | 48% | framing, malformed input, timeouts, disconnects |
+| `handler_assembly` | 62% | joints, components, rigid groups |
+
+The order of work is the order a test can be trusted in, not the order of the numbers:
+
+1. **`socket_server` and `handler_scene` first.** Both are drivable from `tests/fakes/`
+   today - a real socket round-trip needs no Fusion at all, and the scene handlers read
+   objects the design fake already models. These are the two places where a test proves
+   something about our own code rather than about our imitation of Autodesk's.
+2. **Then the three API-heavy modules, at the call boundary.** A fake that declares the
+   real signature pins that the handler called it with those arguments; it does not pin
+   that Fusion accepts them. That is a weaker claim and worth stating as one in each
+   test's docstring, the way `test_addon_hole.py` already does.
+3. **Only then measure against Fusion 2706** - the new tests' claim about Fusion belongs
+   in the PR body with the version it was run on, and a line the fakes exercise is not
+   evidence that the feature works.
+
+Not part of this: moving the 59 floor. Raising it to whatever the new figure becomes is
+a number chasing its own measurement; the reason to write these tests is the refusals
+and return values nobody has looked at. The floor moves afterwards only if that is what
+someone decides to guard.
