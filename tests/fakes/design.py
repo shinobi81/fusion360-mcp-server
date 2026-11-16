@@ -1235,23 +1235,45 @@ class FakeRigidGroup(FakeDeletable):
         self.includeChildren = include_children
 
 
-class FakeRigidGroups(FakeCollection):
+class FakeRigidGroups:
     """``root.rigidGroups``: ``add(occurrences, includeChildren)`` - two arguments.
 
     A rigid group is one call in Fusion, not an input/feature pair, and its second
     argument is the flag ``create_rigid_group``'s ``include_children`` becomes.
+    That two-argument ``add`` is why this is not a ``FakeCollection``: inheriting a
+    base whose ``add`` takes one item would leave this class overriding it with a
+    different signature - ``py/overridden-method-signature``, the sibling of the
+    ``py/init-calls-subclass`` lesson ``FakeCollection`` records.  So the three
+    members the add-in uses are carried here instead: ``add`` for
+    ``create_rigid_group``, and ``count``/``item(i)`` for ``delete_all``'s sweep.
     """
 
     def __init__(self):
-        super().__init__()
+        self._items: list[FakeRigidGroup] = []
         self.added: list[FakeRigidGroup] = []
+
+    @property
+    def count(self) -> int:
+        return len(self._items)
+
+    def item(self, index: int) -> FakeRigidGroup:
+        return self._items[index]
 
     def add(self, occurrences, include_children) -> FakeRigidGroup:
         group = FakeRigidGroup(
             f"Rigid Group{self.count + 1}", list(occurrences), include_children
         )
+        # ``FakeDeletable.deleteMe()`` removes the group from the collection it
+        # lives in, which is how ``delete_all`` proves the design is empty.
+        group._collection = self
+        self._items.append(group)
         self.added.append(group)
-        return super().add(group)
+        return group
+
+    def remove(self, group: FakeRigidGroup) -> None:
+        """What ``FakeDeletable.deleteMe()`` calls."""
+        if group in self._items:
+            self._items.remove(group)
 
 
 class FakeRoot:
