@@ -426,6 +426,10 @@ class FakeBody(FakeDeletable):
         self.boundingBox = bounding_box or FakeBoundingBox()
         self.faces = faces if faces is not None else FakeCollection([FakeFace()])
         self.edges = edges if edges is not None else FakeEdges([])
+        #: ``get_object_info`` reports a vertex count and nothing here builds a
+        #: vertex, so the collection is empty rather than absent: a count of 0 is a
+        #: real answer, an AttributeError is not.
+        self.vertices = FakeCollection()
         #: Fusion's stable per-body id, distinct per body - a shared ``None`` would
         #: make every sibling look like the export target, and the sweep would hide
         #: nothing while the test read as green.

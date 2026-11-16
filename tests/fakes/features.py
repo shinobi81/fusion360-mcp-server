@@ -94,20 +94,32 @@ class FakeMeasureResult:
 
 
 class FakeMeasureManager:
-    """``app.measureManager``: the minimum-distance query ``measure_distance`` uses."""
+    """``app.measureManager``: the two queries the measure commands use.
+
+    ``measureAngle`` answers in **radians**, as Fusion does, so a reply that
+    skipped ``math.degrees`` reads 1.5708 where the caller asked for 90.  Both
+    queries record into ``measured``, because the command's job is to resolve the
+    names to the entities it measures - a face pair, for the angle.
+    """
 
     def __init__(
         self,
         value: float = 5.0,
         point_one: tuple[float, float, float] = (0.0, 0.0, 0.0),
         point_two: tuple[float, float, float] = (5.0, 0.0, 0.0),
+        angle: float = 0.0,
     ):
         self._result = FakeMeasureResult(value, point_one, point_two)
+        self._angle = angle
         self.measured: list[tuple] = []
 
     def measureMinimumDistance(self, entity_one, entity_two) -> FakeMeasureResult:
         self.measured.append((entity_one, entity_two))
         return self._result
+
+    def measureAngle(self, entity_one, entity_two) -> FakeMeasureResult:
+        self.measured.append((entity_one, entity_two))
+        return FakeMeasureResult(self._angle, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))
 
 
 class FakeInterference:

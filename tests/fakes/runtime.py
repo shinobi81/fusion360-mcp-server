@@ -125,6 +125,19 @@ class FakeObjectCollection:
         return len(self.items)
 
 
+class FakeMatrix3D:
+    """``adsk.core.Matrix3D.create()``: the identity placement, and nothing else.
+
+    ``create_component`` passes one to ``occurrences.addNewComponent`` and never
+    reads it back, so only the factory is modelled: a matrix that carried
+    numbers nothing measured would be fiction with a shape.
+    """
+
+    @classmethod
+    def create(cls) -> "FakeMatrix3D":
+        return cls()
+
+
 class FakeValueInput:
     """``adsk.core.ValueInput``: the two constructors, and which one was used.
 
@@ -236,6 +249,24 @@ class FakeJointGeometry:
         )
 
 
+class FakeUserCoordinateSystemGeometry:
+    """What ``UserCoordinateSystemGeometry_createByPoint(point)`` returns.
+
+    The factory is a module-level function in Fusion's binding, spelled with the
+    constructor in the name.  The handler never reads the geometry - it hands it
+    straight to ``userCoordinateSystems.createInput`` - so the fake keeps the
+    anchor point and nothing else, which is what lets a test assert where the UCS
+    was placed.
+    """
+
+    def __init__(self, point):
+        self.point = point
+
+    @staticmethod
+    def createByPoint(point) -> "FakeUserCoordinateSystemGeometry":
+        return FakeUserCoordinateSystemGeometry(point)
+
+
 def _joint_directions() -> types.SimpleNamespace:
     """The three members of ``JointDirections`` a joint motion can be given.
 
@@ -286,6 +317,20 @@ def _mesh_refinement_settings() -> types.SimpleNamespace:
     Fusion's naming rather than a measurement.
     """
     return types.SimpleNamespace(MeshRefinementMedium="medium")
+
+
+def _auto_constrain_result_types() -> types.SimpleNamespace:
+    """``AutoConstrainResultTypes``: the three options ``auto_constrain`` maps to.
+
+    The members are the ones the add-in asks for - 1 thorough, 2 fast, 3 may move
+    geometry within tolerance - and their values are the attribute names, so a test
+    reads which one reached the input without a lookup table.
+    """
+    return types.SimpleNamespace(
+        Option1AutoConstrainResultType="Option1AutoConstrainResultType",
+        Option2AutoConstrainResultType="Option2AutoConstrainResultType",
+        Option3AutoConstrainResultType="Option3AutoConstrainResultType",
+    )
 
 
 def _dimension_orientations() -> types.SimpleNamespace:
@@ -346,6 +391,7 @@ def install() -> None:
         Cylinder=FakeCylinderGeometry,
         ObjectCollection=FakeObjectCollection,
         ValueInput=FakeValueInput,
+        Matrix3D=FakeMatrix3D,
         OrientedBoundingBox3D=_primitives().FakeOrientedBoundingBox3D,
         Application=FakeApplication,
         CustomEventHandler=FakeCustomEventHandler,
@@ -354,6 +400,10 @@ def install() -> None:
         "adsk.fusion",
         DesignTypes=_design_types(),
         FeatureOperations=_feature_operations(),
+        AutoConstrainResultTypes=_auto_constrain_result_types(),
+        UserCoordinateSystemGeometry_createByPoint=(
+            FakeUserCoordinateSystemGeometry.createByPoint
+        ),
         JointDirections=_joint_directions(),
         JointQuadrantAngleTypes=_joint_quadrants(),
         JointKeyPointTypes=_joint_key_points(),
