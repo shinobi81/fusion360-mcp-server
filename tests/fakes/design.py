@@ -115,10 +115,13 @@ class FakeParameter(FakeDeletable):
 
     @property
     def value(self) -> float:
-        """A simplification: Fusion reads centimetres, so "1000 mm" is 100.0.
+        """The expression's leading number - **not** Fusion's centimetres.
 
-        Nothing reads this today; the tests assert on ``expression``, which is
-        what the handler must write, so the scale is not modelled.
+        Fusion answers ``Parameter.value`` in internal units, so ``"100 mm"`` is
+        ``10.0``; this fake splits the expression and returns the number verbatim,
+        so the same parameter reads back as ``100.0``.  The tests that assert on
+        ``value`` pin the field's wiring, not the conversion, and say so where they
+        assert it; ``expression`` is what the handler must write.
         """
         first = self.expression.split()[0] if self.expression else "0"
         return float(first)
@@ -1133,10 +1136,11 @@ class FakeConstructionAxisInput(FakeConstructionInput):
 class _FakeConstructionCollection(FakeCollection):
     """Shared half of the two construction collections: inputs, then a named item.
 
-    ``add`` refuses an input whose geometry was never set, because a construction
-    entity with no definition cannot exist.  The default names - "Construction
-    Plane1", "Construction Axis1" - are the *fake's*: the replies only have to
-    name the object ``add`` returned, and no test pins Fusion's own default.
+    ``add`` takes the input ``createInput`` returned and does not check that a
+    setter ran: no measurement says what Fusion does with an input whose geometry
+    was never set, so the fake does not refuse one.  The default names -
+    "Construction Plane1", "Construction Axis1" - are the *fake's*: the replies only
+    have to name the object ``add`` returned, and no test pins Fusion's own default.
     """
 
     _INPUT: type
@@ -1158,8 +1162,6 @@ class _FakeConstructionCollection(FakeCollection):
     def add(self, item) -> FakeDeletable:
         if not isinstance(item, self._INPUT):
             raise TypeError(f"add takes the input createInput returned, got {item!r}")
-        if item.setter is None:
-            raise RuntimeError(f"3 : a {self._NAME} needs a definition")
         return super().add(FakeDeletable(f"{self._NAME}{self.count + 1}"))
 
 

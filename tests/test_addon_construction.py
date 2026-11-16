@@ -8,10 +8,14 @@ These tests pin the call — the definition a plane was built from, the anchor a
 was placed on, the option an auto-constrain was asked for — because that is what a
 wrong argument would change while still returning ``ok: true``.
 
-Two of the fakes are new here and both declare the arity of the handler's call
-site, which is Fusion's: ``Sketch.offset(entities, direction, distance)`` (three
-arguments, an ``ObjectCollection`` first) and the AutoConstrain input/result pair,
-whose ``autoConstrain`` may answer ``None`` for a sketch Fusion will not adjust.
+Two of the fakes are the *sketch* pair the brief named, and both declare the arity
+of the handler's call site, which is Fusion's: ``Sketch.offset(entities, direction,
+distance)`` (three arguments, an ``ObjectCollection`` first) and the AutoConstrain
+input/result pair, whose ``autoConstrain`` may answer ``None`` for a sketch Fusion
+will not adjust.  The construction surface these tests also need - the plane and
+axis inputs, the UCS input, ``rigidGroups``, ``userCoordinateSystems`` - is new in
+``tests/fakes/design.py`` too, and every default *name* it invents ("Construction
+Plane1", "UCS1", "Rigid Group1") is the fake's: no test here pins one as Fusion's.
 """
 
 from __future__ import annotations

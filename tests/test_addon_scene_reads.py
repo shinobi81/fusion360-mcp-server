@@ -17,6 +17,13 @@ measured making:
   ``rename_body``, the command that *needs* the body to exist;
 * no measured Fusion refusal exists for renaming a body onto another body's name,
   so nothing here pins a collision refusal.
+
+The positive fixtures hold a decoy first in the collection the handler walks, so a
+read that stopped comparing names would answer for the decoy: each "the object that
+was asked for" test goes red if the comparison is deleted.  One name below is the
+*fake's*, not Fusion's: ``FakeRoot`` invents ``"Component1"`` for the root
+component, so ``test_list_components_names_the_root_and_each_occurrence`` pins that
+the root is named in the reply, not what Fusion calls it.
 """
 
 from __future__ import annotations
@@ -40,13 +47,24 @@ def _plate() -> FakeBody:
     )
 
 
+def _spacer() -> FakeBody:
+    """A decoy body, placed *before* the named one in every fixture that uses it.
+
+    A read that answered for the first body it saw, instead of the one it was
+    asked for, would report this box (20..21, not 0..10).
+    """
+    return FakeBody(
+        "Spacer", bounding_box=FakeBoundingBox((20.0, 20.0, 20.0), (21.0, 21.0, 21.0))
+    )
+
+
 def _measuring_app(manager: FakeMeasureManager):
     """The handler app ``measure_angle`` needs: it reads ``app.measureManager`` only."""
     return type("FakeApp", (), {"measureManager": manager})()
 
 
 def test_get_object_info_of_a_body_reports_its_counts_and_box(bound_handler):
-    handler = bound_handler(FakeDesign(features=0, bodies=[_plate()]))
+    handler = bound_handler(FakeDesign(features=0, bodies=[_spacer(), _plate()]))
 
     assert handler.get_object_info("Plate") == {
         "found": True,
@@ -69,7 +87,8 @@ def test_get_object_info_of_a_sketch_reports_its_profiles_and_curves(bound_handl
         sketch.sketchCurves.sketchLines.addByTwoPoints(
             FakePoint3D(0.0, float(row), 0.0), FakePoint3D(1.0, float(row), 0.0)
         )
-    handler = bound_handler(FakeDesign(features=0, sketches=[sketch]))
+    decoy = FakeSketch(name="Sketch2", profile_count=7)
+    handler = bound_handler(FakeDesign(features=0, sketches=[decoy, sketch]))
 
     assert handler.get_object_info("Sketch1") == {
         "found": True,
@@ -91,14 +110,18 @@ def test_get_object_info_of_a_name_that_is_not_there_reports_found_false(
     peer ``get_bounding_box`` answers the same way.  BODY_NOT_FOUND is pinned on
     ``rename_body`` below, where the handler really does refuse.
     """
-    handler = bound_handler(FakeDesign(features=0))
+    handler = bound_handler(FakeDesign(features=0, bodies=[_plate()]))
 
     assert handler.get_object_info("Ghost") == {"found": False, "name": "Ghost"}
 
 
 def test_get_bounding_box_reports_the_body_it_was_asked_for(bound_handler):
-    """The box, its size and its centre all come from the body that was named."""
-    handler = bound_handler(FakeDesign(features=0, bodies=[_plate()]))
+    """The box, its size and its centre all come from the body that was named.
+
+    ``_body_by_name`` walks the collection in order, so a lookup that stopped
+    comparing names answers with the decoy's box, twenty centimetres out.
+    """
+    handler = bound_handler(FakeDesign(features=0, bodies=[_spacer(), _plate()]))
 
     assert handler.get_bounding_box("Plate") == {
         "found": True,
@@ -198,6 +221,14 @@ def test_measure_angle_of_a_name_that_is_not_a_body_refuses(bound_handler):
 
 
 def test_get_parameters_lists_what_the_design_holds(bound_handler):
+    """All five reported fields, taken from the parameter each one belongs to.
+
+    ``value`` is the *fake's* number, not Fusion's reply: ``FakeParameter.value``
+    returns the expression's leading digits, so ``"100 mm"`` reads back as
+    ``100.0`` where Fusion answers 10.0 cm.  The assertion pins that the handler
+    passes the parameter's own ``value`` through, which is the wiring a wrong
+    field name would break; the unit conversion is not modelled by the fake.
+    """
     design = FakeDesign(features=2)
     design.userParameters.add(
         "width", FakeValueInput.createByString("100 mm"), "mm", "plate width"
