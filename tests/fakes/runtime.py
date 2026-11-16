@@ -197,6 +197,15 @@ def _design_types() -> types.SimpleNamespace:
     )
 
 
+def _document_types() -> types.SimpleNamespace:
+    """``DocumentTypes``: the one member ``new_document`` asks ``documents.add`` for.
+
+    Fusion also has a drawing document type; nothing here calls it, and a member
+    nobody calls would be a guess about Fusion's naming rather than a measurement.
+    """
+    return types.SimpleNamespace(FusionDesignDocumentType="FusionDesignDocumentType")
+
+
 class FakeJointGeometry:
     """``JointGeometry``: an origin and a right-handed axis frame.
 
@@ -430,6 +439,7 @@ def install() -> None:
         ValueInput=FakeValueInput,
         Color=FakeColor,
         Matrix3D=FakeMatrix3D,
+        DocumentTypes=_document_types(),
         OrientedBoundingBox3D=_primitives().FakeOrientedBoundingBox3D,
         Application=FakeApplication,
         CustomEventHandler=FakeCustomEventHandler,

@@ -34,6 +34,7 @@ from .features import (
     FakeRuledSurfaceFeatures,
     FakeThreadFeatures,
 )
+from .mesh import FakeMeshBodies
 from .runtime import (
     DIRECT,
     PARAMETRIC,
@@ -1288,6 +1289,7 @@ class FakeRoot:
         design: FakeDesign | None = None,
         sketches=(),
         bodies=None,
+        mesh_bodies=(),
     ):
         #: The *fake's* root name - no measurement pinned what Fusion calls the root
         #: component of a new design - and ``list_components`` reports it as the
@@ -1298,6 +1300,9 @@ class FakeRoot:
             design=design,
         )
         self.sketches = FakeSketches(list(sketches))
+        #: Fusion keeps mesh bodies apart from B-rep bodies; ``compare_meshes`` walks
+        #: this collection by name. Empty until a fixture supplies one.
+        self.meshBodies = FakeMeshBodies(list(mesh_bodies))
         self.features = FakeFeatures(design)
         self.joints = FakeJoints()
         self.asBuiltJoints = FakeAsBuiltJoints()
@@ -1360,6 +1365,7 @@ class FakeDesign:
         sketches=(),
         bodies=None,
         interferences=(),
+        mesh_bodies=(),
     ):
         self.marker = features if marker is None else marker
         self.features = features
@@ -1380,7 +1386,7 @@ class FakeDesign:
         self.appearances = FakeAppearances()
         self.interference = FakeInterference(list(interferences))
         self._timeline = FakeTimeline(self)
-        self.rootComponent = FakeRoot(self, sketches, bodies)
+        self.rootComponent = FakeRoot(self, sketches, bodies, mesh_bodies)
         self.undo_commands_executed = 0
         #: Fusion's design goes invalid when its document is closed, and its
         #: properties then raise "4 : An API Object refers to a deleted Object".
