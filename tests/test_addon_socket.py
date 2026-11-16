@@ -86,9 +86,9 @@ def _exchange(payload: bytes, timeout: float = _TIMEOUT, bridge=None):
     )
     thread.start()
 
-    # Bounded before the write: a payload past the handler's buffer cap makes it
-    # close the connection while this is still sending, and a client that has
-    # nothing left to say has already done what the write was for.
+    # Bounded before the write: a handler that never reads must not hang the test,
+    # and a client that has nothing left to say has already done what the write
+    # was for.
     client_end.settimeout(timeout)
     with suppress(OSError, socket.timeout):
         client_end.sendall(payload)
@@ -325,17 +325,36 @@ def test_a_line_that_is_not_text_closes_without_answering(caplog):
     assert "Client handler error" in caplog.text
 
 
-def test_an_enormous_line_is_refused_without_buffering_it_all(caplog):
+def test_an_enormous_line_is_refused_without_buffering_it_all(
+    server, monkeypatch, caplog
+):
     """Past ``_MAX_BUFFER_BYTES`` with no newline, the connection is dropped.
 
-    The log line is what makes this a test of the cap: an unterminated buffer that
-    simply reaches end of input is closed too, so "nothing was dispatched and the
-    stream ended" would pass with no cap at all.
-    """
-    bridge, replies = _exchange(b"x" * (socket_server._MAX_BUFFER_BYTES + 1))
+    The cap is patched down to 64 KiB rather than writing the shipped 16 MiB: past
+    the cap the handler has grown ``buf`` quadratically and then hangs up mid-write,
+    and on the macOS CI job that write never finished inside the bound the client
+    gave it - the handler saw end of input and took the ordinary disconnect path
+    instead of the cap. A small cap keeps the line enormous relative to it while
+    the write stays cheap and complete.
 
-    assert bridge.commands == []
-    assert replies == []
+    The claim is behavioural: the server ends the stream while this peer's write
+    side is still open, and nothing reaches the bridge. The log line is
+    supplementary - an unterminated buffer that merely reaches end of input closes
+    the same way, and only the still-open write side tells the two apart.
+    """
+    cap = 64 * 1024
+    monkeypatch.setattr(socket_server, "_MAX_BUFFER_BYTES", cap)
+
+    with _Peer(server) as peer:
+        # A failed write is tolerated: the server hangs up only because of the cap,
+        # so the failure is the behaviour, not an error in the test. cap + 1 bytes
+        # means the cap is crossed on the last byte, leaving nothing unread and
+        # making the server's close a clean FIN rather than a reset on every
+        # platform.
+        with suppress(BrokenPipeError, ConnectionResetError):
+            peer.send("x" * (cap + 1))
+        assert peer.closed() is True, "a line past the cap must not hold the connection"
+    assert server._bridge.commands == []
     assert "Client buffer over" in caplog.text
 
 
