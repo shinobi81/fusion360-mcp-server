@@ -428,6 +428,13 @@ def test_a_started_listener_serves_a_client_and_releases_its_port(server):
     parked until after the read: a handler free to loop notices ``_running``
     going false and closes its own socket, so only a handler that cannot close
     it can show that ``stop()`` did.
+
+    The freed port is proven by connecting, not by binding: this test makes the
+    server the side that closed first, so its end of the connection is in
+    TIME_WAIT, and a plain ``bind`` is refused there until the state expires
+    (Linux, macOS - the reason ``_bind_socket`` sets ``SO_REUSEADDR``). Giving the
+    probe that option instead would defeat the check on Windows, where a second
+    socket carrying it can bind over a live listener.
     """
     port = server._socket.getsockname()[1]
     bridge = server._bridge
@@ -443,8 +450,8 @@ def test_a_started_listener_serves_a_client_and_releases_its_port(server):
             assert peer.closed() is True, "stop() must close the client it accepted"
         finally:
             bridge.release()
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-        probe.bind(("127.0.0.1", port))
+    with pytest.raises(ConnectionRefusedError):
+        socket.create_connection(("127.0.0.1", port), timeout=_TIMEOUT)
 
 
 def test_starting_a_running_server_answers_false(server):
