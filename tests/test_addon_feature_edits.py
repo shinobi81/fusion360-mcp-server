@@ -224,7 +224,7 @@ def test_split_face_splits_the_faces_at_the_indices_given(plate):
 
 
 def test_split_face_without_indices_splits_every_face_of_the_named_body(plate):
-    """The default is every face of *that* body - not of the first body."""
+    """The default is every face of *that* body, on the XY plane, extended."""
     root = plate._root()
 
     plate.split_face("Bracket")
@@ -232,6 +232,8 @@ def test_split_face_without_indices_splits_every_face_of_the_named_body(plate):
     inp = root.features.splitFaceFeatures.added[0]
     assert list(inp.faces) == list(root.bRepBodies.item(1).faces)
     assert len(list(inp.faces)) == len(box_faces())
+    assert inp.splittingPlane is root.xYConstructionPlane
+    assert inp.isSplittingToolExtended is True
 
 
 def test_offset_faces_defaults_to_the_face_in_the_top_plane(plate):
@@ -391,6 +393,9 @@ def test_create_box_parametric_extrudes_the_height_as_the_unit_it_was_given(box)
         "plate_t",
         "string",
     )
+    for inp in (numeric, expression):
+        assert inp.operation == "new_body"
+        assert inp.distance[0] is False
 
 
 def test_create_box_parametric_lays_the_placeholder_rectangle_out_at_one(box):
@@ -447,13 +452,17 @@ def test_create_box_parametric_names_the_body_it_built(box):
     """``body_name`` renames the feature's body, and the reply reads it back.
 
     The body is the extrude fake's model of a new-body feature.  What the handler
-    contributes - and what this asserts - is the rename: without it the reply
-    would carry the fake's own "Extrude1".
+    contributes - and what this asserts - is the rename, read off the created
+    feature: the reply alone would still say "Crate" if nothing were renamed.
     """
+    root = box._root()
+
     result = box.create_box_parametric(
         length=2.0, width=1.0, height=0.5, body_name="Crate"
     )
 
+    created = root.features.extrudeFeatures.created
+    assert created[0].bodies.item(0).name == "Crate"
     assert result["body_name"] == "Crate"
 
 

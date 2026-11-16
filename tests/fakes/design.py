@@ -499,6 +499,7 @@ class FakeExtrudeFeatures:
     def __init__(self):
         self.inputs: list[FakeExtrudeInput] = []
         self.added: list[FakeExtrudeInput] = []
+        self.created: list[FakeFeature] = []
 
     def createInput(self, profile, operation) -> FakeExtrudeInput:
         inp = FakeExtrudeInput(profile, operation)
@@ -512,7 +513,9 @@ class FakeExtrudeFeatures:
         # renames that body through ``Feature.bodies`` (the SDK's own property,
         # not measured here); a cut or a join would produce none, which is not
         # modelled and nothing here reads.
-        return FakeFeature("Extrude1", bodies=[FakeBody("Extrude1")])
+        feature = FakeFeature("Extrude1", bodies=[FakeBody("Extrude1")])
+        self.created.append(feature)
+        return feature
 
 
 class FakeSweepInput:

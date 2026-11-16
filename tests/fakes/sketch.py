@@ -157,7 +157,7 @@ class FakeSketchLineList:
     rather than nothing, and ``create_box_parametric`` dimensions two of the four
     (``item(0)`` horizontally, ``item(1)`` vertically) - so the return value has
     to be a collection or the command cannot run at all.  The **order** is this
-    fake's: the lines are built clockwise from the first corner, which makes
+    fake's: the lines are built counter-clockwise from the first corner, which makes
     ``item(0)`` the edge along sketch x and ``item(1)`` the one along sketch y.
     No test asserts Fusion's own ordering, only which orientation and value each
     index was dimensioned with.
