@@ -6,15 +6,22 @@ POST - ``POST / HTTP/1.1`` plus headers, then a JSON command - was dispatched as
 a command. Closing the connection on the first malformed complete line removes
 that path.
 
+What a malformed line costs is one connection: the listener has to survive it,
+which is why the same module also starts a real one and stops it, drives the
+accept loop's error arms, and pins what happens to a command whose client, or
+whose bridge, fails while it is in flight.
+
 ``socket_server.py`` imports no ``adsk``, so this runs in CI.
 """
 
 import errno
 import json
+import logging
 import pathlib
 import socket
 import sys
 import threading
+import time
 from contextlib import suppress
 
 import pytest
@@ -23,22 +30,53 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from addon.server import socket_server  # noqa: E402
 from addon.server.socket_server import Fusion360MCPServer  # noqa: E402
 from tests.fakes.design import FakeDesign  # noqa: E402
 
+_TIMEOUT = 5.0  # bounds every wait: a handler that never answers must fail the test
+
 
 class _RecordingBridge:
+    """The add-in's bridge seam: the commands offered and the answer given back.
+
+    ``reply`` is what ``submit`` returns, so a test can put the envelope a real
+    command produces on the wire without running the handler, and ``error`` is
+    raised in its place.  ``hold()`` parks the next submit until ``release()``,
+    which is how a test gets a command in flight instead of racing one.
+    """
+
     def __init__(self):
         self.commands = []
+        self.reply = {"status": "success", "result": {"ok": True}}
+        self.error = None
+        self.arrived = threading.Event()
+        self._released = threading.Event()
+        self._released.set()
+
+    def hold(self):
+        self._released.clear()
+        self.arrived.clear()
+
+    def release(self):
+        self._released.set()
 
     def submit(self, command):
         self.commands.append(command)
-        return {"status": "success", "result": {"ok": True}}
+        self.arrived.set()
+        self._released.wait(timeout=_TIMEOUT)
+        if self.error is not None:
+            raise self.error
+        return self.reply
 
 
-def _exchange(payload: bytes, timeout: float = 5.0):
-    """Push *payload* through one _handle_client and collect what came back."""
-    bridge = _RecordingBridge()
+def _exchange(payload: bytes, timeout: float = _TIMEOUT, bridge=None):
+    """Push *payload* through one _handle_client and collect what came back.
+
+    *bridge* replaces the recording one, so a test can script the answer or make
+    ``submit`` raise.
+    """
+    bridge = _RecordingBridge() if bridge is None else bridge
     server = Fusion360MCPServer(bridge)
     server._running = True
 
@@ -48,7 +86,12 @@ def _exchange(payload: bytes, timeout: float = 5.0):
     )
     thread.start()
 
-    client_end.sendall(payload)
+    # Bounded before the write: a handler that never reads must not hang the test,
+    # and a client that has nothing left to say has already done what the write
+    # was for.
+    client_end.settimeout(timeout)
+    with suppress(OSError, socket.timeout):
+        client_end.sendall(payload)
     # A peer that answered and closed at once has already ended the stream, which
     # is all this was for; darwin calls that ENOTCONN where Windows returns
     # quietly (measured on the sibling fuzz target's identical call).
@@ -56,7 +99,6 @@ def _exchange(payload: bytes, timeout: float = 5.0):
         client_end.shutdown(socket.SHUT_WR)
 
     replies = b""
-    client_end.settimeout(timeout)
     try:
         with suppress(socket.timeout):
             while True:
@@ -77,6 +119,104 @@ def _exchange(payload: bytes, timeout: float = 5.0):
     assert not thread.is_alive(), "the handler outlived its peer and a close"
 
     return bridge, [json.loads(line) for line in replies.splitlines() if line.strip()]
+
+
+class _Peer:
+    """One loopback client of a started server, buffered so a reply is not lost."""
+
+    def __init__(self, server):
+        port = server._socket.getsockname()[1]
+        self._conn = socket.create_connection((server.host, port), timeout=_TIMEOUT)
+        self._buffer = b""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        with suppress(OSError):
+            self._conn.close()
+
+    def send(self, text: str):
+        self._conn.sendall(text.encode("utf-8"))
+
+    def reply(self) -> dict:
+        while b"\n" not in self._buffer:
+            chunk = self._conn.recv(4096)
+            assert chunk, "the server closed without answering"
+            self._buffer += chunk
+        line, _, self._buffer = self._buffer.partition(b"\n")
+        return json.loads(line)
+
+    def closed(self) -> bool:
+        """Whether the server ended the stream - read, not inferred.
+
+        Two seconds rather than ``_TIMEOUT``: the answer is meant to be already
+        waiting, and a close that never comes should not hold the suite up.
+        """
+        self._conn.settimeout(2.0)
+        while True:
+            try:
+                chunk = self._conn.recv(4096)
+            except socket.timeout:
+                return False
+            if not chunk:
+                return True
+            self._buffer += chunk
+
+    def drop(self):
+        """Hang up without reading, the way a killed client does."""
+        with suppress(OSError):
+            self._conn.close()
+
+
+def _started(bridge=None) -> Fusion360MCPServer:
+    """A server already serving on an ephemeral port.
+
+    Port 0 rather than a fixed one, so nothing else on the machine can hold it.
+    ``_bind_socket`` runs in the accept thread, so the wait is for what that
+    thread leaves behind rather than for ``start()``, which only starts it.
+    """
+    server = Fusion360MCPServer(
+        _RecordingBridge() if bridge is None else bridge, port=0
+    )
+    assert server.start() is True
+    deadline = time.monotonic() + _TIMEOUT
+    while server._socket is None:
+        assert time.monotonic() < deadline, "the listener never bound its port"
+        time.sleep(0.005)
+    return server
+
+
+@pytest.fixture
+def server():
+    """A started listener on an ephemeral port, stopped after the test."""
+    started = _started()
+    yield started
+    started.stop()
+
+
+class _ScriptedListener:
+    """``accept()`` that replays steps, so the loop's arms need no racing peers.
+
+    An exception step is raised; a callable step runs and the next step is used
+    instead; anything else is handed back as the accepted client.
+    """
+
+    def __init__(self, *steps):
+        self.steps = list(steps)
+        self.calls = 0
+
+    def accept(self):
+        self.calls += 1
+        while self.steps:
+            step = self.steps.pop(0)
+            if isinstance(step, BaseException):
+                raise step
+            if callable(step):
+                step()
+                continue
+            return step
+        raise AssertionError("the accept loop asked for more than the script allows")
 
 
 def test_http_post_body_is_not_dispatched():
@@ -144,6 +284,332 @@ def test_unterminated_buffer_waits_instead_of_failing():
 
     assert bridge.commands == []
     assert not any(r.get("message") == "Invalid JSON" for r in replies)
+
+
+def test_blank_lines_between_frames_are_skipped():
+    """``\\n\\n`` is framing noise: not a command, not an error."""
+    payload = b"\n\n" + json.dumps({"type": "ping"}).encode() + b"\n\n"
+
+    bridge, replies = _exchange(payload)
+
+    assert bridge.commands == [{"type": "ping"}]
+    assert replies == [{"status": "success", "result": {"ok": True}}]
+
+
+def test_a_complete_frame_needs_no_newline():
+    """The fallback: a blob that parses on its own is dispatched, newline or not."""
+    bridge, replies = _exchange(json.dumps({"type": "ping"}).encode())
+
+    assert bridge.commands == [{"type": "ping"}]
+    assert replies == [{"status": "success", "result": {"ok": True}}]
+
+
+def test_a_line_that_is_not_text_closes_without_answering(caplog):
+    """Bytes that are not UTF-8 reach the catch-all, not the refusal.
+
+    ``json.loads`` raises ``UnicodeDecodeError`` - a ``ValueError``, but not a
+    ``JSONDecodeError`` - so the framing loop's refusal never runs and the
+    connection closes with no reply at all. The fuzz target records that gap as
+    deferred; this pins the close it does produce, not a reply it does not.
+
+    ``\\x80`` and not ``\\xff\\xfe``: the latter is a UTF-16 BOM, which
+    ``json.loads`` decodes to the empty string and then refuses as JSON, so it
+    reaches the other arm.
+    """
+    caplog.set_level(logging.DEBUG, logger="fusion360mcp.socket")
+
+    bridge, replies = _exchange(b"\x80\n")
+
+    assert bridge.commands == []
+    assert replies == []
+    assert "Client handler error" in caplog.text
+
+
+def test_an_enormous_line_is_refused_without_buffering_it_all(
+    server, monkeypatch, caplog
+):
+    """Past ``_MAX_BUFFER_BYTES`` with no newline, the connection is dropped.
+
+    The cap is patched down to 64 KiB rather than writing the shipped 16 MiB: past
+    the cap the handler has grown ``buf`` quadratically and then hangs up mid-write,
+    and on the macOS CI job that write never finished inside the bound the client
+    gave it - the handler saw end of input and took the ordinary disconnect path
+    instead of the cap. A small cap keeps the line enormous relative to it while
+    the write stays cheap and complete.
+
+    The claim is behavioural: the server ends the stream while this peer's write
+    side is still open, and nothing reaches the bridge. The log line is
+    supplementary - an unterminated buffer that merely reaches end of input closes
+    the same way, and only the still-open write side tells the two apart.
+    """
+    cap = 64 * 1024
+    monkeypatch.setattr(socket_server, "_MAX_BUFFER_BYTES", cap)
+
+    with _Peer(server) as peer:
+        # A failed write is tolerated: the server hangs up only because of the cap,
+        # so the failure is the behaviour, not an error in the test. cap + 1 bytes
+        # means the cap is crossed on the last byte, leaving nothing unread and
+        # making the server's close a clean FIN rather than a reset on every
+        # platform.
+        with suppress(BrokenPipeError, ConnectionResetError):
+            peer.send("x" * (cap + 1))
+        assert peer.closed() is True, "a line past the cap must not hold the connection"
+    assert server._bridge.commands == []
+    assert "Client buffer over" in caplog.text
+
+
+def test_a_line_that_is_not_json_closes_the_connection(server):
+    """One bad line costs that connection and everything behind it.
+
+    The ping is in the same write as the bad line, so it is already in the
+    handler's buffer when the refusal returns: only the close keeps it off the
+    bridge. The second peer is the other half of the claim - one connection,
+    not the listener.
+    """
+    bridge = server._bridge
+    with _Peer(server) as peer:
+        peer.send("GET / HTTP/1.1\n" + json.dumps({"type": "ping"}) + "\n")
+
+        assert peer.reply() == {"status": "error", "message": "Invalid JSON"}
+        assert peer.closed() is True
+    assert bridge.commands == []
+
+    with _Peer(server) as afterwards:
+        afterwards.send(json.dumps({"type": "ping"}) + "\n")
+        assert afterwards.reply()["status"] == "success"
+    assert bridge.commands == [{"type": "ping"}]
+
+
+def test_a_bridge_failure_answers_an_error_envelope():
+    """A submit that raises is data on the wire, not a dropped connection."""
+    bridge = _RecordingBridge()
+    bridge.error = RuntimeError("the handler blew up")
+
+    answered, replies = _exchange(b'{"type": "explode"}\n', bridge=bridge)
+
+    assert answered is bridge
+    assert replies == [{"status": "error", "message": "the handler blew up"}]
+
+
+def test_a_command_with_no_name_answers_an_envelope_rather_than_closing(
+    server, handler_module
+):
+    """``{}`` is valid JSON, so the socket forwards it and relays what comes back.
+
+    The envelope is the handler's own, computed here rather than copied, so the
+    socket test cannot drift from the wording an agent branches on. The ping
+    after it is the proof the connection was not the price of asking.
+    """
+    bridge = server._bridge
+    bridge.reply = handler_module.CommandHandler().execute_command({})
+
+    with _Peer(server) as peer:
+        peer.send("{}\n")
+        answer = peer.reply()
+        assert answer["status"] == "error"
+        assert answer["error_kind"] == "UNKNOWN_COMMAND"
+
+        # The socket relays whatever the bridge answers, so the second answer is
+        # the bridge's own: what the ping proves is that a frame still arrives.
+        bridge.reply = {"status": "success", "result": {"ok": True}}
+        peer.send(json.dumps({"type": "ping"}) + "\n")
+        assert peer.reply()["status"] == "success"
+    assert bridge.commands == [{}, {"type": "ping"}]
+
+
+def test_a_reply_to_a_client_that_is_gone_is_logged_not_raised(caplog):
+    """``_send`` is best effort: the reply is lost, the handler does not fall over.
+
+    Driven at ``_send`` because the race a real client would need - gone after its
+    command was submitted but before the answer - cannot be made to raise on
+    demand: a peer that closed normally still accepts the write.
+    """
+    client, other_end = socket.socketpair()
+    client.close()
+
+    Fusion360MCPServer._send(client, {"status": "success"})
+
+    other_end.close()
+    assert "Failed to send response" in caplog.text
+
+
+# ----------------------------------------------------------------------
+# The listener: start, stop, and the accept loop's error arms
+# ----------------------------------------------------------------------
+
+
+def test_a_started_listener_serves_a_client_and_releases_its_port(server):
+    """Start binds and serves; stop frees the address and hangs up on its client.
+
+    ``stop()`` closes the accepted sockets as well as the listener: a per-client
+    thread blocked in ``recv`` would otherwise outlive the server it belongs to.
+    The command is parked in the bridge while ``stop()`` runs, and it stays
+    parked until after the read: a handler free to loop notices ``_running``
+    going false and closes its own socket, so only a handler that cannot close
+    it can show that ``stop()`` did.
+
+    The freed port is proven by connecting, not by binding: this test makes the
+    server the side that closed first, so its end of the connection is in
+    TIME_WAIT, and a plain ``bind`` is refused there until the state expires
+    (Linux, macOS - the reason ``_bind_socket`` sets ``SO_REUSEADDR``). Giving the
+    probe that option instead would defeat the check on Windows, where a second
+    socket carrying it can bind over a live listener.
+    """
+    port = server._socket.getsockname()[1]
+    bridge = server._bridge
+    assert server.is_running() is True
+    bridge.hold()
+    with _Peer(server) as peer:
+        peer.send(json.dumps({"type": "slow"}) + "\n")
+        assert bridge.arrived.wait(_TIMEOUT), "the command never reached the bridge"
+        try:
+            server.stop()
+
+            assert server.is_running() is False
+            assert peer.closed() is True, "stop() must close the client it accepted"
+        finally:
+            bridge.release()
+    with pytest.raises(ConnectionRefusedError):
+        socket.create_connection(("127.0.0.1", port), timeout=_TIMEOUT)
+
+
+def test_starting_a_running_server_answers_false(server):
+    """``start()`` twice is one listener: the second call reports it did nothing."""
+    listener = server._accept_thread
+
+    assert server.start() is False
+    assert server._accept_thread is listener
+    with _Peer(server) as peer:
+        peer.send(json.dumps({"type": "ping"}) + "\n")
+        assert peer.reply()["status"] == "success"
+
+
+def test_a_port_that_cannot_be_bound_is_reported_rather_than_raised(caplog):
+    """The restarter counts a ``False``; an exception here would kill its thread.
+
+    192.0.2.1 is TEST-NET-1 (RFC 5737): reserved for documentation, assigned to no
+    interface, so the bind is refused on every platform without needing an
+    occupied or privileged port.
+    """
+    server = Fusion360MCPServer(_RecordingBridge(), host="192.0.2.1", port=0)
+
+    assert server._bind_socket() is False
+    assert server._socket is None
+    assert "Bind failed" in caplog.text
+
+
+def test_the_accept_loop_returns_when_nothing_is_bound():
+    """No socket means nothing to accept: rebind in the outer loop, not spin here."""
+    server = Fusion360MCPServer(_RecordingBridge())
+    server._running = True
+
+    server._accept_loop()
+
+    assert server._socket is None
+
+
+def test_a_quiet_accept_loop_waits_out_its_timeouts_then_fails_loudly():
+    """A one-second accept timeout is a poll; a dead socket is not, and must bubble.
+
+    Bubbling is the contract the outer loop restarts on: swallowing the ``OSError``
+    would leave a running server that accepts nothing.
+    """
+    server = Fusion360MCPServer(_RecordingBridge())
+    server._running = True
+    listener = _ScriptedListener(
+        socket.timeout(), socket.timeout(), OSError("listener died")
+    )
+    server._socket = listener
+
+    with pytest.raises(OSError, match="listener died"):
+        server._accept_loop()
+
+    assert listener.calls == 3
+
+
+def test_an_accept_error_after_stop_ends_the_loop_quietly():
+    """Once ``_running`` is false the error is the stop, not a fault to restart."""
+    server = Fusion360MCPServer(_RecordingBridge())
+    server._running = True
+    listener = _ScriptedListener(
+        lambda: setattr(server, "_running", False), OSError("stopped")
+    )
+    server._socket = listener
+
+    server._accept_loop()
+
+    assert listener.calls == 1
+
+
+def test_a_listener_that_cannot_bind_gives_up_after_the_restart_cap(
+    monkeypatch, caplog
+):
+    """Ten retries, then stop trying: a loop that never binds would retry forever."""
+    monkeypatch.setattr(socket_server, "_RESTART_DELAY", 0.0)
+    server = Fusion360MCPServer(_RecordingBridge())
+    server._running = True
+    attempts = []
+
+    def refuse():
+        attempts.append(1)
+        return False
+
+    monkeypatch.setattr(server, "_bind_socket", refuse)
+
+    server._accept_loop_with_restart()
+
+    assert len(attempts) == socket_server._MAX_RESTARTS + 1
+    assert "giving up" in caplog.text
+
+
+def test_a_crashed_accept_loop_is_rebound_rather_than_left_dead(monkeypatch, caplog):
+    """A crash in one life costs a rebind, not the bridge: the loop comes back.
+
+    The bind is scripted because what is under test is the policy - rebind, and
+    stop when the server has been told to - not the timing of a real socket loss.
+    """
+    monkeypatch.setattr(socket_server, "_RESTART_DELAY", 0.0)
+    server = Fusion360MCPServer(_RecordingBridge())
+    server._running = True
+    lives = []
+
+    def bind():
+        lives.append(1)
+        # The third life is the stop that ends the loop, so it does not run forever.
+        server._running = len(lives) < 3
+        return True
+
+    def crash():
+        raise RuntimeError("accept loop crashed")
+
+    monkeypatch.setattr(server, "_bind_socket", bind)
+    monkeypatch.setattr(server, "_accept_loop", crash)
+
+    server._accept_loop_with_restart()
+
+    assert len(lives) == 3
+    assert "Accept loop crashed" in caplog.text
+
+
+def test_a_client_that_disappears_mid_command_does_not_stop_the_server(server):
+    """The client loses its reply, not the listener.
+
+    The handler is inside ``submit`` when the peer goes - the state where the
+    answer has nowhere to go - and the next client must still be served.
+    """
+    bridge = server._bridge
+    bridge.hold()
+    vanished = _Peer(server)
+    vanished.send(json.dumps({"type": "slow"}) + "\n")
+    assert bridge.arrived.wait(_TIMEOUT), "the command never reached the bridge"
+
+    vanished.drop()
+    bridge.release()
+
+    with _Peer(server) as afterwards:
+        afterwards.send(json.dumps({"type": "ping"}) + "\n")
+        assert afterwards.reply()["status"] == "success"
+    assert bridge.commands == [{"type": "slow"}, {"type": "ping"}]
 
 
 def test_execute_code_survives_a_script_that_closes_its_document(bound_handler):
