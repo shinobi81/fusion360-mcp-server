@@ -21,6 +21,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import ClassVar
 
+from .appearance import FakeAppearances
 from .bodies import FakeBody, FakeFace
 from .collection import FakeCollection, FakeDeletable, FakeItemCollection
 from .features import (
@@ -178,6 +179,9 @@ class FakeComponent:
         #: unions their bodies as well as its own; ``create_component`` places the
         #: new one through this collection.
         self.occurrences = FakeOccurrences()
+        #: Fusion assigns an appearance to a component as well as to a body and a
+        #: face; ``None`` until something assigns one.
+        self.appearance = None
 
     @property
     def allOccurrences(self) -> FakeCollection:
@@ -1370,6 +1374,10 @@ class FakeDesign:
         ]
         self.bodies = len(bodies) if bodies is not None else (1 if features else 0)
         self.userParameters = FakeUserParameters()
+        #: The design's own appearances: ``set_color`` adds one, ``set_appearance``
+        #: copies a library appearance in. Empty until a command creates one, which
+        #: is a new design's state as far as anything here reads it.
+        self.appearances = FakeAppearances()
         self.interference = FakeInterference(list(interferences))
         self._timeline = FakeTimeline(self)
         self.rootComponent = FakeRoot(self, sketches, bodies)

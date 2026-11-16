@@ -381,6 +381,9 @@ class FakeFace:
         )
         self.evaluator = FakeEvaluator(normal)
         self.area = area
+        #: Fusion lets an appearance be assigned to one face; ``None`` is "none
+        #: assigned", and nothing here inherits the body's.
+        self.appearance = None
         self.geometry = (
             FakePlane(self.pointOnFace.coords(), normal)
             if planar
@@ -404,6 +407,38 @@ class FakeFace:
         return FakeJointGeometry(**self.joint_frame)
 
 
+class FakePhysicalProperties:
+    """``Body.getPhysicalProperties(accuracy)``: Fusion's five answers.
+
+    Fusion reports its **internal** units here - mass in grams, volume in cm^3,
+    area in cm^2, density in g/cm^3, and ``centerOfMass`` a point in centimetres -
+    so the fake does too, and a handler that converted any of them to SI would be
+    caught by the reply.
+
+    The numbers are the **fixture's**: Fusion derives them from the solid and its
+    material, and nothing here models a solid's density.  The defaults are
+    placeholders consistent with ``FakeBody``'s own (volume 1, area 6) and they
+    cannot tell mass from volume because both are 1 - so a test that reads them
+    passes its own.  The ``accuracy`` argument does not change them either: Fusion
+    re-meshes per accuracy, while this fake records which one was asked for and
+    answers the same object.
+    """
+
+    def __init__(
+        self,
+        mass: float = 1.0,
+        volume: float = 1.0,
+        area: float = 6.0,
+        density: float = 1.0,
+        center_of_mass: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    ):
+        self.mass = mass
+        self.volume = volume
+        self.area = area
+        self.density = density
+        self.centerOfMass = FakePoint3D(*center_of_mass)
+
+
 _BODY_TOKENS = itertools.count(1)
 """One identity per fake body, so two bodies never share an ``entityToken``."""
 
@@ -417,12 +452,22 @@ class FakeBody(FakeDeletable):
         faces: FakeCollection | None = None,
         bounding_box: FakeBoundingBox | None = None,
         edges: FakeCollection | None = None,
+        physical_properties: FakePhysicalProperties | None = None,
     ):
         super().__init__(name)
         self.volume = 1.0
         self.area = 6.0
         self.material = None
         self.isVisible = True
+        #: ``None`` until something assigns one. Fusion gives a new body the
+        #: design's default appearance, whose name no test reads.
+        self.appearance = None
+        #: ``getPhysicalProperties``' answer, spelled as Fusion's method reads it.
+        #: The constructor argument is snake_case, like ``bounding_box``.
+        self.physicalProperties = physical_properties or FakePhysicalProperties()
+        #: Every accuracy ``getPhysicalProperties`` was asked for, in order - the
+        #: one thing this fake models about that argument.
+        self.accuracy_requests: list = []
         self.boundingBox = bounding_box or FakeBoundingBox()
         self.faces = faces if faces is not None else FakeCollection([FakeFace()])
         self.edges = edges if edges is not None else FakeEdges([])
@@ -436,6 +481,11 @@ class FakeBody(FakeDeletable):
         self.entityToken = f"token-{next(_BODY_TOKENS)}"
         #: ``None`` when the body sits directly in the root component.
         self.assemblyContext: object | None = None
+
+    def getPhysicalProperties(self, accuracy) -> FakePhysicalProperties:
+        """Fusion's one-argument call: the properties, and the accuracy asked for."""
+        self.accuracy_requests.append(accuracy)
+        return self.physicalProperties
 
 
 def body_with_faces(name: str, normals: list[tuple[float, float, float]]) -> FakeBody:

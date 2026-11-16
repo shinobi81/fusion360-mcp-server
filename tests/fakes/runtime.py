@@ -138,6 +138,29 @@ class FakeMatrix3D:
         return cls()
 
 
+class FakeColor:
+    """``adsk.core.Color``: four 0-255 channels, including ``opacity``.
+
+    Fusion's opacity is an integer 0-255, not a 0..1 float, so ``set_color``'s own
+    conversion of its 0..1 argument is visible here.  The fake stores what it was
+    given and neither clamps nor rounds it - that is the handler's job, and a fake
+    that did it too would hide a caller that forgot.
+    """
+
+    def __init__(self, red: int, green: int, blue: int, opacity: int):
+        self.red = red
+        self.green = green
+        self.blue = blue
+        self.opacity = opacity
+
+    @staticmethod
+    def create(red: int, green: int, blue: int, opacity: int) -> "FakeColor":
+        return FakeColor(red, green, blue, opacity)
+
+    def channels(self) -> tuple[int, int, int, int]:
+        return (self.red, self.green, self.blue, self.opacity)
+
+
 class FakeValueInput:
     """``adsk.core.ValueInput``: the two constructors, and which one was used.
 
@@ -309,6 +332,20 @@ def _feature_operations() -> types.SimpleNamespace:
     )
 
 
+def _calculation_accuracy() -> types.SimpleNamespace:
+    """``CalculationAccuracy``: the four levels ``get_physical_properties`` maps to.
+
+    Fusion's member names are the handler's own; their values here are those names
+    so a test can assert which accuracy reached the body without a lookup table.
+    """
+    return types.SimpleNamespace(
+        LowCalculationAccuracy="LowCalculationAccuracy",
+        MediumCalculationAccuracy="MediumCalculationAccuracy",
+        HighCalculationAccuracy="HighCalculationAccuracy",
+        VeryHighCalculationAccuracy="VeryHighCalculationAccuracy",
+    )
+
+
 def _mesh_refinement_settings() -> types.SimpleNamespace:
     """``MeshRefinementSettings``: the one member ``export_stl`` asks for.
 
@@ -391,6 +428,7 @@ def install() -> None:
         Cylinder=FakeCylinderGeometry,
         ObjectCollection=FakeObjectCollection,
         ValueInput=FakeValueInput,
+        Color=FakeColor,
         Matrix3D=FakeMatrix3D,
         OrientedBoundingBox3D=_primitives().FakeOrientedBoundingBox3D,
         Application=FakeApplication,
@@ -399,6 +437,7 @@ def install() -> None:
     fusion = module(
         "adsk.fusion",
         DesignTypes=_design_types(),
+        CalculationAccuracy=_calculation_accuracy(),
         FeatureOperations=_feature_operations(),
         AutoConstrainResultTypes=_auto_constrain_result_types(),
         UserCoordinateSystemGeometry_createByPoint=(
