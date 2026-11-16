@@ -353,6 +353,106 @@ class FakeRuledSurfaceFeatures:
         return FakeFeature(f"Ruled Surface{len(self.inputs)}")
 
 
+class FakePatchInput:
+    """``PatchFeatureInput``: the two ``createInput`` arguments, under Fusion's names.
+
+    The shipped signature is ``createInput(boundaryCurve, operation)`` - the
+    boundary may be a sketch profile, an edge, an ObjectCollection or a Path, and
+    only ``NewBodyFeatureOperation``/``NewComponentFeatureOperation`` are accepted
+    for the operation (``adsk.fusion.PatchFeatures.createInput``'s own docstring).
+
+    ``continuity`` and ``groupContinuity`` are the names the stub lists, and they
+    are here because they are the input's identity, not because the handler sets
+    one: both stay ``None`` until a call site writes them.  Fusion's own instances
+    also accept arbitrary attribute names, so a call site that writes a name the
+    SDK does not ship (``boundaryContinuity``) leaves these ``None`` - a silent
+    no-op, which is what makes the real names worth declaring.
+    """
+
+    def __init__(self, boundary_curve, operation):
+        self.boundaryCurve = boundary_curve
+        self.operation = operation
+        self.continuity = None
+        self.groupContinuity = None
+
+
+class FakePatchFeatures:
+    """``root.features.patchFeatures``: two positional arguments, as in the SDK.
+
+    A one- or three-argument call is a ``TypeError`` here as it is in the binding.
+    The patched surface itself is not modelled - that needs the boundary's
+    geometry - so the reply can only be built from what the call passed.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakePatchInput] = []
+        self.added: list[FakePatchInput] = []
+        self.created: list[FakeFeature] = []
+
+    @property
+    def last_input(self) -> FakePatchInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(self, boundary_curve, operation) -> FakePatchInput:
+        created = FakePatchInput(boundary_curve, operation)
+        self.inputs.append(created)
+        return created
+
+    def add(self, inp: FakePatchInput) -> FakeFeature:
+        if not isinstance(inp, FakePatchInput):
+            raise TypeError("patchFeatures.add takes the input createInput made")
+        self.added.append(inp)
+        feature = FakeFeature(f"Patch{len(self.added)}")
+        self.created.append(feature)
+        return feature
+
+
+class FakeStitchInput:
+    """``stitchFeatures.createInput(stitchSurfaces, tolerance, operation)``.
+
+    ``stitchSurfaces`` is the ``ObjectCollection`` of open bodies the handler
+    assembled by name; ``tolerance`` is the ``ValueInput``.  Nothing is set on the
+    input afterwards, so the three attributes are the ``createInput`` arguments.
+    """
+
+    def __init__(self, stitch_surfaces, tolerance, operation):
+        self.stitchSurfaces = stitch_surfaces
+        self.tolerance = tolerance
+        self.operation = operation
+
+
+class FakeStitchFeatures:
+    """``root.features.stitchFeatures``: three positional arguments.
+
+    Whether the surfaces actually touch - and therefore whether they stitch at
+    all - is Fusion's judgement about geometry this fake does not carry, so it
+    records the request and refuses nothing beyond a wrong arity or a wrong
+    ``add`` argument.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakeStitchInput] = []
+        self.added: list[FakeStitchInput] = []
+        self.created: list[FakeFeature] = []
+
+    @property
+    def last_input(self) -> FakeStitchInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(self, stitch_surfaces, tolerance, operation) -> FakeStitchInput:
+        created = FakeStitchInput(stitch_surfaces, tolerance, operation)
+        self.inputs.append(created)
+        return created
+
+    def add(self, inp: FakeStitchInput) -> FakeFeature:
+        if not isinstance(inp, FakeStitchInput):
+            raise TypeError("stitchFeatures.add takes the input createInput made")
+        self.added.append(inp)
+        feature = FakeFeature(f"Stitch{len(self.added)}")
+        self.created.append(feature)
+        return feature
+
+
 class FakeMirrorInput:
     """``mirrorFeatures.createInput(objects, mirrorPlane)``: two arguments, no setters.
 

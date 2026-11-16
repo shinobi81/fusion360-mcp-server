@@ -273,8 +273,12 @@ class FakeProfiles:
     def __init__(self, sketch: FakeSketch, count: int):
         self._sketch = sketch
         self.count = count
+        #: Every index ``item`` was asked for, in order - the one thing a caller
+        #: that only reads ``count`` can get wrong is which profile it picked.
+        self.requested: list[int] = []
 
     def item(self, index: int) -> FakeProfile:
+        self.requested.append(index)
         return FakeProfile(self._sketch)
 
 

@@ -34,12 +34,14 @@ from .features import (
     FakeMirrorFeatures,
     FakeMoveFeatures,
     FakeOffsetFacesFeatures,
+    FakePatchFeatures,
     FakeProfile,
     FakeRectangularPatternFeatures,
     FakeRuledSurfaceFeatures,
     FakeScaleFeatures,
     FakeSplitBodyFeatures,
     FakeSplitFaceFeatures,
+    FakeStitchFeatures,
     FakeThreadFeatures,
 )
 from .mesh import FakeMeshBodies
@@ -804,6 +806,8 @@ class FakeFeatures:
         self.baseFeatures = FakeBaseFeatures()
         self.threadFeatures = FakeThreadFeatures()
         self.ruledSurfaceFeatures = FakeRuledSurfaceFeatures()
+        self.patchFeatures = FakePatchFeatures()
+        self.stitchFeatures = FakeStitchFeatures()
         self.mirrorFeatures = FakeMirrorFeatures(design)
         self.rectangularPatternFeatures = FakeRectangularPatternFeatures()
         self.circularPatternFeatures = FakeCircularPatternFeatures()

@@ -415,6 +415,20 @@ def _ruled_surface_types() -> types.SimpleNamespace:
     )
 
 
+def _surface_continuity_types() -> types.SimpleNamespace:
+    """``SurfaceContinuityTypes``: the three the patch input's continuity takes.
+
+    Read from the shipped stub (``adsk/fusion.py``, ``SurfaceContinuityTypes``):
+    Connected, Tangent, Curvature, and nothing else.  Their values are the
+    attribute names so a test can assert which one reached the input.
+    """
+    return types.SimpleNamespace(
+        ConnectedSurfaceContinuityType="ConnectedSurfaceContinuityType",
+        TangentSurfaceContinuityType="TangentSurfaceContinuityType",
+        CurvatureSurfaceContinuityType="CurvatureSurfaceContinuityType",
+    )
+
+
 def _pattern_distance_types() -> types.SimpleNamespace:
     """``PatternDistanceType``: the member ``rectangular_pattern`` asks for.
 
@@ -480,6 +494,7 @@ def install() -> None:
         JointGeometry=FakeJointGeometry,
         DimensionOrientations=_dimension_orientations(),
         RuledSurfaceTypes=_ruled_surface_types(),
+        SurfaceContinuityTypes=_surface_continuity_types(),
         PatternDistanceType=_pattern_distance_types(),
         ThreadInfo=importlib.import_module("tests.fakes.features").FakeThreadInfo,
         ThreadDataQuery=importlib.import_module(

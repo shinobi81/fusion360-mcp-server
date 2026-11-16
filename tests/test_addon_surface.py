@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.fakes.bodies import body_with_edges
+from tests.fakes.bodies import FakeBody, body_with_edges
 from tests.fakes.design import FakeDesign
 from tests.fakes.runtime import PARAMETRIC
 from tests.fakes.sketch import FakeSketch
@@ -83,6 +83,47 @@ def test_projection_is_linked_by_default(bound_handler):
 
     assert [is_linked for _, is_linked in sketch.projected] == [True, True]
     assert out["projected_curves"] == 2
+
+
+def test_a_patch_of_a_sketch_profile_hands_that_profile_to_the_feature(bound_handler):
+    """The requested sketch's profile at the requested index is the boundary.
+
+    The decoy sketch is listed first, and the chosen sketch holds two profiles, so
+    a lookup that took the first of either would hand over a different boundary.
+    """
+    decoy = FakeSketch(name="Decoy")
+    boundary = FakeSketch(name="Boundary", profile_count=2)
+    design = FakeDesign(bodies=[FakeBody("Body1")], sketches=[decoy, boundary])
+    handler = bound_handler(design)
+
+    out = handler.patch_surface("Boundary", profile_index=1)
+
+    created = design.rootComponent.features.patchFeatures.inputs[0]
+    assert created.boundaryCurve.sketch is boundary
+    assert boundary.profiles.requested == [1]
+    assert created.operation == "new_body"
+    assert out == {"feature_name": "Patch1", "continuity": "connected"}
+
+
+def test_a_stitch_of_bodies_that_do_not_touch_still_hands_over_both(bound_handler):
+    """Whether two surfaces meet is Fusion's judgement, so both are forwarded.
+
+    The decoy body is in the root and must not join the collection, and the two
+    named bodies are requested out of root order, so the reply's count cannot
+    come from the collection's length by accident.
+    """
+    first, second, decoy = FakeBody("SurfaceA"), FakeBody("SurfaceB"), FakeBody("Decoy")
+    design = FakeDesign(bodies=[first, second, decoy])
+    handler = bound_handler(design)
+
+    out = handler.stitch_surfaces(["SurfaceB", "SurfaceA"], tolerance=0.05)
+
+    created = design.rootComponent.features.stitchFeatures.inputs[0]
+    assert list(created.stitchSurfaces) == [second, first]
+    assert created.tolerance.kind == "real"
+    assert created.tolerance.value == 0.05
+    assert created.operation == "new_body"
+    assert out == {"feature_name": "Stitch1", "body_count": 2}
 
 
 def test_an_unknown_rule_type_is_refused_as_invalid_input(bound_handler):
