@@ -98,10 +98,16 @@ Measured on 0.8.5 (`coverage report --include="addon/server/*"`):
 
 The order of work is the order a test can be trusted in, not the order of the numbers:
 
-1. **`socket_server` and `handler_scene` first.** Both are drivable from `tests/fakes/`
-   today - a real socket round-trip needs no Fusion at all, and the scene handlers read
-   objects the design fake already models. These are the two places where a test proves
-   something about our own code rather than about our imitation of Autodesk's.
+1. **`socket_server` first, because it needs no `adsk` at all** - a real socket round-trip
+   is a test of our framing, our timeouts and our refusals, not of an imitation of
+   Autodesk's API. Then the part of `handler_scene` and `handler_assembly` that the design,
+   body and occurrence fakes already model: object info, measurement, bounding box,
+   parameters, components, construction planes and axes. Those two groups are where a test
+   proves something about our code rather than about a fake we wrote.
+   The rest of `handler_scene` is not free: the fakes model no appearance, physical
+   properties, mesh body or document, so `set_appearance`, `get_physical_properties`,
+   `compare_meshes` and `new_document` need the fake extended before a test can mean
+   anything.
 2. **Then the three API-heavy modules, at the call boundary.** A fake that declares the
    real signature pins that the handler called it with those arguments; it does not pin
    that Fusion accepts them. That is a weaker claim and worth stating as one in each
