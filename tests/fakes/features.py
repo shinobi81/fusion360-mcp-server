@@ -11,13 +11,20 @@ from __future__ import annotations
 from typing import ClassVar
 
 from .bodies import FakeBody
-from .collection import FakeCollection
-from .runtime import FakePoint3D, FakeValueInput
+from .collection import FakeCollection, FakeItemCollection
+from .runtime import FakeMatrix3D, FakePoint3D, FakeValueInput
 
 
 class FakeFeature:
-    def __init__(self, name: str):
+    def __init__(self, name: str, bodies=()):
         self.name = name
+        #: Fusion's ``Feature.bodies`` - the bodies the feature created or
+        #: modified.  Empty unless a fake models a body, and only
+        #: ``FakeExtrudeFeatures`` does: ``create_box_parametric`` renames the body
+        #: it built and has nothing else to read it from.  A ``FakeItemCollection``
+        #: because Fusion's is a derived view over bodies that live in the
+        #: component - it owns none of them and must not reparent one.
+        self.bodies = FakeItemCollection(bodies)
 
 
 class FakeDraftInput:
@@ -546,6 +553,231 @@ class FakeCircularPatternFeatures:
             )
         self.added.append(inp)
         feature = FakeFeature(f"Circular Pattern{len(self.added)}")
+        self.created.append(feature)
+        return feature
+
+
+class FakeSplitBodyInput:
+    """``splitBodyFeatures.createInput(body, splitTool, isSplittingToolExtended)``.
+
+    One call, two shapes: the split tool is a construction plane or another
+    BRepBody, and the handler chooses between them on whether a body was named.
+    The fake keeps the tool exactly as it was handed over rather than demanding
+    one type - which of the two Fusion accepts depends on the same branch, so a
+    fake that took only a plane would refuse the body form.  The attribute names
+    are Fusion's ``createInput`` arguments; the handler sets no property here.
+    """
+
+    def __init__(self, body, split_tool, is_extended):
+        self.body = body
+        self.splitTool = split_tool
+        self.isSplittingToolExtended = is_extended
+
+
+class FakeSplitBodyFeatures:
+    """``root.features.splitBodyFeatures``: what a split was told to cut.
+
+    Three arguments, Fusion's arity, so a two- or four-argument call is a
+    ``TypeError``.  What is **not** modelled is the split itself: where a plane
+    cuts a solid - and therefore how many bodies come out - needs the geometry,
+    so a count here would be the fake's invention, and no handler reports one.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakeSplitBodyInput] = []
+        self.added: list[FakeSplitBodyInput] = []
+        self.created: list[FakeFeature] = []
+
+    def createInput(self, body, split_tool, is_extended) -> FakeSplitBodyInput:
+        created = FakeSplitBodyInput(body, split_tool, is_extended)
+        self.inputs.append(created)
+        return created
+
+    def add(self, inp: FakeSplitBodyInput) -> FakeFeature:
+        if not isinstance(inp, FakeSplitBodyInput):
+            raise TypeError("splitBodyFeatures.add takes the input createInput made")
+        self.added.append(inp)
+        feature = FakeFeature(f"Split Body{len(self.added)}")
+        self.created.append(feature)
+        return feature
+
+
+class FakeSplitFaceInput:
+    """``splitFaceFeatures.createInput(faces, splittingPlane, isExtended)``.
+
+    ``faces`` is the ``ObjectCollection`` of the faces to split, not a body: the
+    handler assembles it from indices or from every face the body has.  Nothing
+    is set on the input afterwards, so the three attributes are named after
+    Fusion's arguments.
+    """
+
+    def __init__(self, faces, splitting_plane, is_extended):
+        self.faces = faces
+        self.splittingPlane = splitting_plane
+        self.isSplittingToolExtended = is_extended
+
+
+class FakeSplitFaceFeatures:
+    """``root.features.splitFaceFeatures``: which faces, on which plane.
+
+    Three arguments, Fusion's arity.  The split - a face becoming two - is not
+    modelled for the same reason as ``FakeSplitBodyFeatures``: it needs the
+    geometry, and no reply field is built on it.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakeSplitFaceInput] = []
+        self.added: list[FakeSplitFaceInput] = []
+        self.created: list[FakeFeature] = []
+
+    def createInput(self, faces, splitting_plane, is_extended) -> FakeSplitFaceInput:
+        created = FakeSplitFaceInput(faces, splitting_plane, is_extended)
+        self.inputs.append(created)
+        return created
+
+    def add(self, inp: FakeSplitFaceInput) -> FakeFeature:
+        if not isinstance(inp, FakeSplitFaceInput):
+            raise TypeError("splitFaceFeatures.add takes the input createInput made")
+        self.added.append(inp)
+        feature = FakeFeature(f"Split Face{len(self.added)}")
+        self.created.append(feature)
+        return feature
+
+
+class FakeOffsetFacesInput:
+    """``offsetFeatures.createInput(faces, distance, operation)``.
+
+    ``distance`` stays the ``ValueInput`` Fusion was handed, so a test reads
+    whether the call site passed a real or an expression; ``operation`` is the
+    ``FeatureOperations`` member.  The handler sets no property afterwards, so
+    the names are the ``createInput`` arguments.
+    """
+
+    def __init__(self, faces, distance, operation):
+        self.faces = faces
+        self.distance = distance
+        self.operation = operation
+
+
+class FakeOffsetFacesFeatures:
+    """``root.features.offsetFeatures``: which faces, by how much.
+
+    Three arguments, Fusion's arity.  The offset surface is not modelled - how
+    far a face moves depends on its geometry, which this fake does not carry -
+    so only the request is recorded, and a test asserts on that.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakeOffsetFacesInput] = []
+        self.added: list[FakeOffsetFacesInput] = []
+        self.created: list[FakeFeature] = []
+
+    def createInput(self, faces, distance, operation) -> FakeOffsetFacesInput:
+        created = FakeOffsetFacesInput(faces, distance, operation)
+        self.inputs.append(created)
+        return created
+
+    def add(self, inp: FakeOffsetFacesInput) -> FakeFeature:
+        if not isinstance(inp, FakeOffsetFacesInput):
+            raise TypeError("offsetFeatures.add takes the input createInput made")
+        self.added.append(inp)
+        feature = FakeFeature(f"Offset{len(self.added)}")
+        self.created.append(feature)
+        return feature
+
+
+class FakeScaleInput:
+    """``scaleFeatures.createInput``: the bodies, the anchor, and the factors.
+
+    ``scales`` holds one ``ValueInput`` for a uniform scale and three for a
+    per-axis one - the two Fusion overloads - so its own length is what a test
+    reads to tell them apart.  ``anchorPoint`` is the ``Point3D`` the handler
+    builds from ``anchor_x``/``anchor_y``/``anchor_z``.
+    """
+
+    def __init__(self, input_entities, anchor_point, scales):
+        self.inputEntities = input_entities
+        self.anchorPoint = anchor_point
+        self.scales = scales
+
+
+class FakeScaleFeatures:
+    """``root.features.scaleFeatures``: one factor or three, never two.
+
+    Fusion's ``createInput`` is overloaded - ``(inputEntities, point, scale)``
+    and ``(inputEntities, point, xScale, yScale, zScale)`` - so exactly one or
+    three factors is accepted and two or four is a ``TypeError``, as the binding
+    would raise.  The scaled geometry is not modelled: a body's points move by
+    an amount that depends on the anchor and every vertex, and no reply field is
+    built on it.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakeScaleInput] = []
+        self.added: list[FakeScaleInput] = []
+        self.created: list[FakeFeature] = []
+
+    def createInput(self, input_entities, anchor_point, *scales) -> FakeScaleInput:
+        if len(scales) not in (1, 3):
+            raise TypeError(
+                "Wrong number or type of arguments for overloaded function "
+                "'ScaleFeatures_createInput': expected one scale or three"
+            )
+        created = FakeScaleInput(input_entities, anchor_point, scales)
+        self.inputs.append(created)
+        return created
+
+    def add(self, inp: FakeScaleInput) -> FakeFeature:
+        if not isinstance(inp, FakeScaleInput):
+            raise TypeError("scaleFeatures.add takes the input createInput made")
+        self.added.append(inp)
+        feature = FakeFeature(f"Scale{len(self.added)}")
+        self.created.append(feature)
+        return feature
+
+
+class FakeMoveInput:
+    """``moveFeatures.createInput(inputEntities, transform)``.
+
+    The transform is the ``Matrix3D`` the handler built, so a test can read the
+    ``translation`` it set on it.  Nothing is set on the input afterwards.
+    """
+
+    def __init__(self, input_entities, transform):
+        self.inputEntities = input_entities
+        self.transform = transform
+
+
+class FakeMoveFeatures:
+    """``root.features.moveFeatures``: two arguments, as the binding declares.
+
+    The type check is not decoration: the handler's mistake would be to hand
+    over a ``Vector3D`` - the translation it just built - where the placement
+    belongs, and Fusion answers that with "Wrong number or type of arguments".
+    The move itself is not modelled; nothing reads where the body went.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakeMoveInput] = []
+        self.added: list[FakeMoveInput] = []
+        self.created: list[FakeFeature] = []
+
+    def createInput(self, input_entities, transform) -> FakeMoveInput:
+        if not isinstance(transform, FakeMatrix3D):
+            raise TypeError(
+                "Wrong number or type of arguments for overloaded function "
+                "'MoveFeatures_createInput': expected a Matrix3D, got "
+                f"{type(transform).__name__}"
+            )
+        created = FakeMoveInput(input_entities, transform)
+        self.inputs.append(created)
+        return created
+
+    def add(self, inp: FakeMoveInput) -> FakeFeature:
+        if not isinstance(inp, FakeMoveInput):
+            raise TypeError("moveFeatures.add takes the input createInput made")
+        self.added.append(inp)
+        feature = FakeFeature(f"Move{len(self.added)}")
         self.created.append(feature)
         return feature
 

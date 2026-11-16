@@ -126,12 +126,19 @@ class FakeObjectCollection:
 
 
 class FakeMatrix3D:
-    """``adsk.core.Matrix3D.create()``: the identity placement, and nothing else.
+    """``adsk.core.Matrix3D.create()``: the identity placement.
 
-    ``create_component`` passes one to ``occurrences.addNewComponent`` and never
-    reads it back, so only the factory is modelled: a matrix that carried
-    numbers nothing measured would be fiction with a shape.
+    ``translation`` is the one member modelled, because ``move_body`` writes it
+    before handing the matrix to ``moveFeatures``: Fusion's is a settable
+    ``Vector3D``, and a test reads back the one the handler built.  It stays
+    ``None`` until something writes one, so a call site that never sets a
+    placement cannot pass by inheriting a default.  ``create_component`` passes
+    a matrix to ``occurrences.addNewComponent`` and reads nothing back from it - a
+    matrix that carried numbers nothing measured would be fiction there.
     """
+
+    def __init__(self):
+        self.translation: FakeVector3D | None = None
 
     @classmethod
     def create(cls) -> "FakeMatrix3D":
