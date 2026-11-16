@@ -21,6 +21,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import ClassVar
 
+from .appearance import FakeAppearances
 from .bodies import FakeBody, FakeFace
 from .collection import FakeCollection, FakeDeletable, FakeItemCollection
 from .features import (
@@ -33,6 +34,7 @@ from .features import (
     FakeRuledSurfaceFeatures,
     FakeThreadFeatures,
 )
+from .mesh import FakeMeshBodies
 from .runtime import (
     DIRECT,
     PARAMETRIC,
@@ -178,6 +180,9 @@ class FakeComponent:
         #: unions their bodies as well as its own; ``create_component`` places the
         #: new one through this collection.
         self.occurrences = FakeOccurrences()
+        #: Fusion assigns an appearance to a component as well as to a body and a
+        #: face; ``None`` until something assigns one.
+        self.appearance = None
 
     @property
     def allOccurrences(self) -> FakeCollection:
@@ -1284,6 +1289,7 @@ class FakeRoot:
         design: FakeDesign | None = None,
         sketches=(),
         bodies=None,
+        mesh_bodies=(),
     ):
         #: The *fake's* root name - no measurement pinned what Fusion calls the root
         #: component of a new design - and ``list_components`` reports it as the
@@ -1294,11 +1300,17 @@ class FakeRoot:
             design=design,
         )
         self.sketches = FakeSketches(list(sketches))
+        #: Fusion keeps mesh bodies apart from B-rep bodies; ``compare_meshes`` walks
+        #: this collection by name. Empty until a fixture supplies one.
+        self.meshBodies = FakeMeshBodies(list(mesh_bodies))
         self.features = FakeFeatures(design)
         self.joints = FakeJoints()
         self.asBuiltJoints = FakeAsBuiltJoints()
         self.rigidGroups = FakeRigidGroups()
         self.occurrences = FakeOccurrences()
+        #: Fusion assigns an appearance to a component as well as to a body and a
+        #: face; ``None`` until something assigns one.
+        self.appearance = None
         self.constructionPlanes = FakeConstructionPlanes()
         self.constructionAxes = FakeConstructionAxes()
         self.constructionPoints = FakeCollection()
@@ -1356,6 +1368,7 @@ class FakeDesign:
         sketches=(),
         bodies=None,
         interferences=(),
+        mesh_bodies=(),
     ):
         self.marker = features if marker is None else marker
         self.features = features
@@ -1370,9 +1383,13 @@ class FakeDesign:
         ]
         self.bodies = len(bodies) if bodies is not None else (1 if features else 0)
         self.userParameters = FakeUserParameters()
+        #: The design's own appearances: ``set_color`` adds one, ``set_appearance``
+        #: copies a library appearance in. Empty until a command creates one, which
+        #: is a new design's state as far as anything here reads it.
+        self.appearances = FakeAppearances()
         self.interference = FakeInterference(list(interferences))
         self._timeline = FakeTimeline(self)
-        self.rootComponent = FakeRoot(self, sketches, bodies)
+        self.rootComponent = FakeRoot(self, sketches, bodies, mesh_bodies)
         self.undo_commands_executed = 0
         #: Fusion's design goes invalid when its document is closed, and its
         #: properties then raise "4 : An API Object refers to a deleted Object".

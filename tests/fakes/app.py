@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import types
 
+from .appearance import FakeMaterialLibraries
+
 
 class FakeCustomEvent:
     """``adsk.core.CustomEvent``: the handler list the bridge adds to and drops from."""
@@ -50,6 +52,10 @@ class FakeApplication:
         self.activeProduct = None
         self.events: list[FakeCustomEvent] = []
         self.unregistered: list[str] = []
+        #: Fusion's appearance/material libraries. Empty, not invented: which
+        #: libraries an install ships is not measured here, so a test that reaches
+        #: ``set_appearance`` supplies its own.
+        self.materialLibraries = FakeMaterialLibraries()
 
     @staticmethod
     def get() -> "FakeApplication":
