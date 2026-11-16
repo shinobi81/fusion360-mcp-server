@@ -40,7 +40,7 @@ from tests.fakes.bodies import (
     FakeFace,
     FakePhysicalProperties,
 )
-from tests.fakes.design import FakeDesign
+from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
 
 
 def _plate() -> FakeBody:
@@ -64,9 +64,10 @@ def _handler_and_bodies(bound_handler, app=None):
     return handler, design, design.rootComponent.bRepBodies.item(1)
 
 
-def _app_with(library: FakeMaterialLibrary) -> FakeApplication:
+def _app_with(*libraries: FakeMaterialLibrary) -> FakeApplication:
+    """An application whose material libraries are exactly these, in this order."""
     app = FakeApplication()
-    app.materialLibraries = FakeMaterialLibraries([library])
+    app.materialLibraries = FakeMaterialLibraries(list(libraries))
     return app
 
 
@@ -159,13 +160,68 @@ def test_set_appearance_copies_the_library_appearance_into_the_design(bound_hand
         "appearance": "Polished Aluminium",
     }
 
+    # A second identical call **reuses** the copy it already made: an implementation
+    # that always called ``addByCopy`` would make a second one and move the body onto
+    # it, so the design's collection would grow.
+    handler.set_appearance("Plate", "Polished Aluminium")
 
-def test_set_appearance_falls_back_to_a_library_the_known_names_do_not_match(
+    assert plate.appearance is assigned, "the body keeps the design's first copy"
+    assert design.appearances.count == 2, "the decoy plus one copy, not two"
+
+
+def test_set_appearance_prefers_the_library_fusion_names_first(bound_handler):
+    """``"Fusion Appearance Library"`` wins over an earlier library with appearances.
+
+    Every name here is the test's: which libraries a Fusion install ships was not
+    measured.  Drop that one known name and the fallback reaches the library before
+    it, which holds appearances but not the one asked for.  The *other* known name
+    is pinned by ``test_set_appearance_falls_back_to_the_fusion_360_named_library``.
+    """
+    handler, _design, plate = _handler_and_bodies(
+        bound_handler,
+        _app_with(
+            FakeMaterialLibrary("Custom Appearances", [FakeAppearance("Steel")]),
+            FakeMaterialLibrary(
+                "Fusion Appearance Library", [FakeAppearance("Copper")]
+            ),
+        ),
+    )
+
+    handler.set_appearance("Plate", "Copper")
+
+    assert plate.appearance.name == "Copper"
+
+
+def test_set_appearance_falls_back_to_the_fusion_360_named_library(bound_handler):
+    """The second known name: ``"Fusion 360 Appearance Library"``, not the first."""
+    handler, _design, plate = _handler_and_bodies(
+        bound_handler,
+        _app_with(
+            FakeMaterialLibrary("Custom Appearances", [FakeAppearance("Steel")]),
+            FakeMaterialLibrary(
+                "Fusion 360 Appearance Library", [FakeAppearance("Brass")]
+            ),
+        ),
+    )
+
+    handler.set_appearance("Plate", "Brass")
+
+    assert plate.appearance.name == "Brass"
+
+
+def test_set_appearance_falls_back_past_a_library_holding_no_appearances(
     bound_handler,
 ):
-    """The library name is the test's: no Fusion install was measured for one."""
-    library = FakeMaterialLibrary("Custom Appearances", [FakeAppearance("Brass")])
-    handler, _design, plate = _handler_and_bodies(bound_handler, _app_with(library))
+    """The fallback skips an empty library rather than taking the first one."""
+    handler, _design, plate = _handler_and_bodies(
+        bound_handler,
+        _app_with(
+            # Empty and first: a search that ignored ``appearances.count`` would
+            # stop here and find no appearance named Brass.
+            FakeMaterialLibrary("Empty Library", []),
+            FakeMaterialLibrary("Custom Appearances", [FakeAppearance("Brass")]),
+        ),
+    )
 
     handler.set_appearance("Plate", "Brass")
 
@@ -237,6 +293,24 @@ def test_set_appearance_on_a_component_lands_on_the_component(bound_handler):
     assert root.appearance is not None
     assert root.appearance.name == "Brass"
     assert plate.appearance is None, "the bodies inside are untouched"
+
+
+def test_set_appearance_on_a_component_inside_an_occurrence(bound_handler):
+    """A component reached through an occurrence, not the root component."""
+    library = FakeMaterialLibrary(
+        "Fusion Appearance Library", [FakeAppearance("Brass")]
+    )
+    handler, design, plate = _handler_and_bodies(bound_handler, _app_with(library))
+    root = design.rootComponent
+    bracket = FakeComponent("Bracket")
+    root.occurrences.add(FakeOccurrence(bracket))
+
+    handler.set_appearance("Bracket", "Brass", target_type="component")
+
+    assert bracket.appearance is not None
+    assert bracket.appearance.name == "Brass"
+    assert root.appearance is None, "the root is not the component that was named"
+    assert plate.appearance is None, "neither is a body"
 
 
 # ── get_physical_properties ──────────────────────────────────────────

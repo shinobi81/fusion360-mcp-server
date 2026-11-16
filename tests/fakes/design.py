@@ -1308,6 +1308,9 @@ class FakeRoot:
         self.asBuiltJoints = FakeAsBuiltJoints()
         self.rigidGroups = FakeRigidGroups()
         self.occurrences = FakeOccurrences()
+        #: Fusion assigns an appearance to a component as well as to a body and a
+        #: face; ``None`` until something assigns one.
+        self.appearance = None
         self.constructionPlanes = FakeConstructionPlanes()
         self.constructionAxes = FakeConstructionAxes()
         self.constructionPoints = FakeCollection()
