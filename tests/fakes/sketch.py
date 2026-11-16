@@ -20,7 +20,7 @@ import math
 
 from .bodies import FakeBoundingBox
 from .collection import FakeCollection
-from .runtime import FakePlane, FakePoint3D, FakeVector3D
+from .runtime import FakeObjectCollection, FakePlane, FakePoint3D, FakeVector3D
 
 
 def _dot(a: tuple[float, float, float], b: tuple[float, float, float]) -> float:
@@ -391,6 +391,40 @@ class FakeProjectedCurves:
         self.count = count
 
 
+class FakeAutoConstrainInput:
+    """``Sketch.createAutoConstrainInput()``: an input whose option is settable.
+
+    Fusion's input carries ``resultOption``, and the handler writes one of the
+    three ``AutoConstrainResultTypes`` members to it before calling
+    ``autoConstrain``.  The fake records whatever it was handed rather than
+    refusing an unknown member: what Fusion does with one has not been measured.
+    """
+
+    def __init__(self):
+        self.resultOption = None
+
+
+class FakeAutoConstrainResult:
+    """What ``Sketch.autoConstrain`` returns: the four counts the reply is built from.
+
+    The three collections are only ever measured with ``len()``, so each count
+    builds its own list: a separate number that disagreed with the collection it
+    described would be a fake reporting a count Fusion never reported.
+    """
+
+    def __init__(
+        self,
+        is_fully_constrained: bool = False,
+        constraints: int = 0,
+        dimensions: int = 0,
+        moved: int = 0,
+    ):
+        self.isFullyConstrained = is_fully_constrained
+        self.addedConstraints = list(range(constraints))
+        self.addedDimensions = list(range(dimensions))
+        self.movedGeometry = list(range(moved))
+
+
 class FakeSketch:
     """A sketch: transform, recorded curve calls, line objects, profiles."""
 
@@ -416,6 +450,16 @@ class FakeSketch:
         self.geometricConstraints = FakeGeometricConstraints()
         self.sketchDimensions = FakeSketchDimensions()
         self.profiles = FakeProfiles(self, profile_count)
+        #: ``(entities, direction, distance)`` per ``offset()``, which is the arity
+        #: the handler calls and Fusion ships.
+        self.offset_calls: list[tuple] = []
+        #: The input each ``autoConstrain()`` was called with, so a test reads the
+        #: option that was asked for.
+        self.auto_constrain_inputs: list[FakeAutoConstrainInput] = []
+        #: ``resultOption -> answer``; a missing key gives ``auto_constrain_result``,
+        #: and ``None`` models Fusion's answer for a sketch it will not adjust.
+        self.auto_constrain_results: dict = {}
+        self.auto_constrain_result = FakeAutoConstrainResult()
 
     def bump(self) -> None:
         self.version += 1
@@ -480,6 +524,39 @@ class FakeSketch:
         """The retired form, kept so a regression shows up as linkage=None."""
         self.projected.append(([entity], None))
         return FakeProjectedCurves(1)
+
+    def offset(self, entities, direction, distance) -> None:
+        """``Sketch.offset(entities, direction, distance)`` — three arguments.
+
+        Fusion takes an ``ObjectCollection`` of sketch entities, a point that says
+        which side to offset towards, and the distance; the handler passes exactly
+        those three, so the two-argument shape this fake was first planned with is
+        a ``TypeError`` here.  The offset geometry is not modelled — Fusion derives
+        it from the curve and no handler reads it back — so only the call is kept.
+        """
+        if not isinstance(entities, FakeObjectCollection):
+            raise TypeError(
+                "Wrong number or type of arguments for overloaded function "
+                "'Sketch_offset'"
+            )
+        self.offset_calls.append((entities, direction, distance))
+
+    def createAutoConstrainInput(self) -> FakeAutoConstrainInput:
+        """``Sketch.createAutoConstrainInput()``: the input, before any option."""
+        return FakeAutoConstrainInput()
+
+    def autoConstrain(self, ac_input: FakeAutoConstrainInput):
+        """``Sketch.autoConstrain(input)``: one result — or ``None``.
+
+        Fusion's Option 3 answers ``None`` for a sketch it will not adjust, which
+        the handler turns into a refusal; ``auto_constrain_results`` overrides the
+        answer per option so that branch is expressible.  A permissive fake that
+        always returned a result would hide it, and nothing would notice.
+        """
+        self.auto_constrain_inputs.append(ac_input)
+        return self.auto_constrain_results.get(
+            ac_input.resultOption, self.auto_constrain_result
+        )
 
 
 def _cross(

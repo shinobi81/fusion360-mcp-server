@@ -33,7 +33,14 @@ from .features import (
     FakeRuledSurfaceFeatures,
     FakeThreadFeatures,
 )
-from .runtime import DIRECT, PARAMETRIC, FakePoint3D, FakeValueInput
+from .runtime import (
+    DIRECT,
+    PARAMETRIC,
+    FakeMatrix3D,
+    FakePoint3D,
+    FakeUserCoordinateSystemGeometry,
+    FakeValueInput,
+)
 from .sketch import FakeSketches, FakeSketchPoint
 
 
@@ -136,8 +143,17 @@ class FakeUserParameters:
             else str(value_input.value)
         )
         created = FakeParameter(name, expression, unit, comment, value_input.kind)
+        # ``Parameter.deleteMe()`` removes it from this collection, so the
+        # collection has to be the one that knows how: ``delete_parameter`` reads
+        # back through ``get_parameters``, where a parameter that only looked
+        # deleted is still there.
+        created._collection = self
         self._parameters[name] = created
         return created
+
+    def remove(self, parameter: FakeParameter) -> None:
+        """What ``FakeDeletable.deleteMe()`` calls; Fusion's deletion is per item."""
+        self._parameters.pop(parameter.name, None)
 
     def itemByName(self, name: str) -> FakeParameter | None:
         return self._parameters.get(name)
@@ -155,6 +171,20 @@ class FakeComponent:
     def __init__(self, name: str, bodies=()):
         self.name = name
         self.bRepBodies = FakeBRepBodies(list(bodies))
+        #: A component holds the occurrences placed in it, and ``get_bounding_box``
+        #: unions their bodies as well as its own; ``create_component`` places the
+        #: new one through this collection.
+        self.occurrences = FakeOccurrences()
+
+    @property
+    def allOccurrences(self) -> FakeCollection:
+        """Fusion's flat list of every occurrence below this component.
+
+        Only the immediate children are modelled: no fixture here nests an
+        assembly inside an assembly, and a recursive walk would be fiction about
+        a depth nothing has measured.
+        """
+        return self.occurrences
 
 
 class FakeBaseFeature(FakeDeletable):
@@ -276,11 +306,31 @@ class FakeOccurrence:
         #: before/after displacement map on this.
         self.name = component.name
         self.transform = FakeTransform(x)
+        #: Visible until a test hides it: ``list_components`` reports the flag.
+        self.isVisible = True
 
     @property
     def bRepBodies(self) -> FakeCollection:
         """An occurrence reaches its component's bodies, as Fusion does."""
         return self.component.bRepBodies
+
+
+class FakeOccurrences(FakeCollection):
+    """``root.occurrences``: ``addNewComponent(matrix)`` is the one creator used.
+
+    Fusion takes a ``Matrix3D`` and returns the occurrence it placed.  The fake
+    keeps the component it made, so the occurrence reads back as an ordinary one
+    - which is what ``create_component`` renames and what ``allOccurrences``
+    reports afterwards.
+    """
+
+    def addNewComponent(self, matrix) -> FakeOccurrence:
+        if not isinstance(matrix, FakeMatrix3D):
+            raise TypeError(
+                f"addNewComponent takes a Matrix3D, not {type(matrix).__name__}"
+            )
+        occurrence = FakeOccurrence(FakeComponent(f"Component{self.count + 1}"))
+        return super().add(occurrence)
 
 
 class FakeAxes:
@@ -1028,6 +1078,180 @@ class FakeAsBuiltJoints(FakeCollection):
         return joint
 
 
+class FakeConstructionInput:
+    """``constructionPlanes.createInput()`` / ``constructionAxes.createInput()``.
+
+    Each setter declares the arity of the handler's call site, which is Fusion's,
+    so a wrong one is a ``TypeError`` here instead of a recorded call nobody could
+    tell from a correct one.  Which setters exist is per collection - a plane input
+    has no ``setByEdge``, an axis input no ``setByOffset`` - so the wrong call is an
+    ``AttributeError``, as it is in Fusion.
+    """
+
+    def __init__(self):
+        #: The one setter that was called, and the arguments it was given.
+        self.setter: str | None = None
+        self.args: tuple = ()
+
+    def _record(self, setter: str, args: tuple) -> None:
+        self.setter = setter
+        self.args = args
+
+
+class FakeConstructionPlaneInput(FakeConstructionInput):
+    """The four plane definitions ``create_construction_plane`` builds."""
+
+    def setByOffset(self, plane, offset) -> None:
+        self._record("setByOffset", (plane, offset))
+
+    def setByAngle(self, axis, angle, plane) -> None:
+        self._record("setByAngle", (axis, angle, plane))
+
+    def setByTwoPlanes(self, plane_one, plane_two) -> None:
+        self._record("setByTwoPlanes", (plane_one, plane_two))
+
+    def setByThreePoints(self, point_one, point_two, point_three) -> None:
+        self._record("setByThreePoints", (point_one, point_two, point_three))
+
+
+class FakeConstructionAxisInput(FakeConstructionInput):
+    """The four axis definitions ``create_construction_axis`` builds."""
+
+    def setByTwoPoints(self, point_one, point_two) -> None:
+        self._record("setByTwoPoints", (point_one, point_two))
+
+    def setByTwoPlanes(self, plane_one, plane_two) -> None:
+        self._record("setByTwoPlanes", (plane_one, plane_two))
+
+    def setByEdge(self, edge) -> None:
+        self._record("setByEdge", (edge,))
+
+    def setByPerpendicularAtPoint(self, plane, point) -> None:
+        self._record("setByPerpendicularAtPoint", (plane, point))
+
+
+class _FakeConstructionCollection(FakeCollection):
+    """Shared half of the two construction collections: inputs, then a named item.
+
+    ``add`` refuses an input whose geometry was never set, because a construction
+    entity with no definition cannot exist.  The default names - "Construction
+    Plane1", "Construction Axis1" - are the *fake's*: the replies only have to
+    name the object ``add`` returned, and no test pins Fusion's own default.
+    """
+
+    _INPUT: type
+    _NAME: str
+
+    def __init__(self):
+        super().__init__()
+        self.inputs: list[FakeConstructionInput] = []
+
+    @property
+    def last_input(self) -> FakeConstructionInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(self) -> FakeConstructionInput:
+        created = self._INPUT()
+        self.inputs.append(created)
+        return created
+
+    def add(self, item) -> FakeDeletable:
+        if not isinstance(item, self._INPUT):
+            raise TypeError(f"add takes the input createInput returned, got {item!r}")
+        if item.setter is None:
+            raise RuntimeError(f"3 : a {self._NAME} needs a definition")
+        return super().add(FakeDeletable(f"{self._NAME}{self.count + 1}"))
+
+
+class FakeConstructionPlanes(_FakeConstructionCollection):
+    """``root.constructionPlanes``: the definition each plane was built from."""
+
+    _INPUT = FakeConstructionPlaneInput
+    _NAME = "Construction Plane"
+
+
+class FakeConstructionAxes(_FakeConstructionCollection):
+    """``root.constructionAxes``: the same shape, for the axis definitions."""
+
+    _INPUT = FakeConstructionAxisInput
+    _NAME = "Construction Axis"
+
+
+class FakeUserCoordinateSystemInput:
+    """``userCoordinateSystems.createInput(geometry)``: three optional angles.
+
+    Fusion exposes ``angleX``/``angleY``/``angleZ`` as ``ValueInput`` properties
+    and only the ones set take effect, so an unset one stays ``None`` and a test
+    can tell which angles the handler wrote.
+    """
+
+    def __init__(self, geometry):
+        self.geometry = geometry
+        self.angleX = None
+        self.angleY = None
+        self.angleZ = None
+
+
+class FakeUserCoordinateSystems(FakeCollection):
+    """``root.userCoordinateSystems``: anchored on a geometry, then named.
+
+    The default name "UCS1" is the *fake's* - ``create_ucs`` renames the UCS when
+    the caller named it, and the reply only reads ``name`` back.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.inputs: list[FakeUserCoordinateSystemInput] = []
+
+    @property
+    def last_input(self) -> FakeUserCoordinateSystemInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(self, geometry) -> FakeUserCoordinateSystemInput:
+        if not isinstance(geometry, FakeUserCoordinateSystemGeometry):
+            raise TypeError(
+                "userCoordinateSystems.createInput takes the geometry "
+                "UserCoordinateSystemGeometry_createByPoint made, not "
+                f"{type(geometry).__name__}"
+            )
+        created = FakeUserCoordinateSystemInput(geometry)
+        self.inputs.append(created)
+        return created
+
+    def add(self, item) -> FakeDeletable:
+        if not isinstance(item, FakeUserCoordinateSystemInput):
+            raise TypeError("add takes the input createInput returned")
+        return super().add(FakeDeletable(f"UCS{self.count + 1}"))
+
+
+class FakeRigidGroup(FakeDeletable):
+    """A created rigid group: the occurrences in it and whether children came too."""
+
+    def __init__(self, name: str, occurrences: list, include_children: bool):
+        super().__init__(name)
+        self.occurrences = occurrences
+        self.includeChildren = include_children
+
+
+class FakeRigidGroups(FakeCollection):
+    """``root.rigidGroups``: ``add(occurrences, includeChildren)`` - two arguments.
+
+    A rigid group is one call in Fusion, not an input/feature pair, and its second
+    argument is the flag ``create_rigid_group``'s ``include_children`` becomes.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.added: list[FakeRigidGroup] = []
+
+    def add(self, occurrences, include_children) -> FakeRigidGroup:
+        group = FakeRigidGroup(
+            f"Rigid Group{self.count + 1}", list(occurrences), include_children
+        )
+        self.added.append(group)
+        return super().add(group)
+
+
 class FakeRoot:
     """``design.rootComponent``: everything ``delete_all`` sweeps, plus planes."""
 
@@ -1037,6 +1261,10 @@ class FakeRoot:
         sketches=(),
         bodies=None,
     ):
+        #: The *fake's* root name - no measurement pinned what Fusion calls the root
+        #: component of a new design - and ``list_components`` reports it as the
+        #: first row.
+        self.name = "Component1"
         self.bRepBodies = FakeBRepBodies(
             list(bodies) if bodies is not None else _default_bodies(design),
             design=design,
@@ -1045,11 +1273,12 @@ class FakeRoot:
         self.features = FakeFeatures(design)
         self.joints = FakeJoints()
         self.asBuiltJoints = FakeAsBuiltJoints()
-        self.rigidGroups = FakeCollection()
-        self.occurrences = FakeCollection()
-        self.constructionPlanes = FakeCollection()
-        self.constructionAxes = FakeCollection()
+        self.rigidGroups = FakeRigidGroups()
+        self.occurrences = FakeOccurrences()
+        self.constructionPlanes = FakeConstructionPlanes()
+        self.constructionAxes = FakeConstructionAxes()
         self.constructionPoints = FakeCollection()
+        self.userCoordinateSystems = FakeUserCoordinateSystems()
         axes = FakeAxes()
         self.xConstructionAxis = axes.xConstructionAxis
         self.yConstructionAxis = axes.yConstructionAxis
