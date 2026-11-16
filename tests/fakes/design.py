@@ -26,12 +26,20 @@ from .bodies import FakeBody, FakeFace
 from .collection import FakeCollection, FakeDeletable, FakeItemCollection
 from .features import (
     FakeAnalyses,
+    FakeCircularPatternFeatures,
     FakeDraftFeatures,
     FakeExportManager,
     FakeFeature,
     FakeInterference,
+    FakeMirrorFeatures,
+    FakeMoveFeatures,
+    FakeOffsetFacesFeatures,
     FakeProfile,
+    FakeRectangularPatternFeatures,
     FakeRuledSurfaceFeatures,
+    FakeScaleFeatures,
+    FakeSplitBodyFeatures,
+    FakeSplitFaceFeatures,
     FakeThreadFeatures,
 )
 from .mesh import FakeMeshBodies
@@ -176,6 +184,12 @@ class FakeComponent:
     def __init__(self, name: str, bodies=()):
         self.name = name
         self.bRepBodies = FakeBRepBodies(list(bodies))
+        #: A Fusion component holds its own sketches and features - the root
+        #: component is one, not a separate kind of thing - so a command that
+        #: builds into a named component (``create_box_parametric``'s
+        #: ``component_name``) reaches these on the component it resolved.
+        self.sketches = FakeSketches()
+        self.features = FakeFeatures()
         #: A component holds the occurrences placed in it, and ``get_bounding_box``
         #: unions their bodies as well as its own; ``create_component`` places the
         #: new one through this collection.
@@ -485,6 +499,7 @@ class FakeExtrudeFeatures:
     def __init__(self):
         self.inputs: list[FakeExtrudeInput] = []
         self.added: list[FakeExtrudeInput] = []
+        self.created: list[FakeFeature] = []
 
     def createInput(self, profile, operation) -> FakeExtrudeInput:
         inp = FakeExtrudeInput(profile, operation)
@@ -493,7 +508,14 @@ class FakeExtrudeFeatures:
 
     def add(self, inp):
         self.added.append(inp)
-        return FakeFeature("Extrude1")
+        # One body, the fake's model of ``NewBodyFeatureOperation`` - the only
+        # operation this fake builds a body for.  ``create_box_parametric``
+        # renames that body through ``Feature.bodies`` (the SDK's own property,
+        # not measured here); a cut or a join would produce none, which is not
+        # modelled and nothing here reads.
+        feature = FakeFeature("Extrude1", bodies=[FakeBody("Extrude1")])
+        self.created.append(feature)
+        return feature
 
 
 class FakeSweepInput:
@@ -782,6 +804,14 @@ class FakeFeatures:
         self.baseFeatures = FakeBaseFeatures()
         self.threadFeatures = FakeThreadFeatures()
         self.ruledSurfaceFeatures = FakeRuledSurfaceFeatures()
+        self.mirrorFeatures = FakeMirrorFeatures(design)
+        self.rectangularPatternFeatures = FakeRectangularPatternFeatures()
+        self.circularPatternFeatures = FakeCircularPatternFeatures()
+        self.splitBodyFeatures = FakeSplitBodyFeatures()
+        self.splitFaceFeatures = FakeSplitFaceFeatures()
+        self.offsetFeatures = FakeOffsetFacesFeatures()
+        self.scaleFeatures = FakeScaleFeatures()
+        self.moveFeatures = FakeMoveFeatures()
 
     def createPath(self, curve):
         """``features.createPath``: a sweep needs a Path around the curve."""

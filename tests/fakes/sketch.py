@@ -150,6 +150,33 @@ class _PointDegreeRecorder(_CurveRecorder):
         self._record(points=list(points), degree=degree)
 
 
+class FakeSketchLineList:
+    """What ``addTwoPointRectangle`` returns: the four lines it built, in order.
+
+    Fusion's ``SketchLines.addTwoPointRectangle`` returns a ``SketchLineList``
+    rather than nothing, and ``create_box_parametric`` dimensions two of the four
+    (``item(0)`` horizontally, ``item(1)`` vertically) - so the return value has
+    to be a collection or the command cannot run at all.  The **order** is this
+    fake's: the lines are built counter-clockwise from the first corner, which makes
+    ``item(0)`` the edge along sketch x and ``item(1)`` the one along sketch y.
+    No test asserts Fusion's own ordering, only which orientation and value each
+    index was dimensioned with.
+    """
+
+    def __init__(self, lines: list[FakeLine]):
+        self._lines = list(lines)
+
+    @property
+    def count(self) -> int:
+        return len(self._lines)
+
+    def item(self, index: int) -> FakeLine:
+        return self._lines[index]
+
+    def __iter__(self):
+        return iter(self._lines)
+
+
 class FakeSketchLines:
     """``sketchCurves.sketchLines``: records calls *and* builds line objects.
 
@@ -168,7 +195,7 @@ class FakeSketchLines:
         self._sketch.bump()  # Fusion invalidates existing proxies
         return line
 
-    def addTwoPointRectangle(self, p1, p2) -> None:
+    def addTwoPointRectangle(self, p1, p2) -> FakeSketchLineList:
         # Fusion builds four edges; the revolve tests probe ``lines`` for
         # "no geometry was created", so a rectangle has to appear there.
         corners = [
@@ -177,10 +204,14 @@ class FakeSketchLines:
             FakePoint3D(p2.x, p2.y, 0.0),
             FakePoint3D(p1.x, p2.y, 0.0),
         ]
+        built = []
         for index, start in enumerate(corners):
-            self._sketch.lines.append(FakeLine(start, corners[(index + 1) % 4]))
+            line = FakeLine(start, corners[(index + 1) % 4])
+            self._sketch.lines.append(line)
+            built.append(line)
         self._sketch.curve_calls.append(("line", {"points": [p1, p2]}))
         self._sketch.bump()
+        return FakeSketchLineList(built)
 
     @property
     def count(self) -> int:
@@ -345,10 +376,41 @@ for _name in FakeGeometricConstraints.METHODS:
 
 
 class FakeModelParameter:
-    """``dim.parameter``: the value ``add_dimension`` writes."""
+    """``dim.parameter``: the value ``add_dimension`` writes.
+
+    Fusion's ``ModelParameter`` carries the number in ``value`` (internal units)
+    and the unit-carrying text in ``expression``, and assigning one does not
+    assign the other.  So both are properties that **record** which one was
+    written, in ``writes`` - with two plain attributes a ``createByReal`` payload
+    and a ``createByString`` one would be indistinguishable, and the choice
+    between them is the whole point of ``value_input_for``.
+    """
 
     def __init__(self):
-        self.value = 0.0
+        self.written: list[tuple[str, object]] = []
+        self._value = 0.0
+        self._expression: str | None = None
+
+    @property
+    def value(self) -> float:
+        return self._value
+
+    @value.setter
+    def value(self, new: float) -> None:
+        self.written.append(("value", new))
+        self._value = new
+
+    @property
+    def expression(self) -> str | None:
+        """``None`` until written: a sketch dimension always has an expression
+        in Fusion, but which text it starts with is the handler's business and
+        nothing reads it before a write."""
+        return self._expression
+
+    @expression.setter
+    def expression(self, new: str) -> None:
+        self.written.append(("expression", new))
+        self._expression = new
 
 
 class FakeDimension:
@@ -365,10 +427,15 @@ class FakeSketchDimensions:
     def __init__(self):
         self.calls: list[tuple[str, tuple]] = []
         self.last_dimension: FakeDimension | None = None
+        #: Every dimension ``add*Dimension`` returned, in order - a command that
+        #: adds two (``create_box_parametric`` adds one per side) needs both, and
+        #: ``last_dimension`` would only keep the second.
+        self.dimensions: list[FakeDimension] = []
 
     def _record(self, method: str, args: tuple) -> FakeDimension:
         self.calls.append((method, args))
         self.last_dimension = FakeDimension(method)
+        self.dimensions.append(self.last_dimension)
         return self.last_dimension
 
     def addDistanceDimension(self, p1, p2, orientation, text_point) -> FakeDimension:
