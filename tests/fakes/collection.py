@@ -21,7 +21,8 @@ class RemovableCollection(Protocol):
     ``remove``, so that is the whole contract.
     """
 
-    def remove(self, item) -> None: ...
+    def remove(self, item) -> None:
+        """Take ``item`` out of this collection, if it is in it."""
 
 
 class FakeItemCollection:
