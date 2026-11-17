@@ -187,11 +187,13 @@ def test_a_selector_that_is_not_a_list_is_refused_with_its_own_hints(params, mes
     ]
 
 
-#: One parameter set per assembly validator: the tool it belongs to, the parameters
-#: that earn the refusal, and the exact kind, sentence and hints both modes answer.
-#: The tool is a column because two validators share the same parameters (``add_joint``
-#: and ``create_as_built_joint`` differ only by ``joint_type``).
-ASSEMBLY_REFUSALS = [
+#: One parameter set per ``rules.py`` validator: the tool it belongs to, the
+#: parameters that earn the refusal, and the exact kind, sentence and hints both
+#: modes answer.  The tool is a column because two validators share the same
+#: parameters (``add_joint`` and ``create_as_built_joint`` differ only by
+#: ``joint_type``), and because a shared ``handler_base`` helper is reached through
+#: the tools that call it rather than one of its own.
+PARAMETER_REFUSALS = [
     (
         "add_joint",
         {"component_one": "A", "component_two": "A", "face_one": 0, "face_two": 0},
@@ -249,12 +251,30 @@ ASSEMBLY_REFUSALS = [
             "use execute_code.",
         ),
     ),
+    # ``handler_base._body_by_name``: any tool that names a body reaches it, so the
+    # row rides on the one that takes nothing else.
+    (
+        "get_physical_properties",
+        {"body_name": ""},
+        "INVALID_INPUT",
+        "A body name is required",
+        ("Pass a body name; get_scene_info lists the bodies in this design.",),
+    ),
+    # ``handler_base._point3d``: reached by both construction tools, and judged per
+    # point so the message names the one that is wrong.
+    (
+        "create_construction_plane",
+        {"method": "three_points", "point_one": [0, 0]},
+        "INVALID_INPUT",
+        "point_one must be [x, y, z] in centimetres",
+        ("Pass three numbers, in centimetres: [x, y, z].",),
+    ),
 ]
 
 
 @pytest.mark.parametrize(
     ("command", "params", "expected_kind", "expected_message", "expected_hints"),
-    ASSEMBLY_REFUSALS,
+    PARAMETER_REFUSALS,
     ids=[
         "components_differ",
         "joint_geometry",
@@ -262,6 +282,8 @@ ASSEMBLY_REFUSALS = [
         "rigid_group_size",
         "construction_method",
         "perpendicular_axis",
+        "body_name_required",
+        "point3d_shape",
     ],
 )
 def test_the_validator_and_mock_agree(

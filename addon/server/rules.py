@@ -250,6 +250,44 @@ def perpendicular_axis_refusal(
     )
 
 
+def body_name_required_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal a body-naming call with no name earns, or None when one was given.
+
+    ``handler_base._body_by_name`` takes the name every body command was handed, and
+    an empty one names nothing: Fusion would be given ``""`` and answer about the
+    argument, without saying which call was short.  Whether a body *of* that name
+    exists needs the design; that a name was given does not, so mock mode judges it
+    too.
+    """
+    if params.get("body_name"):
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        "A body name is required",
+        hints=("Pass a body name; get_scene_info lists the bodies in this design.",),
+    )
+
+
+def point3d_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal a point that is not three numbers earns, or None when all are.
+
+    ``params`` maps each point parameter's name to the value the caller sent, so the
+    message names the one that is wrong: ``Point3D.create(*values)`` unpacked a short
+    list inside Fusion's binding, and the caller read a ``TypeError`` instead.  Three
+    numbers in the right shape is judged here; whether they describe a usable point
+    is Fusion's.
+    """
+    for field, values in params.items():
+        if isinstance(values, (list, tuple)) and len(values) == 3:
+            continue
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"{field} must be [x, y, z] in centimetres",
+            hints=("Pass three numbers, in centimetres: [x, y, z].",),
+        )
+    return None
+
+
 def rule_type_refusal(rule_type: str) -> _hints.Refusal | None:
     """The refusal a ``ruled_surface`` ``rule_type`` earns, or None when it is usable.
 

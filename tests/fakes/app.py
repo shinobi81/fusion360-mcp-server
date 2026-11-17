@@ -9,8 +9,12 @@ an invented ``activeProduct`` would change what ``_snapshot`` reports.
 from __future__ import annotations
 
 import types
+from typing import TYPE_CHECKING
 
 from .appearance import FakeMaterialLibraries
+
+if TYPE_CHECKING:
+    from .document import FakeDocuments
 
 
 class FakeCustomEvent:
@@ -42,6 +46,10 @@ class FakeApplication:
     bridge share one session object, so a fake that minted a new one per call would
     let a reloaded handler be wired to an application the bridge knows nothing about.
     """
+
+    #: Installed by a test that needs a document (``tests/fakes/document.py``); a
+    #: missing one is the absence this fake is built around, so there is no default.
+    documents: FakeDocuments
 
     _instance: "FakeApplication | None" = None
 

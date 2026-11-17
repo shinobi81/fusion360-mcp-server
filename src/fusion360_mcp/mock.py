@@ -19,11 +19,13 @@ from typing import Any
 from ._mutation_commands import MUTATION_COMMANDS
 from ._rules import (
     as_built_geometry_refusal,
+    body_name_required_refusal,
     components_differ_refusal,
     construction_method_refusal,
     edge_selector_refusal,
     joint_geometry_refusal,
     perpendicular_axis_refusal,
+    point3d_refusal,
     rigid_group_size_refusal,
     rule_type_refusal,
     sketch_plane_z_note,
@@ -918,6 +920,16 @@ def _add_dimension(p: dict) -> dict:
 
 def _create_construction_plane(p: dict) -> dict:
     refusal = construction_method_refusal(p)
+    if refusal is None and p.get("method") == "three_points":
+        # The add-in builds a Point3D per point on this branch only, so the points an
+        # offset or midplane call leaves unset are not judged.
+        refusal = point3d_refusal(
+            {
+                "point_one": p.get("point_one"),
+                "point_two": p.get("point_two"),
+                "point_three": p.get("point_three"),
+            }
+        )
     if refusal is not None:
         return _refusal_error(refusal)
     return {
@@ -928,6 +940,13 @@ def _create_construction_plane(p: dict) -> dict:
 
 def _create_construction_axis(p: dict) -> dict:
     refusal = perpendicular_axis_refusal(p)
+    if refusal is None and p.get("method") == "two_points":
+        refusal = point3d_refusal(
+            {
+                "point_one": p.get("point_one"),
+                "point_two": p.get("point_two"),
+            }
+        )
     if refusal is not None:
         return _refusal_error(refusal)
     return {
@@ -1135,6 +1154,9 @@ def _measure_angle(p: dict) -> dict:
 
 
 def _get_physical_properties(p: dict) -> dict:
+    refusal = body_name_required_refusal(p)
+    if refusal is not None:
+        return _refusal_error(refusal)
     return {
         "body_name": p.get("body_name", "Body1"),
         "mass": 0.785,

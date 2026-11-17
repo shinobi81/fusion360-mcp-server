@@ -277,15 +277,16 @@ class HandlerBase:
 
         The construction tools take optional point lists; unpacking None raised
         TypeError from inside Fusion's binding, which said nothing a caller could
-        act on.
+        act on.  The check is judged from the parameter alone, so it lives in
+        ``rules`` and mock mode answers it identically.
         """
-        if not values or len(values) != 3:
-            raise RuntimeError(f"{label} must be [x, y, z] in centimetres")
+        if refusal := _rules.point3d_refusal({label: values}):
+            raise refusal
         return adsk.core.Point3D.create(*values)
 
     def _body_by_name(self, name: str | None):
-        if not name:
-            raise RuntimeError("A body name is required")
+        if refusal := _rules.body_name_required_refusal({"body_name": name}):
+            raise refusal
         root = self._root()
         # Search root bodies first
         for i in range(root.bRepBodies.count):
@@ -318,7 +319,11 @@ class HandlerBase:
         for occ in root.allOccurrences:
             if occ.component.name == name:
                 return occ.component
-        raise RuntimeError(f"Component '{name}' not found")
+        raise _hints.Refusal(
+            "NAME_NOT_FOUND",
+            f"Component '{name}' not found",
+            hints=("Call list_components for the component names.",),
+        )
 
     def _construction_plane(self, plane: str | None):
         root = self._root()
@@ -331,7 +336,11 @@ class HandlerBase:
         # xy would build geometry nobody asked for.
         p = m.get((plane or "").lower())
         if p is None:
-            raise RuntimeError(f"Unknown plane {plane!r} — use xy, yz, or xz")
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"Unknown plane {plane!r} — use xy, yz, or xz",
+                hints=("Pass xy, yz or xz; the plane is lowercased, so XZ works.",),
+            )
         return p
 
     def _construction_axis(self, axis: str):
@@ -344,7 +353,11 @@ class HandlerBase:
         # Lowercased like _construction_plane, so "X" and "x" name the same axis.
         a = m.get((axis or "").lower())
         if a is None:
-            raise RuntimeError(f"Unknown axis '{axis}' — use x, y, or z")
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"Unknown axis '{axis}' — use x, y, or z",
+                hints=("Pass x, y or z; the axis is lowercased, so Y works.",),
+            )
         return a
 
     @staticmethod
@@ -465,7 +478,11 @@ class HandlerBase:
                 item.isSuppressed = suppressed
                 key = "suppressed" if suppressed else "unsuppressed"
                 return {key: True, "feature": feature_name}
-        raise RuntimeError(f"Feature '{feature_name}' not found in timeline")
+        raise _hints.Refusal(
+            "NAME_NOT_FOUND",
+            f"Feature '{feature_name}' not found in timeline",
+            hints=("Call get_scene_info for the timeline feature names.",),
+        )
 
     @staticmethod
     def _wait_future(future, timeout: float = 25.0):

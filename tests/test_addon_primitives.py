@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import pytest
 
+from addon.server import hints as addon_hints
 from tests.fakes.design import FakeDesign
 
 
@@ -155,7 +156,17 @@ class TestSuppressFeature:
 
     @pytest.mark.parametrize("method", ["suppress_feature", "unsuppress_feature"])
     def test_an_unknown_feature_is_refused(self, bound_handler, method):
+        """The timeline was walked and holds no entry of that name.
+
+        ``NAME_NOT_FOUND`` is the kind for a design lookup, and the hint names the
+        command that lists the timeline's features.
+        """
         design, _named = self._design()
 
-        with pytest.raises(RuntimeError, match="not found in timeline"):
+        with pytest.raises(RuntimeError, match="not found in timeline") as raised:
             getattr(bound_handler(design), method)("NoSuchFeature")
+
+        assert addon_hints.classify(raised.value) == (
+            "NAME_NOT_FOUND",
+            ["Call get_scene_info for the timeline feature names."],
+        )

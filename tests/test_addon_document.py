@@ -30,6 +30,7 @@ from __future__ import annotations
 import pytest
 
 from addon.server import fusion_api
+from addon.server import hints as addon_hints
 from tests.fakes.app import FakeApplication
 from tests.fakes.design import FakeDesign
 from tests.fakes.document import FakeDocument, FakeDocuments, FakeProduct
@@ -120,6 +121,36 @@ def test_new_document_reports_the_design_product_it_found_by_type(
     assert reply["component"] == design.rootComponent.name
 
 
+def test_new_document_without_a_design_product_is_a_design_type_mismatch(
+    bound_handler, monkeypatch
+):
+    """The document came back holding no Design product, so there is nothing to use.
+
+    ``FakeDocuments.add`` always puts a design in the document it mints, so the
+    document is replaced here with one holding a CAM product only.  What Fusion
+    hands back outside a design-capable workspace was not measured; the assertion
+    is the reply, and ``DESIGN_TYPE_MISMATCH`` is the kind that says "wrong product
+    type" rather than "wrong argument".
+    """
+    design = FakeDesign(features=0)
+    app = _app_with_documents(design)
+    monkeypatch.setattr(
+        app.documents,
+        "add",
+        lambda _document_type: FakeDocument(
+            "Untitled", [FakeProduct("CAMProductType")]
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="no design product") as raised:
+        bound_handler(design, app=app).new_document()
+
+    assert addon_hints.classify(raised.value) == (
+        "DESIGN_TYPE_MISMATCH",
+        ["new_document creates a design; check get_design_type."],
+    )
+
+
 # ── set_design_type ──────────────────────────────────────────────────
 
 
@@ -175,14 +206,9 @@ def test_set_design_type_already_in_that_mode_changes_nothing(
     assert nudges == [], "there is nothing to switch, so Fusion is not nudged"
 
 
-def test_set_design_type_with_an_unknown_name_is_refused(bound_handler):
-    design = FakeDesign(features=2)
-    handler = bound_handler(design)
-
-    with pytest.raises(RuntimeError):
-        handler.set_design_type("hybrid")
-
-    assert design.designType == PARAMETRIC
+# An unknown design_type no longer reaches the add-in: it is the one value the tool's
+# schema enum declares a set of, and the gate refuses a value outside it before either
+# mode sees the command.  ``test_schema_gate.py`` owns that assertion now.
 
 
 # ── compare_meshes ───────────────────────────────────────────────────
@@ -262,3 +288,42 @@ def test_compare_meshes_of_a_name_no_mesh_body_has_is_refused(bound_handler):
 
     with pytest.raises(RuntimeError):
         handler.compare_meshes("Panel", "PanelCopy")
+
+
+def test_compare_meshes_of_a_body_with_no_mesh_is_fusion_refused(bound_handler):
+    """``body.mesh or body.displayMesh`` answered None for the named body.
+
+    ``FakeMeshBody`` carries no display mesh at all, so a body handed ``mesh=None``
+    is the state where both reads are empty.  ``FUSION_REFUSED`` says Fusion has
+    nothing to compare rather than that the argument was wrong; the hint names the
+    export that works without a polygon mesh.
+    """
+    design = FakeDesign(features=0, mesh_bodies=[FakeMeshBody("Panel", None)])
+
+    with pytest.raises(RuntimeError, match="Could not obtain polygon mesh") as raised:
+        bound_handler(design).compare_meshes("Panel", "Panel")
+
+    assert addon_hints.classify(raised.value) == (
+        "FUSION_REFUSED",
+        ["The body has no mesh to compare; export it as STL instead."],
+    )
+
+
+def test_compare_meshes_that_yields_no_deviation_is_fusion_refused(bound_handler):
+    """``compareWith`` answered an empty list: two meshes, no measurement.
+
+    The deviation lists are the fake's, and these two are empty, so the handler has
+    no statistics to summarise.  The kind is ``FUSION_REFUSED``, not
+    ``INVALID_INPUT``: the names were right and Fusion's comparison came back empty.
+    """
+    panel = FakeMeshBody("Panel", FakePolygonMesh(node_count=0, deviations=[]))
+    offset = FakeMeshBody("PanelOffset", FakePolygonMesh(node_count=0, deviations=[]))
+    design = FakeDesign(features=0, mesh_bodies=[panel, offset])
+
+    with pytest.raises(RuntimeError, match="no deviation data") as raised:
+        bound_handler(design).compare_meshes("Panel", "PanelOffset")
+
+    assert addon_hints.classify(raised.value) == (
+        "FUSION_REFUSED",
+        ["compareWith found no deviation; check both bodies are meshes."],
+    )

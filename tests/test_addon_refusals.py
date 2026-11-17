@@ -274,12 +274,6 @@ def test_an_unknown_rule_type_is_refused_as_a_refusal(bound_handler):
 #: the last one empties this set.  A row here is a debt, not an exemption.
 _UNCLASSIFIED_BASELINE: frozenset[tuple[str, str]] = frozenset(
     {
-        ("handler_base.py", "A body name is required"),
-        ("handler_base.py", "Component '…' not found"),
-        ("handler_base.py", "Feature '…' not found in timeline"),
-        ("handler_base.py", "Unknown axis '…' — use x, y, or z"),
-        ("handler_base.py", "Unknown plane … — use xy, yz, or xz"),
-        ("handler_base.py", "… must be [x, y, z] in centimetres"),
         ("handler_cam.py", "Fusion rejected strategy '…' for setup '…'"),
         (
             "handler_cam.py",
@@ -328,17 +322,6 @@ _UNCLASSIFIED_BASELINE: frozenset[tuple[str, str]] = frozenset(
             "delete_all did not clear the design — remaining: …. Deleted: …. "
             + "Failures: …",
         ),
-        ("handler_scene.py", "Appearance '…' not found"),
-        ("handler_scene.py", "Could not copy appearance '…' into the design"),
-        ("handler_scene.py", "Could not obtain polygon mesh data"),
-        ("handler_scene.py", "Entity '…' not found"),
-        ("handler_scene.py", "Invalid design_type '…'. Use 'parametric' or 'direct'."),
-        ("handler_scene.py", "Need at least 2 components with bodies"),
-        ("handler_scene.py", "New document has no design product"),
-        ("handler_scene.py", "No appearance library found"),
-        ("handler_scene.py", "Parameter '…' not found"),
-        ("handler_scene.py", "SyntaxError: …\n…"),
-        ("handler_scene.py", "compareWith returned no deviation data"),
         (
             "handler_sketch.py",
             "Invalid result_option … — use 1 (thorough), 2 (fast), or 3 (may adjust "
@@ -393,6 +376,16 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
             "event_bridge.py",
             98,
             "raise NotImplementedError: no Refusal bound to it",
+        ),
+        (
+            "handler_base.py",
+            284,
+            "raise refusal: kind comes from _rules.point3d_refusal",
+        ),
+        (
+            "handler_base.py",
+            289,
+            "raise refusal: kind comes from _rules.body_name_required_refusal",
         ),
         (
             "handler_assembly.py",

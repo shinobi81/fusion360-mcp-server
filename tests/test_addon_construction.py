@@ -24,6 +24,7 @@ import math
 
 import pytest
 
+from addon.server import hints as addon_hints
 from tests.fakes.bodies import body_with_edges
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
 from tests.fakes.runtime import FakePoint3D
@@ -145,18 +146,84 @@ def test_create_construction_plane_by_three_points_passes_the_points_in_order(
 def test_create_construction_plane_needs_a_reference_or_an_offset(bound_handler):
     """``method="offset"`` with no plane has nothing to offset from.
 
-    The refusal names the planes the tool takes and creates nothing.  It reaches
-    the caller as ``error_kind: UNKNOWN`` with no hints — ``hints.py`` has no rule
-    for "Unknown plane" and that file is canonical and mirrored, so it is out of
-    this commit's reach.  The classification gap is reported with the pull request.
+    The refusal names the planes the tool takes and creates nothing.  It is
+    ``INVALID_INPUT``: the argument is what has to change, and the hint says the
+    value is lowercased, so ``XZ`` would have worked.
     """
     design = FakeDesign(features=2)
     root = design.rootComponent
 
-    with pytest.raises(RuntimeError, match="Unknown plane"):
+    with pytest.raises(RuntimeError, match="Unknown plane") as raised:
         bound_handler(design).create_construction_plane(method="offset", offset=2.5)
 
+    assert addon_hints.classify(raised.value) == (
+        "INVALID_INPUT",
+        ["Pass xy, yz or xz; the plane is lowercased, so XZ works."],
+    )
     assert root.constructionPlanes.count == 0, "no plane was created"
+
+
+def test_an_unknown_construction_axis_names_the_axis_it_takes(bound_handler):
+    """``method="angle"`` resolves its edge name as an axis; ``w`` is not one."""
+    design = FakeDesign(features=2)
+    root = design.rootComponent
+
+    with pytest.raises(RuntimeError, match="Unknown axis") as raised:
+        bound_handler(design).create_construction_plane(
+            method="angle", plane="xy", angle=30, edge_name="w"
+        )
+
+    assert addon_hints.classify(raised.value) == (
+        "INVALID_INPUT",
+        ["Pass x, y or z; the axis is lowercased, so Y works."],
+    )
+    assert root.constructionPlanes.count == 0
+
+
+def test_three_points_with_a_missing_point_names_that_point(bound_handler):
+    """The label is the parameter's name, and each point is judged in place.
+
+    ``point_one`` is complete and ``point_two`` is not, so the refusal names the
+    second: unpacking the short list into ``Point3D.create`` said nothing a caller
+    could act on.
+    """
+    design = FakeDesign(features=2)
+    root = design.rootComponent
+
+    with pytest.raises(RuntimeError, match="point_two must be") as raised:
+        bound_handler(design).create_construction_plane(
+            method="three_points",
+            point_one=[0, 0, 0],
+            point_two=[4, 0],
+            point_three=[0, 3, 0],
+        )
+
+    assert addon_hints.classify(raised.value) == (
+        "INVALID_INPUT",
+        ["Pass three numbers, in centimetres: [x, y, z]."],
+    )
+    assert root.constructionPlanes.count == 0
+
+
+def test_a_point_that_is_not_a_list_is_refused_rather_than_raising(bound_handler):
+    """``len()`` of a number is a TypeError, which reached the caller as UNKNOWN.
+
+    The shape is judged before the length for that reason: a bare ``3`` is not a
+    three-coordinate point, and neither is a string that happens to be three
+    characters long.
+    """
+    design = FakeDesign(features=2)
+
+    with pytest.raises(RuntimeError, match="point_one must be") as raised:
+        bound_handler(design).create_construction_plane(
+            method="three_points",
+            point_one=3,
+            point_two=[4, 0, 0],
+            point_three=[0, 3, 0],
+        )
+
+    assert addon_hints.classify(raised.value)[0] == "INVALID_INPUT"
+    assert design.rootComponent.constructionPlanes.count == 0
 
 
 def test_a_tangent_plane_is_refused_with_the_alternative(bound_handler):

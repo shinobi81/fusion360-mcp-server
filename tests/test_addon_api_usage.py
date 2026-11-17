@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import pytest
 
+from addon.server import hints as addon_hints
 from tests.fakes.bodies import FakeBody, body_with_faces
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
 from tests.fakes.features import FakeInterferenceResult, FakeMeasureManager
@@ -123,13 +124,24 @@ class TestCheckInterference:
         assert design.interference.inputs[0].entities.items == [body_a, body_b]
 
     def test_requires_two_components_with_bodies(self, bound_handler):
+        """Two components are needed for anything to interfere.
+
+        The arguments are valid — a component with bodies in it is what the name
+        refers to — and the *design* is what is short of them, so the kind is
+        ``GEOMETRY_UNSUPPORTED`` rather than an argument error.
+        """
         design = FakeDesign(features=0)
         design.rootComponent.occurrences.add(
             FakeOccurrence(FakeComponent("Base", [FakeBody("Only")]))
         )
 
-        with pytest.raises(RuntimeError, match="at least 2 components"):
+        with pytest.raises(RuntimeError, match="at least 2 components") as raised:
             bound_handler(design).check_interference(["Base"])
+
+        assert addon_hints.classify(raised.value) == (
+            "GEOMETRY_UNSUPPORTED",
+            ["Create the components with create_component first."],
+        )
 
 
 class TestDraftFaces:
@@ -188,12 +200,18 @@ class TestMeasureDistance:
         assert manager.measured == [(body_a, body_b)]
 
     def test_unknown_entity_is_refused(self, bound_handler):
+        """A name that is neither a body nor ``x,y,z`` is enumerated, not guessed at."""
         design = FakeDesign(features=0)
 
-        with pytest.raises(RuntimeError, match="not found"):
+        with pytest.raises(RuntimeError, match="not found") as raised:
             bound_handler(design, _app(FakeMeasureManager())).measure_distance(
                 "Ghost", "Ghost"
             )
+
+        assert addon_hints.classify(raised.value) == (
+            "NAME_NOT_FOUND",
+            ["Call get_scene_info for the entity names in this design."],
+        )
 
 
 def _app(measure_manager: FakeMeasureManager):

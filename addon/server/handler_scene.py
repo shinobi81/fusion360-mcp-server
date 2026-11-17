@@ -13,6 +13,7 @@ from contextlib import redirect_stdout
 
 from . import fusion_api as adsk
 from . import get_logger
+from . import hints as _hints
 from . import parameter_units as _param_units
 
 log = get_logger("handler")
@@ -34,7 +35,11 @@ class SceneCommands:
 
         design = doc.products.itemByProductType("DesignProductType")
         if design is None:
-            raise RuntimeError("New document has no design product")
+            raise _hints.Refusal(
+                "DESIGN_TYPE_MISMATCH",
+                "New document has no design product",
+                hints=("new_document creates a design; check get_design_type.",),
+            )
 
         design_types = adsk.fusion.DesignTypes
         if design.designType == design_types.ParametricDesignType:
@@ -255,7 +260,11 @@ class SceneCommands:
             if "," in name:
                 coords = [float(x.strip()) for x in name.split(",")]
                 return adsk.core.Point3D.create(*coords)
-            raise RuntimeError(f"Entity '{name}' not found")
+            raise _hints.Refusal(
+                "NAME_NOT_FOUND",
+                f"Entity '{name}' not found",
+                hints=("Call get_scene_info for the entity names in this design.",),
+            )
 
         e1 = get_entity(entity_one)
         e2 = get_entity(entity_two)
@@ -284,7 +293,11 @@ class SceneCommands:
                 b = root.bRepBodies.item(i)
                 if b.name == name:
                     return b.faces.item(0)  # First face
-            raise RuntimeError(f"Entity '{name}' not found")
+            raise _hints.Refusal(
+                "NAME_NOT_FOUND",
+                f"Entity '{name}' not found",
+                hints=("Call get_scene_info for the entity names in this design.",),
+            )
 
         e1 = get_entity(entity_one)
         e2 = get_entity(entity_two)
@@ -349,7 +362,11 @@ class SceneCommands:
                         bodies.add(b)
 
         if bodies.count < 2:
-            raise RuntimeError("Need at least 2 components with bodies")
+            raise _hints.Refusal(
+                "GEOMETRY_UNSUPPORTED",
+                "Need at least 2 components with bodies",
+                hints=("Create the components with create_component first.",),
+            )
 
         # Interference analysis is a Design-level API.  Component has no
         # interfere() method at all, so the previous call raised
@@ -399,11 +416,21 @@ class SceneCommands:
         mesh_a = body_a.mesh or body_a.displayMesh
         mesh_b = body_b.mesh or body_b.displayMesh
         if mesh_a is None or mesh_b is None:
-            raise RuntimeError("Could not obtain polygon mesh data")
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
+                "Could not obtain polygon mesh data",
+                hints=("The body has no mesh to compare; export it as STL instead.",),
+            )
 
         deviations = list(mesh_a.compareWith(mesh_b))
         if not deviations:
-            raise RuntimeError("compareWith returned no deviation data")
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
+                "compareWith returned no deviation data",
+                hints=(
+                    "compareWith found no deviation; check both bodies are meshes.",
+                ),
+            )
 
         abs_dev = [abs(d) for d in deviations]
         n = len(deviations)
@@ -442,7 +469,11 @@ class SceneCommands:
                     app_lib = lib
                     break
         if app_lib is None:
-            raise RuntimeError("No appearance library found")
+            raise _hints.Refusal(
+                "WORKSPACE_UNAVAILABLE",
+                "No appearance library found",
+                hints=("Open the Appearance panel once in Fusion, then retry.",),
+            )
 
         appearance = None
         for i in range(app_lib.appearances.count):
@@ -452,7 +483,13 @@ class SceneCommands:
                 break
 
         if not appearance:
-            raise RuntimeError(f"Appearance '{appearance_name}' not found")
+            raise _hints.Refusal(
+                "NAME_NOT_FOUND",
+                f"Appearance '{appearance_name}' not found",
+                hints=(
+                    "Use an appearance name from the library, e.g. 'Steel - Satin'.",
+                ),
+            )
 
         # Library appearances must be copied into the design before
         # assignment — assigning a library appearance directly is
@@ -462,8 +499,10 @@ class SceneCommands:
         if local is None:
             local = design.appearances.addByCopy(appearance, appearance.name)
         if local is None:
-            raise RuntimeError(
-                f"Could not copy appearance '{appearance_name}' into the design"
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
+                f"Could not copy appearance '{appearance_name}' into the design",
+                hints=("Copy the appearance into the document first, then set it.",),
             )
 
         if target_type == "body":
@@ -567,7 +606,11 @@ class SceneCommands:
         design = self._design()
         param = design.userParameters.itemByName(name)
         if not param:
-            raise RuntimeError(f"Parameter '{name}' not found")
+            raise _hints.Refusal(
+                "NAME_NOT_FOUND",
+                f"Parameter '{name}' not found",
+                hints=("Call get_parameters for the names this design has.",),
+            )
         # Assigning .value would be read in internal units, silently rescaling
         # any parameter whose unit is not the internal one. Write the
         # expression, in the unit the parameter already declares.
@@ -585,7 +628,11 @@ class SceneCommands:
         design = self._design()
         param = design.userParameters.itemByName(name)
         if not param:
-            raise RuntimeError(f"Parameter '{name}' not found")
+            raise _hints.Refusal(
+                "NAME_NOT_FOUND",
+                f"Parameter '{name}' not found",
+                hints=("Call get_parameters for the names this design has.",),
+            )
         param.deleteMe()
         return {"deleted": True, "name": name}
 
@@ -638,10 +685,10 @@ class SceneCommands:
             adsk.doEvents()
             return {"changed": True, "design_type": "direct"}
 
-        else:
-            raise RuntimeError(
-                f"Invalid design_type '{design_type}'. Use 'parametric' or 'direct'."
-            )
+        # An unknown design_type is not judged here: the tool's schema declares the two
+        # values as an enum, and the gate refuses anything outside it before either
+        # mode sees the command.
+        return None
 
     def execute_code(self, code: str):
         design = self._design()
@@ -673,7 +720,11 @@ class SceneCommands:
                 for line in detail.splitlines()
                 if not line.startswith("SyntaxError:")
             )
-            raise RuntimeError(f"SyntaxError: {exc}\n{annotated}") from None
+            raise _hints.Refusal(
+                "SCRIPT_ERROR",
+                f"SyntaxError: {exc}\n{annotated}",
+                hints=("Fix the script's syntax; the namespace is rebuilt per call.",),
+            ) from None
 
         last_expr_value = None
         last_expr = (
