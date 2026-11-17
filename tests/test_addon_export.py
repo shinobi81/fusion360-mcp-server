@@ -20,11 +20,14 @@ sweep that never ran — or one keyed on the wrong thing — would pass.
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 
 import pytest
 
+from addon.server import hints as addon_hints
 from tests.fakes.bodies import FakeBody
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
+from tests.fakes.mesh import FakeMeshBodies
 
 
 def _root_body() -> FakeBody:
@@ -204,6 +207,142 @@ class TestComponentBody:
         options = design.exportManager.executed[0]
         assert (options.kind, options.entity) == ("step", occurrence)
         assert out == {"exported": True, "body": "Body1", "file_path": target_path}
+
+
+class _EmptyImport(FakeMeshBodies):
+    """The current ``add(path, units)`` route, answering a file that held no mesh."""
+
+    def add(self, file_path, units):
+        return FakeMeshBodies([])
+
+
+class _LegacyEmptyImport(FakeMeshBodies):
+    """Pre-2025 ``addByFile``: no ``add`` at all, and no body for a meshless file."""
+
+    def add(self, file_path, units):
+        raise AttributeError("addByFile")
+
+    def addByFile(self, file_path, units):
+        return None
+
+
+class TestImportMeshRefusals:
+    """A mesh file is a path and a file, so its refusals are not design lookups."""
+
+    def test_a_missing_file_is_invalid_input(self, bound_handler, tmp_path):
+        missing = tmp_path / "not-there.stl"
+
+        with pytest.raises(addon_hints.Refusal) as raised:
+            bound_handler(FakeDesign()).import_mesh(str(missing))
+
+        assert raised.value.error_kind == "INVALID_INPUT"
+        assert str(raised.value) == f"Mesh file not found: {missing}"
+        assert raised.value.hints == ("Pass a path to a file that exists.",)
+
+    def test_a_file_with_no_mesh_body_is_fusion_refused(self, bound_handler, tmp_path):
+        source = tmp_path / "empty.stl"
+        source.write_bytes(b"")
+        design = FakeDesign()
+        design.rootComponent.meshBodies = _EmptyImport()
+
+        with pytest.raises(addon_hints.Refusal) as raised:
+            bound_handler(design).import_mesh(str(source))
+
+        assert raised.value.error_kind == "FUSION_REFUSED"
+        assert str(raised.value) == f"No mesh bodies imported from {source}"
+        assert raised.value.hints == (
+            "The file has no mesh body; check it in a viewer first.",
+        )
+
+    def test_the_legacy_import_path_reports_a_missing_mesh_body(
+        self, bound_handler, tmp_path
+    ):
+        """``addByFile`` returned one body or ``None``; a meshless file answers None."""
+        source = tmp_path / "empty.stl"
+        source.write_bytes(b"")
+        design = FakeDesign()
+        design.rootComponent.meshBodies = _LegacyEmptyImport()
+
+        with pytest.raises(addon_hints.Refusal) as raised:
+            bound_handler(design).import_mesh(str(source))
+
+        assert raised.value.error_kind == "FUSION_REFUSED"
+        assert str(raised.value) == f"No mesh body imported from {source}"
+        assert raised.value.hints == (
+            "The file has no mesh body; check it in a viewer first.",
+        )
+
+
+class _Viewport:
+    """``Viewport``: ``fit`` and the capture's boolean - all ``render_view`` reads."""
+
+    def __init__(self, saved: bool):
+        self.saved = saved
+        self.fitted = 0
+
+    def fit(self):
+        self.fitted += 1
+
+    def saveAsImageFile(self, path, width, height):
+        return self.saved
+
+
+class TestRenderViewRefusals:
+    def test_no_viewport_is_workspace_unavailable(self, bound_handler):
+        handler = bound_handler(FakeDesign(), app=SimpleNamespace(activeViewport=None))
+
+        with pytest.raises(addon_hints.Refusal) as raised:
+            handler.render_view()
+
+        assert raised.value.error_kind == "WORKSPACE_UNAVAILABLE"
+        assert str(raised.value) == "No active viewport"
+        assert raised.value.hints == ("Open a viewport in Fusion, then retry.",)
+
+    def test_a_failed_capture_is_fusion_refused(self, bound_handler):
+        viewport = _Viewport(saved=False)
+        handler = bound_handler(
+            FakeDesign(), app=SimpleNamespace(activeViewport=viewport)
+        )
+
+        with pytest.raises(addon_hints.Refusal) as raised:
+            handler.render_view()
+
+        assert viewport.fitted == 1, "the capture is attempted, not skipped"
+        assert raised.value.error_kind == "FUSION_REFUSED"
+        assert str(raised.value) == "saveAsImageFile returned false"
+        assert raised.value.hints == (
+            "Retry the export; if it recurs the viewport cannot render this view.",
+        )
+
+
+class TestExportTargetRefusals:
+    def test_an_extension_that_names_no_format_is_refused(self, bound_handler):
+        """``export`` infers the format from ``file_path``, so ``obj`` never meets the
+        schema enum.  The validator is what refuses it, rather than a fall-through to
+        the F3D branch with no value in the envelope."""
+        with pytest.raises(addon_hints.Refusal) as raised:
+            bound_handler(FakeDesign()).export(file_path="model.obj")
+
+        assert raised.value.error_kind == "INVALID_INPUT"
+        assert str(raised.value) == (
+            "Specify format (stl/step/f3d) or file_path with extension"
+        )
+        assert raised.value.hints == (
+            "Pass format='stl', 'step' or 'f3d', or a file_path that ends in one "
+            "of those.",
+        )
+
+    def test_an_extension_that_names_a_format_dispatches_to_it(
+        self, bound_handler, tmp_path
+    ):
+        """The inference still reaches the STEP export after the rewrite."""
+        design = _design_with(_root_body())
+        target = str(tmp_path / "out.step")
+
+        out = bound_handler(design).export(body_name="Body1", file_path=target)
+
+        assert out == {"exported": True, "body": "Body1", "file_path": target}
+        assert design.exportManager.executed[0].kind == "step"
 
 
 class TestNameCollision:

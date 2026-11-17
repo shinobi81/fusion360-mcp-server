@@ -26,6 +26,12 @@ CASES = [
     ("create_construction_axis", {"method": "spiral"}, "Unknown method"),
     # ``set_design_type`` used to judge this itself; the enum is what refuses it now.
     ("set_design_type", {"design_type": "hybrid"}, "design_type"),
+    # The enums whose handler raises this task deleted: the gate is the only
+    # refusal for a value the schema already forbids.
+    ("export", {"format": "obj"}, "Unknown format"),
+    ("import_mesh", {"file_path": "part.stl", "units": "furlong"}, "Unknown units"),
+    ("render_view", {"view": "diagonal"}, "Unknown view"),
+    ("export_view_sheet", {"views": ["current"]}, "Unknown views"),
 ]
 
 
@@ -175,11 +181,12 @@ def test_every_declared_enum_matches_the_set_the_add_in_refuses():
     ``perpendicular_at_point`` is advertised and refused - moves to its domain task
     as a site ``Refusal`` instead.
     """
-    from addon.server.rules import EDGE_SELECTIONS
+    from addon.server.rules import EDGE_SELECTIONS, EXPORT_FORMATS
 
     answered = [
         ("fillet", "edge_selection", EDGE_SELECTIONS),
         ("chamfer", "edge_selection", EDGE_SELECTIONS),
+        ("export", "format", EXPORT_FORMATS),
     ]
     for tool, prop, refused in answered:
         spec = tools.get_tool_by_name(tool)

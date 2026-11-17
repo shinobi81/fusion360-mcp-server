@@ -241,8 +241,8 @@ def test_the_advertised_view_presets_are_the_ones_the_handler_handles():
 def test_export_view_sheet_offers_the_presets_without_current():
     """Its schema lists ``_VIEW_DIRS`` alone, so it does not take ``VIEW_PRESETS``.
 
-    "current" is not a view to render — ``export_view_sheet`` refuses it — so
-    adopting the wider tuple here would advertise a refusal.
+    "current" is not a view to render — the schema refuses it — so adopting the
+    wider tuple here would advertise a refusal.
     """
     from fusion360_mcp import tools
 

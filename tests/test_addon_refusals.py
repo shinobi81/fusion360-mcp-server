@@ -274,35 +274,6 @@ def test_an_unknown_rule_type_is_refused_as_a_refusal(bound_handler):
 #: the last one empties this set.  A row here is a debt, not an exemption.
 _UNCLASSIFIED_BASELINE: frozenset[tuple[str, str]] = frozenset(
     {
-        ("handler_cam.py", "Fusion rejected strategy '…' for setup '…'"),
-        (
-            "handler_cam.py",
-            "No CAM workspace found. Open the Manufacturing workspace in Fusion 360 "
-            + "at least once to initialise it.",
-        ),
-        ("handler_cam.py", "Post processor not found: …"),
-        ("handler_cam.py", "Provide setup_name, operation_name, or generate_all=true"),
-        (
-            "handler_cam.py",
-            "This Fusion build has no local generic post folder (posts are "
-            + "cloud-library based). Pass the full path to the .cps file in "
-            + "'post_processor' instead of a short name.",
-        ),
-        ("handler_export.py", "Mesh file not found: …"),
-        ("handler_export.py", "No active viewport"),
-        ("handler_export.py", "No mesh bodies imported from …"),
-        ("handler_export.py", "No mesh body imported from …"),
-        (
-            "handler_export.py",
-            "Specify format (stl/step/f3d) or file_path with extension",
-        ),
-        ("handler_export.py", "Unknown format: …. Expected: stl, step, f3d"),
-        ("handler_export.py", "Unknown units '…'. Expected one of: …"),
-        ("handler_export.py", "Unknown view '…'. Expected: current, …"),
-        ("handler_export.py", "Unknown views: …. Valid: …"),
-        ("handler_export.py", "body_name required for STEP export"),
-        ("handler_export.py", "body_name required for STL export"),
-        ("handler_export.py", "saveAsImageFile returned false"),
         ("handler_features.py", "Body '…' …, so no point can select an edge"),
         ("handler_features.py", "No near-horizontal …-facing planar face on '…'"),
         (
@@ -439,6 +410,21 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
             "handler_surface.py",
             120,
             "raise refusal: kind comes from _rules.rule_type_refusal",
+        ),
+        (
+            "handler_export.py",
+            325,
+            "raise target_refusal: kind comes from _rules.export_target_refusal",
+        ),
+        (
+            "handler_export.py",
+            329,
+            "raise body_refusal: kind comes from _rules.export_body_refusal",
+        ),
+        (
+            "handler_cam.py",
+            331,
+            "raise refusal: kind comes from _rules.cam_target_refusal",
         ),
     }
 )

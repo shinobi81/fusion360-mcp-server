@@ -8,6 +8,7 @@ package, so its copy is canonical.  Edit that file and run
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from typing import Any
 
@@ -22,6 +23,11 @@ from . import hints as _hints
 #: this tuple as the schema enum and refuses nothing itself, so the validator owns the
 #: set: a fifth selector is one edit here plus the branch that handles it.
 EDGE_SELECTIONS = ("all", "top", "bottom", "vertical")
+
+#: The formats ``export`` dispatches to, in the order ``tools.py`` advertises them.
+#: ``stp`` is STEP's other extension; ``test_schema_gate`` pins the schema enum to this
+#: tuple, so the gate and the validator refuse one set, not two.
+EXPORT_FORMATS = ("stl", "step", "stp", "f3d")
 
 
 def edge_selector_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
@@ -291,6 +297,81 @@ def rule_type_refusal(rule_type: str) -> _hints.Refusal | None:
     return _hints.Refusal(
         "INVALID_INPUT",
         f"Unknown rule_type {rule_type!r} - use 'normal' or 'tangent'",
+    )
+
+
+def _export_format(params: Mapping[str, Any]) -> str:
+    """The format an ``export`` call names, from ``format`` or the path's extension.
+
+    One spelling for the handler and mock mode: the handler dispatches on it, and the
+    validators judge it, so it has to mean the same thing on both sides.
+    """
+    fmt = params.get("format")
+    if fmt:
+        return str(fmt).lower()
+    path = str(params.get("file_path") or "")
+    return os.path.splitext(path)[1].lstrip(".").lower()
+
+
+def export_target_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal an ``export`` call with no usable format earns, or None.
+
+    ``format`` is a schema enum, so the gate answers a mistyped one; this also refuses
+    a ``file_path`` whose extension names no export, which is the one route around the
+    enum.  Without it a call such as ``file_path='model.obj'`` would fall through to
+    the F3D branch with ``obj`` in hand.
+    """
+    if _export_format(params) in EXPORT_FORMATS:
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        "Specify format (stl/step/f3d) or file_path with extension",
+        hints=(
+            "Pass format='stl', 'step' or 'f3d', or a file_path that ends in one "
+            "of those.",
+        ),
+    )
+
+
+def export_body_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal an STL or STEP export without a body earns, or None.
+
+    F3D exports the document, so it needs no body; the two messages differ only in
+    the format they name, and are kept verbatim, which is why one validator answers
+    both.
+    """
+    if params.get("body_name"):
+        return None
+    fmt = _export_format(params)
+    if fmt == "stl":
+        message = "body_name required for STL export"
+    elif fmt in ("step", "stp"):
+        message = "body_name required for STEP export"
+    else:
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        message,
+        hints=("Pass body_name naming the body to export.",),
+    )
+
+
+def cam_target_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal a ``cam_generate_toolpath`` with nothing to generate earns, or None.
+
+    ``operation_name`` alone is not enough - an operation is found through its setup -
+    but the message is unchanged, so it still names ``operation_name`` as an
+    alternative.  Judged before the CAM product is looked up: the caller can fix this
+    call without Fusion, and the add-in's other parameter checks come first too.
+    """
+    if params.get("generate_all") or params.get("setup_name"):
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        "Provide setup_name, operation_name, or generate_all=true",
+        hints=(
+            "Pass setup_name, setup_name and operation_name, or generate_all=true.",
+        ),
     )
 
 

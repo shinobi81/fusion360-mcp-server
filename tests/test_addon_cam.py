@@ -1,0 +1,132 @@
+"""CAM refusals: the workspace, a rejected strategy, and the post-processor lookup.
+
+``cam_post_process`` resolved a short post name and a full ``.cps`` path in one
+block, so the ``INVALID_INPUT`` for a path that is not there was only reachable with
+a CAM ``Product``.  ``_resolve_post`` is that block, and the tests below drive it
+directly; the others replace ``_get_cam`` with a stub product or a product-less
+``CommandHandler``.
+
+The stubs are the smallest shape each method reads, not a model of the CAM tree:
+``_find_setup`` wants ``setups.count``/``item(i)``, and a rejected strategy is
+``operations.add`` answering ``None``.
+"""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import pytest
+
+from addon.server import hints as addon_hints
+
+
+def _items(*items):
+    """A Fusion collection: ``count`` and ``item(i)``."""
+    return SimpleNamespace(count=len(items), item=lambda index: items[index])
+
+
+def _setup(name: str = "Setup1", operation=None) -> SimpleNamespace:
+    """A setup whose ``operations.add`` answers *operation*; ``None`` is rejected."""
+    return SimpleNamespace(
+        name=name,
+        isValid=True,
+        operations=SimpleNamespace(
+            count=0,
+            createInput=lambda _strategy: SimpleNamespace(name=None),
+            add=lambda _input: operation,
+        ),
+    )
+
+
+def _cam(*setups, generic_post=None) -> SimpleNamespace:
+    return SimpleNamespace(setups=_items(*setups), genericPostFolder=generic_post)
+
+
+def _handler(handler_module):
+    """A handler with no ``__init__``: these methods read no dispatch table."""
+    return handler_module.CommandHandler.__new__(handler_module.CommandHandler)
+
+
+def _no_cam_product(_product_type: str):
+    """``products.itemByProductType``: Fusion raises when the product is absent."""
+    raise RuntimeError("no CAM product")
+
+
+def test_no_manufacture_workspace_is_workspace_unavailable(handler_module):
+    """``_get_cam`` activates the workspace on demand; with none, it says so."""
+    handler = _handler(handler_module)
+    handler.app = SimpleNamespace(
+        activeDocument=SimpleNamespace(
+            products=SimpleNamespace(itemByProductType=_no_cam_product)
+        )
+    )
+    handler.ui = SimpleNamespace(workspaces=SimpleNamespace(itemById=lambda _id: None))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_list_setups()
+
+    assert raised.value.error_kind == "WORKSPACE_UNAVAILABLE"
+    assert str(raised.value) == (
+        "No CAM workspace found. Open the Manufacturing workspace in Fusion 360 "
+        "at least once to initialise it."
+    )
+    assert raised.value.hints == ("Open the Manufacturing workspace once, then retry.",)
+
+
+def test_a_rejected_strategy_is_fusion_refused(handler_module):
+    """The schema's enum refuses a typo; this is a name Fusion itself rejects."""
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(_setup(operation=None))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation("Setup1", "face")
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert str(raised.value) == "Fusion rejected strategy 'face' for setup 'Setup1'"
+    assert raised.value.hints == (
+        "Check the strategy name against cam_create_operation's schema.",
+    )
+
+
+def test_a_short_post_name_with_no_local_folder_is_fusion_refused(handler_module):
+    """The build has no local posts, so no argument but a full path can work."""
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(_setup(), generic_post=None)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_post_process("Setup1", post_processor="fanuc")
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert str(raised.value) == (
+        "This Fusion build has no local generic post folder "
+        "(posts are cloud-library based). Pass the full path to "
+        "the .cps file in 'post_processor' instead of a short "
+        "name."
+    )
+    assert raised.value.hints == (
+        "Pass the full path to a .cps file in post_processor.",
+    )
+
+
+def test_a_missing_post_processor_names_the_path(handler_module):
+    """D6: a filesystem path is INVALID_INPUT, and the hints name the path."""
+    handler = handler_module.CommandHandler.__new__(handler_module.CommandHandler)
+    with pytest.raises(addon_hints.Refusal) as caught:
+        handler._resolve_post("/nope.cps")
+    assert caught.value.error_kind == "INVALID_INPUT"
+    assert any(".cps" in hint or "/nope.cps" in hint for hint in caught.value.hints)
+    assert not any("get_scene_info" in hint for hint in caught.value.hints)
+    assert str(caught.value) == "Post processor not found: /nope.cps"
+    assert caught.value.hints == ("Pass a .cps path that exists on this machine.",)
+
+
+def test_a_post_that_exists_is_returned_as_given_or_resolved(handler_module, tmp_path):
+    """The lookup keeps both routes: a full path verbatim, a short name against
+    the build's own folder."""
+    post = tmp_path / "fanuc.cps"
+    post.write_text("", encoding="utf-8")
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: SimpleNamespace(genericPostFolder=str(tmp_path))
+
+    assert handler._resolve_post(str(post)) == str(post)
+    assert handler._resolve_post("fanuc") == str(post)

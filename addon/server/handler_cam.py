@@ -17,7 +17,9 @@ from typing import Any
 
 from . import fusion_api as adsk
 from . import get_logger
+from . import hints as _hints
 from . import parameter_units as _param_units
+from . import rules as _rules
 
 log = get_logger("handler")
 
@@ -52,9 +54,11 @@ class CamCommands:
                 cam_product = _find_cam_product()
 
         if cam_product is None:
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "WORKSPACE_UNAVAILABLE",
                 "No CAM workspace found. Open the Manufacturing workspace "
-                "in Fusion 360 at least once to initialise it."
+                "in Fusion 360 at least once to initialise it.",
+                hints=("Open the Manufacturing workspace once, then retry.",),
             )
         return cam_product
 
@@ -275,8 +279,12 @@ class CamCommands:
 
         op = setup.operations.add(op_input)
         if op is None:
-            raise RuntimeError(
-                f"Fusion rejected strategy '{strategy}' for setup '{setup_name}'"
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
+                f"Fusion rejected strategy '{strategy}' for setup '{setup_name}'",
+                hints=(
+                    "Check the strategy name against cam_create_operation's schema.",
+                ),
             )
 
         # Operation parameters (stepdown, feeds, speeds...) only exist on
@@ -315,6 +323,13 @@ class CamCommands:
         operation_name: str | None = None,
         generate_all: bool = False,
     ):
+        # Judged before the CAM product is looked up: the caller can fix this call
+        # without it, and the message names the arguments that would work.
+        if refusal := _rules.cam_target_refusal(
+            {"setup_name": setup_name, "generate_all": generate_all}
+        ):
+            raise refusal
+
         cam = self._get_cam()
 
         if generate_all:
@@ -342,7 +357,39 @@ class CamCommands:
             self._wait_future(future)
             return {"generated": True, "scope": "setup", "setup": setup_name}
 
-        raise RuntimeError("Provide setup_name, operation_name, or generate_all=true")
+    def _resolve_post(self, path: str) -> str:
+        """The ``.cps`` file a ``post_processor`` names, or a refusal naming *path*.
+
+        A full path (or anything ending in ``.cps``) is taken as given; a short name
+        is resolved against the build's own post folder, which current builds do not
+        provide - posts are cloud-library based.
+
+        Split out of ``cam_post_process`` so the refusal is reachable without a CAM
+        ``Product``: a missing file is the caller's path, not the design or the build.
+        """
+        if path.endswith(".cps") or os.path.sep in path:
+            post_config = path
+        else:
+            cam = self._get_cam()
+            post_folder = getattr(cam, "genericPostFolder", None)
+            if not post_folder:
+                raise _hints.Refusal(
+                    "FUSION_REFUSED",
+                    "This Fusion build has no local generic post folder "
+                    "(posts are cloud-library based). Pass the full path to "
+                    "the .cps file in 'post_processor' instead of a short "
+                    "name.",
+                    hints=("Pass the full path to a .cps file in post_processor.",),
+                )
+            post_config = os.path.join(post_folder, f"{path}.cps")
+
+        if not os.path.isfile(post_config):
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"Post processor not found: {post_config}",
+                hints=("Pass a .cps path that exists on this machine.",),
+            )
+        return post_config
 
     def cam_post_process(
         self,
@@ -358,23 +405,7 @@ class CamCommands:
         if not output_folder:
             output_folder = os.path.join(os.path.expanduser("~"), "Desktop")
 
-        # Accept a full path to a .cps file, or resolve a short name against
-        # the legacy local post folder when the build still provides one.
-        if post_processor.endswith(".cps") or os.path.sep in post_processor:
-            post_config = post_processor
-        else:
-            post_folder = getattr(cam, "genericPostFolder", None)
-            if not post_folder:
-                raise RuntimeError(
-                    "This Fusion build has no local generic post folder "
-                    "(posts are cloud-library based). Pass the full path to "
-                    "the .cps file in 'post_processor' instead of a short "
-                    "name."
-                )
-            post_config = os.path.join(post_folder, f"{post_processor}.cps")
-
-        if not os.path.isfile(post_config):
-            raise RuntimeError(f"Post processor not found: {post_config}")
+        post_config = self._resolve_post(post_processor)
 
         units = (
             adsk.cam.PostOutputUnitOptions.MillimetersOutput

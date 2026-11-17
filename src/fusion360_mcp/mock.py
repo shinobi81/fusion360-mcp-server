@@ -20,9 +20,12 @@ from ._mutation_commands import MUTATION_COMMANDS
 from ._rules import (
     as_built_geometry_refusal,
     body_name_required_refusal,
+    cam_target_refusal,
     components_differ_refusal,
     construction_method_refusal,
     edge_selector_refusal,
+    export_body_refusal,
+    export_target_refusal,
     joint_geometry_refusal,
     perpendicular_axis_refusal,
     point3d_refusal,
@@ -695,6 +698,12 @@ def _export_view_sheet(p: dict) -> dict:
 
 
 def _export(p: dict) -> dict:
+    # Both checks are the add-in's, in its order: no usable format is judged before
+    # the body the format would need.  ``export_stl``/``export_step`` refuse an empty
+    # body name themselves, through ``_body_by_name``.
+    for refusal in (export_target_refusal(p), export_body_refusal(p)):
+        if refusal is not None:
+            return _refusal_error(refusal)
     fmt = (p.get("format") or "").lower()
     path = p.get("file_path", "")
     if not fmt and path:
@@ -1488,6 +1497,10 @@ def _cam_create_operation(p: dict) -> dict:
 
 
 def _cam_generate_toolpath(p: dict) -> dict:
+    # The add-in refuses a call with no target before it looks up the CAM product, so
+    # mock mode must not report a toolpath a call never asked for.
+    if refusal := cam_target_refusal(p):
+        return _refusal_error(refusal)
     return {
         "setup_name": p.get("setup_name", "Setup1"),
         "operation_name": p.get("operation_name"),

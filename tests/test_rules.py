@@ -283,6 +283,39 @@ PARAMETER_REFUSALS = [
         "point_one must be [x, y, z] in centimetres",
         ("Pass three numbers, in centimetres: [x, y, z].",),
     ),
+    # Export and CAM: a format and a body, and a toolpath target, are all judged
+    # before Fusion is asked.
+    (
+        "export",
+        {},
+        "INVALID_INPUT",
+        "Specify format (stl/step/f3d) or file_path with extension",
+        (
+            "Pass format='stl', 'step' or 'f3d', or a file_path that ends in one "
+            "of those.",
+        ),
+    ),
+    (
+        "export",
+        {"format": "stl"},
+        "INVALID_INPUT",
+        "body_name required for STL export",
+        ("Pass body_name naming the body to export.",),
+    ),
+    (
+        "export",
+        {"format": "step"},
+        "INVALID_INPUT",
+        "body_name required for STEP export",
+        ("Pass body_name naming the body to export.",),
+    ),
+    (
+        "cam_generate_toolpath",
+        {},
+        "INVALID_INPUT",
+        "Provide setup_name, operation_name, or generate_all=true",
+        ("Pass setup_name, setup_name and operation_name, or generate_all=true.",),
+    ),
 ]
 
 
@@ -300,6 +333,10 @@ PARAMETER_REFUSALS = [
         "body_name_required_move",
         "body_name_required_color",
         "point3d_shape",
+        "export_target",
+        "export_body_stl",
+        "export_body_step",
+        "cam_target",
     ],
 )
 def test_the_validator_and_mock_agree(
@@ -337,6 +374,31 @@ def test_the_validator_and_mock_agree(
     assert refused["error_kind"] == expected_kind
     assert refused["error_message"] == expected_message
     assert refused["hints"] == list(expected_hints)
+
+
+def test_a_usable_export_or_cam_target_is_refused_by_neither_side():
+    """The table above must not have turned a call Fusion accepts into a refusal."""
+    assert rules.export_target_refusal({"format": "stl"}) is None
+    assert rules.export_target_refusal({"file_path": "out.step"}) is None
+    assert rules.export_body_refusal({"format": "stl", "body_name": "Body1"}) is None
+    assert rules.export_body_refusal({"format": "f3d"}) is None
+    assert rules.cam_target_refusal({"generate_all": True}) is None
+    assert rules.cam_target_refusal({"setup_name": "Setup1"}) is None
+
+
+def test_an_extension_that_names_no_format_is_refused():
+    """The one way around the ``format`` enum, and what absorbed the dead raise.
+
+    ``export`` infers the format from ``file_path`` when ``format`` is omitted, so
+    ``model.obj`` reaches the validator without ever meeting the gate.  The old final
+    ``Unknown format`` raise caught that; deleting it without this condition would
+    have returned a success envelope with no value instead.
+    """
+    refusal = rules.export_target_refusal({"file_path": "model.obj"})
+
+    assert refusal is not None
+    assert refusal.error_kind == "INVALID_INPUT"
+    assert str(refusal) == "Specify format (stl/step/f3d) or file_path with extension"
 
 
 def test_the_mirror_carries_the_same_validation():
