@@ -1266,7 +1266,9 @@ def _ruled_surface(p: dict) -> dict:
 def _trim_surface(p: dict) -> dict:
     return {
         "body_name": p.get("body_name", "Surface1"),
-        "tool_name": p.get("tool_name", "Tool1"),
+        "kept_cells": p.get("keep_cells", [0]),
+        "tool_name": p.get("tool_name"),
+        "tool_plane": p.get("tool_plane"),
         "trimmed": True,
     }
 
@@ -1278,7 +1280,7 @@ def _create_flange(p: dict) -> dict:
     return {
         "body_name": p.get("body_name", "SheetBody1"),
         "edge_index": p.get("edge_index", 0),
-        "height": p.get("height", 1.0),
+        "distance": p.get("distance", 1.0),
         "angle": p.get("angle", 90),
     }
 
@@ -1286,8 +1288,10 @@ def _create_flange(p: dict) -> dict:
 def _create_bend(p: dict) -> dict:
     return {
         "body_name": p.get("body_name", "SheetBody1"),
+        "stationary_face_index": p.get("stationary_face_index", 0),
         "angle": p.get("angle", 90),
-        "bend_radius": p.get("bend_radius", 0.1),
+        "bend_radius": p.get("bend_radius"),
+        "line_position": p.get("line_position", "center"),
     }
 
 

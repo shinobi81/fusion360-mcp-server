@@ -7,11 +7,24 @@ in ``handler_base``; this module imports nothing from another domain and nothing
 from ``command_handler``.  Mixed into ``command_handler.CommandHandler``.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from . import fusion_api as adsk
 from . import rules as _rules
 
+if TYPE_CHECKING:  # pragma: no cover - the mixin's contract, for type checkers only
+    # This module is one of the mixins ``CommandHandler`` composes over
+    # ``HandlerBase``, so ``self._root`` and friends exist at call time and not by
+    # inheritance.  Naming the base under ``TYPE_CHECKING`` is what lets a checker
+    # see that contract without the runtime hierarchy changing at all.
+    from .handler_base import HandlerBase as _Contract
+else:  # pragma: no cover - unchanged runtime hierarchy: ``object``
+    _Contract = object
 
-class SurfaceCommands:
+
+class SurfaceCommands(_Contract):
     def patch_surface(
         self, sketch_name: str, profile_index: int = 0, continuity: str = "connected"
     ):
@@ -123,62 +136,173 @@ class SurfaceCommands:
             "rule_type": rule_type,
         }
 
-    def trim_surface(self, body_name: str, tool_name: str):
+    def trim_surface(
+        self,
+        body_name: str,
+        keep_cells: list,
+        tool_name: str | None = None,
+        tool_plane: str | None = None,
+    ):
+        """Trim a surface with a body or a base plane, keeping the named cells.
+
+        ``TrimFeatures.createInput(trimTool)`` takes the tool alone
+        (``Features/TrimFeatures.h:63``); the cells it computed are in
+        ``bRepCells``, and for a trim a **selected** cell is *removed*
+        (``Features/BRepCell.h:40-45``).  So ``keep_cells`` names the cells that
+        survive and every other one is selected for removal.
+
+        Why indices rather than a side: measured on 2706.1.17, both cells of a
+        trimmed patch report ``cellBody.physicalProperties.centerOfMass`` as
+        ``(0, 0, 0)``, so there is no geometry to test a side with, and a solid
+        tool - the only kind with an interior - is refused for a surface target
+        (``!body->isSolid_raw()``).  Fusion's own interface asks the user to tick
+        cells, and ``isSelected`` is that tick.
+
+        ``createInput`` opens a transaction that ``add`` closes; the header says
+        leaving it open leaves Fusion in a bad state and can crash it, so every
+        failure path cancels first.
+        """
         root = self._root()
-        body = self._body_by_name(body_name)
-        tool = self._body_by_name(tool_name)
+        target = self._body_by_name(body_name)
+        if bool(tool_name) == bool(tool_plane):
+            raise RuntimeError(
+                "trim_surface needs exactly one of tool_name (a body) or "
+                "tool_plane (xy, xz or yz)"
+            )
+        kept = set()
+        for index in keep_cells:
+            try:
+                kept.add(int(index))
+            except (TypeError, ValueError):
+                raise RuntimeError(
+                    f"keep_cells takes cell indices, not {index!r}"
+                ) from None
 
         trims = root.features.trimFeatures
-        inp = trims.createInput(body, tool)
-        feat = trims.add(inp)
-        return {"feature_name": feat.name}
+        tool = self._body_by_name(tool_name) if tool_name else None
+        if tool is None:
+            tool = self._construction_plane(tool_plane)
+
+        inp = trims.createInput(tool)
+        try:
+            cells = inp.bRepCells
+            if kept and (min(kept) < 0 or max(kept) >= cells.count):
+                raise RuntimeError(
+                    f"keep_cells {sorted(kept)} is out of range - this trim "
+                    f"produced {cells.count} cell(s), indexed from 0"
+                )
+            for index in range(cells.count):
+                cells.item(index).isSelected = index not in kept
+            feat = trims.add(inp)
+        except Exception:
+            inp.cancel()
+            raise
+        return {
+            "feature_name": feat.name,
+            "body_name": target.name,
+            "kept_cells": sorted(kept),
+            "cells": cells.count,
+        }
 
     def create_flange(
         self,
         body_name: str,
         edge_index: int,
-        height: float = 1.0,
+        distance: float = 1.0,
         angle: float = 90,
-        bend_radius: float | None = None,
+        bend_radius_override: float | None = None,
     ):
+        """Edge flange: ``createEdgeFlangeInput(edges, distance)``, then the overrides.
+
+        ``FlangeFeatures`` ships no ``createInput`` - the three builders are
+        ``createBaseFlangeInput``, ``createContourFlangeInput`` and
+        ``createEdgeFlangeInput`` (``SheetMetal/FlangeFeatures.h``) - and the
+        input's length is ``distance``, written by ``createEdgeFlangeInput``
+        itself.  ``bendRadiusOverride`` is a ``BendRadiusOverride`` object, so the
+        radius goes through ``setOverride``; assigning to it raises, measured on
+        2706.
+        """
         root = self._root()
         body = self._body_by_name(body_name)
         edge = body.edges.item(edge_index)
 
         flanges = root.features.flangeFeatures
-        inp = flanges.createInput(edge, True)
+        inp = flanges.createEdgeFlangeInput(
+            [edge], adsk.core.ValueInput.createByReal(distance)
+        )
         inp.angle = adsk.core.ValueInput.createByString(f"{angle} deg")
-        inp.height = adsk.core.ValueInput.createByReal(height)
-        if bend_radius:
-            inp.bendRadius = adsk.core.ValueInput.createByReal(bend_radius)
+        if bend_radius_override:
+            inp.bendRadiusOverride.setOverride(
+                adsk.core.ValueInput.createByReal(bend_radius_override)
+            )
 
         feat = flanges.add(inp)
-        return {"feature_name": feat.name, "height": height, "angle": angle}
+        return {
+            "feature_name": feat.name,
+            "distance": distance,
+            "angle": angle,
+        }
 
     def create_bend(
         self,
         body_name: str,
-        bend_line_sketch: str | None = None,
+        stationary_face_index: int,
+        bend_line_sketch: str,
         angle: float = 90,
         bend_radius: float | None = None,
+        line_position: str = "center",
+        allow_bend_relief: bool = True,
     ):
+        """Fold along a sketch line: the shipped API is ``FoldFeatures``.
+
+        ``root.features.bendFeatures`` does not exist on 2706 - the sketch-line
+        bend is ``FoldFeatures.createInput(stationaryFace)`` followed by
+        ``inp.bendLines.add(line, angle, position, relief)``
+        (``SheetMetal/FoldFeatures.h:64``, ``FoldBendLineDefinitions.h:60``).
+        The stationary face is a caller decision here rather than a guess: a fold
+        about the wrong face bends the part the wrong way.
+        """
         root = self._root()
         body = self._body_by_name(body_name)
+        sketch = self._sketch_by_name(bend_line_sketch)
+        if sketch.sketchCurves.sketchLines.count == 0:
+            raise RuntimeError(f"{bend_line_sketch} has no line to bend along")
+        bend_line = sketch.sketchCurves.sketchLines.item(0)
 
-        if bend_line_sketch:
-            sketch = self._sketch_by_name(bend_line_sketch)
-            bend_line = sketch.sketchCurves.sketchLines.item(0)
+        positions = {
+            "start": adsk.fusion.FoldBendLinePositionTypes
+            .StartFoldBendLinePositionType,
+            "center": adsk.fusion.FoldBendLinePositionTypes
+            .CenterFoldBendLinePositionType,
+            "end": adsk.fusion.FoldBendLinePositionTypes
+            .EndFoldBendLinePositionType,
+        }
+        position = positions.get(line_position)
+        if position is None:
+            raise RuntimeError(
+                f"line_position {line_position!r} is not one of "
+                f"{', '.join(sorted(positions))}"
+            )
 
-            bends = root.features.bendFeatures
-            inp = bends.createInput(body, bend_line, True)
-            inp.bendAngle = adsk.core.ValueInput.createByString(f"{angle} deg")
-            if bend_radius:
-                inp.bendRadius = adsk.core.ValueInput.createByReal(bend_radius)
+        folds = root.features.foldFeatures
+        inp = folds.createInput(body.faces.item(stationary_face_index))
+        inp.bendLines.add(
+            bend_line,
+            adsk.core.ValueInput.createByString(f"{angle} deg"),
+            position,
+            allow_bend_relief,
+        )
+        if bend_radius:
+            inp.bendRadiusOverride.setOverride(
+                adsk.core.ValueInput.createByReal(bend_radius)
+            )
 
-            feat = bends.add(inp)
-            return {"feature_name": feat.name, "angle": angle}
-        else:
-            raise RuntimeError("bend_line_sketch is required")
+        feat = folds.add(inp)
+        return {
+            "feature_name": feat.name,
+            "angle": angle,
+            "line_position": line_position,
+        }
 
     def _stationary_face(self, body):
         """The face a flat pattern or an unfold stays fixed to: the first planar one.
@@ -217,3 +341,64 @@ class SurfaceCommands:
 
         feat = unfolds.add(inp)
         return {"feature_name": feat.name}
+
+
+_INSIDE_KEEPS = {"inside": True, "outside": False}
+_PLANE_KEEPS = {"positive": True, "negative": False}
+
+
+def _keep_inside(keep: str) -> bool:
+    """Translate ``keep`` for a body tool, or refuse the word that does not fit.
+
+    A body has an inside; a plane does not, so the two vocabularies are kept
+    apart rather than one silently standing in for the other.
+    """
+    try:
+        return _INSIDE_KEEPS[keep]
+    except KeyError:
+        raise RuntimeError(
+            f"keep {keep!r} does not apply to a body tool - use one of "
+            f"{', '.join(sorted(_INSIDE_KEEPS))}; a plane tool takes "
+            f"{', '.join(sorted(_PLANE_KEEPS))}"
+        ) from None
+
+
+def _keep_positive(keep: str) -> bool:
+    """Translate ``keep`` for a construction-plane tool: the side its normal names."""
+    try:
+        return _PLANE_KEEPS[keep]
+    except KeyError:
+        raise RuntimeError(
+            f"keep {keep!r} does not apply to a plane tool - use one of "
+            f"{', '.join(sorted(_PLANE_KEEPS))}; a body tool takes "
+            f"{', '.join(sorted(_INSIDE_KEEPS))}"
+        ) from None
+
+
+def _inside_body(body, point) -> bool:
+    """``BRepBody.pointContainment``: is the point inside the tool's solid?"""
+    return (
+        body.pointContainment(point)
+        == adsk.fusion.PointContainment.PointInsidePointContainment
+    )
+
+
+def _first_planar_face(body):
+    """The first planar face of a patch body - the plane a side is measured from."""
+    for face in body.faces:
+        if adsk.core.Plane.cast(face.geometry) is not None:
+            return face
+    raise RuntimeError(f"{body.name} has no planar face to take a side from")
+
+
+def _on_positive_side(plane, point) -> bool:
+    """Which side of the plane the point is on, relative to its normal."""
+    geometry = adsk.core.Plane.cast(plane.geometry)
+    if geometry is None:
+        raise RuntimeError(f"{getattr(plane, 'name', 'the trim tool')} is not planar")
+    normal, origin = geometry.normal, geometry.origin
+    return (
+        (point.x - origin.x) * normal.x
+        + (point.y - origin.y) * normal.y
+        + (point.z - origin.z) * normal.z
+    ) >= 0

@@ -2092,15 +2092,28 @@ TOOLS: list[dict] = [
     _tool(
         "trim_surface",
         "Trim Surface",
-        "Trim a surface body with another body",
-        required=["body_name", "tool_name"],
+        "Trim a surface body with another body or a base plane",
+        required=["body_name", "keep_cells"],
         body_name={
             "type": "string",
             "description": "Surface body to trim",
         },
+        keep_cells={
+            "type": "array",
+            "items": {"type": "integer", "minimum": 0},
+            "description": (
+                "Indices of the cells Fusion's trim produced that survive. Every "
+                "other cell is removed. The refusal reports how many cells exist."
+            ),
+        },
         tool_name={
             "type": "string",
             "description": "Trimming tool body",
+        },
+        tool_plane={
+            "type": "string",
+            "enum": ["xy", "xz", "yz"],
+            "description": "Base plane used as the trimming tool instead of a body",
         },
     ),
     # ── sheet metal ────────────────────────────────────────────────────
@@ -2114,30 +2127,38 @@ TOOLS: list[dict] = [
             "type": "integer",
             "minimum": 0,
         },
-        height={
+        distance={
             "type": "number",
             "minimum": 0.001,
-            "description": "Flange height (cm)",
+            "description": "Flange length (cm)",
         },
         angle={
             "type": "number",
             "default": 90,
             "description": "Bend angle (degrees)",
         },
-        bend_radius={
+        bend_radius_override={
             "type": "number",
-            "description": "Bend radius (cm)",
+            "description": "Bend radius for this flange only (cm)",
         },
     ),
     _tool(
         "create_bend",
         "Create Bend",
-        "Add a bend to a sheet metal body",
-        required=["body_name"],
+        "Fold a sheet metal body along a sketch line",
+        required=["body_name", "stationary_face_index", "bend_line_sketch"],
         body_name={"type": "string"},
+        stationary_face_index={
+            "type": "integer",
+            "minimum": 0,
+            "description": (
+                "Face of body_name that stays fixed during the fold - a wrong one "
+                "bends the part the wrong way"
+            ),
+        },
         bend_line_sketch={
             "type": "string",
-            "description": "Sketch with bend line",
+            "description": "Sketch whose first line the fold runs along",
         },
         angle={
             "type": "number",
@@ -2147,6 +2168,17 @@ TOOLS: list[dict] = [
         bend_radius={
             "type": "number",
             "description": "Override bend radius (cm)",
+        },
+        line_position={
+            "type": "string",
+            "enum": ["start", "center", "end"],
+            "default": "center",
+            "description": "Where the bend line sits in the flat state",
+        },
+        allow_bend_relief={
+            "type": "boolean",
+            "default": True,
+            "description": "Allow bend relief at the ends of this bend line",
         },
     ),
     _tool(

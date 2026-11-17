@@ -456,6 +456,9 @@ class FakeBody(FakeDeletable):
     ):
         super().__init__(name)
         self.volume = 1.0
+        #: Solid by default, because most fixtures are solids.  ``trim_surface``
+        #: branches on it: a solid tool has an inside, a patch body has none.
+        self.isSolid = True
         self.area = 6.0
         self.material = None
         self.isVisible = True
@@ -486,6 +489,27 @@ class FakeBody(FakeDeletable):
         """Fusion's one-argument call: the properties, and the accuracy asked for."""
         self.accuracy_requests.append(accuracy)
         return self.physicalProperties
+
+    def pointContainment(self, point) -> str:
+        """``BRepBody.pointContainment(point)``: the answer ``PointContainment`` gives.
+
+        Fusion decides from the body's geometry; a fake body has none beyond its
+        bounding box, so the box is the test - which is enough for
+        ``trim_surface``'s side test as long as a cell centroid is not on the
+        boundary.  The values are the ones ``adsk.fusion.PointContainment``
+        carries in ``tests/fakes/runtime.py``, so a handler comparing against
+        ``InsidePointContainment`` matches.
+        """
+        box = self.boundingBox
+        lo, hi = box.minPoint, box.maxPoint
+        inside = (
+            lo.x <= point.x <= hi.x
+            and lo.y <= point.y <= hi.y
+            and lo.z <= point.z <= hi.z
+        )
+        return (
+            "PointInsidePointContainment" if inside else "PointOutsidePointContainment"
+        )
 
 
 def body_with_faces(name: str, normals: list[tuple[float, float, float]]) -> FakeBody:

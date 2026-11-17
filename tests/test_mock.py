@@ -890,10 +890,12 @@ class TestMockSurfaceOps:
             "trim_surface",
             {
                 "body_name": "Surf1",
+                "keep_cells": [0],
                 "tool_name": "Cutter",
             },
         )
         assert result["body_name"] == "Surf1"
+        assert result["kept_cells"] == [0]
         assert result["tool_name"] == "Cutter"
         assert result["trimmed"] is True
 
@@ -905,21 +907,24 @@ class TestMockSheetMetal:
             {
                 "body_name": "Sheet1",
                 "edge_index": 0,
-                "height": 2.0,
+                "distance": 2.0,
             },
         )
         assert result["body_name"] == "Sheet1"
-        assert result["height"] == 2.0
+        assert result["distance"] == 2.0
 
     def test_create_bend(self):
         result = mock_command(
             "create_bend",
             {
                 "body_name": "Sheet1",
+                "stationary_face_index": 1,
+                "bend_line_sketch": "Sketch1",
                 "angle": 45,
             },
         )
         assert result["body_name"] == "Sheet1"
+        assert result["stationary_face_index"] == 1
         assert result["angle"] == 45
 
     def test_flat_pattern(self):

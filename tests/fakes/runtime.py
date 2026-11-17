@@ -455,6 +455,38 @@ def _surface_continuity_types() -> types.SimpleNamespace:
     )
 
 
+def _point_containment() -> types.SimpleNamespace:
+    """``PointContainment``: what ``BRepBody.pointContainment`` answers.
+
+    Measured on 2706 by reading ``dir(adsk.fusion.PointContainment)``: the four
+    members are ``PointInside``, ``PointOutside``, ``PointOn`` and ``Unknown``,
+    each carrying the ``PointContainment`` suffix.  The first draft of this fake
+    invented ``InsidePointContainment`` and the handler matched it, so the suite
+    was green while Fusion raised ``AttributeError`` -- which is why the names
+    are read rather than guessed.
+    """
+    return types.SimpleNamespace(
+        PointInsidePointContainment="PointInsidePointContainment",
+        PointOutsidePointContainment="PointOutsidePointContainment",
+        PointOnPointContainment="PointOnPointContainment",
+        UnknownPointContainment="UnknownPointContainment",
+    )
+
+
+def _fold_bend_line_positions() -> types.SimpleNamespace:
+    """``FoldBendLinePositionTypes``: where the bend line sits in the flat state.
+
+    Read from the shipped stub (``adsk/fusion.py``,
+    ``FoldBendLinePositionTypes``): start, center and end, spelled with the
+    ``FoldBendLinePositionType`` suffix.
+    """
+    return types.SimpleNamespace(
+        StartFoldBendLinePositionType="Start",
+        CenterFoldBendLinePositionType="Center",
+        EndFoldBendLinePositionType="End",
+    )
+
+
 def _pattern_distance_types() -> types.SimpleNamespace:
     """``PatternDistanceType``: the member ``rectangular_pattern`` asks for.
 
@@ -522,6 +554,8 @@ def install() -> None:
         DimensionOrientations=_dimension_orientations(),
         RuledSurfaceTypes=_ruled_surface_types(),
         SurfaceContinuityTypes=_surface_continuity_types(),
+        PointContainment=_point_containment(),
+        FoldBendLinePositionTypes=_fold_bend_line_positions(),
         PatternDistanceType=_pattern_distance_types(),
         ThreadInfo=importlib.import_module("tests.fakes.features").FakeThreadInfo,
         ThreadDataQuery=importlib.import_module(

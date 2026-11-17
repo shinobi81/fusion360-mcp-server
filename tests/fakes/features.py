@@ -1139,3 +1139,255 @@ class FakeExportManager:
             ]
         if self.fail:
             raise RuntimeError("3 : Some input argument is invalid.")
+
+
+class FakeBendRadiusOverride:
+    """``BendRadiusOverride``: an override object, not a settable property.
+
+    ``SheetMetal/BendRadiusOverride.h`` ships ``setOverride(bendRadius)`` and
+    returns whether it activated; the feature inputs expose it as a *getter*
+    only, so ``inp.bendRadiusOverride = ValueInput`` raises in Fusion (measured on
+    2706: ``property '_get_bendRadiusOverride' ... has no setter``).  Assigning to
+    :attr:`value` here would silently succeed, so the class carries no setter -
+    the only way in is :meth:`setOverride`, as in the binding.
+    """
+
+    def __init__(self):
+        #: The ``ValueInput`` handed to ``setOverride``, or ``None``.
+        self.value = None
+        self.overrides: list = []
+
+    def setOverride(self, bend_radius) -> bool:
+        if bend_radius is None:
+            return False
+        self.value = bend_radius
+        self.overrides.append(bend_radius)
+        return True
+
+
+class FakeEdgeFlangeInput:
+    """``EdgeFlangeInput``: the members ``create_flange`` writes.
+
+    ``SheetMetal/EdgeFlangeInput.h`` ships ``distance`` (via
+    ``setDistanceExtent``), ``angle``, ``bendRadiusOverride``,
+    ``bendReliefOverride``, ``extentType``, ``isFlipped`` and the corner-relief
+    overrides.  There is **no** ``height`` and no settable ``bendRadius``, which
+    is what the old handler wrote.
+    """
+
+    def __init__(self, edges, distance):
+        self.edges = list(edges)
+        self.distance = distance
+        self.angle = None
+        self.bendRadiusOverride = FakeBendRadiusOverride()
+        self.isFlipped = False
+
+
+class FakeFlangeFeatures:
+    """``root.features.flangeFeatures``: the three flange builders, no ``createInput``.
+
+    ``SheetMetal/FlangeFeatures.h`` ships ``createBaseFlangeInput(profiles)``,
+    ``createContourFlangeInput(profiles, distance)`` and
+    ``createEdgeFlangeInput(edges, distance)``.  A ``createInput`` method here
+    would let the handler's old call pass, so it is deliberately absent: the
+    handler that used it raised ``AttributeError`` on 2706.1.17 and any
+    regression fails the same way.
+    """
+
+    def __init__(self):
+        self.edge_inputs: list[FakeEdgeFlangeInput] = []
+        self.created: list[FakeFeature] = []
+
+    def createEdgeFlangeInput(
+        self, edges: "list", distance: "FakeValueInput"
+    ) -> FakeEdgeFlangeInput:
+        """``createEdgeFlangeInput(edges: list[BRepEdge], distance: ValueInput)``.
+
+        A ``BRepEdge`` or a ``Profiles`` collection where the list belongs is a
+        ``TypeError``, as the binding's ``std::vector<Ptr<BRepEdge>>`` is.
+        """
+        if not isinstance(edges, list):
+            raise TypeError(
+                "in method 'FlangeFeatures_createEdgeFlangeInput', argument 2 of "
+                "type 'std::vector<Ptr<BRepEdge>> const &'"
+            )
+        if not isinstance(distance, FakeValueInput):
+            raise TypeError(
+                "in method 'FlangeFeatures_createEdgeFlangeInput', argument 3 of "
+                "type 'Ptr<ValueInput> const &'"
+            )
+        made = FakeEdgeFlangeInput(edges, distance)
+        self.edge_inputs.append(made)
+        return made
+
+    def add(self, inp: FakeEdgeFlangeInput) -> FakeFeature:
+        if not isinstance(inp, FakeEdgeFlangeInput):
+            raise TypeError("flangeFeatures.add takes the input createInput made")
+        feature = FakeFeature(f"EdgeFlange{len(self.created) + 1}")
+        self.created.append(feature)
+        return feature
+
+
+class FakeFoldBendLineDefinition:
+    """One bend line on a fold: what ``FoldBendLineDefinitions.add`` returns."""
+
+    def __init__(self, bend_line, bend_angle, line_position, allow_bend_relief):
+        self.bendLine = bend_line
+        self.bendAngle = bend_angle
+        self.linePosition = line_position
+        self.allowBendRelief = allow_bend_relief
+
+
+class FakeFoldBendLineDefinitions:
+    """``FoldFeatureInput.bendLines``: Fusion's four-argument ``add``.
+
+    ``SheetMetal/FoldBendLineDefinitions.h`` ships ``add(bendLine: SketchLine,
+    bendAngle: ValueInput, linePosition: FoldBendLinePositionTypes,
+    allowBendRelief: bool)``.  A missing argument is a ``TypeError`` here as it
+    is in the binding.
+    """
+
+    def __init__(self):
+        self.added: list[FakeFoldBendLineDefinition] = []
+
+    def add(
+        self, bend_line, bend_angle, line_position, allow_bend_relief
+    ) -> FakeFoldBendLineDefinition:
+        definition = FakeFoldBendLineDefinition(
+            bend_line, bend_angle, line_position, allow_bend_relief
+        )
+        self.added.append(definition)
+        return definition
+
+
+class FakeFoldFeatureInput:
+    """``FoldFeatureInput``: the stationary face, the bend lines, the overrides."""
+
+    def __init__(self, stationary_face):
+        self.stationaryFace = stationary_face
+        self.bendLines = FakeFoldBendLineDefinitions()
+        self.bendRadiusOverride = FakeBendRadiusOverride()
+        self.isUseCornerRelief = True
+
+
+class FakeFoldFeatures:
+    """``root.features.foldFeatures``: ``createInput(stationaryFace)`` - one argument.
+
+    ``SheetMetal/FoldFeatures.h:64`` ships ``createInput(stationaryFace:
+    BRepFace)``; the bend lines go on the input afterwards.  A two-argument call
+    is a ``TypeError``, which is what keeps ``create_bend`` from going back to a
+    ``bendFeatures`` collection that does not exist.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakeFoldFeatureInput] = []
+        self.created: list[FakeFeature] = []
+
+    @property
+    def last_input(self) -> FakeFoldFeatureInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(self, stationary_face) -> FakeFoldFeatureInput:
+        made = FakeFoldFeatureInput(stationary_face)
+        self.inputs.append(made)
+        return made
+
+    def add(self, inp: FakeFoldFeatureInput) -> FakeFeature:
+        if not isinstance(inp, FakeFoldFeatureInput):
+            raise TypeError("foldFeatures.add takes the input createInput made")
+        feature = FakeFeature(f"Fold{len(self.created) + 1}")
+        self.created.append(feature)
+        return feature
+
+
+class FakeBRepCell:
+    """``BRepCell``: a transient body plus the selection flag a trim reads.
+
+    ``Features/BRepCell.h``: ``isSelected`` is settable, and for a **trim** a
+    selected cell is *removed* - the opposite of a boundary fill.
+    """
+
+    def __init__(self, cell_body):
+        self.cellBody = cell_body
+        self.isSelected = False
+
+
+class FakeBRepCells:
+    """``BRepCells``: ``count`` and ``item(i)`` over the cells Fusion computed."""
+
+    def __init__(self, cell_bodies=()):
+        self._cells = [FakeBRepCell(body) for body in cell_bodies]
+
+    @property
+    def count(self) -> int:
+        return len(self._cells)
+
+    def item(self, index: int) -> FakeBRepCell:
+        return self._cells[index]
+
+
+class FakeTrimFeatureInput:
+    """``TrimFeatureInput``: the tool, the cells, and the transaction's cancel.
+
+    ``createInput`` starts a trim transaction that ``add`` completes; the
+    header says leaving it open leaves Fusion in a bad state and can crash it, so
+    :meth:`cancel` is modelled and every test that expects a refusal asserts it
+    was called.
+    """
+
+    def __init__(self, trim_tool, cell_bodies=()):
+        self.trimTool = trim_tool
+        self.bRepCells = FakeBRepCells(cell_bodies)
+        self.cancelled = False
+
+    def cancel(self) -> None:
+        self.cancelled = True
+
+
+class FakeTrimFeatures:
+    """``root.features.trimFeatures``: ``createInput(trimTool)`` - one argument.
+
+    ``Features/TrimFeatures.h:63`` ships ``createInput(trimTool: Base)``; the
+    handler passed ``(body, tool)``, which is a ``TypeError`` on every call.  The
+    cells Fusion computes come from ``cell_bodies``, which a test supplies: how a
+    surface splits is geometry this fake does not carry.
+    """
+
+    def __init__(self, cell_bodies=()):
+        self._cell_bodies = list(cell_bodies)
+        self.inputs: list[FakeTrimFeatureInput] = []
+        self.created: list[FakeFeature] = []
+
+    @property
+    def cell_bodies(self) -> list:
+        """The transient bodies ``createInput`` splits the target into.
+
+        A test sets this before calling: how a surface splits is geometry the
+        fake does not carry, so the cells are the fixture's claim about the
+        geometry, not the fake's.
+        """
+        return self._cell_bodies
+
+    @cell_bodies.setter
+    def cell_bodies(self, bodies) -> None:
+        self._cell_bodies = list(bodies)
+
+    @property
+    def last_input(self) -> "FakeTrimFeatureInput | None":
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(self, trim_tool) -> FakeTrimFeatureInput:
+        made = FakeTrimFeatureInput(trim_tool, self._cell_bodies)
+        self.inputs.append(made)
+        return made
+
+    def add(self, inp: FakeTrimFeatureInput) -> FakeFeature:
+        if not isinstance(inp, FakeTrimFeatureInput):
+            raise TypeError("trimFeatures.add takes the input createInput made")
+        if not any(cell.isSelected for cell in inp.bRepCells._cells):
+            # Fusion trims nothing when no cell is selected; say so rather than
+            # reporting a feature that removed nothing.
+            raise RuntimeError("3 : no cells were selected to remove")
+        feature = FakeFeature(f"Trim{len(self.created) + 1}")
+        self.created.append(feature)
+        return feature

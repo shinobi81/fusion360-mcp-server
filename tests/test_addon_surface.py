@@ -222,3 +222,119 @@ def test_an_unknown_rule_type_is_refused_as_invalid_input(bound_handler):
     kind, hints = classify(str(raised.value))
     assert kind == "INVALID_INPUT"
     assert any("normal or tangent" in hint for hint in hints), hints
+
+
+# ── trim_surface ───────────────────────────────────────────────────────
+
+
+def _cells_of(design) -> list:
+    """The cells the last trim input carries, with the input proven to exist."""
+    created = design.rootComponent.features.trimFeatures.last_input
+    assert created is not None
+    return [created.bRepCells.item(i) for i in range(created.bRepCells.count)]
+
+
+def _trim_design(cells):
+    """A target surface, a patch tool, and the cells Fusion computed."""
+    tool = FakeBody("Cutter")
+    design = FakeDesign(bodies=[FakeBody("DecoyBody"), FakeBody("Surf1"), tool])
+    design.rootComponent.features.trimFeatures.cell_bodies = cells
+    return design, tool
+
+
+def test_a_trim_removes_every_cell_it_was_not_asked_to_keep(bound_handler):
+    """``isSelected`` means *remove* for a trim, so the kept cells are unselected.
+
+    Measured on 2706: both cells of a patch report ``centerOfMass`` as
+    ``(0, 0, 0)``, so a side cannot be computed - the caller names the cells and
+    every other one is selected for removal (``Features/BRepCell.h:40-45``).
+    """
+    design, _tool = _trim_design([FakeBody("Cell0"), FakeBody("Cell1")])
+    handler = bound_handler(design)
+
+    handler.trim_surface("Surf1", keep_cells=[0], tool_name="Cutter")
+
+    cells = _cells_of(design)
+    assert cells[0].isSelected is False
+    assert cells[1].isSelected is True
+
+
+def test_a_trim_keeping_the_other_cell_moves_the_selection(bound_handler):
+    """The mirror image: same two cells, the opposite selection."""
+    design, _tool = _trim_design([FakeBody("Cell0"), FakeBody("Cell1")])
+    handler = bound_handler(design)
+
+    handler.trim_surface("Surf1", keep_cells=[1], tool_name="Cutter")
+
+    cells = _cells_of(design)
+    assert cells[0].isSelected is True
+    assert cells[1].isSelected is False
+
+
+def test_a_trim_reports_how_many_cells_it_had_to_choose_from(bound_handler):
+    """The reply carries the count, so a caller can retry with a valid index."""
+    design, _tool = _trim_design([FakeBody("Cell0"), FakeBody("Cell1")])
+    handler = bound_handler(design)
+
+    out = handler.trim_surface("Surf1", keep_cells=[1], tool_name="Cutter")
+
+    assert out["cells"] == 2
+    assert out["kept_cells"] == [1]
+
+
+def test_a_trim_refuses_a_cell_index_past_the_end_before_fusion_adds(
+    bound_handler,
+):
+    """An out-of-range index is refused by us, and the transaction is cancelled."""
+    design, _tool = _trim_design([FakeBody("Cell0"), FakeBody("Cell1")])
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError, match="out of range"):
+        handler.trim_surface("Surf1", keep_cells=[2], tool_name="Cutter")
+
+    created = design.rootComponent.features.trimFeatures.last_input
+    assert created is not None
+    assert created.cancelled is True
+    assert design.rootComponent.features.trimFeatures.created == []
+
+
+def test_a_trim_cancels_the_transaction_when_fusion_refuses(bound_handler):
+    """Keeping every cell selects none, and Fusion refuses; we must cancel first.
+
+    ``createInput`` opens a transaction - the header says leaving it open leaves
+    Fusion in a bad state and can crash it.
+    """
+    design, _tool = _trim_design([FakeBody("Cell0")])
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError):
+        handler.trim_surface("Surf1", keep_cells=[0], tool_name="Cutter")
+
+    created = design.rootComponent.features.trimFeatures.last_input
+    assert created is not None
+    assert created.cancelled is True
+
+
+def test_a_trim_takes_either_a_body_or_a_plane_and_refuses_both(bound_handler):
+    """Two tools, or none, is a refusal before Fusion is asked for anything."""
+    design, _tool = _trim_design([])
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError, match="exactly one of"):
+        handler.trim_surface(
+            "Surf1", keep_cells=[0], tool_name="Cutter", tool_plane="xy"
+        )
+
+    assert design.rootComponent.features.trimFeatures.inputs == []
+
+
+def test_a_trim_reads_the_cells_of_a_plane_tool_too(bound_handler):
+    """A construction plane is a valid tool, and the cells come back the same."""
+    design, _tool = _trim_design([FakeBody("Cell0"), FakeBody("Cell1")])
+    handler = bound_handler(design)
+
+    handler.trim_surface("Surf1", keep_cells=[0], tool_plane="xy")
+
+    created = design.rootComponent.features.trimFeatures.last_input
+    assert created is not None
+    assert created.trimTool is design.rootComponent.xYConstructionPlane
