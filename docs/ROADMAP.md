@@ -116,24 +116,29 @@ could never have worked:
 | `scale_body` | per-axis branch passed five arguments to a three-argument `createInput`; non-uniform is `setToNonUniform` | fixed (#131) |
 | `create_construction_axis("perpendicular_at_point")` | handed a `ConstructionPlane` to a `BRepFace` parameter; now refuses and names the missing argument | fixed (#131) |
 | `patch_surface` | wrote a property Fusion does not ship, so `continuity` was a silent no-op | fixed to `groupContinuity`; the argument is inert for sketch curves until the tool takes edges (#131) |
-| `create_flange`, `create_bend`, `trim_surface` | `FlangeFeatures` has no `createInput`; there is no `bendFeatures` at all; `TrimFeatures.createInput` takes the tool alone | **still broken**, recorded in the PRs, not repaired |
+| `create_flange`, `create_bend`, `trim_surface` | `FlangeFeatures` has no `createInput`; there is no `bendFeatures` at all; `TrimFeatures.createInput` takes the tool alone | **fixed and proven live (#134)** |
 
 ### What is left
 
-1. **One Fusion 2706 session.** Every fix above is header-and-binding evidence; none was
-   run inside Fusion. That session also answers the open question behind four call sites
-   that pass a raw `Point3D` where Fusion documents a point entity (`scale_body`'s anchor,
-   `create_construction_plane("three_points")`, `create_construction_axis("two_points")`,
-   and the point half of `perpendicular_at_point`). If Fusion refuses those, three more
-   commands are affected.
-2. **Repair the three dead sheet-metal and surface commands.** `create_flange` and
-   `create_bend` need `FlangeFeatures.createEdgeFlangeInput` and the `FoldFeatures` API;
-   `trim_surface` needs a keep-cells decision from `TrimFeatureInput.bRepCells`. Each is
-   a design decision, not an arity swap.
-3. **`handler_cam` (17%) and `handler_export` (23%)** remain where they were: a CAM
+Zero invented names remain, and that is now checked rather than hoped for:
+`scripts/check_fusion_api.py` walks every `adsk.<dotted.path>` under `addon/server`
+and asks the running Fusion whether it exists - 193 references, none missing on
+2706.1.17 (#135).
+
+1. **`hints.py` rules** for the refusals that still classify `UNKNOWN` — its own PR, with
+   `scripts/sync_mirrors.py`, because the table is canonical and mirrored.
+2. **`handler_cam` (17%) and `handler_export` (23%)** remain where they were: a CAM
    `Product` and an `exportManager`/`viewport` are the two largest fakes in the tree, and
    the behaviour they would cover is the behaviour a fake cannot settle - a view sheet
    either renders or it does not. Those belong in a Fusion session, not in a fake.
+3. **`create_construction_axis("perpendicular_at_point")`** refuses by design: it
+   needs a `BRepFace`, which the tool has no argument for. Making it work means adding a
+   face parameter, a schema decision rather than a repair.
+
+Settled, so a later session does not re-open them: the four call sites that pass a raw
+`Point3D` where the headers say "a construction point, sketch point or vertex" are fine.
+`setByThreePoints`, `setByTwoPoints` and `ScaleFeatures.createInput` all accept a
+`Point3D` on 2706.1.17. The documentation is advice, not enforcement.
 
 Not part of this: moving the 59 floor. Raising it to whatever the new figure becomes is
 a number chasing its own measurement; the reason to write these tests is the refusals
