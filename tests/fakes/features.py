@@ -882,6 +882,106 @@ class FakeMoveFeatures:
         return feature
 
 
+class FakeFlangeInput:
+    """``FlangeFeatureInput``: the two ``createInput`` arguments and the three writes.
+
+    The *positional* arguments are recorded under names this fake chose
+    (``edge``, ``isTangentChain``) - no SDK text was to hand when it was written,
+    so only the count and the order come from the call site.  ``angle``,
+    ``height`` and ``bendRadius`` are the three properties ``create_flange``
+    writes, each starting ``None`` so a call that skipped one is visible rather
+    than defaulted to a value nobody asked for.
+    """
+
+    def __init__(self, edge, is_tangent_chain):
+        self.edge = edge
+        self.isTangentChain = is_tangent_chain
+        self.angle: FakeValueInput | None = None
+        self.height: FakeValueInput | None = None
+        self.bendRadius: FakeValueInput | None = None
+
+
+class FakeFlangeFeatures:
+    """``root.features.flangeFeatures``: two positional arguments, as called.
+
+    The arity is the handler's - ``createInput(edge, <flag>)`` - so a one- or
+    three-argument call is a ``TypeError``.  Whether the edge actually carries a
+    bend, and where the flange lands, is Fusion's judgement about geometry this
+    fake does not carry: it records the request and refuses nothing else.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakeFlangeInput] = []
+        self.added: list[FakeFlangeInput] = []
+        self.created: list[FakeFeature] = []
+
+    @property
+    def last_input(self) -> FakeFlangeInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(self, edge, is_tangent_chain) -> FakeFlangeInput:
+        created = FakeFlangeInput(edge, is_tangent_chain)
+        self.inputs.append(created)
+        return created
+
+    def add(self, inp: FakeFlangeInput) -> FakeFeature:
+        if not isinstance(inp, FakeFlangeInput):
+            raise TypeError("flangeFeatures.add takes the input createInput made")
+        self.added.append(inp)
+        feature = FakeFeature(f"Flange{len(self.added)}")
+        self.created.append(feature)
+        return feature
+
+
+class FakeBendInput:
+    """``BendFeatureInput``: the three ``createInput`` arguments and two writes.
+
+    ``baseObject``, ``bendLine`` and ``bendLineExtended`` are the fake's names for
+    the three positional arguments - the handler passes a body, a sketch line and
+    a boolean, in that order, and only that order is claimed here.  ``bendAngle``
+    and ``bendRadius`` are what ``create_bend`` writes, ``None`` until it does.
+    """
+
+    def __init__(self, base_object, bend_line, is_bend_line_extended):
+        self.baseObject = base_object
+        self.bendLine = bend_line
+        self.isBendLineExtended = is_bend_line_extended
+        self.bendAngle: FakeValueInput | None = None
+        self.bendRadius: FakeValueInput | None = None
+
+
+class FakeBendFeatures:
+    """``root.features.bendFeatures``: three positional arguments, as called.
+
+    Whether a bend line lies on the body - and therefore whether a bend is
+    possible at all - needs geometry, so the fake records the request and refuses
+    nothing but a wrong arity or an ``add`` of something ``createInput`` did not
+    make.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakeBendInput] = []
+        self.added: list[FakeBendInput] = []
+        self.created: list[FakeFeature] = []
+
+    @property
+    def last_input(self) -> FakeBendInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(self, base_object, bend_line, is_bend_line_extended):
+        created = FakeBendInput(base_object, bend_line, is_bend_line_extended)
+        self.inputs.append(created)
+        return created
+
+    def add(self, inp: FakeBendInput) -> FakeFeature:
+        if not isinstance(inp, FakeBendInput):
+            raise TypeError("bendFeatures.add takes the input createInput made")
+        self.added.append(inp)
+        feature = FakeFeature(f"Bend{len(self.added)}")
+        self.created.append(feature)
+        return feature
+
+
 class FakeSectionAnalysisInput:
     def __init__(self):
         self.plane = None

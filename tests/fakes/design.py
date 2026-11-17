@@ -26,10 +26,12 @@ from .bodies import FakeBody, FakeFace
 from .collection import FakeCollection, FakeDeletable, FakeItemCollection
 from .features import (
     FakeAnalyses,
+    FakeBendFeatures,
     FakeCircularPatternFeatures,
     FakeDraftFeatures,
     FakeExportManager,
     FakeFeature,
+    FakeFlangeFeatures,
     FakeInterference,
     FakeMirrorFeatures,
     FakeMoveFeatures,
@@ -813,6 +815,8 @@ class FakeFeatures:
         self.circularPatternFeatures = FakeCircularPatternFeatures()
         self.splitBodyFeatures = FakeSplitBodyFeatures()
         self.splitFaceFeatures = FakeSplitFaceFeatures()
+        self.flangeFeatures = FakeFlangeFeatures()
+        self.bendFeatures = FakeBendFeatures()
         self.offsetFeatures = FakeOffsetFacesFeatures()
         self.scaleFeatures = FakeScaleFeatures()
         self.moveFeatures = FakeMoveFeatures()
