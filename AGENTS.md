@@ -215,8 +215,11 @@ say whether a feature did _something_, a render whether it did the _right_ thing
   way the tool you call is the tool you wrote.
 - **A fake declares Fusion's shipped arity and types.** Read the call site against the
   binding (`…\webdeploy\production\<hash>\API\Python\packages\adsk\`) or the C++ headers;
-  do not copy the handler's argument list into the fake. Where a header names a type
-  (`BRepFace`, a point entity, `ValueInput`), the fake checks it.
+  do not copy the handler's argument list into the fake. Check the types Fusion _enforces_,
+  not the ones its prose implies: measured on 2706, a raw `Point3D` is accepted where
+  `setByThreePoints` and `ScaleFeatures.createInput` document a point entity, while a
+  `ConstructionPlane` in a `BRepFace` slot is refused. `scripts/check_fusion_api.py`
+  checks the names; only a call settles the rest.
 - **One operation per tool call.** Fusion's API is not thread-safe and complex scripts
   crash the add-in.
 - **No loops inside execute_code** — three similar features are three tool calls.
