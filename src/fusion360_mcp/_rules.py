@@ -211,7 +211,7 @@ def construction_method_refusal(
         "INVALID_INPUT",
         "Tangent plane needs face selection—use execute_code",
         hints=(
-            "create_construction_axis has no face parameter; build this plane "
+            "create_construction_plane has no face parameter; build this plane "
             "with execute_code.",
         ),
     )

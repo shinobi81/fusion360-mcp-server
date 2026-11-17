@@ -582,11 +582,11 @@ def _unresolved_raises(module: ast.Module, name: str) -> set[tuple[str, int, str
 
     One level of binding is resolved — ``refusal = ...`` or ``refusal := ...`` in the
     enclosing function — which is the shape spec D8 anticipates.  **No site in the tree
-    has it**: the three ``raise refusal`` sites take their kind from
-    ``_rules.*_refusal(...)``, which this walk cannot read, and ``event_bridge``'s raise
-    is a ``Protocol`` body.  A binding the walk cannot resolve is listed with its reason
-    rather than passing quietly, as is a raise whose kind or message is computed rather
-    than written down (D8).
+    binds it to a literal ``Refusal``**: every ``raise refusal`` site takes its kind
+    from ``_rules.*_refusal(...)``, which this walk cannot read, and ``event_bridge``'s
+    raise is a ``Protocol`` body.  A binding the walk cannot resolve is listed with its
+    reason rather than passing quietly, as is a raise whose kind or message is computed
+    rather than written down (D8).
     """
     rows: set[tuple[str, int, str]] = set()
     for func in ast.walk(module):

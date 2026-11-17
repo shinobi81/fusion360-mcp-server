@@ -188,51 +188,72 @@ def test_a_selector_that_is_not_a_list_is_refused_with_its_own_hints(params, mes
 
 
 #: One parameter set per assembly validator: the tool it belongs to, the parameters
-#: that earn the refusal, and the kind plus a fragment of the sentence both modes
-#: answer.  The tool is a column because two validators share the same parameters
-#: (``add_joint`` and ``create_as_built_joint`` differ only by ``joint_type``).
+#: that earn the refusal, and the exact kind, sentence and hints both modes answer.
+#: The tool is a column because two validators share the same parameters (``add_joint``
+#: and ``create_as_built_joint`` differ only by ``joint_type``).
 ASSEMBLY_REFUSALS = [
     (
         "add_joint",
         {"component_one": "A", "component_two": "A", "face_one": 0, "face_two": 0},
         "INVALID_INPUT",
-        "must differ",
+        "component_one and component_two must differ",
+        ("Pass two different components; a joint needs two.",),
     ),
     (
         "add_joint",
         {"component_one": "A", "component_two": "B"},
         "INVALID_INPUT",
-        "needs joint geometry",
+        "add_joint needs joint geometry: pass face_one/face_two "
+        "(and body_one/body_two when a component holds more than one body). "
+        "Component origin points are not valid joint geometry.",
+        (
+            "Pass face_one and face_two.",
+            "Add body_one/body_two when the component holds more than one body.",
+        ),
     ),
     (
         "create_as_built_joint",
         {"component_one": "A", "component_two": "B", "joint_type": "revolute"},
         "INVALID_INPUT",
-        "as-built joint needs geometry",
+        "A revolute as-built joint needs geometry: pass face_one/face_two "
+        "(and body_one/body_two when a component holds more than one body). "
+        "Only 'rigid' works without it.",
+        ("Pass face_one and face_two, or use joint_type='rigid'.",),
     ),
     (
         "create_rigid_group",
         {"component_names": ["A"]},
         "INVALID_INPUT",
-        "at least 2 components",
+        "Need at least 2 components for rigid group",
+        ("Pass at least two component names.",),
     ),
     (
         "create_construction_plane",
         {"method": "tangent"},
         "INVALID_INPUT",
-        "needs face selection",
+        "Tangent plane needs face selection—use execute_code",
+        (
+            "create_construction_plane has no face parameter; build this plane "
+            "with execute_code.",
+        ),
     ),
     (
         "create_construction_axis",
         {"method": "perpendicular_at_point"},
         "INVALID_INPUT",
-        "B-Rep face",
+        "Perpendicular axis needs a B-Rep face, which this tool has no "
+        "parameter for — use execute_code; the method stays in the schema for "
+        "wire compatibility",
+        (
+            "The schema advertises this method for wire compatibility; "
+            "use execute_code.",
+        ),
     ),
 ]
 
 
 @pytest.mark.parametrize(
-    ("command", "params", "expected_kind", "expected_fragment"),
+    ("command", "params", "expected_kind", "expected_message", "expected_hints"),
     ASSEMBLY_REFUSALS,
     ids=[
         "components_differ",
@@ -244,12 +265,20 @@ ASSEMBLY_REFUSALS = [
     ],
 )
 def test_the_validator_and_mock_agree(
-    bound_handler, command, params, expected_kind, expected_fragment
+    bound_handler,
+    command,
+    params,
+    expected_kind,
+    expected_message,
+    expected_hints,
 ):
-    """The handler raises and mock mode answers with the same sentence and kind.
+    """The handler raises and mock mode answers with the exact sentence and hints.
 
-    Both sides call the validator in ``rules``; the row is what would fail if a
-    call site passed a different mapping, or if one side kept its own wording.
+    The whole message is pinned, not a fragment: once these rows leave
+    ``_UNCLASSIFIED_BASELINE``, a reflowed em dash or an added period would
+    otherwise stay green.  The hints are pinned too, so a validator that drops its
+    ``hints=`` tuple falls through to the kind default here instead of shipping
+    boilerplate.
     """
     design = FakeDesign(features=0)
     design.rootComponent.occurrences.add(FakeOccurrence(FakeComponent("A")))
@@ -259,13 +288,17 @@ def test_the_validator_and_mock_agree(
     with pytest.raises(addon_hints.Refusal) as raised:
         getattr(handler, command)(**params)
 
+    assert raised.value.error_kind == expected_kind
+    assert str(raised.value) == expected_message
+    assert list(raised.value.hints) == list(expected_hints)
+    assert addon_hints.classify(raised.value)[1] == list(expected_hints)
+
     refused = mock.mock_command(command, params)
 
     assert refused["ok"] is False
-    assert refused["error_kind"] == raised.value.error_kind == expected_kind
-    assert refused["error_message"] == str(raised.value)
-    assert refused["hints"] == list(raised.value.hints)
-    assert expected_fragment in str(raised.value)
+    assert refused["error_kind"] == expected_kind
+    assert refused["error_message"] == expected_message
+    assert refused["hints"] == list(expected_hints)
 
 
 def test_the_mirror_carries_the_same_validation():
