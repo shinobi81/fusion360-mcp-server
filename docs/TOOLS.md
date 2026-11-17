@@ -142,7 +142,7 @@ what a selection returns.
 
 | Tool              | Description                                |
 | ----------------- | ------------------------------------------ |
-| `patch_surface`   | Create a patch surface from boundary edges |
+| `patch_surface`   | Create a patch surface from a sketch profile. `continuity` applies to B-Rep edge boundaries and is ignored for sketch curves, which is this tool's only accepted boundary |
 | `stitch_surfaces` | Stitch surface bodies into one             |
 | `thicken_surface` | Thicken a surface into a solid             |
 | `ruled_surface`   | Ruled surface from a **free** edge — a sheet body's boundary. A solid's edge is shared by two faces and Fusion refuses it (`invalid free edge`); patch or stitch to a surface body first |
@@ -162,7 +162,7 @@ what a selection returns.
 | Tool                        | Description                                                                       |
 | --------------------------- | --------------------------------------------------------------------------------- |
 | `create_construction_plane` | Offset, angle, midplane, 3-point, tangent                                         |
-| `create_construction_axis`  | Two-point, intersection, edge, perpendicular                                      |
+| `create_construction_axis`  | Two-point, intersection, edge, perpendicular (needs a B-Rep face — refused)       |
 | `create_ucs`                | **(2026+, preview API)** User Coordinate System at a point with optional rotation |
 
 ## Assembly

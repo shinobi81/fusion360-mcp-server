@@ -33,7 +33,10 @@ class SurfaceCommands:
             "tangent": sct.TangentSurfaceContinuityType,
             "curvature": sct.CurvatureSurfaceContinuityType,
         }
-        inp.boundaryContinuity = cont_map.get(continuity, cont_map["connected"])
+        # The shipped member is groupContinuity; the retired name is continuity.
+        # Fusion accepts an unknown attribute name and ignores it, so a
+        # misspelling here would be a silent no-op.
+        inp.groupContinuity = cont_map.get(continuity, cont_map["connected"])
 
         feat = patches.add(inp)
         return {"feature_name": feat.name, "continuity": continuity}

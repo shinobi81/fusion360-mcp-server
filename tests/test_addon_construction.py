@@ -86,6 +86,25 @@ def test_create_construction_plane_by_angle_measures_from_the_axis_and_the_plane
     assert plane is root.yZConstructionPlane
 
 
+def test_a_construction_plane_and_its_axis_take_the_same_letter_case(bound_handler):
+    """``_construction_plane`` lowercased its argument and the axis did not.
+
+    So ``"X"`` was refused for an axis and accepted for a plane; both lookups
+    lowercase now, as this call - which needs one of each - shows.
+    """
+    design = FakeDesign(features=2)
+    root = design.rootComponent
+    handler = bound_handler(design)
+
+    handler.create_construction_plane(
+        method="angle", plane="XZ", angle=30, edge_name="X"
+    )
+
+    axis, _, plane = root.constructionPlanes.last_input.args
+    assert axis is root.xConstructionAxis
+    assert plane is root.xZConstructionPlane
+
+
 def test_create_construction_plane_by_midplane_sits_between_the_two_planes(
     bound_handler,
 ):
@@ -196,20 +215,22 @@ def test_create_construction_axis_where_two_planes_meet(bound_handler):
     assert created.args == (root.xYConstructionPlane, root.yZConstructionPlane)
 
 
-def test_create_construction_axis_perpendicular_at_a_point(bound_handler):
+def test_create_construction_axis_perpendicular_at_a_point_is_refused(bound_handler):
+    """The shipped setter takes a B-Rep face, which the method cannot name.
+
+    ``setByPerpendicularAtPoint(face: BRepFace, pointEntity)`` was handed a
+    construction plane, so SWIG refused every call; the tool has no face
+    parameter, so the method is refused up front and no axis is created.  The
+    schema keeps the enum value for wire compatibility.
+    """
     design = FakeDesign(features=2)
-    root = design.rootComponent
-    handler = bound_handler(design)
 
-    handler.create_construction_axis(
-        "perpendicular_at_point", plane_one="xz", point_one=[1, 2, 3]
-    )
+    with pytest.raises(RuntimeError, match="B-Rep face"):
+        bound_handler(design).create_construction_axis(
+            "perpendicular_at_point", plane_one="xz", point_one=[1, 2, 3]
+        )
 
-    created = root.constructionAxes.last_input
-    assert created.setter == "setByPerpendicularAtPoint"
-    plane, point = created.args
-    assert plane is root.xZConstructionPlane
-    assert _coords(point) == (1.0, 2.0, 3.0)
+    assert design.rootComponent.constructionAxes.count == 0
 
 
 def test_create_construction_axis_on_a_body_edge(bound_handler):

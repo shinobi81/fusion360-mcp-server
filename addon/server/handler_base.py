@@ -341,7 +341,8 @@ class HandlerBase:
             "y": root.yConstructionAxis,
             "z": root.zConstructionAxis,
         }
-        a = m.get(axis)
+        # Lowercased like _construction_plane, so "X" and "x" name the same axis.
+        a = m.get((axis or "").lower())
         if a is None:
             raise RuntimeError(f"Unknown axis '{axis}' — use x, y, or z")
         return a

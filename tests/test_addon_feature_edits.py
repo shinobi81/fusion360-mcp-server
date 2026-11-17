@@ -192,6 +192,7 @@ def test_split_body_splits_the_named_body_with_the_named_plane(plate):
     assert inp.splitTool is root.yZConstructionPlane
     assert inp.isSplittingToolExtended is True
     assert result["feature_name"] == splits.created[0].name
+    assert result["splitting_plane"] == "yz"
 
 
 def test_split_body_with_a_tool_body_names_it_instead_of_a_plane(plate):
@@ -205,6 +206,10 @@ def test_split_body_with_a_tool_body_names_it_instead_of_a_plane(plate):
     assert inp.splitTool is root.bRepBodies.item(0)
     assert inp.isSplittingToolExtended is False
     assert result["feature_name"] == root.features.splitBodyFeatures.created[0].name
+    # The tool was a body, so the reply says so rather than naming a plane
+    # the feature never used.
+    assert result["splitting_body"] == "Base"
+    assert "splitting_plane" not in result
 
 
 def test_split_face_splits_the_faces_at_the_indices_given(plate):
@@ -296,35 +301,54 @@ def test_offset_faces_with_no_face_in_the_top_plane_is_refused(bound_handler):
 
 
 def test_scale_body_scales_the_named_body_about_the_anchor(plate):
-    """One body, one factor, the anchor the caller named."""
+    """One body, one uniform factor, the anchor the caller named."""
     root = plate._root()
 
-    plate.scale_body("Bracket", scale=2.0, anchor_x=1.0, anchor_y=2.0, anchor_z=3.0)
+    result = plate.scale_body(
+        "Bracket", scale=2.0, anchor_x=1.0, anchor_y=2.0, anchor_z=3.0
+    )
 
     inp = root.features.scaleFeatures.added[0]
     assert [body.name for body in inp.inputEntities] == ["Bracket"]
-    assert inp.anchorPoint.coords() == (1.0, 2.0, 3.0)
-    assert [value.value for value in inp.scales] == [2.0]
+    assert inp.point.coords() == (1.0, 2.0, 3.0)
+    assert (inp.scaleFactor.value, inp.scaleFactor.kind) == (2.0, "real")
+    assert inp.isUniform is True
+    assert result["scale"] == 2.0
 
 
 def test_scale_body_takes_three_factors_only_when_all_three_are_given(plate):
-    """Two of three factors is still the uniform overload, on ``scale``."""
+    """Two of three factors leaves the input uniform, on ``scale``."""
     root = plate._root()
 
-    plate.scale_body("Bracket", scale=1.5, scale_x=2.0, scale_y=3.0)
+    result = plate.scale_body("Bracket", scale=1.5, scale_x=2.0, scale_y=3.0)
 
     inp = root.features.scaleFeatures.added[0]
-    assert [value.value for value in inp.scales] == [1.5]
+    assert inp.isUniform is True
+    assert (inp.scaleFactor.value, inp.scaleFactor.kind) == (1.5, "real")
+    assert (inp.xScale, inp.yScale, inp.zScale) == (None, None, None)
+    assert "scale_x" not in result
 
 
 def test_scale_body_scales_each_axis_when_three_factors_are_given(plate):
-    """Three factors replace the uniform one, in x, y, z order."""
+    """Three factors go through ``setToNonUniform``, which turns ``isUniform`` off."""
     root = plate._root()
 
-    plate.scale_body("Bracket", scale=1.0, scale_x=2.0, scale_y=3.0, scale_z=4.0)
+    result = plate.scale_body(
+        "Bracket", scale=1.0, scale_x=2.0, scale_y=3.0, scale_z=4.0
+    )
 
     inp = root.features.scaleFeatures.added[0]
-    assert [value.value for value in inp.scales] == [2.0, 3.0, 4.0]
+    assert inp.isUniform is False
+    assert [
+        (value.value, value.kind) for value in (inp.xScale, inp.yScale, inp.zScale)
+    ] == [(2.0, "real"), (3.0, "real"), (4.0, "real")]
+    # The reply reports the factors that were used, not the unused uniform one.
+    assert "scale" not in result
+    assert [result["scale_x"], result["scale_y"], result["scale_z"]] == [
+        2.0,
+        3.0,
+        4.0,
+    ]
 
 
 def test_move_body_hands_fusion_one_body_and_a_translation(plate):

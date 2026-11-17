@@ -111,7 +111,25 @@ def test_a_patch_of_a_sketch_profile_hands_that_profile_to_the_feature(bound_han
     assert created.boundaryCurve.sketch is boundary
     assert boundary.profiles.requested == [1]
     assert created.operation == "new_body"
+    assert created.groupContinuity == "ConnectedSurfaceContinuityType"
     assert out == {"feature_name": "Patch1", "continuity": "connected"}
+
+
+def test_a_patch_takes_the_continuity_the_caller_asked_for(bound_handler):
+    """``continuity="tangent"`` reaches ``groupContinuity``, the shipped member.
+
+    The handler used to write ``boundaryContinuity``, which is not a member: the
+    write did nothing, the reply said ``tangent`` and Fusion patched with the
+    connected default.
+    """
+    design, _ = _design_with_a_sketch()
+    handler = bound_handler(design)
+
+    out = handler.patch_surface("Sketch1", continuity="tangent")
+
+    created = design.rootComponent.features.patchFeatures.inputs[0]
+    assert created.groupContinuity == "TangentSurfaceContinuityType"
+    assert out["continuity"] == "tangent"
 
 
 def test_a_stitch_of_bodies_that_do_not_touch_still_hands_over_both(bound_handler):

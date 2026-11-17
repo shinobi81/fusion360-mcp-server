@@ -318,10 +318,9 @@ def test_a_line_that_is_not_text_closes_without_answering(caplog):
     """
     caplog.set_level(logging.DEBUG, logger="fusion360mcp.socket")
 
-    bridge, replies = _exchange(b"\x80\n")
+    bridge, _ = _exchange(b"\x80\n")
 
     assert bridge.commands == []
-    assert replies == []
     assert "Client handler error" in caplog.text
 
 

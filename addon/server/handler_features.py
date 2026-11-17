@@ -1145,6 +1145,8 @@ class FeatureCommands:
                 body, self._construction_plane(splitting_plane), extend_tool
             )
         feat = splits.add(inp)
+        if splitting_body:
+            return {"feature_name": feat.name, "splitting_body": splitting_body}
         return {"feature_name": feat.name, "splitting_plane": splitting_plane}
 
     def split_face(
@@ -1218,19 +1220,29 @@ class FeatureCommands:
         anchor = adsk.core.Point3D.create(anchor_x, anchor_y, anchor_z)
 
         scales = root.features.scaleFeatures
-        if scale_x is not None and scale_y is not None and scale_z is not None:
-            inp = scales.createInput(
-                bodies,
-                anchor,
+        # Shipped: createInput(inputEntities, point, scaleFactor) - three
+        # arguments, the third the uniform factor.  A per-axis scale is that
+        # same input with setToNonUniform() called on it afterwards.
+        inp = scales.createInput(
+            bodies, anchor, adsk.core.ValueInput.createByReal(scale)
+        )
+        non_uniform = (
+            scale_x is not None and scale_y is not None and scale_z is not None
+        )
+        if non_uniform:
+            inp.setToNonUniform(
                 adsk.core.ValueInput.createByReal(scale_x),
                 adsk.core.ValueInput.createByReal(scale_y),
                 adsk.core.ValueInput.createByReal(scale_z),
             )
-        else:
-            inp = scales.createInput(
-                bodies, anchor, adsk.core.ValueInput.createByReal(scale)
-            )
         feat = scales.add(inp)
+        if non_uniform:
+            return {
+                "feature_name": feat.name,
+                "scale_x": scale_x,
+                "scale_y": scale_y,
+                "scale_z": scale_z,
+            }
         return {"feature_name": feat.name, "scale": scale}
 
     def suppress_feature(self, feature_name: str):
