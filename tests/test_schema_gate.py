@@ -33,6 +33,16 @@ def test_a_declared_constraint_is_refused_before_fusion(tool, params, fragment):
     assert envelope["hints"]
 
 
+def test_a_one_of_refusal_names_the_field():
+    """The unshaped fallback still names the field; jsonschema's text is kept."""
+    envelope = server._schema_refusal(
+        "create_box_parametric", {"length": 0, "width": 1.0, "height": 1.0}
+    )
+    assert envelope is not None
+    assert envelope["error_message"].startswith("length: ")
+    assert "is not valid under any of the given schemas" in envelope["error_message"]
+
+
 def test_a_valid_call_passes_through():
     params = {"count": 2, "radius": 1.0, "spacing": 1.0}
     assert server._schema_refusal("draw_circles", params) is None
@@ -43,7 +53,7 @@ def test_a_command_that_is_not_a_tool_passes_through():
 
 
 def test_send_treats_none_params_as_empty():
-    """The callers that pass ``None`` are the add-in's; validating it would refuse."""
+    """The server's own ``_read`` passes ``None``; validating it would refuse."""
     result = server._send("mock", "ping", None)
     assert result["status"] == "pong"
     assert result["mode"] == "mock"
@@ -118,7 +128,7 @@ class TestGateMessage:
             instance="abc",
             path=["height"],
         )
-        assert server._gate_message(err) == "height must be a number, got 'abc'"
+        assert server._gate_message(err) == "height must be of type number, got 'abc'"
 
     def test_min_items_names_the_property_not_the_item_index(self):
         err = jsonschema.exceptions.ValidationError(

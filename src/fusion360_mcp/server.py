@@ -43,8 +43,9 @@ def _gate_message(err: jsonschema.exceptions.ValidationError) -> str:
 
     ``jsonschema``'s own messages name the keyword (``'q' is not one of ...``);
     a caller should not have to read the schema to fix the call.  A validator
-    this gate does not shape falls through to ``err.message`` so an unhandled
-    constraint is visible rather than silently reworded.
+    this gate does not shape falls through to ``err.message``, prefixed with the
+    field name when there is one, so an unhandled constraint is visible rather
+    than silently reworded.
     """
     prop = next(
         (part for part in reversed(err.absolute_path) if isinstance(part, str)), ""
@@ -59,7 +60,7 @@ def _gate_message(err: jsonschema.exceptions.ValidationError) -> str:
     if err.validator == "maximum":
         return f"{prop} must be at most {err.validator_value}, got {err.instance}"
     if err.validator == "type":
-        return f"{prop} must be a {err.validator_value}, got {err.instance!r}"
+        return f"{prop} must be of type {err.validator_value}, got {err.instance!r}"
     if err.validator == "minItems":
         return f"{prop} needs at least {err.validator_value} items"
     if err.validator == "maxItems":
@@ -69,7 +70,7 @@ def _gate_message(err: jsonschema.exceptions.ValidationError) -> str:
         # place the missing property's name appears.
         missing = re.search(r"'([^']+)'", err.message)
         return f"{missing.group(1) if missing else err.message} is required"
-    return err.message
+    return f"{prop}: {err.message}" if prop else err.message
 
 
 def _schema_refusal(command_type: str, params: dict) -> dict | None:
