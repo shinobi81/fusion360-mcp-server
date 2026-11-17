@@ -162,7 +162,7 @@ what a selection returns.
 | Tool                        | Description                                                                       |
 | --------------------------- | --------------------------------------------------------------------------------- |
 | `create_construction_plane` | Offset, angle, midplane, 3-point, tangent                                         |
-| `create_construction_axis`  | Two-point, intersection, edge, perpendicular                                      |
+| `create_construction_axis`  | Two-point, intersection, edge, perpendicular (needs a B-Rep face — refused)       |
 | `create_ucs`                | **(2026+, preview API)** User Coordinate System at a point with optional rotation |
 
 ## Assembly

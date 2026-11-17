@@ -2013,7 +2013,7 @@ TOOLS: list[dict] = [
     _tool(
         "patch_surface",
         "Patch Surface",
-        ("Create a patch surface from boundary edges"),
+        ("Create a patch surface from a sketch profile"),
         required=["sketch_name"],
         sketch_name={
             "type": "string",
