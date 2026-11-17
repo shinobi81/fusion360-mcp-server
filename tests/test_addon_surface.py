@@ -169,9 +169,10 @@ def test_both_one_sided_directions_are_indistinguishable_at_the_api(bound_handle
     """``positive`` and ``negative`` reach Fusion as the same one-sided thicken.
 
     The shipped ``ThickenFeatureInput`` has no direction or flip member, so the
-    tool's three direction names describe two behaviours: symmetric or not.  A
-    handler that invented a distinction would have to write a property Fusion
-    does not ship, and this fake would raise on it rather than record it.
+    tool's three direction names describe two behaviours: symmetric or not.
+    Nothing here models a direction, so a handler that wrote a property of its
+    own would not be caught by this fake; what the test proves is that the two
+    directions reach the five modelled members identically.
     """
     design, _surface = _thicken_design()
     handler = bound_handler(design)

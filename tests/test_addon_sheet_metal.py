@@ -17,8 +17,10 @@ these fakes do not carry.
 
 ``create_flange`` and ``create_bend`` have no fakes and no tests: the shipped
 ``FlangeFeatures`` exposes no ``createInput``, and ``root.features.bendFeatures``
-does not exist, so both commands raise ``AttributeError`` on every call.  Tests
-against a fake named after a missing API would be green fiction.
+does not exist, so both commands raise ``AttributeError`` on every call that
+reaches the feature collection (``create_bend`` refuses a missing
+``bend_line_sketch`` first, and that argument is optional).  Tests against a fake
+named after a missing API would be green fiction.
 """
 
 from __future__ import annotations
