@@ -207,7 +207,7 @@ def test_a_body_with_no_horizontal_face_cannot_host_a_hole(bound_handler):
     assert raised.value.error_kind == "GEOMETRY_UNSUPPORTED"
     assert str(raised.value) == ("No near-horizontal top-facing planar face on 'Shoe'")
     assert raised.value.hints == (
-        "Pick a body whose faces include a near-horizontal X-facing plane.",
+        "Pick a body whose faces include a near-horizontal plane (top or bottom).",
     )
 
 

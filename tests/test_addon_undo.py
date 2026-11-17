@@ -183,15 +183,26 @@ class TestDirectModeFallback:
 
 class TestDesignTypeGuard:
     def test_aborts_if_rolling_back_switches_the_design_type(self, rig):
-        """Fusion changed the design type under the undo: a Fusion outcome, not ours."""
+        """Fusion changed the design type under the undo: a Fusion outcome, not ours.
+
+        The whole sentence is pinned, tail included: this raise left
+        ``_UNCLASSIFIED_BASELINE``, so nothing else would notice a reword.  Both
+        halves read "Parametric" here because the handler restores the type before
+        it builds the message — the fake is what switches it — and that is exactly
+        the text a caller receives.
+        """
         design, handler = rig(FakeDesign(features=2, marker_switches_type=True))
 
         with pytest.raises(addon_hints.Refusal) as raised:
             handler.undo()
 
         assert raised.value.error_kind == "FUSION_REFUSED"
-        assert str(raised.value).startswith("Undo aborted: stepping the timeline back")
-        assert "The marker was restored." in str(raised.value)
+        assert str(raised.value) == (
+            "Undo aborted: stepping the timeline back to 1 changed the design type "
+            "from Parametric to Parametric. The marker was restored. If the design is "
+            "stuck in direct mode, call set_design_type('parametric') to capture "
+            "history again, then delete the failed feature explicitly."
+        )
         assert raised.value.hints == (
             "Undo changed the design type; reload the document and retry.",
         )

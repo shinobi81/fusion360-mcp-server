@@ -62,10 +62,14 @@ class TestDeleteAll:
             bound_handler(design).delete_all()
 
         assert raised.value.error_kind == "FUSION_REFUSED"
-        assert str(raised.value).startswith(
-            "delete_all did not clear the design — remaining: "
+        assert str(raised.value) == (
+            "delete_all did not clear the design — remaining: {'bodies': 1, "
+            "'sketches': 0, 'occurrences': 0, 'joints': 0, 'construction': 0, "
+            "'timeline': 0}. Deleted: {'timeline': 0, 'joints': 0, 'occurrences': 0, "
+            "'construction': 0, 'bodies': 0, 'sketches': 0}. Failures: [{'stage': "
+            "'body', 'index': 0, 'name': 'Keeper', 'error': 'RuntimeError: Fusion "
+            "refused'}]"
         )
-        assert "Failures: " in str(raised.value)
         assert raised.value.hints == (
             "Re-run delete_all; if bodies remain, delete them one at a time.",
         )

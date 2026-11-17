@@ -332,7 +332,10 @@ class FeatureCommands:
                 raise _hints.Refusal(
                     "GEOMETRY_UNSUPPORTED",
                     f"Body '{body.name}' {reason}, so no point can select an edge",
-                    hints=("Choose a body with a face that has edges.",),
+                    hints=(
+                        "Choose a body whose face has edges and reports a usable "
+                        "parameter range.",
+                    ),
                 )
             distance, edge, index = best
             # Tolerance before ambiguity: a point far from everything that happens
@@ -851,8 +854,8 @@ class FeatureCommands:
                 f"No near-horizontal {face_selection}-facing planar face on "
                 f"'{body.name}'",
                 hints=(
-                    "Pick a body whose faces include a near-horizontal X-facing "
-                    "plane.",
+                    "Pick a body whose faces include a near-horizontal plane (top "
+                    "or bottom).",
                 ),
             )
 

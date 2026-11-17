@@ -367,7 +367,7 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
             94,
             "raise refusal: kind comes from _rules.edge_selector_refusal",
         ),
-        ("handler_features.py", 984, "message is not a literal"),
+        ("handler_features.py", 987, "message is not a literal"),
         (
             "handler_sketch.py",
             294,

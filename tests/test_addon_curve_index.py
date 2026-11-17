@@ -148,6 +148,28 @@ def test_a_symmetry_without_a_line_is_refused_from_the_parameters(bound_handler)
     )
 
 
+def test_a_symmetry_line_of_zero_names_the_first_line(bound_handler):
+    """Index 0 is a line, not "unset": the validator tests ``is not None``.
+
+    A truthiness check would refuse it, and the caller would have no way to mirror
+    about the sketch's first line.  The handler and mock mode both accept it.
+    """
+    design, sketch = four_curve_design()
+    handler = bound_handler(design)
+    params = {
+        "constraint_type": "symmetry",
+        "entity_one": 0,
+        "entity_two": 1,
+        "symmetry_line": 0,
+    }
+
+    assert handler.add_constraint(**params) == {
+        "sketch": sketch.name,
+        "constraint_type": "symmetry",
+    }
+    assert mock_mod.mock_command("add_constraint", dict(params))["ok"] is True
+
+
 @pytest.mark.parametrize("index", [1.5, 4.0, True])
 def test_an_index_that_is_not_a_whole_number_is_refused(bound_handler, index):
     """A float raises TypeError and ``True`` is an int — both reach Fusion's list."""

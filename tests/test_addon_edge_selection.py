@@ -614,7 +614,9 @@ def test_a_body_with_no_edges_cannot_be_selected_by_a_point(select):
     assert str(raised.value) == (
         "Body 'Plate' has no edges, so no point can select an edge"
     )
-    assert raised.value.hints == ("Choose a body with a face that has edges.",)
+    assert raised.value.hints == (
+        "Choose a body whose face has edges and reports a usable parameter range.",
+    )
 
 
 def test_a_wider_tolerance_accepts_a_further_point(select):

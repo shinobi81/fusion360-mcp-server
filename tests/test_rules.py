@@ -411,6 +411,29 @@ def test_a_usable_export_or_cam_target_is_refused_by_neither_side():
     assert rules.cam_target_refusal({"setup_name": "Setup1"}) is None
 
 
+@pytest.mark.parametrize("symmetry_line", [0, 2])
+def test_a_symmetry_line_index_is_refused_by_neither_side(symmetry_line):
+    """A line index is an index: 0 is the first line, not "unset".
+
+    ``is not None`` is what keeps a falsy index usable, and nothing else pins it —
+    the refusal row passes no line at all, and the handler test that adds one
+    passes 2.
+    """
+    params = {"constraint_type": "symmetry", "symmetry_line": symmetry_line}
+
+    assert rules.symmetry_line_refusal(params) is None
+    refused = mock.mock_command(
+        "add_constraint",
+        {
+            "constraint_type": "symmetry",
+            "entity_one": 0,
+            "entity_two": 1,
+            "symmetry_line": symmetry_line,
+        },
+    )
+    assert refused["ok"] is True
+
+
 @pytest.mark.parametrize(
     ("params", "message"),
     [
