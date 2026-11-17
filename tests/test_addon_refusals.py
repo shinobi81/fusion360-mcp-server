@@ -418,7 +418,7 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_export.py",
-            329,
+            333,
             "raise body_refusal: kind comes from _rules.export_body_refusal",
         ),
         (

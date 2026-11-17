@@ -295,6 +295,18 @@ PARAMETER_REFUSALS = [
             "of those.",
         ),
     ),
+    # A path that names a format the tool cannot write keeps the sentence the handler
+    # raised before the validator existed (D2); it is the one way around the enum.
+    (
+        "export",
+        {"file_path": "model.obj"},
+        "INVALID_INPUT",
+        "Unknown format: obj. Expected: stl, step, f3d",
+        (
+            "Pass format='stl', 'step' or 'f3d', or a file_path that ends in one "
+            "of those.",
+        ),
+    ),
     (
         "export",
         {"format": "stl"},
@@ -334,6 +346,7 @@ PARAMETER_REFUSALS = [
         "body_name_required_color",
         "point3d_shape",
         "export_target",
+        "export_unknown_format",
         "export_body_stl",
         "export_body_step",
         "cam_target",
@@ -386,19 +399,29 @@ def test_a_usable_export_or_cam_target_is_refused_by_neither_side():
     assert rules.cam_target_refusal({"setup_name": "Setup1"}) is None
 
 
-def test_an_extension_that_names_no_format_is_refused():
-    """The one way around the ``format`` enum, and what absorbed the dead raise.
+@pytest.mark.parametrize(
+    ("params", "message"),
+    [
+        ({}, "Specify format (stl/step/f3d) or file_path with extension"),
+        (
+            {"file_path": "model.igs"},
+            "Unknown format: igs. Expected: stl, step, f3d",
+        ),
+    ],
+)
+def test_the_export_target_refusal_keeps_both_sentences(params, message):
+    """D2: a named-but-unsupported format reads as the raise it replaced.
 
-    ``export`` infers the format from ``file_path`` when ``format`` is omitted, so
-    ``model.obj`` reaches the validator without ever meeting the gate.  The old final
-    ``Unknown format`` raise caught that; deleting it without this condition would
-    have returned a success envelope with no value instead.
+    ``export`` infers the format from ``file_path``, so ``model.igs`` reaches the
+    validator without meeting the gate; the old final ``Unknown format`` raise is the
+    sentence that answered it, and the plan freezes message text.  Only the call that
+    names nothing keeps the older ``Specify format`` sentence.
     """
-    refusal = rules.export_target_refusal({"file_path": "model.obj"})
+    refusal = rules.export_target_refusal(params)
 
     assert refusal is not None
     assert refusal.error_kind == "INVALID_INPUT"
-    assert str(refusal) == "Specify format (stl/step/f3d) or file_path with extension"
+    assert str(refusal) == message
 
 
 def test_the_mirror_carries_the_same_validation():

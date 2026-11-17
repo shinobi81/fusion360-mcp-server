@@ -326,16 +326,25 @@ def _export_format(params: Mapping[str, Any]) -> str:
 def export_target_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal an ``export`` call with no usable format earns, or None.
 
-    ``format`` is a schema enum, so the gate answers a mistyped one; this also refuses
-    a ``file_path`` whose extension names no export, which is the one route around the
-    enum.  Without it a call such as ``file_path='model.obj'`` would fall through to
-    the F3D branch with ``obj`` in hand.
+    Two sentences, because they answer different mistakes.  A call that names nothing
+    (``format`` empty, no ``file_path``) is told what to pass; a call that names a
+    format the tool cannot write keeps the sentence the handler used to raise, which
+    the plan freezes (D2).
+
+    ``format`` is a schema enum, so the gate answers a mistyped one; a ``file_path``
+    whose extension names no export is the one route around the enum, and without this
+    check it would fall through to the F3D branch with ``obj`` in hand.
     """
-    if _export_format(params) in EXPORT_FORMATS:
+    fmt = _export_format(params)
+    if fmt in EXPORT_FORMATS:
         return None
+    if fmt:
+        message = f"Unknown format: {fmt}. Expected: stl, step, f3d"
+    else:
+        message = "Specify format (stl/step/f3d) or file_path with extension"
     return _hints.Refusal(
         "INVALID_INPUT",
-        "Specify format (stl/step/f3d) or file_path with extension",
+        message,
         hints=(
             "Pass format='stl', 'step' or 'f3d', or a file_path that ends in one "
             "of those.",

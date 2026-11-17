@@ -316,20 +316,30 @@ class TestRenderViewRefusals:
 
 
 class TestExportTargetRefusals:
-    def test_an_extension_that_names_no_format_is_refused(self, bound_handler):
+    def test_a_wrong_extension_keeps_the_unknown_format_sentence(self, bound_handler):
         """``export`` infers the format from ``file_path``, so ``obj`` never meets the
-        schema enum.  The validator is what refuses it, rather than a fall-through to
-        the F3D branch with no value in the envelope."""
+        schema enum.  The validator answers with the sentence the deleted raise
+        carried, not the one for a call that names nothing."""
         with pytest.raises(addon_hints.Refusal) as raised:
             bound_handler(FakeDesign()).export(file_path="model.obj")
 
         assert raised.value.error_kind == "INVALID_INPUT"
-        assert str(raised.value) == (
-            "Specify format (stl/step/f3d) or file_path with extension"
-        )
+        assert str(raised.value) == "Unknown format: obj. Expected: stl, step, f3d"
         assert raised.value.hints == (
             "Pass format='stl', 'step' or 'f3d', or a file_path that ends in one "
             "of those.",
+        )
+
+    def test_naming_neither_a_format_nor_a_path_is_a_different_sentence(
+        self, bound_handler
+    ):
+        """Nothing was named, so the caller is told what to pass."""
+        with pytest.raises(addon_hints.Refusal) as raised:
+            bound_handler(FakeDesign()).export()
+
+        assert raised.value.error_kind == "INVALID_INPUT"
+        assert str(raised.value) == (
+            "Specify format (stl/step/f3d) or file_path with extension"
         )
 
     def test_an_extension_that_names_a_format_dispatches_to_it(
@@ -343,6 +353,27 @@ class TestExportTargetRefusals:
 
         assert out == {"exported": True, "body": "Body1", "file_path": target}
         assert design.exportManager.executed[0].kind == "step"
+
+    @pytest.mark.parametrize("by_extension", [False, True])
+    def test_export_f3d_needs_no_body(self, bound_handler, tmp_path, by_extension):
+        """F3D exports the document, so neither route may ask for a body name.
+
+        ``export_body_refusal`` returns None for f3d, so a body check ahead of the
+        dispatch raised ``AssertionError`` here - which ``execute_command`` reports as
+        ``UNKNOWN``, the failure mode this work removes.
+        """
+        design = _design_with(_root_body())
+        target = str(tmp_path / "out.f3d")
+
+        handler = bound_handler(design)
+        out = (
+            handler.export(file_path=target)
+            if by_extension
+            else handler.export(format="f3d", file_path=target)
+        )
+
+        assert out == {"exported": True, "file_path": target}
+        assert design.exportManager.executed[0].kind == "f3d"
 
 
 class TestNameCollision:

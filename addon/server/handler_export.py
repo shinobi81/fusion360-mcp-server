@@ -323,6 +323,10 @@ class ExportCommands:
             {"format": fmt, "file_path": file_path}
         ):
             raise target_refusal
+        # F3D exports the document, so it takes no body; the body check and the
+        # narrowing assert behind it belong to the two body exports only.
+        if fmt == "f3d":
+            return self.export_f3d(file_path)
         if body_refusal := _rules.export_body_refusal(
             {"format": fmt, "body_name": body_name}
         ):
@@ -333,12 +337,10 @@ class ExportCommands:
 
         if fmt == "stl":
             return self.export_stl(body_name, file_path)
-        if fmt in ("step", "stp"):
-            return self.export_step(body_name, file_path)
 
         # export_target_refusal refused every format outside _rules.EXPORT_FORMATS,
-        # and stl/step/stp are dispatched above, so this is f3d.
-        return self.export_f3d(file_path)
+        # and stl/f3d are dispatched above, so this is step or stp.
+        return self.export_step(body_name, file_path)
 
     def import_mesh(
         self, file_path: str, component_name: str | None = None, units: str = "mm"
