@@ -187,16 +187,6 @@ class SurfaceCommands:
 
         unfolds = root.features.unfoldFeatures
 
-        bends = adsk.core.ObjectCollection.create()
-        if bend_indices:
-            for idx in bend_indices:
-                # Get bend faces from sheet metal body
-                bends.add(body.faces.item(idx))
-        else:
-            # Unfold all bends
-            for face in body.faces:
-                bends.add(face)
-
         # Find stationary face (first planar face)
         stationary = None
         for face in body.faces:
@@ -207,6 +197,12 @@ class SurfaceCommands:
         if not stationary:
             raise RuntimeError("No planar face found for stationary face")
 
-        inp = unfolds.createInput(bends, stationary)
+        # createInput takes the stationary face alone; the bends go on the input.
+        inp = unfolds.createInput(stationary)
+        if bend_indices:
+            inp.bendFaces = [body.faces.item(idx) for idx in bend_indices]
+        else:
+            inp.isUnfoldAllBends = True
+
         feat = unfolds.add(inp)
         return {"feature_name": feat.name}

@@ -35,6 +35,13 @@ _ADAPTER_NAMES = ("cam", "core", "fusion", "doEvents")
 PARAMETRIC = "ParametricDesignType"
 DIRECT = "DirectDesignType"
 
+# ``adsk.core.SurfaceTypes``, as the shipped stub numbers it (``adsk/core.py``:
+# ``PlaneSurfaceType = 0``, ``CylinderSurfaceType = 1``).  ``unfold`` scans a body's
+# faces for the first planar one, so a geometry that answered the wrong member
+# would pick a bend's side wall as the stationary face.
+PLANE_SURFACE_TYPE = 0
+CYLINDER_SURFACE_TYPE = 1
+
 
 class FakePoint3D:
     def __init__(self, x: float = 0.0, y: float = 0.0, z: float = 0.0):
@@ -72,6 +79,9 @@ class FakePlane:
     ):
         self.origin = FakePoint3D(*origin)
         self.normal = FakeVector3D(*normal)
+        #: ``Surface.surfaceType`` - the property ``unfold`` reads to find a
+        #: planar face, rather than the ``Plane.cast`` the hole tools use.
+        self.surfaceType = PLANE_SURFACE_TYPE
 
     @staticmethod
     def cast(geometry: object) -> FakePlane | None:
@@ -93,6 +103,9 @@ class FakeCylinderGeometry:
 
     def __init__(self, radius: float = 1.0):
         self.radius = float(radius)
+        #: Not ``PlaneSurfaceType``: a bend's cylindrical wall must never be
+        #: mistaken for the stationary face.
+        self.surfaceType = CYLINDER_SURFACE_TYPE
 
     @staticmethod
     def cast(geometry):
@@ -339,6 +352,19 @@ def _joint_key_points() -> types.SimpleNamespace:
     )
 
 
+def _surface_types() -> types.SimpleNamespace:
+    """``adsk.core.SurfaceTypes``: the two members the add-in asks for.
+
+    Read from the shipped stub (``adsk/core.py``, ``SurfaceTypes``): it numbers all
+    eight surface kinds, and only a planar face and a cylindrical one are modelled
+    here - the two a sheet-metal body's scan meets.
+    """
+    return types.SimpleNamespace(
+        PlaneSurfaceType=PLANE_SURFACE_TYPE,
+        CylinderSurfaceType=CYLINDER_SURFACE_TYPE,
+    )
+
+
 def _feature_operations() -> types.SimpleNamespace:
     return types.SimpleNamespace(
         NewBodyFeatureOperation="new_body",
@@ -475,6 +501,7 @@ def install() -> None:
         Color=FakeColor,
         Matrix3D=FakeMatrix3D,
         DocumentTypes=_document_types(),
+        SurfaceTypes=_surface_types(),
         OrientedBoundingBox3D=_primitives().FakeOrientedBoundingBox3D,
         Application=FakeApplication,
         CustomEventHandler=FakeCustomEventHandler,

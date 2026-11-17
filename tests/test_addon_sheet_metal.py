@@ -1,31 +1,39 @@
-"""``create_flange`` and ``create_bend``: what the two call sites hand Fusion.
+"""``create_flange``, ``create_bend`` and ``unfold``: what the call sites hand Fusion.
 
-Both commands resolve a name to an entity and then fill a feature input, so the
-tests assert exactly that: which edge, which bend line, which body, and which of
-the input's properties the call site writes.  Each test carries one claim, and
-each puts a decoy in every collection the handler searches — a second body in the
-root, a second edge on the body, a second sketch in the root — so a lookup that
-took the first item would hand over the wrong entity and fail.
+Each command resolves a name to an entity and then fills a feature input, so the
+tests assert exactly that: which edge, which bend line, which body, which face,
+and which of the input's properties the call site writes.  Each test carries one
+claim, and each puts a decoy in every collection the handler searches — a second
+body in the root, a second edge on the body, a second sketch in the root, a
+non-planar face before the flat ones — so a lookup that took the first item would
+hand over the wrong entity and fail.
 
 Which claims are the **fake's**, not Fusion's:
 
-* The arities (two positional arguments for ``flangeFeatures.createInput``,
-  three for ``bendFeatures.createInput``) come from the call sites in
-  ``handler_surface.py``; no SDK text was to hand when the fakes were written, so
-  only the count and the order are claimed, not the parameter names.
-* The recorded attribute names on the inputs (``edge``, ``isTangentChain``,
-  ``baseObject``, ``bendLine``, ``isBendLineExtended``) are the fake's
-  arrangement for reading a call back; no test treats one as a Fusion property.
+* The flange and bend arities (two positional arguments for
+  ``flangeFeatures.createInput``, three for ``bendFeatures.createInput``) come
+  from the call sites in ``handler_surface.py``; no SDK text was to hand when
+  those four fakes were written, so only the count and the order are claimed, not
+  the parameter names.
+* The recorded attribute names on the flange and bend inputs (``edge``,
+  ``isTangentChain``, ``baseObject``, ``bendLine``, ``isBendLineExtended``) are
+  the fake's arrangement for reading a call back; no test treats one as a Fusion
+  property.  ``unfold``'s input is the exception: ``stationaryFace``,
+  ``bendFaces`` and ``isUnfoldAllBends`` are the shipped names
+  (``UnfoldFeatureInput.h:46-62``), which is why a call site that set a name Fusion
+  does not ship would leave them at their defaults and fail here.
 * ``feature_name`` is the fake's own numbering.  Nothing here claims what Fusion
-  names a flange, nor whether a flange or a bend is geometrically possible on the
-  entity it was given — that needs the geometry, which these fakes do not carry.
+  names a feature, nor whether a flange, a bend or an unfold is
+  geometrically possible on the entity it was given — that needs the geometry,
+  which these fakes do not carry.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from tests.fakes.bodies import FakeBody, body_with_edges
+from tests.fakes.bodies import FakeBody, FakeFace, body_with_edges
+from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeDesign
 from tests.fakes.runtime import FakePoint3D
 from tests.fakes.sketch import FakeSketch
@@ -222,3 +230,78 @@ def test_a_bend_radius_is_handed_over_as_a_real(bound_handler):
 
     radius = design.rootComponent.features.bendFeatures.inputs[0].bendRadius
     assert (radius.kind, radius.value) == ("real", 0.25)
+
+
+def _sheet_metal_design() -> tuple[FakeDesign, FakeBody, list[FakeFace]]:
+    """A strip whose **first** face is a bend wall, not a flat one.
+
+    The decoy body is first in the root, and the faces are ordered so nothing but
+    the planar test can pick the stationary face: index 0 is cylindrical, so a scan
+    that took the first face, or a handler that passed the collection it built,
+    hands over the wrong entity.  Faces 1 and 2 are the two flat faces this body
+    has, and the bend tests ask for index 2 **before** index 0, so a collection
+    that kept the body's order, or sorted the indices, is caught.
+    """
+    faces = [FakeFace(planar=False), FakeFace(planar=True), FakeFace(planar=True)]
+    body = FakeBody("Bracket", faces=FakeCollection(faces))
+    return FakeDesign(bodies=[FakeBody("DecoyBody"), body]), body, faces
+
+
+def test_an_unfold_takes_the_first_planar_face_as_stationary(bound_handler):
+    """The stationary face is a flat face of the named body, not the leading wall.
+
+    ``UnfoldFeatureInput`` keeps this face fixed while the sheet unfolds, and
+    ``createInput`` takes it as its only argument, so handing over a bend's
+    cylindrical wall would fold the part about something that is not a face of it.
+    """
+    design, _body, faces = _sheet_metal_design()
+    handler = bound_handler(design)
+
+    handler.unfold("Bracket", bend_indices=[2])
+
+    created = design.rootComponent.features.unfoldFeatures.inputs[0]
+    assert created.stationaryFace is faces[1]
+    assert created.stationaryFace is not faces[0]
+
+
+def test_an_unfold_of_named_bends_hands_over_those_faces_in_order(bound_handler):
+    """The two indices asked for, in that order, and every-bend left off.
+
+    ``bendFaces`` is a vector, so the order reaches Fusion; ``isUnfoldAllBends``
+    true would make Fusion ignore the vector entirely, which is why it is asserted
+    false in the same breath.
+    """
+    design, _body, faces = _sheet_metal_design()
+    handler = bound_handler(design)
+
+    handler.unfold("Bracket", bend_indices=[2, 0])
+
+    created = design.rootComponent.features.unfoldFeatures.inputs[0]
+    assert created.bendFaces == [faces[2], faces[0]]
+    assert created.isUnfoldAllBends is False
+
+
+def test_an_unfold_without_bend_indices_asks_for_every_bend(bound_handler):
+    """No indices means the flag, and no face list: they are not both sent."""
+    design, _body, _faces = _sheet_metal_design()
+    handler = bound_handler(design)
+
+    handler.unfold("Bracket")
+
+    created = design.rootComponent.features.unfoldFeatures.inputs[0]
+    assert created.isUnfoldAllBends is True
+    assert created.bendFaces == []
+
+
+def test_an_unfold_of_a_body_with_no_flat_face_builds_no_input(bound_handler):
+    """The refusal happens before anything is handed to Fusion."""
+    faces = FakeCollection([FakeFace(planar=False), FakeFace(planar=False)])
+    design = FakeDesign(
+        bodies=[FakeBody("DecoyBody"), FakeBody("Tube", faces=faces)],
+    )
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError):
+        handler.unfold("Tube")
+
+    assert design.rootComponent.features.unfoldFeatures.inputs == []

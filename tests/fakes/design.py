@@ -45,6 +45,7 @@ from .features import (
     FakeSplitFaceFeatures,
     FakeStitchFeatures,
     FakeThreadFeatures,
+    FakeUnfoldFeatures,
 )
 from .mesh import FakeMeshBodies
 from .runtime import (
@@ -817,6 +818,7 @@ class FakeFeatures:
         self.splitFaceFeatures = FakeSplitFaceFeatures()
         self.flangeFeatures = FakeFlangeFeatures()
         self.bendFeatures = FakeBendFeatures()
+        self.unfoldFeatures = FakeUnfoldFeatures()
         self.offsetFeatures = FakeOffsetFacesFeatures()
         self.scaleFeatures = FakeScaleFeatures()
         self.moveFeatures = FakeMoveFeatures()

@@ -982,6 +982,66 @@ class FakeBendFeatures:
         return feature
 
 
+class FakeUnfoldFeatureInput:
+    """``UnfoldFeatureInput``: the stationary face up front, the bends afterwards.
+
+    Read from ``Fusion/SheetMetal/UnfoldFeatureInput.h``: ``stationaryFace``
+    (``:46-47``, "The stationary face is set when createInput is called but can be
+    changed before calling add"), ``bendFaces`` (``:54-55``, a
+    ``std::vector<core::Ptr<BRepFace>>`` - the inner or outer cylindrical face of
+    each bend), and ``isUnfoldAllBends`` (``:61-62``), which ``:58-59`` says unfolds
+    every bend and **ignores** ``bendFaces`` when true, defaulting to false.
+
+    The two later properties start at Fusion's defaults - no bend faces and the flag
+    off - so a call site that sets neither is visible rather than defaulted, and a
+    call site that sets both is visible too, since Fusion would read only the flag.
+    """
+
+    def __init__(self, stationary_face):
+        self.stationaryFace = stationary_face
+        self.bendFaces: list = []
+        self.isUnfoldAllBends: bool = False
+
+
+class FakeUnfoldFeatures:
+    """``root.features.unfoldFeatures``: ``createInput`` takes the stationary face
+    alone.
+
+    ``UnfoldFeatures.h:63`` ships ``createInput(const core::Ptr<BRepFace>&
+    stationaryFace)`` - **one** argument, the face that stays fixed.  The handler
+    used to pass ``(bends, stationary)``, a collection first, which Fusion answers
+    with ``TypeError: Wrong number or type of arguments`` on every call; declaring
+    the arity here is what keeps that call from coming back, so a two- or
+    three-argument call is a ``TypeError`` in the fake too.
+
+    The face is not type-checked and the unfold itself is not modelled: whether a
+    face is a bend's wall, and what the flattened body looks like, is Fusion's
+    judgement about geometry this fake does not carry.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakeUnfoldFeatureInput] = []
+        self.added: list[FakeUnfoldFeatureInput] = []
+        self.created: list[FakeFeature] = []
+
+    @property
+    def last_input(self) -> FakeUnfoldFeatureInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(self, stationary_face) -> FakeUnfoldFeatureInput:
+        created = FakeUnfoldFeatureInput(stationary_face)
+        self.inputs.append(created)
+        return created
+
+    def add(self, inp: FakeUnfoldFeatureInput) -> FakeFeature:
+        if not isinstance(inp, FakeUnfoldFeatureInput):
+            raise TypeError("unfoldFeatures.add takes the input createInput made")
+        self.added.append(inp)
+        feature = FakeFeature(f"Unfold{len(self.added)}")
+        self.created.append(feature)
+        return feature
+
+
 class FakeSectionAnalysisInput:
     def __init__(self):
         self.plane = None
