@@ -15,6 +15,11 @@ CASES = [
         "axis",
     ),
     ("export_stl", {}, "body_name"),
+    (
+        "fillet",
+        {"radius": 1.0, "edge_points": [[0, 0]]},
+        "edge_points needs at least 3 items",
+    ),
 ]
 
 
@@ -37,9 +42,11 @@ def test_a_command_that_is_not_a_tool_passes_through():
     assert server._schema_refusal("no_such_command", {"anything": 1}) is None
 
 
-def test_none_params_are_treated_as_empty():
-    """The add-in accepts ``params=None``; the gate must not refuse it."""
-    assert server._schema_refusal("ping", {}) is None
+def test_send_treats_none_params_as_empty():
+    """The callers that pass ``None`` are the add-in's; validating it would refuse."""
+    result = server._send("mock", "ping", None)
+    assert result["status"] == "pong"
+    assert result["mode"] == "mock"
 
 
 def test_send_refuses_before_mock_runs():
@@ -50,8 +57,20 @@ def test_send_refuses_before_mock_runs():
     assert "mode" not in result
 
 
+def test_send_refuses_before_connecting(monkeypatch):
+    """Socket mode is gated too: the refusal never opens a connection."""
+
+    def _explode(*_args, **_kwargs):
+        raise AssertionError("the gate must refuse before get_connection")
+
+    monkeypatch.setattr(server, "get_connection", _explode)
+    result = server._send("socket", "export_stl", {})
+    assert result["ok"] is False
+    assert result["error_kind"] == "INVALID_INPUT"
+
+
 class TestGateMessage:
-    """The four constraint shapes the schema declares, in the add-in's voice."""
+    """The constraint shapes the schema declares, in the add-in's voice."""
 
     def test_an_enum_names_the_field_and_every_accepted_value(self):
         err = jsonschema.exceptions.ValidationError(
@@ -91,14 +110,44 @@ class TestGateMessage:
         )
         assert server._gate_message(err) == "body_name is required"
 
+    def test_a_type_names_the_field_the_expected_type_and_the_value(self):
+        err = jsonschema.exceptions.ValidationError(
+            "'abc' is not of type 'number'",
+            validator="type",
+            validator_value="number",
+            instance="abc",
+            path=["height"],
+        )
+        assert server._gate_message(err) == "height must be a number, got 'abc'"
+
+    def test_min_items_names_the_property_not_the_item_index(self):
+        err = jsonschema.exceptions.ValidationError(
+            "[0, 0] is too short",
+            validator="minItems",
+            validator_value=3,
+            instance=[0, 0],
+            path=["edge_points", 0],
+        )
+        assert server._gate_message(err) == "edge_points needs at least 3 items"
+
+    def test_max_items_names_the_property_not_the_item_index(self):
+        err = jsonschema.exceptions.ValidationError(
+            "[0, 0, 0, 0] is too long",
+            validator="maxItems",
+            validator_value=3,
+            instance=[0, 0, 0, 0],
+            path=["edge_points", 0],
+        )
+        assert server._gate_message(err) == "edge_points allows at most 3 items"
+
     def test_an_unhandled_validator_keeps_the_jsonschema_message(self):
         err = jsonschema.exceptions.ValidationError(
-            "1 is not of type 'string'",
-            validator="type",
-            validator_value="string",
-            instance=1,
+            "'abc' does not match '^[0-9]+$'",
+            validator="pattern",
+            validator_value="^[0-9]+$",
+            instance="abc",
         )
-        assert server._gate_message(err) == "1 is not of type 'string'"
+        assert server._gate_message(err) == "'abc' does not match '^[0-9]+$'"
 
 
 def test_every_declared_enum_matches_the_set_the_add_in_refuses():

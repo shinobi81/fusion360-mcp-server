@@ -58,6 +58,12 @@ def _gate_message(err: jsonschema.exceptions.ValidationError) -> str:
         return f"{prop} must be at least {err.validator_value}, got {err.instance}"
     if err.validator == "maximum":
         return f"{prop} must be at most {err.validator_value}, got {err.instance}"
+    if err.validator == "type":
+        return f"{prop} must be a {err.validator_value}, got {err.instance!r}"
+    if err.validator == "minItems":
+        return f"{prop} needs at least {err.validator_value} items"
+    if err.validator == "maxItems":
+        return f"{prop} allows at most {err.validator_value} items"
     if err.validator == "required":
         # ``absolute_path`` is empty for ``required``: the message is the only
         # place the missing property's name appears.
@@ -101,8 +107,9 @@ def _send(
     """Route a command through either the real TCP connection or mock.
 
     The tool's schema is enforced first, so neither mode sees arguments it
-    declares invalid; ``params=None`` is the add-in's own empty-params spelling
-    and is normalised before validation.
+    declares invalid.  ``params=None`` is what some callers pass; validating it
+    as ``None`` against the schema's ``{"type": "object"}`` would refuse
+    ``ping``, so it is normalised to ``{}`` before validation.
     """
     if params is None:
         params = {}
