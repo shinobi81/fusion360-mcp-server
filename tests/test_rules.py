@@ -16,7 +16,7 @@ from addon.server import hints as addon_hints
 from addon.server import rules
 from fusion360_mcp import _rules, mock
 from tests.fakes.bodies import body_with_edges
-from tests.fakes.design import FakeDesign
+from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
 
 #: Refused from the parameters alone, so no body is ever touched.
 BAD_EDGE_SELECTORS = [
@@ -185,6 +185,87 @@ def test_a_selector_that_is_not_a_list_is_refused_with_its_own_hints(params, mes
         "An edge selector is a list; nothing was written.",
         "Pass edge_indices as whole numbers, or edge_points as [x, y, z] triples.",
     ]
+
+
+#: One parameter set per assembly validator: the tool it belongs to, the parameters
+#: that earn the refusal, and the kind plus a fragment of the sentence both modes
+#: answer.  The tool is a column because two validators share the same parameters
+#: (``add_joint`` and ``create_as_built_joint`` differ only by ``joint_type``).
+ASSEMBLY_REFUSALS = [
+    (
+        "add_joint",
+        {"component_one": "A", "component_two": "A", "face_one": 0, "face_two": 0},
+        "INVALID_INPUT",
+        "must differ",
+    ),
+    (
+        "add_joint",
+        {"component_one": "A", "component_two": "B"},
+        "INVALID_INPUT",
+        "needs joint geometry",
+    ),
+    (
+        "create_as_built_joint",
+        {"component_one": "A", "component_two": "B", "joint_type": "revolute"},
+        "INVALID_INPUT",
+        "as-built joint needs geometry",
+    ),
+    (
+        "create_rigid_group",
+        {"component_names": ["A"]},
+        "INVALID_INPUT",
+        "at least 2 components",
+    ),
+    (
+        "create_construction_plane",
+        {"method": "tangent"},
+        "INVALID_INPUT",
+        "needs face selection",
+    ),
+    (
+        "create_construction_axis",
+        {"method": "perpendicular_at_point"},
+        "INVALID_INPUT",
+        "B-Rep face",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("command", "params", "expected_kind", "expected_fragment"),
+    ASSEMBLY_REFUSALS,
+    ids=[
+        "components_differ",
+        "joint_geometry",
+        "as_built_geometry",
+        "rigid_group_size",
+        "construction_method",
+        "perpendicular_axis",
+    ],
+)
+def test_the_validator_and_mock_agree(
+    bound_handler, command, params, expected_kind, expected_fragment
+):
+    """The handler raises and mock mode answers with the same sentence and kind.
+
+    Both sides call the validator in ``rules``; the row is what would fail if a
+    call site passed a different mapping, or if one side kept its own wording.
+    """
+    design = FakeDesign(features=0)
+    design.rootComponent.occurrences.add(FakeOccurrence(FakeComponent("A")))
+    design.rootComponent.occurrences.add(FakeOccurrence(FakeComponent("B")))
+    handler = bound_handler(design)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        getattr(handler, command)(**params)
+
+    refused = mock.mock_command(command, params)
+
+    assert refused["ok"] is False
+    assert refused["error_kind"] == raised.value.error_kind == expected_kind
+    assert refused["error_message"] == str(raised.value)
+    assert refused["hints"] == list(raised.value.hints)
+    assert expected_fragment in str(raised.value)
 
 
 def test_the_mirror_carries_the_same_validation():

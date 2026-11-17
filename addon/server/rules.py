@@ -127,6 +127,129 @@ def target_body_refusal(
     )
 
 
+def components_differ_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal a joint between one component and itself earns, or None.
+
+    Two occurrences of the same component have no relative motion, so Fusion is
+    never asked.  The names are compared, not the occurrences: a handler has
+    already resolved them, and mock mode has no design to resolve them in.
+    """
+    component_one = params.get("component_one")
+    component_two = params.get("component_two")
+    if component_one is None or component_two is None or component_one != component_two:
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        "component_one and component_two must differ",
+        hints=("Pass two different components; a joint needs two.",),
+    )
+
+
+def joint_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal an ``add_joint`` without a face pair earns, or None.
+
+    A joint cannot be built from the components' origin points: a bare point
+    carries no component association, so ``JointGeometry.createByPoint`` rejects
+    it.  Whether the named face exists needs Fusion; that it was named does not.
+    """
+    if params.get("face_one") is not None and params.get("face_two") is not None:
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        "add_joint needs joint geometry: pass face_one/face_two "
+        "(and body_one/body_two when a component holds more than one body). "
+        "Component origin points are not valid joint geometry.",
+        hints=(
+            "Pass face_one and face_two.",
+            "Add body_one/body_two when the component holds more than one body.",
+        ),
+    )
+
+
+def as_built_geometry_refusal(
+    params: Mapping[str, Any],
+) -> _hints.Refusal | None:
+    """The refusal a non-rigid as-built joint without a face pair earns, or None.
+
+    Fusion refuses the input with "Geometry should not be null if joint motion is
+    not rigid", so only ``rigid`` works without geometry.  ``joint_type`` decides
+    it, and an omitted one is the handler's ``rigid`` default.
+    """
+    joint_type = params.get("joint_type", "rigid")
+    if joint_type == "rigid":
+        return None
+    if params.get("face_one") is not None and params.get("face_two") is not None:
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        f"A {joint_type} as-built joint needs geometry: pass face_one/face_two "
+        "(and body_one/body_two when a component holds more than one body). "
+        "Only 'rigid' works without it.",
+        hints=("Pass face_one and face_two, or use joint_type='rigid'.",),
+    )
+
+
+def rigid_group_size_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal a rigid group of fewer than two components earns, or None.
+
+    ``params`` carries the names that resolved to occurrences, so this is what the
+    add-in checks before ``rigidGroups.add``; mock mode judges the names it was
+    given, which is all it has.  A group of one holds nothing together.
+    """
+    names = params.get("component_names") or ()
+    if len(names) >= 2:
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        "Need at least 2 components for rigid group",
+        hints=("Pass at least two component names.",),
+    )
+
+
+def construction_method_refusal(
+    params: Mapping[str, Any],
+) -> _hints.Refusal | None:
+    """The refusal a tangent construction plane earns, or None.
+
+    A tangent plane needs a face to be tangent to, and the tool has no face
+    parameter, so the call cannot be built.  The method stays in the schema for
+    wire compatibility, where ``execute_code`` is the route that works.
+    """
+    if params.get("method") != "tangent":
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        "Tangent plane needs face selection—use execute_code",
+        hints=(
+            "create_construction_axis has no face parameter; build this plane "
+            "with execute_code.",
+        ),
+    )
+
+
+def perpendicular_axis_refusal(
+    params: Mapping[str, Any],
+) -> _hints.Refusal | None:
+    """The refusal a perpendicular construction axis earns, or None.
+
+    ``setByPerpendicularAtPoint(face, pointEntity)`` needs a B-Rep face, which
+    this tool has no parameter for, so the call cannot be built; the method stays
+    in the schema for wire compatibility.
+    """
+    if params.get("method") != "perpendicular_at_point":
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        "Perpendicular axis needs a B-Rep face, which this tool has no "
+        "parameter for — use execute_code; the method stays in the "
+        "schema for wire compatibility",
+        hints=(
+            "The schema advertises this method for wire compatibility; "
+            "use execute_code.",
+        ),
+    )
+
+
 def rule_type_refusal(rule_type: str) -> _hints.Refusal | None:
     """The refusal a ``ruled_surface`` ``rule_type`` earns, or None when it is usable.
 

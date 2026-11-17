@@ -285,12 +285,6 @@ _UNCLASSIFIED_BASELINE: frozenset[tuple[str, str]] = frozenset(
         ),
         (
             "handler_assembly.py",
-            "A … as-built joint needs geometry: pass face_one/face_two (and "
-            + "body_one/body_two when a component holds more than one body). Only "
-            + "'rigid' works without it.",
-        ),
-        (
-            "handler_assembly.py",
             "Component '…' has … bodies; pass '…' to choose which body carries the "
             + "joint geometry",
         ),
@@ -304,33 +298,13 @@ _UNCLASSIFIED_BASELINE: frozenset[tuple[str, str]] = frozenset(
             "Fusion did not keep the requested value on '…' (set … …, read back …). "
             + "A design.computeAll() after setting a joint value resets it to zero.",
         ),
-        ("handler_assembly.py", "Need at least 2 components for rigid group"),
         (
             "handler_assembly.py",
             "No as-built joints in the design; pass as_built=False for regular "
             + "joints or create one first",
         ),
         ("handler_assembly.py", "One or both components not found"),
-        (
-            "handler_assembly.py",
-            "Perpendicular axis needs a B-Rep face, which this tool has no "
-            + "parameter for — use execute_code; the method stays in the schema for "
-            + "wire compatibility",
-        ),
-        ("handler_assembly.py", "Tangent plane needs face selection—use execute_code"),
         ("handler_assembly.py", "Unknown axis: …. Use one of …"),
-        ("handler_assembly.py", "Unknown joint type: …. Use one of …"),
-        ("handler_assembly.py", "Unknown key_point: …. Use one of …"),
-        ("handler_assembly.py", "Unknown method: …"),
-        ("handler_assembly.py", "Unknown quadrant/key_point: …/…"),
-        ("handler_assembly.py", "Unknown quadrant: …. Use one of …"),
-        (
-            "handler_assembly.py",
-            "add_joint needs joint geometry: pass face_one/face_two (and "
-            + "body_one/body_two when a component holds more than one body). "
-            + "Component origin points are not valid joint geometry.",
-        ),
-        ("handler_assembly.py", "component_one and component_two must differ"),
         ("handler_assembly.py", "value_kind '…' does not apply to …; use one of …"),
         ("handler_assembly.py", "…joint '…' not found (… …joints in the design)"),
         ("handler_base.py", "A body name is required"),
@@ -452,6 +426,41 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
             "event_bridge.py",
             98,
             "raise NotImplementedError: no Refusal bound to it",
+        ),
+        (
+            "handler_assembly.py",
+            155,
+            "raise refusal: kind comes from _rules.construction_method_refusal",
+        ),
+        (
+            "handler_assembly.py",
+            198,
+            "raise refusal: kind comes from _rules.perpendicular_axis_refusal",
+        ),
+        (
+            "handler_assembly.py",
+            344,
+            "raise component_refusal: kind comes from _rules.components_differ_refusal",
+        ),
+        (
+            "handler_assembly.py",
+            349,
+            "raise geometry_refusal: kind comes from _rules.joint_geometry_refusal",
+        ),
+        (
+            "handler_assembly.py",
+            611,
+            "raise component_refusal: kind comes from _rules.components_differ_refusal",
+        ),
+        (
+            "handler_assembly.py",
+            622,
+            "raise geometry_refusal: kind comes from _rules.as_built_geometry_refusal",
+        ),
+        (
+            "handler_assembly.py",
+            772,
+            "raise refusal: kind comes from _rules.rigid_group_size_refusal",
         ),
         (
             "handler_features.py",

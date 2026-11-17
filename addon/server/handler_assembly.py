@@ -10,6 +10,7 @@ from contextlib import suppress
 from typing import Any, ClassVar
 
 from . import fusion_api as adsk
+from . import rules as _rules
 
 
 def _vector(v) -> list:
@@ -150,6 +151,8 @@ class AssemblyCommands:
     ):
         root = self._root()
         planes = root.constructionPlanes
+        if refusal := _rules.construction_method_refusal({"method": method}):
+            raise refusal
         inp = planes.createInput()
 
         if method == "offset":
@@ -172,10 +175,6 @@ class AssemblyCommands:
             p2 = self._point3d(point_two, "point_two")
             p3 = self._point3d(point_three, "point_three")
             inp.setByThreePoints(p1, p2, p3)
-        elif method == "tangent":
-            raise RuntimeError("Tangent plane needs face selection—use execute_code")
-        else:
-            raise RuntimeError(f"Unknown method: {method}")
 
         plane_obj = planes.add(inp)
         return {"created": True, "name": plane_obj.name, "method": method}
@@ -192,6 +191,11 @@ class AssemblyCommands:
     ):
         root = self._root()
         axes = root.constructionAxes
+        # Shipped: setByPerpendicularAtPoint(face: BRepFace, pointEntity).  The tool
+        # has no face parameter to give it, so the call cannot be built; the enum
+        # value stays in the schema for wire compatibility.
+        if refusal := _rules.perpendicular_axis_refusal({"method": method}):
+            raise refusal
         inp = axes.createInput()
 
         if method == "two_points":
@@ -206,17 +210,6 @@ class AssemblyCommands:
             body = self._body_by_name(body_name)
             edge = body.edges.item(edge_index)
             inp.setByEdge(edge)
-        elif method == "perpendicular_at_point":
-            # Shipped: setByPerpendicularAtPoint(face: BRepFace, pointEntity).
-            # The tool has no face parameter to give it, so the call cannot be
-            # built; the enum value stays in the schema for wire compatibility.
-            raise RuntimeError(
-                "Perpendicular axis needs a B-Rep face, which this tool has no "
-                "parameter for — use execute_code; the method stays in the "
-                "schema for wire compatibility"
-            )
-        else:
-            raise RuntimeError(f"Unknown method: {method}")
 
         axis_obj = axes.add(inp)
         return {"created": True, "name": axis_obj.name, "method": method}
@@ -341,25 +334,19 @@ class AssemblyCommands:
         root = self._root()
         joints = root.joints
 
-        if joint_type not in self._JOINT_MOTION_SETTERS:
-            raise RuntimeError(
-                f"Unknown joint type: {joint_type}. "
-                f"Use one of {sorted(self._JOINT_MOTION_SETTERS)}"
-            )
-
         occ1 = self._occurrence_by_component(component_one)
         occ2 = self._occurrence_by_component(component_two)
         if not occ1 or not occ2:
             raise RuntimeError("One or both components not found")
-        if occ1 == occ2:
-            raise RuntimeError("component_one and component_two must differ")
+        if component_refusal := _rules.components_differ_refusal(
+            {"component_one": component_one, "component_two": component_two}
+        ):
+            raise component_refusal
 
-        if face_one is None or face_two is None:
-            raise RuntimeError(
-                "add_joint needs joint geometry: pass face_one/face_two "
-                "(and body_one/body_two when a component holds more than one body). "
-                "Component origin points are not valid joint geometry."
-            )
+        if geometry_refusal := _rules.joint_geometry_refusal(
+            {"face_one": face_one, "face_two": face_two}
+        ):
+            raise geometry_refusal
 
         faces = (
             self._joint_face(occ1, body_one, face_one, "body_one"),
@@ -367,17 +354,7 @@ class AssemblyCommands:
         )
 
         quadrant_attr = self._JOINT_QUADRANTS.get(quadrant)
-        if quadrant_attr is None:
-            raise RuntimeError(
-                "Unknown quadrant: "
-                f"{quadrant}. Use one of {sorted(self._JOINT_QUADRANTS)}"
-            )
         key_point_attr = self._JOINT_KEY_POINTS.get(key_point)
-        if key_point_attr is None:
-            raise RuntimeError(
-                "Unknown key_point: "
-                f"{key_point}. Use one of {sorted(self._JOINT_KEY_POINTS)}"
-            )
         quadrant_value = getattr(adsk.fusion.JointQuadrantAngleTypes, quadrant_attr)
         key_point_value = getattr(adsk.fusion.JointKeyPointTypes, key_point_attr)
 
@@ -624,27 +601,25 @@ class AssemblyCommands:
         """
         root = self._root()
 
-        if joint_type not in self._JOINT_MOTION_SETTERS:
-            raise RuntimeError(
-                f"Unknown joint type: {joint_type}. "
-                f"Use one of {sorted(self._JOINT_MOTION_SETTERS)}"
-            )
-
         occ1 = self._occurrence_by_component(component_one)
         occ2 = self._occurrence_by_component(component_two)
         if not occ1 or not occ2:
             raise RuntimeError("One or both components not found")
-        if occ1 == occ2:
-            raise RuntimeError("component_one and component_two must differ")
+        if component_refusal := _rules.components_differ_refusal(
+            {"component_one": component_one, "component_two": component_two}
+        ):
+            raise component_refusal
 
         geometry = None
         if joint_type != "rigid":
-            if face_one is None or face_two is None:
-                raise RuntimeError(
-                    f"A {joint_type} as-built joint needs geometry: pass "
-                    "face_one/face_two (and body_one/body_two when a component "
-                    "holds more than one body). Only 'rigid' works without it."
-                )
+            if geometry_refusal := _rules.as_built_geometry_refusal(
+                {
+                    "joint_type": joint_type,
+                    "face_one": face_one,
+                    "face_two": face_two,
+                }
+            ):
+                raise geometry_refusal
             face = self._joint_face(occ1, body_one, face_one, "body_one")
 
             # ``asBuiltJoints.createInput`` takes a single geometry, so face_two
@@ -653,10 +628,6 @@ class AssemblyCommands:
             self._joint_face(occ2, body_two, face_two, "body_two")
             quadrant_attr = self._JOINT_QUADRANTS.get(quadrant)
             key_point_attr = self._JOINT_KEY_POINTS.get(key_point)
-            if quadrant_attr is None or key_point_attr is None:
-                raise RuntimeError(
-                    f"Unknown quadrant/key_point: {quadrant}/{key_point}"
-                )
             geometry = adsk.fusion.JointGeometry.createByCylinderOrConeFace(
                 face,
                 getattr(adsk.fusion.JointQuadrantAngleTypes, quadrant_attr),
@@ -786,15 +757,19 @@ class AssemblyCommands:
     def create_rigid_group(self, component_names: list, include_children: bool = True):
         root = self._root()
         occs = adsk.core.ObjectCollection.create()
+        resolved_names = []
 
         for name in component_names:
             for occ in root.allOccurrences:
                 if occ.component.name == name:
                     occs.add(occ)
+                    resolved_names.append(name)
                     break
 
-        if occs.count < 2:
-            raise RuntimeError("Need at least 2 components for rigid group")
+        if refusal := _rules.rigid_group_size_refusal(
+            {"component_names": resolved_names}
+        ):
+            raise refusal
 
         groups = root.rigidGroups
         groups.add(occs, include_children)

@@ -20,6 +20,10 @@ CASES = [
         {"radius": 1.0, "edge_points": [[0, 0]]},
         "edge_points needs at least 3 items",
     ),
+    # The construction methods' ``Unknown method`` handlers were dead code: every
+    # value in the schema's enum is dispatched, so the gate is the only refusal.
+    ("create_construction_plane", {"method": "cant"}, "Unknown method"),
+    ("create_construction_axis", {"method": "spiral"}, "Unknown method"),
 ]
 
 

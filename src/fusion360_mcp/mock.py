@@ -18,7 +18,13 @@ from typing import Any
 
 from ._mutation_commands import MUTATION_COMMANDS
 from ._rules import (
+    as_built_geometry_refusal,
+    components_differ_refusal,
+    construction_method_refusal,
     edge_selector_refusal,
+    joint_geometry_refusal,
+    perpendicular_axis_refusal,
+    rigid_group_size_refusal,
     rule_type_refusal,
     sketch_plane_z_note,
     target_body_refusal,
@@ -569,6 +575,9 @@ def _create_component(p: dict) -> dict:
 
 
 def _add_joint(p: dict) -> dict:
+    refusal = components_differ_refusal(p) or joint_geometry_refusal(p)
+    if refusal is not None:
+        return _refusal_error(refusal)
     return {
         "component_one": p.get("component_one", "Comp1"),
         "component_two": p.get("component_two", "Comp2"),
@@ -908,6 +917,9 @@ def _add_dimension(p: dict) -> dict:
 
 
 def _create_construction_plane(p: dict) -> dict:
+    refusal = construction_method_refusal(p)
+    if refusal is not None:
+        return _refusal_error(refusal)
     return {
         "plane_name": "ConstructionPlane_mock",
         "method": p.get("method", "offset"),
@@ -915,6 +927,9 @@ def _create_construction_plane(p: dict) -> dict:
 
 
 def _create_construction_axis(p: dict) -> dict:
+    refusal = perpendicular_axis_refusal(p)
+    if refusal is not None:
+        return _refusal_error(refusal)
     return {
         "axis_name": "ConstructionAxis_mock",
         "method": p.get("method", "two_points"),
@@ -1077,6 +1092,9 @@ def _create_torus(p: dict) -> dict:
 
 
 def _create_as_built_joint(p: dict) -> dict:
+    refusal = components_differ_refusal(p) or as_built_geometry_refusal(p)
+    if refusal is not None:
+        return _refusal_error(refusal)
     return {
         "component_one": p.get("component_one", "Comp1"),
         "component_two": p.get("component_two", "Comp2"),
@@ -1086,6 +1104,9 @@ def _create_as_built_joint(p: dict) -> dict:
 
 
 def _create_rigid_group(p: dict) -> dict:
+    refusal = rigid_group_size_refusal(p)
+    if refusal is not None:
+        return _refusal_error(refusal)
     return {
         "component_names": p.get("component_names", []),
         "rigid_group_name": "RigidGroup_mock",

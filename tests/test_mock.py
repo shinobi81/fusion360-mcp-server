@@ -337,6 +337,8 @@ class TestMockAssembly:
                 "component_one": "A",
                 "component_two": "B",
                 "joint_type": "revolute",
+                "face_one": 0,
+                "face_two": 0,
             },
         )
         assert result["joint_type"] == "revolute"
@@ -708,6 +710,8 @@ class TestMockAssemblyExtended:
                 "component_one": "Arm",
                 "component_two": "Base",
                 "joint_type": "revolute",
+                "face_one": 0,
+                "face_two": 0,
             },
         )
         assert result["component_one"] == "Arm"

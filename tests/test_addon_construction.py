@@ -169,13 +169,9 @@ def test_a_tangent_plane_is_refused_with_the_alternative(bound_handler):
     assert design.rootComponent.constructionPlanes.count == 0
 
 
-def test_an_unknown_construction_plane_method_is_refused(bound_handler):
-    design = FakeDesign(features=2)
-
-    with pytest.raises(RuntimeError, match="Unknown method: cant"):
-        bound_handler(design).create_construction_plane(method="cant")
-
-    assert design.rootComponent.constructionPlanes.count == 0
+# An unknown method no longer reaches the add-in: the schema gate refuses a value
+# outside the tool's enum before either mode sees it.  ``test_schema_gate.py`` owns
+# that assertion now.
 
 
 # ── construction axes ────────────────────────────────────────────────
@@ -250,16 +246,6 @@ def test_create_construction_axis_on_a_body_edge(bound_handler):
     created = design.rootComponent.constructionAxes.last_input
     assert created.setter == "setByEdge"
     assert created.args == (body.edges.item(1),), "the edge the caller named"
-
-
-def test_an_unknown_construction_axis_method_is_refused(bound_handler):
-    """ "spiral" is not one of the four, and no axis may be created for it."""
-    design = FakeDesign(features=2)
-
-    with pytest.raises(RuntimeError, match="Unknown method: spiral"):
-        bound_handler(design).create_construction_axis("spiral")
-
-    assert design.rootComponent.constructionAxes.count == 0
 
 
 # ── user coordinate systems ──────────────────────────────────────────
