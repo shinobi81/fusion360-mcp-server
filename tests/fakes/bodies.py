@@ -456,6 +456,9 @@ class FakeBody(FakeDeletable):
     ):
         super().__init__(name)
         self.volume = 1.0
+        #: Solid by default, because most fixtures are solids.  ``trim_surface``
+        #: branches on it: a solid tool has an inside, a patch body has none.
+        self.isSolid = True
         self.area = 6.0
         self.material = None
         self.isVisible = True
@@ -504,7 +507,9 @@ class FakeBody(FakeDeletable):
             and lo.y <= point.y <= hi.y
             and lo.z <= point.z <= hi.z
         )
-        return "PointInsidePointContainment" if inside else "PointOutsidePointContainment"
+        return (
+            "PointInsidePointContainment" if inside else "PointOutsidePointContainment"
+        )
 
 
 def body_with_faces(name: str, normals: list[tuple[float, float, float]]) -> FakeBody:

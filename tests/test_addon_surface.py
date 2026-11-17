@@ -344,3 +344,27 @@ def test_a_trim_refuses_the_word_that_does_not_fit_the_tool(bound_handler):
 
     with pytest.raises(RuntimeError, match="does not apply to a body tool"):
         handler.trim_surface("Surf1", keep="positive", tool_name="Cutter")
+
+
+def test_a_trim_with_a_patch_tool_reads_the_side_from_its_planar_face(bound_handler):
+    """A patch body has no interior, so its side comes from its face's normal.
+
+    Measured on 2706: a *solid* tool against a surface target makes Fusion raise
+    ``!body->isSolid_raw()`` when the cells are counted, and a patch body answers
+    ``pointContainment`` with ``Outside`` for every point, so ``inside`` cannot
+    mean anything for it.  The concrete side is the tool's first planar face.
+    """
+    tool = FakeBody("Patch", faces=FakeCollection([FakeFace(normal=(0, 1, 0))]))
+    tool.isSolid = False
+    design = FakeDesign(bodies=[FakeBody("DecoyBody"), FakeBody("Surf1"), tool])
+    design.rootComponent.features.trimFeatures.cell_bodies = [
+        _cell_at(0.0, -2.0),
+        _cell_at(0.0, 2.0),
+    ]
+    handler = bound_handler(design)
+
+    handler.trim_surface("Surf1", keep="negative", tool_name="Patch")
+
+    cells = _cells_of(design)
+    assert cells[0].isSelected is False
+    assert cells[1].isSelected is True

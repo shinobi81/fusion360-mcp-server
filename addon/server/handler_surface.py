@@ -166,7 +166,10 @@ class SurfaceCommands(_Contract):
         trims = root.features.trimFeatures
         if tool_name:
             tool = self._body_by_name(tool_name)
-            kept = _keep_inside(keep)
+        # A patch body has no interior, so "inside" means nothing for it: the side
+        # is its first planar face's normal, as for a plane.  Only a solid tool has
+        # an inside, and only a solid target accepts one.
+            kept = _keep_inside(keep) if tool.isSolid else _keep_positive(keep)
         else:
             tool = self._construction_plane(tool_plane)
             kept = _keep_positive(keep)
@@ -177,11 +180,14 @@ class SurfaceCommands(_Contract):
             for index in range(cells.count):
                 cell = cells.item(index)
                 centroid = cell.cellBody.physicalProperties.centerOfMass
-                on_kept_side = (
-                    _inside_body(tool, centroid)
-                    if tool_name
-                    else _on_positive_side(tool, centroid)
-                )
+                if tool_name and tool.isSolid:
+                    on_kept_side = _inside_body(tool, centroid)
+                elif tool_name:
+                    on_kept_side = _on_positive_side(
+                        _first_planar_face(tool), centroid
+                    )
+                else:
+                    on_kept_side = _on_positive_side(tool, centroid)
                 cell.isSelected = on_kept_side is not kept
             feat = trims.add(inp)
         except Exception:
@@ -368,11 +374,19 @@ def _inside_body(body, point) -> bool:
     )
 
 
+def _first_planar_face(body):
+    """The first planar face of a patch body - the plane a side is measured from."""
+    for face in body.faces:
+        if adsk.core.Plane.cast(face.geometry) is not None:
+            return face
+    raise RuntimeError(f"{body.name} has no planar face to take a side from")
+
+
 def _on_positive_side(plane, point) -> bool:
-    """Which side of the plane the point is on, relative to the plane's normal."""
+    """Which side of the plane the point is on, relative to its normal."""
     geometry = adsk.core.Plane.cast(plane.geometry)
     if geometry is None:
-        raise RuntimeError(f"{plane.name} is not a construction plane")
+        raise RuntimeError(f"{getattr(plane, 'name', 'the trim tool')} is not planar")
     normal, origin = geometry.normal, geometry.origin
     return (
         (point.x - origin.x) * normal.x
