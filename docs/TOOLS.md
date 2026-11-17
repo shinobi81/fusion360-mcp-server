@@ -146,7 +146,7 @@ what a selection returns.
 | `stitch_surfaces` | Stitch surface bodies into one             |
 | `thicken_surface` | Thicken a surface into a solid             |
 | `ruled_surface`   | Ruled surface from a **free** edge — a sheet body's boundary. A solid's edge is shared by two faces and Fusion refuses it (`invalid free edge`); patch or stitch to a surface body first |
-| `trim_surface`    | Trim a surface with a body or a base plane. `keep` picks the side that stays: `inside`/`outside` for a body tool, `positive`/`negative` (the plane normal's side) for `tool_plane`. A selected cell is removed, so the kept side is the unselected one |
+| `trim_surface`    | Trim a surface with a body or a base plane. `keep_cells` lists the cells that survive; every other cell is removed. Fusion offers no side to name - a trimmed patch's cells all report a zero centroid - so the indices are the caller's choice, and the refusal reports how many there are |
 
 ## Sheet Metal
 

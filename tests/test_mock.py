@@ -890,12 +890,12 @@ class TestMockSurfaceOps:
             "trim_surface",
             {
                 "body_name": "Surf1",
-                "keep": "inside",
+                "keep_cells": [0],
                 "tool_name": "Cutter",
             },
         )
         assert result["body_name"] == "Surf1"
-        assert result["keep"] == "inside"
+        assert result["kept_cells"] == [0]
         assert result["tool_name"] == "Cutter"
         assert result["trimmed"] is True
 

@@ -2093,18 +2093,17 @@ TOOLS: list[dict] = [
         "trim_surface",
         "Trim Surface",
         "Trim a surface body with another body or a base plane",
-        required=["body_name", "keep"],
+        required=["body_name", "keep_cells"],
         body_name={
             "type": "string",
             "description": "Surface body to trim",
         },
-        keep={
-            "type": "string",
-            "enum": ["inside", "outside", "positive", "negative"],
+        keep_cells={
+            "type": "array",
+            "items": {"type": "integer", "minimum": 0},
             "description": (
-                "Which side of the tool to keep. A body tool takes inside/outside "
-                "(inside = within the tool's solid); a plane tool takes "
-                "positive/negative, the side its normal points to."
+                "Indices of the cells Fusion's trim produced that survive. Every "
+                "other cell is removed. The refusal reports how many cells exist."
             ),
         },
         tool_name={

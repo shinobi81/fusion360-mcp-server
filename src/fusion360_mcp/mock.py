@@ -1266,7 +1266,7 @@ def _ruled_surface(p: dict) -> dict:
 def _trim_surface(p: dict) -> dict:
     return {
         "body_name": p.get("body_name", "Surface1"),
-        "keep": p.get("keep", "outside"),
+        "kept_cells": p.get("keep_cells", [0]),
         "tool_name": p.get("tool_name"),
         "tool_plane": p.get("tool_plane"),
         "trimmed": True,

@@ -139,17 +139,24 @@ class SurfaceCommands(_Contract):
     def trim_surface(
         self,
         body_name: str,
-        keep: str,
+        keep_cells: list,
         tool_name: str | None = None,
         tool_plane: str | None = None,
     ):
-        """Trim a surface with a body or a base plane, keeping one side of it.
+        """Trim a surface with a body or a base plane, keeping the named cells.
 
         ``TrimFeatures.createInput(trimTool)`` takes the tool alone
         (``Features/TrimFeatures.h:63``); the cells it computed are in
         ``bRepCells``, and for a trim a **selected** cell is *removed*
-        (``Features/BRepCell.h:40-45``).  So ``keep`` is the complement of the
-        selection: the cells on the kept side stay unselected.
+        (``Features/BRepCell.h:40-45``).  So ``keep_cells`` names the cells that
+        survive and every other one is selected for removal.
+
+        Why indices rather than a side: measured on 2706.1.17, both cells of a
+        trimmed patch report ``cellBody.physicalProperties.centerOfMass`` as
+        ``(0, 0, 0)``, so there is no geometry to test a side with, and a solid
+        tool - the only kind with an interior - is refused for a surface target
+        (``!body->isSolid_raw()``).  Fusion's own interface asks the user to tick
+        cells, and ``isSelected`` is that tick.
 
         ``createInput`` opens a transaction that ``add`` closes; the header says
         leaving it open leaves Fusion in a bad state and can crash it, so every
@@ -162,38 +169,40 @@ class SurfaceCommands(_Contract):
                 "trim_surface needs exactly one of tool_name (a body) or "
                 "tool_plane (xy, xz or yz)"
             )
+        kept = set()
+        for index in keep_cells:
+            try:
+                kept.add(int(index))
+            except (TypeError, ValueError):
+                raise RuntimeError(
+                    f"keep_cells takes cell indices, not {index!r}"
+                ) from None
 
         trims = root.features.trimFeatures
-        if tool_name:
-            tool = self._body_by_name(tool_name)
-        # A patch body has no interior, so "inside" means nothing for it: the side
-        # is its first planar face's normal, as for a plane.  Only a solid tool has
-        # an inside, and only a solid target accepts one.
-            kept = _keep_inside(keep) if tool.isSolid else _keep_positive(keep)
-        else:
+        tool = self._body_by_name(tool_name) if tool_name else None
+        if tool is None:
             tool = self._construction_plane(tool_plane)
-            kept = _keep_positive(keep)
 
         inp = trims.createInput(tool)
         try:
             cells = inp.bRepCells
+            if kept and (min(kept) < 0 or max(kept) >= cells.count):
+                raise RuntimeError(
+                    f"keep_cells {sorted(kept)} is out of range - this trim "
+                    f"produced {cells.count} cell(s), indexed from 0"
+                )
             for index in range(cells.count):
-                cell = cells.item(index)
-                centroid = cell.cellBody.physicalProperties.centerOfMass
-                if tool_name and tool.isSolid:
-                    on_kept_side = _inside_body(tool, centroid)
-                elif tool_name:
-                    on_kept_side = _on_positive_side(
-                        _first_planar_face(tool), centroid
-                    )
-                else:
-                    on_kept_side = _on_positive_side(tool, centroid)
-                cell.isSelected = on_kept_side is not kept
+                cells.item(index).isSelected = index not in kept
             feat = trims.add(inp)
         except Exception:
             inp.cancel()
             raise
-        return {"feature_name": feat.name, "body_name": target.name, "keep": keep}
+        return {
+            "feature_name": feat.name,
+            "body_name": target.name,
+            "kept_cells": sorted(kept),
+            "cells": cells.count,
+        }
 
     def create_flange(
         self,
