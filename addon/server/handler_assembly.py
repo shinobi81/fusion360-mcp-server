@@ -207,8 +207,14 @@ class AssemblyCommands:
             edge = body.edges.item(edge_index)
             inp.setByEdge(edge)
         elif method == "perpendicular_at_point":
-            p1 = self._point3d(point_one, "point_one")
-            inp.setByPerpendicularAtPoint(self._construction_plane(plane_one), p1)
+            # Shipped: setByPerpendicularAtPoint(face: BRepFace, pointEntity).
+            # The tool has no face parameter to give it, so the call cannot be
+            # built; the enum value stays in the schema for wire compatibility.
+            raise RuntimeError(
+                "Perpendicular axis needs a B-Rep face, which this tool has no "
+                "parameter for — use execute_code; the method stays in the "
+                "schema for wire compatibility"
+            )
         else:
             raise RuntimeError(f"Unknown method: {method}")
 

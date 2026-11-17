@@ -1161,7 +1161,12 @@ class FakeConstructionPlaneInput(FakeConstructionInput):
 
 
 class FakeConstructionAxisInput(FakeConstructionInput):
-    """The four axis definitions ``create_construction_axis`` builds."""
+    """The three axis definitions ``create_construction_axis`` builds.
+
+    ``setByPerpendicularAtPoint(face, point)`` is not here: Fusion's first
+    argument is a B-Rep face, the tool has no parameter that can supply one, and
+    the handler refuses the method before any setter runs.
+    """
 
     def setByTwoPoints(self, point_one, point_two) -> None:
         self._record("setByTwoPoints", (point_one, point_two))
@@ -1171,9 +1176,6 @@ class FakeConstructionAxisInput(FakeConstructionInput):
 
     def setByEdge(self, edge) -> None:
         self._record("setByEdge", (edge,))
-
-    def setByPerpendicularAtPoint(self, plane, point) -> None:
-        self._record("setByPerpendicularAtPoint", (plane, point))
 
 
 class _FakeConstructionCollection(FakeCollection):
