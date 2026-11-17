@@ -11,6 +11,18 @@ import re
 # Each entry: (regex applied to str(exc), error_kind, hints)
 # First match wins. Patterns use re.IGNORECASE.
 _RULES: list[tuple[str, str, list[str]]] = [
+    # ``fusion_api.__getattr__`` is an adapter contract, not a tool refusal: it must
+    # raise AttributeError or getattr/hasattr/monkeypatch stop working.  The kind is
+    # recovered here instead, and the advice points at the script that checks names.
+    (
+        r"has no attribute|cannot resolve",
+        "INTERNAL_ERROR",
+        [
+            "This is an add-in defect, not an input problem.",
+            "Run `uv run python scripts/check_fusion_api.py` to see which adsk name "
+            "is missing in this Fusion build.",
+        ],
+    ),
     (
         r"no active design",
         "NO_ACTIVE_DESIGN",
@@ -20,7 +32,7 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
-        r"no profiles? in sketch",
+        r"no profiles? in sketch|produced no profile",
         "PROFILE_NOT_CLOSED",
         [
             "The sketch has no closed profile to extrude/revolve.",
@@ -100,7 +112,7 @@ _RULES: list[tuple[str, str, list[str]]] = [
         # ("invalid parameter") also matches this message. Fusion never saw the
         # value -- the add-in refused it -- so that rule's units and enum hints
         # would point the caller at the wrong cause.
-        r"is not finite",
+        r"(?:is not|must be) finite",
         "INVALID_INPUT",
         [
             # One line each: a wrapped pair in a list trips CodeQL's
@@ -492,7 +504,7 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
-        r"timeout",
+        r"timeout|did not finish within",
         "TIMEOUT",
         [
             "The operation exceeded the 30s bridge timeout.",
@@ -527,6 +539,74 @@ _RULES: list[tuple[str, str, list[str]]] = [
     ),
 ]
 
+#: Every ``error_kind`` this module can return, spelled out rather than derived from
+#: ``_RULES``: a literal is what makes a typo in a new rule's kind a red target.
+#:
+#: Twenty entries: the thirteen kinds ``_RULES`` returned before the six were added,
+#: plus ``UNKNOWN``, plus the six new ones.  ``FUSION_REFUSED`` is the easy one to
+#: drop - the first draft of this plan did, and the guard's ``kind in _KNOWN_KINDS``
+#: assertion would have failed on every ``FUSION_REFUSED`` refusal until someone
+#: noticed.
+_KNOWN_KINDS: frozenset[str] = frozenset(
+    {
+        "AXIS_OUT_OF_PLANE",
+        "BODY_NOT_FOUND",
+        "BOOLEAN_NO_OP",
+        "DESIGN_TYPE_MISMATCH",
+        "FUSION_REFUSED",
+        "GEOMETRY_UNSUPPORTED",
+        "INTERNAL_ERROR",
+        "INVALID_INPUT",
+        "NAME_NOT_FOUND",
+        "NOT_ENTITLED",
+        "NO_ACTIVE_DESIGN",
+        "PROFILE_NOT_CLOSED",
+        "REGEN_FAILED",
+        "SCRIPT_ERROR",
+        "SELF_INTERSECTION",
+        "SKETCH_NOT_FOUND",
+        "TIMEOUT",
+        "UNKNOWN",
+        "UNKNOWN_COMMAND",
+        "WORKSPACE_UNAVAILABLE",
+    }
+)
+
+#: The advice a ``Refusal`` gets when it carries none of its own and its message matches
+#: no rule.  One entry per kind the add-in types itself; a kind absent here falls
+#: through to ``_GENERIC_HINTS``, which is honest about knowing nothing.
+_KIND_HINTS: dict[str, tuple[str, ...]] = {
+    "INVALID_INPUT": (
+        "Pass only the values error_message lists; nothing was written.",
+        "error_message names the field it rejected and the values it accepts.",
+    ),
+    "NAME_NOT_FOUND": (
+        "The name does not exist in the active design.",
+        "Enumerate with get_scene_info or list_components, then retry with a name "
+        "from that list.",
+    ),
+    "GEOMETRY_UNSUPPORTED": (
+        "The body does not have the geometry this call needs.",
+        "Inspect it with get_object_info and choose a face or edge it actually has.",
+    ),
+    "FUSION_REFUSED": (
+        "Fusion did not complete the operation; nothing was written.",
+        "Check the design state with get_scene_info, then retry or change the "
+        "approach.",
+    ),
+    "WORKSPACE_UNAVAILABLE": (
+        "The workspace this call needs has not been opened in this Fusion session.",
+        "Open it once (the Manufacturing workspace, or a viewport) and retry.",
+    ),
+    "SCRIPT_ERROR": (
+        "execute_code ran a script that did not compile or run.",
+        "Fix the script and resend; the namespace is rebuilt on every call.",
+    ),
+    "INTERNAL_ERROR": (
+        "This is an add-in defect, not an input problem.",
+        "Report it with the traceback; nothing was written.",
+    ),
+}
 
 #: Advice for a refusal whose kind no rule mentions — an empty hint list is the
 #: failure mode every rule above exists to stop, and a later kind must not revive it.
@@ -570,10 +650,7 @@ def _hints_for(exc: Refusal) -> list[str]:
     for pattern, _kind, hints in _RULES:
         if re.search(pattern, msg, re.IGNORECASE):
             return list(hints)
-    for _pattern, kind, hints in _RULES:
-        if kind == exc.error_kind:
-            return list(hints)
-    return list(_GENERIC_HINTS)
+    return list(_KIND_HINTS.get(exc.error_kind, _GENERIC_HINTS))
 
 
 def classify(exc: BaseException | str) -> tuple[str, list[str]]:

@@ -124,10 +124,11 @@ def test_a_fusion_message_still_comes_from_the_table():
         ("NOT_A_DOCUMENTED_KIND", "boom", ()),
         # The refusal carries its own hints, which win over every rule.
         ("AXIS_OUT_OF_PLANE", "axis leaves the sketch", ("pick a coplanar axis",)),
-        # No rule matches, so the first one of that kind supplies the hints.  This
-        # variant is here to run the mirror's copy of that branch; what it returns
-        # is pinned on the canonical module by
-        # test_a_refusal_whose_message_matches_no_rule_takes_its_kind_first_hints.
+        # No rule matches and BODY_NOT_FOUND has no ``_KIND_HINTS`` entry, so the
+        # last fallback answers and both modules return ``_GENERIC_HINTS``.  This
+        # variant runs the mirror's copy of that branch; the per-kind branch is
+        # pinned on the canonical module by
+        # test_a_refusal_with_no_matching_rule_takes_its_kind_default.
         ("BODY_NOT_FOUND", "nothing to match here", ()),
         # A rule matches the message, and its hints are the ones returned.
         ("INVALID_INPUT", "3 : invalid free edge", ()),
@@ -144,24 +145,47 @@ def test_the_generated_mirror_refuses_identically(kind, message, hints):
     assert mirror.classify(mirror.Refusal(kind, message, hints)) == expected
 
 
-def test_a_refusal_whose_message_matches_no_rule_takes_its_kind_first_hints():
-    """The fourth step of the fallback, which no other test can see.
+def test_a_refusal_with_no_matching_rule_takes_its_kind_default():
+    """D4: the fallback is a per-kind entry, never the first rule of that kind.
 
-    The kind is documented and the message matches no rule, so the advice comes from
-    the first entry of that kind.  Asserted on the literal inf/nan hints rather than
-    on a lookup into ``_RULES``, which would agree with itself by construction: the
-    other 30 ``INVALID_INPUT`` entries carry different advice, so returning any of
-    them fails here.
+    The old behaviour borrowed the inf/NaN rule's hints for any unmatched
+    ``INVALID_INPUT``, which told a caller with a bad ``count`` about ``nan``.
     """
     kind, hints = addon_hints.classify(
         addon_hints.Refusal("INVALID_INPUT", "nothing in the table reads like this")
     )
     assert kind == "INVALID_INPUT"
-    assert hints == [
-        "inf, -inf and nan are not numbers Fusion can store; nothing was written.",
-        "Send a finite number, or set the real value later with set_parameter.",
-    ]
-    assert hints != addon_hints._GENERIC_HINTS
+    assert hints == list(addon_hints._KIND_HINTS["INVALID_INPUT"])
+    assert "inf, -inf and nan" not in " ".join(hints)
+
+
+@pytest.mark.parametrize(
+    ("message", "kind"),
+    [
+        (
+            "Toolpath generation did not finish within 30s. The operation may still "
+            "complete in the background — check with cam_list_operations before "
+            "regenerating.",
+            "TIMEOUT",
+        ),
+        ("thickness must be finite, in cm: inf", "INVALID_INPUT"),
+        ("Rectangle sketch produced no profile", "PROFILE_NOT_CLOSED"),
+    ],
+)
+def test_the_three_wordings_that_never_matched(message, kind):
+    """Rule 43 said only ``timeout``, rule 9 only ``is not finite``, rule 2 only
+    ``no profiles? in sketch`` — so the add-in's own three sentences were UNKNOWN."""
+    assert addon_hints.classify(message)[0] == kind
+
+
+def test_the_adapter_wording_classifies_as_internal():
+    """``addon/server/fusion_api.py`` must keep raising AttributeError — getattr,
+    hasattr and monkeypatch all catch only that — so the kind comes from here."""
+    kind, hints = addon_hints.classify(
+        AttributeError("module 'addon.server.fusion_api' has no attribute 'corex'")
+    )
+    assert kind == "INTERNAL_ERROR"
+    assert any("check_fusion_api" in hint for hint in hints)
 
 
 # ── the converted call sites ─────────────────────────────────────────
