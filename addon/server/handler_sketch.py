@@ -231,10 +231,26 @@ class SketchCommands:
         that: measured at 100 circles, 68 ms against 912 ms. The restore is in a
         ``finally`` so a bad parameter cannot leave the sketch unsolved.
 
-        ``count`` and ``axis`` are not judged here: the schema declares a minimum
-        and an enum for them, so the server refuses a bad one before the add-in
-        sees the call.
+        ``count`` and ``axis`` are judged by the schema too: the gate refuses a
+        value it forbids first for MCP callers, and the checks below are the
+        direct-wire defence D12 requires.
         """
+        # The gate refuses these first for MCP callers, and a client on :9876 can
+        # reach this method without it: count=-5 would report added: -5, and
+        # axis="q" would put every circle on one point.
+        if count < 1:
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                "count must be at least 1",
+                hints=("Pass count as a whole number of circles, at least 1.",),
+            )
+        if axis not in ("x", "y"):
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"Unknown axis: {axis} - use x or y",
+                hints=("Pass axis='x' or axis='y'.",),
+            )
+
         sketch = self._sketch(sketch_name)
         previous_deferred = sketch.isComputeDeferred
         sketch.isComputeDeferred = True

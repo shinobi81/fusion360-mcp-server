@@ -1200,6 +1200,9 @@ EMPTY_BODY_NAME = [
     ("set_appearance", {"target_name": "", "target_type": "body"}),
     ("set_appearance", {"target_name": "", "target_type": "face"}),
     ("extrude", {"target_body": "", "operation": "cut"}),
+    ("revolve", {"target_body": "", "operation": "cut"}),
+    ("sweep", {"target_body": "", "operation": "cut"}),
+    ("loft", {"target_body": "", "operation": "cut"}),
 ]
 
 

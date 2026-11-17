@@ -180,7 +180,7 @@ and asks the running Fusion whether it exists - 193 references, none missing on
    opens at `[0.8.5]` because the packaging guard fails an entry written ahead of the
    version being cut, so entries are written once, at release. The note owes the PRs
    merged since `v0.8.5` (`#125`-`#137`) and this work's entry: the six new kinds, the
-   schema gate, the two refusals that moved from `UNKNOWN` to a kind, and the gate's own
+   schema gate, the refusals that moved from `UNKNOWN` to a kind, and the gate's own
    sentences for the rows it answers.
 2. **Retag the rules that already carry a kind** - deferred, and named here so the
    inconsistency reads as a decision rather than an oversight. The work above changed the

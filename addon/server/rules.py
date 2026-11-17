@@ -157,6 +157,9 @@ def joint_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     A joint cannot be built from the components' origin points: a bare point
     carries no component association, so ``JointGeometry.createByPoint`` rejects
     it.  Whether the named face exists needs Fusion; that it was named does not.
+    The tool's schema also requires ``face_one`` and ``face_two``, so the gate
+    refuses a missing pair first for MCP callers; this sentence answers a caller
+    that reached the add-in directly.
     """
     if params.get("face_one") is not None and params.get("face_two") is not None:
         return None
@@ -200,7 +203,9 @@ def rigid_group_size_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None
 
     ``params`` carries the names that resolved to occurrences, so this is what the
     add-in checks before ``rigidGroups.add``; mock mode judges the names it was
-    given, which is all it has.  A group of one holds nothing together.
+    given, which is all it has.  A group of one holds nothing together.  The
+    schema's ``minItems: 2`` makes the gate refuse a shorter list first for MCP
+    callers; this sentence is the direct-wire answer.
     """
     names = params.get("component_names") or ()
     if len(names) >= 2:
@@ -281,7 +286,8 @@ def point3d_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     message names the one that is wrong: ``Point3D.create(*values)`` unpacked a short
     list inside Fusion's binding, and the caller read a ``TypeError`` instead.  Three
     numbers in the right shape is judged here; whether they describe a usable point
-    is Fusion's.
+    is Fusion's.  ``_POINT3`` declares the same shape, so the gate refuses a
+    non-point first for MCP callers; this sentence is the direct-wire answer.
     """
     for field, values in params.items():
         if isinstance(values, (list, tuple)) and len(values) == 3:
@@ -344,6 +350,8 @@ def keep_cells_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     index, so a word is a caller mistake Fusion cannot report; the indices are
     converted here the way the handler converts them, which is why a numeric string
     is accepted.  Whether an index is in range needs the cells Fusion computes.
+    The schema types each entry as an integer with a minimum of 0, so the gate
+    refuses those first for MCP callers; this sentence is the direct-wire answer.
     """
     for index in params.get("keep_cells") or ():
         try:
@@ -435,9 +443,7 @@ def cam_target_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     return _hints.Refusal(
         "INVALID_INPUT",
         "Provide setup_name, operation_name, or generate_all=true",
-        hints=(
-            "Pass setup_name, setup_name and operation_name, or generate_all=true.",
-        ),
+        hints=("Pass setup_name, operation_name, or generate_all=true.",),
     )
 
 

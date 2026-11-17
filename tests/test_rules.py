@@ -337,7 +337,7 @@ PARAMETER_REFUSALS = [
         {},
         "INVALID_INPUT",
         "Provide setup_name, operation_name, or generate_all=true",
-        ("Pass setup_name, setup_name and operation_name, or generate_all=true.",),
+        ("Pass setup_name, operation_name, or generate_all=true.",),
     ),
     # Surface trim: the tool and the cell indices are judged from the parameters
     # alone, before Fusion computes any cell to check an index against.

@@ -688,10 +688,15 @@ class SceneCommands:
             adsk.doEvents()
             return {"changed": True, "design_type": "direct"}
 
-        # An unknown design_type is not judged here: the tool's schema declares the two
-        # values as an enum, and the gate refuses anything outside it before either
-        # mode sees the command.
-        return None
+        # The gate refuses a value outside the enum first for MCP callers; a client
+        # on :9876 never passes it, and returning None would make execute_command
+        # report {"value": None, "ok": true}.  D12 keeps this as the direct-wire
+        # defence.
+        raise _hints.Refusal(
+            "INVALID_INPUT",
+            f"Invalid design_type '{design_type}'. Use 'parametric' or 'direct'.",
+            hints=("Pass design_type='parametric' or 'direct'.",),
+        )
 
     def execute_code(self, code: str):
         design = self._design()

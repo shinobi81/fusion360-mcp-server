@@ -58,6 +58,9 @@ def test_a_declared_constraint_is_refused_before_fusion(tool, params, fragment):
     assert envelope["error_kind"] == "INVALID_INPUT"
     assert fragment in envelope["error_message"]
     assert envelope["hints"]
+    # AGENTS.md's failure shape includes a traceback; the gate never ran Fusion,
+    # so its refusal carries an empty one rather than omitting the key.
+    assert envelope["traceback"] == ""
 
 
 def test_a_one_of_refusal_names_the_field():
@@ -202,6 +205,10 @@ def test_every_declared_enum_matches_the_set_the_add_in_refuses():
         ("fillet", "edge_selection", EDGE_SELECTIONS),
         ("chamfer", "edge_selection", EDGE_SELECTIONS),
         ("export", "format", EXPORT_FORMATS),
+        # The guards restored for a direct-wire caller: the add-in refuses these
+        # too, so deleting the enum would reopen the hole rather than move it.
+        ("draw_circles", "axis", ("x", "y")),
+        ("set_design_type", "design_type", ("parametric", "direct")),
     ]
     for tool, prop, refused in answered:
         spec = tools.get_tool_by_name(tool)

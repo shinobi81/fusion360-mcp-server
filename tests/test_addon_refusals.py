@@ -184,11 +184,21 @@ def test_the_three_wordings_that_never_matched(message, kind):
 def test_the_adapter_wording_classifies_as_internal():
     """``addon/server/fusion_api.py`` must keep raising AttributeError — getattr,
     hasattr and monkeypatch all catch only that — so the kind comes from here."""
-    kind, hints = addon_hints.classify(
-        AttributeError("module 'addon.server.fusion_api' has no attribute 'corex'")
+    for message in (
+        "module 'addon.server.fusion_api' has no attribute 'corex'",
+        "module 'addon.server.fusion_api' cannot resolve 'corex': adsk is not "
+        "importable",
+    ):
+        kind, hints = addon_hints.classify(AttributeError(message))
+        assert kind == "INTERNAL_ERROR"
+        assert any("check_fusion_api" in hint for hint in hints)
+
+
+def test_a_fusion_message_using_cannot_resolve_is_not_an_internal_error():
+    """The adapter's shape is anchored; the phrase alone is ordinary Fusion text."""
+    assert addon_hints.classify("Fusion cannot resolve this profile")[0] != (
+        "INTERNAL_ERROR"
     )
-    assert kind == "INTERNAL_ERROR"
-    assert any("check_fusion_api" in hint for hint in hints)
 
 
 # ── the converted call sites ─────────────────────────────────────────
@@ -340,11 +350,11 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ("handler_features.py", 987, "message is not a literal"),
         (
             "handler_sketch.py",
-            294,
+            310,
             "raise refusal: kind comes from _rules.symmetry_line_refusal",
         ),
-        ("handler_sketch.py", 302, "message is not a literal"),
-        ("handler_sketch.py", 438, "message is not a literal"),
+        ("handler_sketch.py", 318, "message is not a literal"),
+        ("handler_sketch.py", 454, "message is not a literal"),
         (
             "handler_surface.py",
             121,

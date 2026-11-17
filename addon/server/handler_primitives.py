@@ -203,7 +203,11 @@ class PrimitiveCommands:
                 f"The marker was restored. If the design is stuck in direct "
                 f"mode, call set_design_type('parametric') to capture history "
                 f"again, then delete the failed feature explicitly.",
-                hints=("Undo changed the design type; reload the document and retry.",),
+                hints=(
+                    "If the design is stuck in direct mode, call "
+                    "set_design_type('parametric'), then delete the failed "
+                    "feature explicitly.",
+                ),
             )
 
         if marker_after == marker_before:

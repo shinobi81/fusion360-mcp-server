@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
 from addon.server import hints as addon_hints  # noqa: E402
 from addon.server.hole_geometry import plane_z_at  # noqa: E402
 from addon.server.parameter_units import expression_for  # noqa: E402
+from fuzz import fuzz_hints_classify  # noqa: E402
 from fuzz.fuzz_hints_classify import check, classify  # noqa: E402
 from fuzz.fuzz_hole_geometry import check as check_geom  # noqa: E402
 from fuzz.fuzz_parameter_units import check as check_units  # noqa: E402
@@ -37,6 +38,11 @@ def test_a_known_message_reaches_a_real_rule():
 
 def test_unknown_text_falls_back():
     assert classify("not a rule at all")[0] == "UNKNOWN"
+
+
+def test_the_fuzz_target_and_the_add_in_know_the_same_kinds():
+    """Two literal sets: a kind added to one and not the other drifts silently."""
+    assert set(fuzz_hints_classify.KNOWN_KINDS) == addon_hints._KNOWN_KINDS
 
 
 def test_units_survive_junk_that_is_not_a_unit():

@@ -20,7 +20,7 @@ _RULES: list[tuple[str, str, list[str]]] = [
     # raise AttributeError or getattr/hasattr/monkeypatch stop working.  The kind is
     # recovered here instead, and the advice points at the script that checks names.
     (
-        r"has no attribute|cannot resolve",
+        r"module .* (has no attribute|cannot resolve)",
         "INTERNAL_ERROR",
         [
             "This is an add-in defect, not an input problem.",
@@ -582,8 +582,8 @@ _KNOWN_KINDS: frozenset[str] = frozenset(
 #: through to ``_GENERIC_HINTS``, which is honest about knowing nothing.
 _KIND_HINTS: dict[str, tuple[str, ...]] = {
     "INVALID_INPUT": (
-        "Pass only the values error_message lists; nothing was written.",
-        "error_message names the field it rejected and the values it accepts.",
+        "Fix the field error_message names; nothing was written.",
+        "It names the field, and the values when the accepted set is fixed.",
     ),
     "NAME_NOT_FOUND": (
         "The name does not exist in the active design.",
@@ -595,8 +595,8 @@ _KIND_HINTS: dict[str, tuple[str, ...]] = {
         "Inspect it with get_object_info and choose a face or edge it actually has.",
     ),
     "FUSION_REFUSED": (
-        "Fusion did not complete the operation; nothing was written.",
-        "Check the design state with get_scene_info, then retry or change the "
+        "Fusion did not complete the operation.",
+        "Check what was written with get_scene_info, then retry or change the "
         "approach.",
     ),
     "WORKSPACE_UNAVAILABLE": (
@@ -609,7 +609,7 @@ _KIND_HINTS: dict[str, tuple[str, ...]] = {
     ),
     "INTERNAL_ERROR": (
         "This is an add-in defect, not an input problem.",
-        "Report it with the traceback; nothing was written.",
+        "Report it with the traceback; get_scene_info shows what was written.",
     ),
 }
 
@@ -617,7 +617,7 @@ _KIND_HINTS: dict[str, tuple[str, ...]] = {
 #: failure mode every rule above exists to stop, and a later kind must not revive it.
 _GENERIC_HINTS: list[str] = [
     "The add-in refused this input; nothing was written.",
-    "error_message names the field it rejected and the values it accepts.",
+    "error_message names the field it rejected, when the refusal has one.",
 ]
 
 

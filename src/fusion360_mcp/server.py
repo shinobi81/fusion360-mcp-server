@@ -39,13 +39,14 @@ log = logging.getLogger("fusion360_mcp.server")
 
 
 def _gate_message(err: jsonschema.exceptions.ValidationError) -> str:
-    """Name the field and the values it accepts, in the add-in's voice.
+    """Describe the rejected field: in the add-in's voice where it shapes the
+    keyword, otherwise the field name plus ``jsonschema``'s own text.
 
-    ``jsonschema``'s own messages name the keyword (``'q' is not one of ...``);
-    a caller should not have to read the schema to fix the call.  A validator
-    this gate does not shape falls through to ``err.message``, prefixed with the
-    field name when there is one, so an unhandled constraint is visible rather
-    than silently reworded.
+    ``jsonschema``'s messages name the keyword (``'q' is not one of ...``); a
+    caller should not have to read the schema to fix the call, so the shapes this
+    gate knows are reworded.  A validator it does not shape falls through to
+    ``err.message``, prefixed with the field name when there is one, so an
+    unhandled constraint is visible rather than silently reworded.
     """
     prop = next(
         (part for part in reversed(err.absolute_path) if isinstance(part, str)), ""
@@ -78,7 +79,8 @@ def _schema_refusal(command_type: str, params: dict) -> dict | None:
 
     One gate for both modes: ``_send`` is the only path to the add-in or to mock
     mode, so an enum or a minimum the schema declares is enforced once.  Messages
-    are the add-in's voice, not ``jsonschema``'s.
+    come from ``_gate_message``: the add-in's voice for the shapes it knows,
+    ``jsonschema``'s own text otherwise.
     """
     spec = get_tool_by_name(command_type)
     if spec is None:
@@ -93,6 +95,7 @@ def _schema_refusal(command_type: str, params: dict) -> dict | None:
             "error_kind": "INVALID_INPUT",
             "error_message": _gate_message(err),
             "hints": list(_hints._KIND_HINTS["INVALID_INPUT"]),
+            "traceback": "",
         }
     return None
 

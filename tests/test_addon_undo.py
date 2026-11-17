@@ -204,7 +204,9 @@ class TestDesignTypeGuard:
             "history again, then delete the failed feature explicitly."
         )
         assert raised.value.hints == (
-            "Undo changed the design type; reload the document and retry.",
+            "If the design is stuck in direct mode, call "
+            "set_design_type('parametric'), then delete the failed feature "
+            "explicitly.",
         )
         assert design.designType == PARAMETRIC, "design was left in direct mode"
         assert design.marker == 2, "the marker was not restored"
