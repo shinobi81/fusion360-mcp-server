@@ -121,9 +121,9 @@ could never have worked:
 ### What the refusal work found - done, on `typed-refusals`, not merged
 
 The roadmap's first item here - `hints.py` rules for the refusals that classify
-`UNKNOWN` - is done on the `typed-refusals` branch, 19 commits off `0bb4545`. The
-record is here rather than in the design document, because `docs/superpowers/` is
-git-ignored and the numbers are the durable half.
+`UNKNOWN` - is done on the `typed-refusals` branch, which starts at `0bb4545`. The record
+is here rather than in the design document, because `docs/superpowers/` is git-ignored
+and the numbers are the durable half.
 
 The roadmap asked for one rules table, and the measurement is what rejected that shape:
 an AST walk of every `raise` in `addon/server` found **134** carrying a literal
@@ -152,12 +152,14 @@ table was the wrong answer, since a table can only read a string:
 - **`Refusal` at the site** for what needs live state - an index against a real face count,
   a component with no planar face. 47 of the 88.
 
-The last 3 were existing rules whose pattern never matched the sentence the add-in actually
-raised. Six kinds came out of the work, chosen by the caller's next move rather than by
-which API failed: `NAME_NOT_FOUND`, `GEOMETRY_UNSUPPORTED`, `FUSION_REFUSED`,
-`WORKSPACE_UNAVAILABLE`, `SCRIPT_ERROR`, `INTERNAL_ERROR`. `INVALID_INPUT` stays for an
-unusable parameter, and `BODY_NOT_FOUND`/`SKETCH_NOT_FOUND` stay although `NAME_NOT_FOUND`
-covers them, because a client may already branch on them.
+The last 2 were existing rules whose pattern never matched the sentence the add-in
+actually raised; the third pattern widened in the same commit was defensive, because the
+live message already ended in `is not finite`. Six kinds came out of the work, chosen by
+the caller's next move rather than by which API failed: `NAME_NOT_FOUND`,
+`GEOMETRY_UNSUPPORTED`, `FUSION_REFUSED`, `WORKSPACE_UNAVAILABLE`, `SCRIPT_ERROR`,
+`INTERNAL_ERROR`. `INVALID_INPUT` stays for an unusable parameter, and
+`BODY_NOT_FOUND`/`SKETCH_NOT_FOUND` stay although `NAME_NOT_FOUND` covers them,
+because a client may already branch on them.
 
 `tests/test_addon_refusals.py` makes it a ratchet rather than a one-off audit. It
 fails on a raise that would reach a caller `UNKNOWN`, on a baseline row that no longer
@@ -174,19 +176,25 @@ Zero invented names remain, and that is now checked rather than hoped for:
 and asks the running Fusion whether it exists - 193 references, none missing on
 2706.1.17 (#135).
 
-1. **Retag the rules that already carry a kind** - deferred, and named here so the
+1. **The 0.9.0 release note is unwritten, and `CHANGELOG.md` cannot tell you.** The file
+   opens at `[0.8.5]` because the packaging guard fails an entry written ahead of the
+   version being cut, so entries are written once, at release. The note owes the PRs
+   merged since `v0.8.5` (`#125`-`#137`) and this work's entry: the six new kinds, the
+   schema gate, the two refusals that moved from `UNKNOWN` to a kind, and the gate's own
+   sentences for the rows it answers.
+2. **Retag the rules that already carry a kind** - deferred, and named here so the
    inconsistency reads as a decision rather than an oversight. The work above changed the
    tag of the 88 with none; a rule that already answered with a kind kept it, even where
    the new taxonomy disagrees: the CAM `setup/operation not found` rule is still
    `INVALID_INPUT`, and so is `no faces matched`. Those tags are what a client may already
    branch on, so changing them is a client-visible change with its own evidence and
    release note, not a ride-along.
-2. **`handler_cam` (39%) and `handler_export` (44%)** - up from 17% and 23%, because the
-   refusal work had to drive their refusal paths - are still the two thinnest modules. A
-   CAM `Product` and an `exportManager`/`viewport` are the largest fakes in the tree, and
-   the lines left are the ones a fake cannot settle: a view sheet either renders or it does
-   not. Those belong in a Fusion session, not in a fake.
-3. **`create_construction_axis("perpendicular_at_point")`** refuses by design: it
+3. **`handler_cam` (39%) and `handler_export` (44%)** - up from 17% and 23%, because the
+   refusal work had to drive their refusal paths - are the two modules the coverage work
+   left where they were. A CAM `Product` and an `exportManager`/`viewport` are the largest
+   fakes in the tree, and the lines left are the ones a fake cannot settle: a view sheet
+   either renders or it does not. Those belong in a Fusion session, not in a fake.
+4. **`create_construction_axis("perpendicular_at_point")`** refuses by design: it
    needs a `BRepFace`, which the tool has no argument for. Making it work means adding a
    face parameter, a schema decision rather than a repair.
 
