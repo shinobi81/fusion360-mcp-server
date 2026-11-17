@@ -1364,6 +1364,35 @@ class FakeRoot:
         self.yZConstructionPlane = planes.yZConstructionPlane
         self.xZConstructionPlane = planes.xZConstructionPlane
         self.analyses = FakeAnalyses()
+        #: The ``FlatPattern`` objects ``createFlatPattern`` returned, in order.
+        self.flat_patterns: list[FakeFeature] = []
+        #: The stationary face of each of those calls, in the same order.  Fusion's
+        #: ``FlatPattern`` does not keep the face it was built from, so this is the
+        #: fake's own record of the call - not a Fusion property.
+        self.flat_pattern_faces: list = []
+
+    def createFlatPattern(self, stationary_face):
+        """``Component.createFlatPattern(stationaryFace)``: **one** argument.
+
+        ``Fusion/Components/Component.h:355`` ships ``core::Ptr<FlatPattern>
+        createFlatPattern(const core::Ptr<BRepFace>& stationaryFace)`` - Fusion's
+        root component is a ``Component`` and this fake is where the handler's
+        ``root`` lands.  There is no ``features.flatPatternFeatures`` in the API,
+        which is what the handler used to read.  The returned ``FlatPattern``
+        derives from ``Feature`` (``Fusion/SheetMetal/FlatPattern.h``, ``class
+        FlatPattern : public Feature``), so it carries the name the reply is built
+        from.
+
+        Declaring the arity is what keeps that call from coming back: a no-argument
+        or two-argument call is a ``TypeError``, as in the binding.  What the flat
+        body looks like is not modelled - that is geometry this fake does not carry -
+        and the face is not type-checked, because the handler's own planar scan is
+        what picks it.
+        """
+        flat_pattern = FakeFeature(f"Flat Pattern{len(self.flat_patterns) + 1}")
+        self.flat_patterns.append(flat_pattern)
+        self.flat_pattern_faces.append(stationary_face)
+        return flat_pattern
 
     def createBRepEdgeProfile(self, edges, chain_edges: bool = True):
         """``Component.createBRepEdgeProfile``: a ruled surface is built from a profile.

@@ -1,4 +1,4 @@
-"""``create_flange``, ``create_bend`` and ``unfold``: what the call sites hand Fusion.
+"""Sheet metal: ``create_flange``, ``create_bend``, ``flat_pattern``, ``unfold``.
 
 Each command resolves a name to an entity and then fills a feature input, so the
 tests assert exactly that: which edge, which bend line, which body, which face,
@@ -23,7 +23,7 @@ Which claims are the **fake's**, not Fusion's:
   (``UnfoldFeatureInput.h:46-62``), which is why a call site that set a name Fusion
   does not ship would leave them at their defaults and fail here.
 * ``feature_name`` is the fake's own numbering.  Nothing here claims what Fusion
-  names a feature, nor whether a flange, a bend or an unfold is
+  names a feature, nor whether a flange, a bend, a flat pattern or an unfold is
   geometrically possible on the entity it was given — that needs the geometry,
   which these fakes do not carry.
 """
@@ -305,3 +305,46 @@ def test_an_unfold_of_a_body_with_no_flat_face_builds_no_input(bound_handler):
         handler.unfold("Tube")
 
     assert design.rootComponent.features.unfoldFeatures.inputs == []
+
+
+def test_a_flat_pattern_is_built_from_the_first_planar_face(bound_handler):
+    """The component is handed a flat face of the named body.
+
+    The leading face is a bend wall and the decoy body comes first in the root, so
+    a scan that took the first face, or a lookup that took the first body, hands
+    over something that is not a face of this part.
+    """
+    design, _body, faces = _sheet_metal_design()
+    handler = bound_handler(design)
+
+    handler.flat_pattern("Bracket")
+
+    root = design.rootComponent
+    assert root.flat_pattern_faces == [faces[1]]
+    assert root.flat_pattern_faces[0] is not faces[0]
+
+
+def test_a_flat_pattern_reports_the_name_of_the_flat_pattern_it_created(bound_handler):
+    """``feature_name`` is the returned ``FlatPattern``'s name, not a made-up one."""
+    design, _body, _faces = _sheet_metal_design()
+    root = design.rootComponent
+    handler = bound_handler(design)
+
+    out = handler.flat_pattern("Bracket")
+
+    assert len(root.flat_patterns) == 1
+    assert out == {"feature_name": root.flat_patterns[0].name}
+
+
+def test_a_flat_pattern_of_a_body_with_no_flat_face_creates_nothing(bound_handler):
+    """The refusal happens before the component is asked for a flat pattern."""
+    faces = FakeCollection([FakeFace(planar=False), FakeFace(planar=False)])
+    design = FakeDesign(
+        bodies=[FakeBody("DecoyBody"), FakeBody("Tube", faces=faces)],
+    )
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError):
+        handler.flat_pattern("Tube")
+
+    assert design.rootComponent.flat_patterns == []
