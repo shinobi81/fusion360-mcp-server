@@ -458,15 +458,18 @@ def _surface_continuity_types() -> types.SimpleNamespace:
 def _point_containment() -> types.SimpleNamespace:
     """``PointContainment``: what ``BRepBody.pointContainment`` answers.
 
-    Read from the shipped stub (``adsk/fusion.py``, ``PointContainment``):
-    ``InsidePointContainment``, ``OutsidePointContainment`` and
-    ``OnPointContainment``, and nothing else.  ``trim_surface`` compares against
-    the inside member, so the values are the attribute names a test can assert.
+    Measured on 2706 by reading ``dir(adsk.fusion.PointContainment)``: the four
+    members are ``PointInside``, ``PointOutside``, ``PointOn`` and ``Unknown``,
+    each carrying the ``PointContainment`` suffix.  The first draft of this fake
+    invented ``InsidePointContainment`` and the handler matched it, so the suite
+    was green while Fusion raised ``AttributeError`` -- which is why the names
+    are read rather than guessed.
     """
     return types.SimpleNamespace(
-        InsidePointContainment="InsidePointContainment",
-        OutsidePointContainment="OutsidePointContainment",
-        OnPointContainment="OnPointContainment",
+        PointInsidePointContainment="PointInsidePointContainment",
+        PointOutsidePointContainment="PointOutsidePointContainment",
+        PointOnPointContainment="PointOnPointContainment",
+        UnknownPointContainment="UnknownPointContainment",
     )
 
 

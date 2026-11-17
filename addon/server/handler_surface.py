@@ -364,7 +364,7 @@ def _inside_body(body, point) -> bool:
     """``BRepBody.pointContainment``: is the point inside the tool's solid?"""
     return (
         body.pointContainment(point)
-        == adsk.fusion.PointContainment.InsidePointContainment
+        == adsk.fusion.PointContainment.PointInsidePointContainment
     )
 
 

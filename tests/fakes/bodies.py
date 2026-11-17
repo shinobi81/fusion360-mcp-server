@@ -504,7 +504,7 @@ class FakeBody(FakeDeletable):
             and lo.y <= point.y <= hi.y
             and lo.z <= point.z <= hi.z
         )
-        return "InsidePointContainment" if inside else "OutsidePointContainment"
+        return "PointInsidePointContainment" if inside else "PointOutsidePointContainment"
 
 
 def body_with_faces(name: str, normals: list[tuple[float, float, float]]) -> FakeBody:
