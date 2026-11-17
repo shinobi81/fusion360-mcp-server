@@ -24,6 +24,7 @@ dependencies = [
     # install resolves from these, not from uv.lock.
     "anyio>=4.14.2",
     "click>=8.5.1",
+    "jsonschema>=4.26.0",
     "mcp>=1.27.2,<2",
 ]
 

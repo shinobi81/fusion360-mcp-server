@@ -342,6 +342,7 @@ source = { editable = "." }
 dependencies = [
     { name = "anyio" },
     { name = "click" },
+    { name = "jsonschema" },
     { name = "mcp" },
 ]
 
@@ -361,6 +362,7 @@ fuzz = [
 requires-dist = [
     { name = "anyio", specifier = ">=4.14.2" },
     { name = "click", specifier = ">=8.5.1" },
+    { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "mcp", specifier = ">=1.27.2,<2" },
 ]
 

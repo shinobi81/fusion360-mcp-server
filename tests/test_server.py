@@ -8,6 +8,34 @@ import pytest
 from fusion360_mcp.server import _send
 
 
+def _example_value(prop: dict):
+    """A value *prop*'s schema accepts, for the required-argument sweep."""
+    if "enum" in prop:
+        return prop["enum"][0]
+    kind = prop.get("type")
+    if kind == "array":
+        item_kind = (prop.get("items") or {}).get("type")
+        if item_kind == "array":
+            return [[0, 0], [0, 0]]
+        if item_kind == "integer":
+            return [0]
+        return ["X", "X"] if prop.get("minItems", 0) > 1 else ["X"]
+    if kind == "string":
+        return "X"
+    if "minimum" in prop:
+        return prop["minimum"]
+    if "oneOf" in prop:
+        return "X"
+    return 0
+
+
+def _minimal_args(tool: dict) -> dict:
+    """The required properties, filled with a value the schema accepts."""
+    props = tool["inputSchema"]["properties"]
+    required = tool["inputSchema"].get("required", [])
+    return {name: _example_value(props[name]) for name in required}
+
+
 class TestSendRouting:
     """_send must route to mock when mode='mock' and to TCP otherwise."""
 
@@ -26,7 +54,7 @@ class TestSendRouting:
         from fusion360_mcp.tools import TOOLS
 
         for tool in TOOLS:
-            result = _send("mock", tool["name"], {})
+            result = _send("mock", tool["name"], _minimal_args(tool))
             assert isinstance(result, dict)
             assert result.get("mode") == "mock", (
                 f"Tool {tool['name']} missing mode=mock in mock response"
