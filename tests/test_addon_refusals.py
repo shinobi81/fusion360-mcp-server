@@ -274,39 +274,6 @@ def test_an_unknown_rule_type_is_refused_as_a_refusal(bound_handler):
 #: the last one empties this set.  A row here is a debt, not an exemption.
 _UNCLASSIFIED_BASELINE: frozenset[tuple[str, str]] = frozenset(
     {
-        (
-            "handler_assembly.py",
-            "'…' has motion …, which this command cannot drive; known types: …",
-        ),
-        ("handler_assembly.py", "'…' is a rigid joint; it has no value to drive"),
-        (
-            "handler_assembly.py",
-            "A joint frame is required to place axis '…' — internal error",
-        ),
-        (
-            "handler_assembly.py",
-            "Component '…' has … bodies; pass '…' to choose which body carries the "
-            + "joint geometry",
-        ),
-        (
-            "handler_assembly.py",
-            "Face index … is out of range for body '…' (… faces). Enumerate them "
-            + "with get_object_info and pick a cylindrical face.",
-        ),
-        (
-            "handler_assembly.py",
-            "Fusion did not keep the requested value on '…' (set … …, read back …). "
-            + "A design.computeAll() after setting a joint value resets it to zero.",
-        ),
-        (
-            "handler_assembly.py",
-            "No as-built joints in the design; pass as_built=False for regular "
-            + "joints or create one first",
-        ),
-        ("handler_assembly.py", "One or both components not found"),
-        ("handler_assembly.py", "Unknown axis: …. Use one of …"),
-        ("handler_assembly.py", "value_kind '…' does not apply to …; use one of …"),
-        ("handler_assembly.py", "…joint '…' not found (… …joints in the design)"),
         ("handler_base.py", "A body name is required"),
         ("handler_base.py", "Component '…' not found"),
         ("handler_base.py", "Feature '…' not found in timeline"),
@@ -429,37 +396,37 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_assembly.py",
-            155,
+            156,
             "raise refusal: kind comes from _rules.construction_method_refusal",
         ),
         (
             "handler_assembly.py",
-            198,
+            199,
             "raise refusal: kind comes from _rules.perpendicular_axis_refusal",
         ),
         (
             "handler_assembly.py",
-            344,
+            357,
             "raise component_refusal: kind comes from _rules.components_differ_refusal",
         ),
         (
             "handler_assembly.py",
-            349,
+            362,
             "raise geometry_refusal: kind comes from _rules.joint_geometry_refusal",
         ),
         (
             "handler_assembly.py",
-            611,
+            635,
             "raise component_refusal: kind comes from _rules.components_differ_refusal",
         ),
         (
             "handler_assembly.py",
-            622,
+            646,
             "raise geometry_refusal: kind comes from _rules.as_built_geometry_refusal",
         ),
         (
             "handler_assembly.py",
-            772,
+            820,
             "raise refusal: kind comes from _rules.rigid_group_size_refusal",
         ),
         (

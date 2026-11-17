@@ -10,6 +10,7 @@ from contextlib import suppress
 from typing import Any, ClassVar
 
 from . import fusion_api as adsk
+from . import hints as _hints
 from . import rules as _rules
 
 
@@ -296,17 +297,25 @@ class AssemblyCommands:
                     f"Body '{body_name}' not found in component '{component.name}'"
                 )
         elif len(bodies) != 1:
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "INVALID_INPUT",
                 f"Component '{component.name}' has {len(bodies)} bodies; "
-                f"pass '{label}' to choose which body carries the joint geometry"
+                f"pass '{label}' to choose which body carries the joint geometry",
+                hints=(
+                    "Pass body_name to say which body carries the joint geometry.",
+                ),
             )
 
         body = bodies[0]
         if face_index is None or not (0 <= face_index < body.faces.count):
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "INVALID_INPUT",
                 f"Face index {face_index} is out of range for body '{body.name}' "
                 f"({body.faces.count} faces). Enumerate them with get_object_info "
-                f"and pick a cylindrical face."
+                f"and pick a cylindrical face.",
+                hints=(
+                    "Face indices run from 0; enumerate with get_object_info.",
+                ),
             )
         return body.faces.item(face_index)
 
@@ -337,7 +346,11 @@ class AssemblyCommands:
         occ1 = self._occurrence_by_component(component_one)
         occ2 = self._occurrence_by_component(component_two)
         if not occ1 or not occ2:
-            raise RuntimeError("One or both components not found")
+            raise _hints.Refusal(
+                "NAME_NOT_FOUND",
+                "One or both components not found",
+                hints=("Call list_components to see the component names.",),
+            )
         if component_refusal := _rules.components_differ_refusal(
             {"component_one": component_one, "component_two": component_two}
         ):
@@ -542,15 +555,22 @@ class AssemblyCommands:
         key = (axis or "").lower()
         attr = self._JOINT_AXES.get(key)
         if attr is None:
-            raise RuntimeError(
-                f"Unknown axis: {axis}. Use one of {sorted(self._JOINT_AXES)}"
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"Unknown axis: {axis}. Use one of {sorted(self._JOINT_AXES)}",
+                hints=(
+                    "Pass x, y or z; the axis is resolved against the joint's own "
+                    "axes.",
+                ),
             )
         if frame is None:
             # Only reachable for a joint whose motion takes no direction at all
             # (rigid), which returns before this is called; a frame is mandatory
             # for anything else, so ask for one rather than guessing.
-            raise RuntimeError(
-                f"A joint frame is required to place axis '{axis}' — internal error"
+            raise _hints.Refusal(
+                "INTERNAL_ERROR",
+                f"A joint frame is required to place axis '{axis}' — internal error",
+                hints=("Report this with the traceback.",),
             )
 
         wanted = self._WORLD_AXES[key]
@@ -604,7 +624,11 @@ class AssemblyCommands:
         occ1 = self._occurrence_by_component(component_one)
         occ2 = self._occurrence_by_component(component_two)
         if not occ1 or not occ2:
-            raise RuntimeError("One or both components not found")
+            raise _hints.Refusal(
+                "NAME_NOT_FOUND",
+                "One or both components not found",
+                hints=("Call list_components to see the component names.",),
+            )
         if component_refusal := _rules.components_differ_refusal(
             {"component_one": component_one, "component_two": component_two}
         ):
@@ -687,39 +711,58 @@ class AssemblyCommands:
                     break
             if joint is None:
                 kind = "as-built " if as_built else ""
-                raise RuntimeError(
+                raise _hints.Refusal(
+                    "NAME_NOT_FOUND",
                     f"{kind}joint '{joint_name}' not found "
-                    f"({collection.count} {kind}joints in the design)"
+                    f"({collection.count} {kind}joints in the design)",
+                    hints=("Call get_scene_info to list the joints in this design.",),
                 )
         else:
             if collection.count == 0:
-                raise RuntimeError(
+                raise _hints.Refusal(
+                    "INVALID_INPUT",
                     "No as-built joints in the design; pass as_built=False for "
-                    "regular joints or create one first"
+                    "regular joints or create one first",
+                    hints=(
+                        "Pass as_built=False for regular joints, or create an "
+                        "as-built joint first.",
+                    ),
                 )
             joint = collection.item(joint_index)
 
         motion = joint.jointMotion
         motion_kind = motion.objectType.split("::")[-1]
         if motion_kind == "RigidJointMotion":
-            raise RuntimeError(
-                f"'{joint.name}' is a rigid joint; it has no value to drive"
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"'{joint.name}' is a rigid joint; it has no value to drive",
+                hints=(
+                    "A rigid joint has no driven value; use a revolute or slider "
+                    "joint.",
+                ),
             )
 
         kinds = self._JOINT_VALUE_ATTRIBUTES.get(motion_kind)
         if kinds is None:
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "INVALID_INPUT",
                 f"'{joint.name}' has motion {motion_kind}, which this command "
                 f"cannot drive; known types: "
-                f"{sorted(self._JOINT_VALUE_ATTRIBUTES)}"
+                f"{sorted(self._JOINT_VALUE_ATTRIBUTES)}",
+                hints=("Drive only the value kinds the joint's motion has.",),
             )
 
         if value_kind:
             attribute = kinds.get(value_kind)
             if attribute is None:
-                raise RuntimeError(
+                raise _hints.Refusal(
+                    "INVALID_INPUT",
                     f"value_kind '{value_kind}' does not apply to {motion_kind}; "
-                    f"use one of {sorted(kinds)}"
+                    f"use one of {sorted(kinds)}",
+                    hints=(
+                        "A value_kind valid for another joint's motion does not "
+                        "apply here; use one this motion has.",
+                    ),
                 )
         else:
             attribute = kinds.get("rotation") or next(iter(kinds.values()))
@@ -736,11 +779,16 @@ class AssemblyCommands:
 
         read_back = getattr(joint.jointMotion, attribute)
         if abs(read_back - target) > 1e-6:
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
                 f"Fusion did not keep the requested value on '{joint.name}' "
                 f"(set {target:.6f} {value_units}, read back "
                 f"{read_back:.6f}). A design.computeAll() after setting a joint "
-                f"value resets it to zero."
+                f"value resets it to zero.",
+                hints=(
+                    "Re-read the value with set_joint_value, and avoid computeAll "
+                    "after setting it.",
+                ),
             )
 
         return {
