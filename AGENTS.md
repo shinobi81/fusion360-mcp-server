@@ -202,6 +202,19 @@ say whether a feature did _something_, a render whether it did the _right_ thing
 
 ## Important constraints
 
+- **An add-in change is not done until Fusion answers it.** A fake proves the call's
+  _signature_, never that Fusion accepts it: `ruled_surface` shipped with its
+  `createInput` arguments in the wrong order, and the surface family was green-tested
+  against fakes named after APIs that do not exist. So every add-in change gets a live
+  check — reproduce the failure through the tool first, then call it again after the fix,
+  and paste the envelope and `deltas` into the PR body with `app.version`. Geometry
+  changes get a `render_view` at a checkpoint. Reload first: the running add-in is the
+  class Fusion loaded at start-up, so an edit plus `scripts/reload_addin.py` is the only
+  way the tool you call is the tool you wrote.
+- **A fake declares Fusion's shipped arity and types.** Read the call site against the
+  binding (`…\webdeploy\production\<hash>\API\Python\packages\adsk\`) or the C++ headers;
+  do not copy the handler's argument list into the fake. Where a header names a type
+  (`BRepFace`, a point entity, `ValueInput`), the fake checks it.
 - **One operation per tool call.** Fusion's API is not thread-safe and complex scripts
   crash the add-in.
 - **No loops inside execute_code** — three similar features are three tool calls.
