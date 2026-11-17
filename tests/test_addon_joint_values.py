@@ -22,6 +22,7 @@ import math
 
 import pytest
 
+from addon.server import hints as addon_hints
 from tests.fakes.bodies import FakeBody, FakeFace
 from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
@@ -143,23 +144,33 @@ def test_set_joint_value_raises_when_fusion_drops_the_value(bound_handler):
 
     joint.jointMotion = Stubborn()
 
-    with pytest.raises(RuntimeError) as raised:
+    with pytest.raises(addon_hints.Refusal) as raised:
         handler.set_joint_value(value=2.5, joint_name=joint.name, as_built=False)
 
-    assert "did not keep" in str(raised.value)
-    assert "computeAll" in str(raised.value), (
-        "the refusal should name the cause, since that is the repair"
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert raised.value.hints == (
+        "Re-read the value with set_joint_value, and avoid computeAll after "
+        "setting it.",
     )
+    assert str(raised.value) == (
+        "Fusion did not keep the requested value on 'Joint1' (set 2.500000 cm, "
+        "read back 0.000000). A design.computeAll() after setting a joint value "
+        "resets it to zero."
+    ), "the refusal should name the cause, since that is the repair"
 
 
 def test_a_rigid_joint_has_nothing_to_drive(bound_handler):
     """Rigid motion is a real motion object with no value on it."""
     handler, joint = _driven_joint(bound_handler, joint_type="rigid")
 
-    with pytest.raises(RuntimeError) as raised:
+    with pytest.raises(addon_hints.Refusal) as raised:
         handler.set_joint_value(value=1.0, joint_name=joint.name, as_built=False)
 
-    assert "rigid" in str(raised.value).lower()
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert raised.value.hints == (
+        "A rigid joint has no driven value; use a revolute or slider joint.",
+    )
+    assert str(raised.value) == ("'Joint1' is a rigid joint; it has no value to drive")
 
 
 def test_the_fake_refuses_a_value_that_motion_does_not_have(bound_handler):
