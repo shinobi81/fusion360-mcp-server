@@ -56,6 +56,14 @@ line-length = 88
 # No `target-version`: ruff infers it from `project.requires-python`, so the support
 # window is stated once and cannot drift from it.
 
+# A bare `ruff format` must never reach `addon/`: it runs on Fusion's own interpreter,
+# which `requires-python` does not govern, so a rewrite legal here is not safe there —
+# Ruff's PEP 758 pass turns `except (A, B):` into `except A, B:`, which older Fusions
+# reject. This happened three times during the typed-refusals work and had to be
+# reverted each time. Linting still covers `addon/`: the gate names it explicitly, and
+# `exclude` is not applied to paths given on the command line.
+extend-exclude = ["addon"]
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "RUF", "B", "SIM"]
 
