@@ -864,29 +864,41 @@ class FakeOffsetFacesFeatures:
 
 
 class FakeScaleInput:
-    """``scaleFeatures.createInput``: the bodies, the anchor, and the factors.
+    """``ScaleFeatureInput``: one uniform factor, or three after ``setToNonUniform``.
 
-    ``scales`` holds one ``ValueInput`` for a uniform scale and three for a
-    per-axis one - the two Fusion overloads - so its own length is what a test
-    reads to tell them apart.  ``anchorPoint`` is the ``Point3D`` the handler
-    builds from ``anchor_x``/``anchor_y``/``anchor_z``.
+    Fusion's ``createInput`` takes the bodies, the point and one uniform factor;
+    a per-axis scale is that same input with ``setToNonUniform(x, y, z)`` called
+    on it, which fills ``xScale``/``yScale``/``zScale`` and flips ``isUniform``
+    to ``False``.  ``point`` is whatever the handler built from ``anchor_x``/
+    ``anchor_y``/``anchor_z``.
     """
 
-    def __init__(self, input_entities, anchor_point, scales):
+    def __init__(self, input_entities, point, scale_factor):
         self.inputEntities = input_entities
-        self.anchorPoint = anchor_point
-        self.scales = scales
+        self.point = point
+        self.scaleFactor = scale_factor
+        self.isUniform = True
+        self.xScale = None
+        self.yScale = None
+        self.zScale = None
+
+    def setToNonUniform(self, x_scale, y_scale, z_scale) -> bool:
+        self.xScale = x_scale
+        self.yScale = y_scale
+        self.zScale = z_scale
+        self.isUniform = False
+        return True
 
 
 class FakeScaleFeatures:
-    """``root.features.scaleFeatures``: one factor or three, never two.
+    """``root.features.scaleFeatures``: three arguments, as the binding declares.
 
-    Fusion's ``createInput`` is overloaded - ``(inputEntities, point, scale)``
-    and ``(inputEntities, point, xScale, yScale, zScale)`` - so exactly one or
-    three factors is accepted and two or four is a ``TypeError``, as the binding
-    would raise.  The scaled geometry is not modelled: a body's points move by
-    an amount that depends on the anchor and every vertex, and no reply field is
-    built on it.
+    ``ScaleFeatures.createInput(inputEntities, point, scaleFactor)`` is not
+    overloaded - a four- or five-argument call is a ``TypeError`` here as it is
+    in Fusion - and the three factors go on the returned input through
+    ``setToNonUniform``.  The scaled geometry is not modelled: a body's points
+    move by an amount that depends on the anchor and every vertex, and no reply
+    field is built on it.
     """
 
     def __init__(self):
@@ -894,13 +906,8 @@ class FakeScaleFeatures:
         self.added: list[FakeScaleInput] = []
         self.created: list[FakeFeature] = []
 
-    def createInput(self, input_entities, anchor_point, *scales) -> FakeScaleInput:
-        if len(scales) not in (1, 3):
-            raise TypeError(
-                "Wrong number or type of arguments for overloaded function "
-                "'ScaleFeatures_createInput': expected one scale or three"
-            )
-        created = FakeScaleInput(input_entities, anchor_point, scales)
+    def createInput(self, input_entities, point, scale_factor) -> FakeScaleInput:
+        created = FakeScaleInput(input_entities, point, scale_factor)
         self.inputs.append(created)
         return created
 
