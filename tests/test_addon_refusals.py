@@ -265,6 +265,11 @@ def test_an_unknown_rule_type_is_refused_as_a_refusal(bound_handler):
 
 # ── the guard: no raise reaches a caller as UNKNOWN ──────────────────
 
+# Both walks assert the kind a typed refusal states; neither asserts that it yields
+# hints, because `_hints_for` cannot return nothing — `_GENERIC_HINTS` is its last
+# resort — so such an assertion could never fail.  The advice a converted site carries
+# is authored with the site (D9); the kind is what has to be mechanical.
+
 #: Raises that still reach a caller as ``UNKNOWN``.  PRs 4a-8 delete their own rows;
 #: the last one empties this set.  A row here is a debt, not an exemption.
 _UNCLASSIFIED_BASELINE: frozenset[tuple[str, str]] = frozenset(
@@ -443,29 +448,33 @@ _UNCLASSIFIED_BASELINE: frozenset[tuple[str, str]] = frozenset(
 #: Raises the static walk cannot judge, each with why.  Never silently skipped.
 _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
     {
-        ("event_bridge.py", 98, "raise <name> unresolved"),
-        ("handler_features.py", 41, "raise <name> unresolved"),
-        ("handler_features.py", 93, "raise <name> unresolved"),
-        ("handler_surface.py", 120, "raise <name> unresolved"),
+        (
+            "event_bridge.py",
+            98,
+            "raise NotImplementedError: no Refusal bound to it",
+        ),
+        (
+            "handler_features.py",
+            41,
+            "raise refusal: kind comes from _rules.target_body_refusal",
+        ),
+        (
+            "handler_features.py",
+            93,
+            "raise refusal: kind comes from _rules.edge_selector_refusal",
+        ),
+        ("handler_features.py", 976, "message is not a literal"),
+        ("handler_sketch.py", 293, "message is not a literal"),
+        ("handler_sketch.py", 434, "message is not a literal"),
+        (
+            "handler_surface.py",
+            120,
+            "raise refusal: kind comes from _rules.rule_type_refusal",
+        ),
     }
 )
 
 _RENDER = "…"  # what a FormattedValue collapses to; every rule anchors on literals
-
-
-def _rendered(arg: ast.expr) -> str | None:
-    """A literal message with interpolated parts collapsed, or None for a value.
-
-    Every rule anchors on literals, so a ``FormattedValue`` becomes ``_RENDER`` and
-    the site is judged by the fixed text it does say.
-    """
-    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-        return arg.value
-    if isinstance(arg, ast.JoinedStr):
-        return "".join(
-            str(p.value) if isinstance(p, ast.Constant) else _RENDER for p in arg.values
-        )
-    return None
 
 
 def _message_of(node: ast.Raise, *, refusal: bool = False) -> str | None:
@@ -480,20 +489,54 @@ def _message_of(node: ast.Raise, *, refusal: bool = False) -> str | None:
     index = 1 if refusal else 0
     if len(exc.args) <= index:
         return None
-    return _rendered(exc.args[index])
+    arg = exc.args[index]
+    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+        return arg.value
+    if isinstance(arg, ast.JoinedStr):
+        return "".join(
+            str(p.value) if isinstance(p, ast.Constant) else _RENDER for p in arg.values
+        )
+    return None
+
+
+def _refusal_call(node: ast.AST | None) -> ast.Call | None:
+    """The ``Refusal(...)`` construction *node* spells, under either import style.
+
+    ``addon/server/rules.py`` explains why the add-in writes ``_hints.Refusal`` and
+    cannot import the name — a reload replaces the class — so a walk that knew only the
+    bare spelling would miss every site the domain tasks convert.
+    """
+    if not isinstance(node, ast.Call):
+        return None
+    name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+    return node if name == "Refusal" else None
+
+
+def _literal_kind(call: ast.Call) -> str | None:
+    """The ``error_kind`` a ``Refusal(...)`` call states, when it is written down."""
+    first = call.args[0] if call.args else None
+    if isinstance(first, ast.Constant) and isinstance(first.value, str):
+        return first.value
+    return None
 
 
 def _judged(module: ast.Module) -> dict[tuple[str, str], str]:
-    """``{(kind_or_'?', message): why}`` for every raise this test can judge."""
+    """``{(kind, message): why}`` for every raise whose kind the walk can read.
+
+    A ``Refusal`` is judged as typed under either spelling: the kind it states is what
+    reaches the caller, so no regex is involved.  A raise the walk cannot read — a
+    computed message, a kind that is not written down — is left out here and listed by
+    ``_unresolved_raises`` with its line and its reason.
+    """
     found: dict[tuple[str, str], str] = {}
     for node in ast.walk(module):
         if not isinstance(node, ast.Raise) or node.exc is None:
             continue
-        exc = node.exc
-        if isinstance(exc, ast.Call) and getattr(exc.func, "id", None) == "Refusal":
-            first = exc.args[0] if exc.args else None
-            kind = first.value if isinstance(first, ast.Constant) else "?"
-            found[(str(kind), _message_of(node, refusal=True) or "")] = "typed"
+        call = _refusal_call(node.exc)
+        if call is not None:
+            kind = _literal_kind(call)
+            if kind is not None:
+                found[(kind, _message_of(node, refusal=True) or "")] = "typed"
             continue
         msg = _message_of(node)
         if msg is not None:
@@ -501,71 +544,97 @@ def _judged(module: ast.Module) -> dict[tuple[str, str], str]:
     return found
 
 
+def _bindings(func: ast.AST) -> dict[str, ast.expr]:
+    """The names *func* binds, for the one-level ``raise <name>`` resolution."""
+    bound: dict[str, ast.expr] = {}
+    for inner in ast.walk(func):
+        if isinstance(inner, ast.Assign):
+            for target in inner.targets:
+                if isinstance(target, ast.Name):
+                    bound[target.id] = inner.value
+        elif isinstance(inner, ast.NamedExpr) and isinstance(inner.target, ast.Name):
+            bound[inner.target.id] = inner.value
+    return bound
+
+
+def _name_reason(name: str, expr: ast.expr | None) -> str:
+    """Why a ``raise <name>`` could not be judged, in terms a reader can act on."""
+    if expr is None:
+        return f"raise {name}: no Refusal bound to it"
+    if _refusal_call(expr) is not None:
+        return f"raise {name}: kind is not a string literal"
+    if isinstance(expr, ast.Call):
+        return f"raise {name}: kind comes from {ast.unparse(expr.func)}"
+    return f"raise {name}: local binding is not a Refusal call"
+
+
+def _unresolved_raises(module: ast.Module, name: str) -> set[tuple[str, int, str]]:
+    """Raises the static walk cannot judge, each with its line and its reason.
+
+    One level of binding is resolved — ``refusal = ...`` or ``refusal := ...`` in the
+    enclosing function — which is the shape spec D8 anticipates.  **No site in the tree
+    has it**: the three ``raise refusal`` sites take their kind from
+    ``_rules.*_refusal(...)``, which this walk cannot read, and ``event_bridge``'s raise
+    is a ``Protocol`` body.  A binding the walk cannot resolve is listed with its reason
+    rather than passing quietly, as is a raise whose kind or message is computed rather
+    than written down (D8).
+    """
+    rows: set[tuple[str, int, str]] = set()
+    for func in ast.walk(module):
+        if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        bound = _bindings(func)
+        for inner in ast.walk(func):
+            if not isinstance(inner, ast.Raise):
+                continue
+            # A bare `raise` re-raises what was caught: its kind was judged where it
+            # was raised, so there is nothing new here to list.
+            if inner.exc is None:
+                continue
+            call = _refusal_call(inner.exc)
+            if call is not None:
+                kind = _literal_kind(call)
+                if kind is None:
+                    rows.add((name, inner.lineno, "kind is not a string literal"))
+                else:
+                    assert kind in addon_hints._KNOWN_KINDS, (name, inner.lineno, kind)
+                continue
+            if isinstance(inner.exc, ast.Call):
+                if _message_of(inner) is None:
+                    rows.add((name, inner.lineno, "message is not a literal"))
+                continue
+            if not isinstance(inner.exc, ast.Name):
+                continue
+            expr = bound.get(inner.exc.id)
+            call = _refusal_call(expr)
+            kind = _literal_kind(call) if call is not None else None
+            if kind is not None:
+                assert kind in addon_hints._KNOWN_KINDS, (name, inner.lineno, kind)
+                continue
+            rows.add((name, inner.lineno, _name_reason(inner.exc.id, expr)))
+    return rows
+
+
 def test_every_raise_site_carries_a_named_kind():
     """The automated form of the audit: no literal-message raise reaches a caller
     UNKNOWN.
 
     Fails two ways on purpose — a new unclassified site (a regression) and a baseline
-    row that no longer matches a site (a stale row), so each domain PR must delete its
-    own rows and the last one empties the baseline.
+    row that no longer matches a site (a stale row) — so each domain PR must delete its
+    own rows and the last one empties the baseline.  A raise the walk cannot read at all
+    is pinned by ``_UNJUDGEABLE``, also by equality.
     """
     addon_dir = pathlib.Path(__file__).resolve().parent.parent / "addon" / "server"
     unknown: set[tuple[str, str]] = set()
     unjudgeable: set[tuple[str, int, str]] = set()
     for path in sorted(addon_dir.glob("*.py")):
         module = ast.parse(path.read_text(encoding="utf-8"))
-        for func in ast.walk(module):
-            if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            # `refusal = Refusal(kind, ...)` then `raise refusal`: resolve one level,
-            # which is what every current site does. A binding this cannot resolve is
-            # listed with its reason rather than passing quietly (spec D8).
-            bound: dict[str, str] = {}
-            for inner in ast.walk(func):
-                if not (
-                    isinstance(inner, ast.Assign) and isinstance(inner.value, ast.Call)
-                ):
-                    continue
-                call = inner.value
-                if getattr(call.func, "id", None) != "Refusal" or not call.args:
-                    continue
-                first = call.args[0]
-                if not isinstance(first, ast.Constant):
-                    continue
-                for target in inner.targets:
-                    if isinstance(target, ast.Name):
-                        bound[target.id] = str(first.value)
-            for inner in ast.walk(func):
-                if not isinstance(inner, ast.Raise):
-                    continue
-                if not isinstance(inner.exc, ast.Name):
-                    continue
-                kind = bound.get(inner.exc.id)
-                if kind is None:
-                    unjudgeable.add(
-                        (path.name, inner.lineno, "raise <name> unresolved")
-                    )
-                else:
-                    assert kind in addon_hints._KNOWN_KINDS, (
-                        path.name,
-                        inner.lineno,
-                        kind,
-                    )
-                    assert addon_hints._hints_for(
-                        addon_hints.Refusal(kind, "raised through a name")
-                    ), (path.name, inner.lineno, "no hints")
+        unjudgeable |= _unresolved_raises(module, path.name)
         for kind, msg in _judged(module):
-            if kind == "?":
-                continue
             if kind == "UNKNOWN":
                 unknown.add((path.name, msg))
             else:
                 assert kind in addon_hints._KNOWN_KINDS, (path.name, kind, msg)
-                assert addon_hints._hints_for(addon_hints.Refusal(kind, msg or "x")), (
-                    path.name,
-                    kind,
-                    "no hints",
-                )
 
     new = unknown - _UNCLASSIFIED_BASELINE
     stale = _UNCLASSIFIED_BASELINE - unknown
@@ -574,36 +643,64 @@ def test_every_raise_site_carries_a_named_kind():
     assert unjudgeable == _UNJUDGEABLE, sorted(unjudgeable ^ _UNJUDGEABLE)
 
 
-def _refusal_call(node: ast.AST) -> ast.Call | None:
-    """The ``Refusal(...)`` construction *node* spells, under either import style."""
-    if not isinstance(node, ast.Call):
-        return None
-    name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
-    return node if name == "Refusal" else None
+def test_a_typed_raise_is_judged_by_the_kind_it_states():
+    """Both spellings: the kind reaches the caller, so no regex is involved.
+
+    ``rules.py`` bans the by-name spelling inside the add-in, so every site the domain
+    tasks convert writes ``_hints.Refusal``.  Read as a bare name only, such a raise
+    was treated as a message, and the *kind string* was looked up in the rules — which
+    is how ``classify("BODY_NOT_FOUND")`` became an ``UNKNOWN`` row named after a kind.
+    """
+    for source in (
+        'raise Refusal("BODY_NOT_FOUND", "x")',
+        'raise _hints.Refusal("BODY_NOT_FOUND", "x")',
+        'raise _hints.Refusal("BODY_NOT_FOUND", "x", hints=("h",))',
+    ):
+        assert _judged(ast.parse(source)) == {("BODY_NOT_FOUND", "x"): "typed"}
 
 
-def _hint_literals(call: ast.Call) -> tuple[str, ...]:
-    """The literal hints a ``Refusal(...)`` passes, positionally or as ``hints=``."""
-    node = call.args[2] if len(call.args) > 2 else None
-    for keyword in call.keywords:
-        if keyword.arg == "hints":
-            node = keyword.value
-    if not isinstance(node, ast.Tuple):
-        return ()
-    return tuple(
-        element.value
-        for element in node.elts
-        if isinstance(element, ast.Constant) and isinstance(element.value, str)
+def test_a_raise_the_walk_cannot_read_is_listed_with_its_reason():
+    """A computed kind or message is named, never skipped and never guessed."""
+    module = ast.parse(
+        "def f(kind, flag):\n"
+        "    if flag:\n"
+        '        raise _hints.Refusal(kind, "boom")\n'
+        "    if refusal := _rules.x_refusal(flag):\n"
+        "        raise refusal\n"
+        "    raise RuntimeError(compute())\n"
     )
+    assert _judged(module) == {}
+    assert _unresolved_raises(module, "snippet.py") == {
+        ("snippet.py", 3, "kind is not a string literal"),
+        ("snippet.py", 5, "raise refusal: kind comes from _rules.x_refusal"),
+        ("snippet.py", 6, "message is not a literal"),
+    }
+
+
+def test_a_refusal_raised_through_a_name_is_judged_from_its_binding():
+    """The one-level resolve D8 anticipates; no site in the tree has the shape yet."""
+    module = ast.parse(
+        "def f():\n"
+        '    refusal = Refusal("BODY_NOT_FOUND", "no body")\n'
+        "    raise refusal\n"
+    )
+    assert _unresolved_raises(module, "snippet.py") == set()
+    typo = ast.parse(
+        "def f():\n"
+        '    refusal = Refusal("BODY_NOT_FOUNDX", "no body")\n'
+        "    raise refusal\n"
+    )
+    with pytest.raises(AssertionError):
+        _unresolved_raises(typo, "snippet.py")
 
 
 def test_every_refusal_built_in_rules_names_a_known_kind():
     """``rules.py`` is the only place a validator's kind is written down.
 
-    A handler raises what a validator returned, so the walk above records the site as
-    unjudgeable and never sees the kind.  ``tests/test_rules.py`` compares the add-in
-    with the *mirror* of that same file, so a mistyped kind agrees on both sides and
-    parity stays green — this is the one assertion that reads the literal.
+    A handler raises what a validator returned, so the walk above records the site and
+    never sees the kind.  ``tests/test_rules.py`` compares the add-in with the *mirror*
+    of that same file, so a mistyped kind agrees on both sides and parity stays green —
+    this is the one assertion that reads the literal.
     """
     addon_dir = pathlib.Path(__file__).resolve().parent.parent / "addon" / "server"
     module = ast.parse((addon_dir / "rules.py").read_text(encoding="utf-8"))
@@ -613,17 +710,7 @@ def test_every_refusal_built_in_rules_names_a_known_kind():
         if call is None:
             continue
         built += 1
-        assert len(call.args) > 1, (call.lineno, "kind and message are positional")
-        kind_arg = call.args[0]
-        assert isinstance(kind_arg, ast.Constant) and isinstance(kind_arg.value, str), (
-            call.lineno,
-            "kind is not a string literal",
-        )
-        kind = kind_arg.value
+        kind = _literal_kind(call)
+        assert kind is not None, (call.lineno, "kind is not a string literal")
         assert kind in addon_hints._KNOWN_KINDS, (call.lineno, kind)
-        assert addon_hints._hints_for(
-            addon_hints.Refusal(
-                kind, _rendered(call.args[1]) or "x", _hint_literals(call)
-            )
-        ), (call.lineno, kind, "no hints")
     assert built, "no Refusal construction found in addon/server/rules.py"
