@@ -7,6 +7,68 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [Unreleased]
+
+Typed refusals: every `raise` in `addon/server` whose message is written down now reaches
+the caller with a named `error_kind` and advice, where 88 of the 134 used to arrive as
+`UNKNOWN` with no hints at all. Two things are visible from outside: the declared tool
+schema is enforced before Fusion is touched, and two refusals that answered `UNKNOWN` now
+answer with a kind. The sentences the add-in raises are unchanged - this work changed the
+tag and the advice, never the wording of an existing refusal. Suite 1393 -> 1524 tests.
+
+### Added
+
+- **Six `error_kind` values**, each chosen by the caller's next move rather than by which
+  API failed: `NAME_NOT_FOUND` (enumerate the design, then retry by name),
+  `GEOMETRY_UNSUPPORTED` (pick a different face or edge), `FUSION_REFUSED` (Fusion did not
+  do what was asked - check the state, then retry or change the call),
+  `WORKSPACE_UNAVAILABLE` (open the Manufacturing workspace or a viewport, once),
+  `SCRIPT_ERROR` (fix the script `execute_code` was handed) and `INTERNAL_ERROR` (an
+  add-in defect; report it). `INVALID_INPUT` stays the tag for an unusable parameter, and
+  `BODY_NOT_FOUND`/`SKETCH_NOT_FOUND` stay although `NAME_NOT_FOUND` covers them too: a
+  client may already branch on them, and folding them in is a breaking change. `AGENTS.md`
+  lists all six with the remediation each implies.
+
+- **A per-kind hint fallback**, `_KIND_HINTS`, for a refusal that carries no hints of its
+  own. It used to take the hints of the *first rule* with the same kind, which is why an
+  unmatched `INVALID_INPUT` shipped advice about `inf, -inf and nan`.
+
+- **A test that walks every `raise` in `addon/server`** and judges the kind the caller
+  would receive, not the string. This is what makes the work stay done: 88 refusals were
+  invisible to a green suite, because `classify()` ran 11 times across 1393 tests and every
+  handler test asserted on the refusal it raised rather than the envelope a caller gets.
+  `tests/test_addon_refusals.py` fails on a new untyped raise, on a baseline row that no
+  longer matches a site, and on any change to the 22 raises it cannot read from source,
+  each of those listed with its reason.
+
+### Changed
+
+- **The tool schema is enforced before Fusion is called, in real and in mock mode.**
+  `tools.py` had always declared enums, numeric bounds, `minItems`/`maxItems` and
+  `required` lists - 63 enum properties and 78 minimum/maximum bounds - and nothing read
+  `inputSchema`: `draw_circles(count=501)` passed a schema that declares `maximum: 500`
+  and nothing on the way in refused it. `_send` is the single path to both the add-in and
+  mock mode, so the gate lives there and answers with the add-in's envelope
+  (`INVALID_INPUT`, hints from the generated mirror) before a connection is opened. Calls
+  the add-in used to accept are refused now, which is the point. A value the schema forbids
+  gets the gate's own sentence, naming the field and the values it accepts, so a client
+  that matched on the handler's old text sees different words for that case.
+  `jsonschema` is a declared dependency now; it had only been installed transitively
+  through `mcp`.
+
+### Fixed
+
+- **Two refusals that used to report `UNKNOWN` now carry a kind.** A CAM toolpath that
+  did not finish inside the timeout is `TIMEOUT`, and a rectangle sketch that produced no
+  profile is `PROFILE_NOT_CLOSED`. Both sentences are unchanged; the rules that should have
+  caught them matched a wording the add-in no longer used: `timeout` against "did not
+  finish within", and `no profiles? in sketch` against "produced no profile".
+
+- **An invented `adsk` name is reported as an add-in defect rather than `UNKNOWN`.**
+  `fusion_api.__getattr__` has to keep raising `AttributeError` - `getattr`, `hasattr` and
+  `monkeypatch` catch only that - so the kind is recovered by a rule: `INTERNAL_ERROR`,
+  with the advice to run `scripts/check_fusion_api.py`, which names the missing member.
+
 ## [0.8.5] - 2026-11-15
 
 Three merged PRs that remove duplication rather than add features, plus the
