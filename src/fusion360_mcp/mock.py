@@ -32,6 +32,7 @@ from ._rules import (
     rigid_group_size_refusal,
     rule_type_refusal,
     sketch_plane_z_note,
+    symmetry_line_refusal,
     target_body_refusal,
 )
 from .hints import Refusal
@@ -847,11 +848,15 @@ def _curve_index_error(p: dict, fields: tuple[str, ...]) -> dict | None:
 
 
 def _add_constraint(p: dict) -> dict:
-    refusal = _entity_shape_error(
+    # First, because the handler refuses it before it reads a sketch: a symmetry call
+    # short of its mirror line is a parameter problem, not a sketch one.
+    if symmetry := symmetry_line_refusal(p):
+        return _refusal_error(symmetry)
+    refused = _entity_shape_error(
         p, "constraint", _CONSTRAINT_NEEDS_TWO, "constraint_type"
     ) or _curve_index_error(p, ("entity_one", "entity_two", "symmetry_line"))
-    if refusal is not None:
-        return refusal
+    if refused is not None:
+        return refused
     return {
         "constraint_type": p.get("constraint_type", "coincident"),
         "entity_one": p.get("entity_one", 0),

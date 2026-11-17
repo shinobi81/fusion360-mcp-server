@@ -32,6 +32,9 @@ CASES = [
     ("import_mesh", {"file_path": "part.stl", "units": "furlong"}, "Unknown units"),
     ("render_view", {"view": "diagonal"}, "Unknown view"),
     ("export_view_sheet", {"views": ["current"]}, "Unknown views"),
+    # ``auto_constrain`` judged its own ``result_option`` until this task; the enum is
+    # what refuses a value outside the three Fusion defines now.
+    ("auto_constrain", {"result_option": 4}, "Unknown result_option"),
 ]
 
 

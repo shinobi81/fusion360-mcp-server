@@ -321,6 +321,17 @@ PARAMETER_REFUSALS = [
         "body_name required for STEP export",
         ("Pass body_name naming the body to export.",),
     ),
+    # A symmetry constraint's third entity, judged from the parameters alone: mock
+    # mode has no sketch to look the index up in, and the handler refuses it before
+    # it reads one, so both sides answer the same sentence.
+    (
+        "add_constraint",
+        {"constraint_type": "symmetry", "entity_one": 0, "entity_two": 1},
+        "INVALID_INPUT",
+        "symmetry needs symmetry_line — the index of the sketch line the two "
+        "entities are mirrored about",
+        ("Pass symmetry_line: the index of a sketch line to mirror about.",),
+    ),
     (
         "cam_generate_toolpath",
         {},
@@ -349,6 +360,7 @@ PARAMETER_REFUSALS = [
         "export_unknown_format",
         "export_body_stl",
         "export_body_step",
+        "symmetry_line",
         "cam_target",
     ],
 )

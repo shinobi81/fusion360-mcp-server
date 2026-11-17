@@ -10,6 +10,7 @@ from contextlib import suppress
 from typing import ClassVar
 
 from . import fusion_api as adsk
+from . import hints as _hints
 from . import hole_geometry as _hole_geom
 from . import parameter_units as _param_units
 from . import rules as _rules
@@ -328,8 +329,10 @@ class FeatureCommands:
                     else f"reported no usable parameter range on any of its "
                     f"{body.edges.count} edge(s)"
                 )
-                raise RuntimeError(
-                    f"Body '{body.name}' {reason}, so no point can select an edge"
+                raise _hints.Refusal(
+                    "GEOMETRY_UNSUPPORTED",
+                    f"Body '{body.name}' {reason}, so no point can select an edge",
+                    hints=("Choose a body with a face that has edges.",),
                 )
             distance, edge, index = best
             # Tolerance before ambiguity: a point far from everything that happens
@@ -843,9 +846,14 @@ class FeatureCommands:
                 best_key, target_face = key, face
 
         if target_face is None:
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "GEOMETRY_UNSUPPORTED",
                 f"No near-horizontal {face_selection}-facing planar face on "
-                f"'{body.name}'"
+                f"'{body.name}'",
+                hints=(
+                    "Pick a body whose faces include a near-horizontal X-facing "
+                    "plane.",
+                ),
             )
 
         # Place the hole centre. center_x / center_y are model-space XY, so the

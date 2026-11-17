@@ -394,6 +394,27 @@ def cam_target_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     )
 
 
+def symmetry_line_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal a ``symmetry`` constraint with no mirror line earns, or None.
+
+    ``symmetry`` is the one constraint type built from three entities: the two that
+    are mirrored and the line they are mirrored about.  The line is its own
+    parameter, so a call without it is short an argument — judged here, before a
+    sketch is read, so mock mode (which has no sketch) answers it too.  Whether the
+    index names a line needs Fusion; that one was given does not.
+    """
+    if params.get("constraint_type") != "symmetry":
+        return None
+    if params.get("symmetry_line") is not None:
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        "symmetry needs symmetry_line — the index of the sketch line the two "
+        "entities are mirrored about",
+        hints=("Pass symmetry_line: the index of a sketch line to mirror about.",),
+    )
+
+
 def sketch_plane_z_note() -> str:
     """What the caller is told when a ``z`` was projected away onto the sketch plane.
 

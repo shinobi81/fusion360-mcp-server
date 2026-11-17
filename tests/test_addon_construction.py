@@ -545,23 +545,21 @@ def test_auto_constrain_that_fusion_declines_to_run_is_refused(bound_handler):
     """Fusion answers ``None`` for a sketch it will not adjust; that is a refusal.
 
     The handler turns it into an error rather than reporting zero constraints and
-    zero dimensions, which would read as "your sketch needed nothing".
+    zero dimensions, which would read as "your sketch needed nothing".  Fusion
+    declined to run, so the kind is ``FUSION_REFUSED`` and the hint names the two
+    options that still work.
     """
     sketch = FakeSketch(name="Sketch1")
     sketch.auto_constrain_results["Option3AutoConstrainResultType"] = None
     handler = bound_handler(FakeDesign(features=0, sketches=[sketch]))
 
-    with pytest.raises(RuntimeError, match="not eligible for geometry adjustment"):
+    with pytest.raises(addon_hints.Refusal) as raised:
         handler.auto_constrain(result_option=3)
 
-
-@pytest.mark.parametrize("option", [0, 4, "1"])
-def test_an_auto_constrain_option_outside_the_three_is_refused(bound_handler, option):
-    """The option is judged before Fusion is asked, so nothing is constrained."""
-    sketch = FakeSketch(name="Sketch1")
-    handler = bound_handler(FakeDesign(features=0, sketches=[sketch]))
-
-    with pytest.raises(RuntimeError, match="Invalid result_option"):
-        handler.auto_constrain(result_option=option)
-
-    assert sketch.auto_constrain_inputs == []
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert str(raised.value) == (
+        "autoConstrain returned no result — the sketch is not eligible for "
+        "geometry adjustment. Retry with result_option 1 or 2."
+    )
+    assert raised.value.hints == ("Retry auto_constrain with result_option 1 or 2.",)
+    assert sketch.auto_constrain_inputs, "Fusion was asked before it declined"

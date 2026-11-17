@@ -46,7 +46,11 @@ class TestDeleteAll:
         assert result["remaining"]["timeline"] == 0
 
     def test_raises_when_a_body_survives(self, bound_handler):
-        """A bare ``except: pass`` is what let it claim success doing nothing."""
+        """A bare ``except: pass`` is what let it claim success doing nothing.
+
+        Fusion kept a body the sweep could not delete, so the kind is
+        ``FUSION_REFUSED``: the arguments were fine and the state is what to check.
+        """
 
         class StubbornBody(FakeBody):
             def deleteMe(self):
@@ -54,8 +58,17 @@ class TestDeleteAll:
 
         design = FakeDesign(features=0, bodies=[StubbornBody("Keeper")])
 
-        with pytest.raises(RuntimeError, match="did not clear the design"):
+        with pytest.raises(addon_hints.Refusal) as raised:
             bound_handler(design).delete_all()
+
+        assert raised.value.error_kind == "FUSION_REFUSED"
+        assert str(raised.value).startswith(
+            "delete_all did not clear the design — remaining: "
+        )
+        assert "Failures: " in str(raised.value)
+        assert raised.value.hints == (
+            "Re-run delete_all; if bodies remain, delete them one at a time.",
+        )
 
     def test_timeline_failures_are_reported_not_swallowed(self, bound_handler):
         """The timeline sweep is outside the fatal check, so it must report.

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import pytest
 
+from addon.server import hints as addon_hints
 from tests.fakes.design import FakeCommandDefinition, FakeDesign, FakeUI
 from tests.fakes.runtime import DIRECT, PARAMETRIC
 
@@ -163,20 +164,36 @@ class TestDirectModeFallback:
         assert "get_scene_info" in combined
 
     def test_missing_undo_command_still_refuses(self, rig):
+        """No undo command means this workspace cannot undo, so open one that can."""
         design, handler = rig(FakeDesign(design_type=DIRECT), with_undo=False)
 
-        with pytest.raises(RuntimeError, match="not available"):
+        with pytest.raises(addon_hints.Refusal) as raised:
             handler.undo()
 
+        assert raised.value.error_kind == "WORKSPACE_UNAVAILABLE"
+        assert str(raised.value) == (
+            "Undo command is not available in the current workspace. The design "
+            "was NOT modified — delete the failed feature explicitly instead."
+        )
+        assert raised.value.hints == (
+            "Undo needs a Parametric workspace; open one and retry.",
+        )
         assert design.undo_commands_executed == 0
 
 
 class TestDesignTypeGuard:
     def test_aborts_if_rolling_back_switches_the_design_type(self, rig):
+        """Fusion changed the design type under the undo: a Fusion outcome, not ours."""
         design, handler = rig(FakeDesign(features=2, marker_switches_type=True))
 
-        with pytest.raises(RuntimeError, match="Undo aborted"):
+        with pytest.raises(addon_hints.Refusal) as raised:
             handler.undo()
 
+        assert raised.value.error_kind == "FUSION_REFUSED"
+        assert str(raised.value).startswith("Undo aborted: stepping the timeline back")
+        assert "The marker was restored." in str(raised.value)
+        assert raised.value.hints == (
+            "Undo changed the design type; reload the document and retry.",
+        )
         assert design.designType == PARAMETRIC, "design was left in direct mode"
         assert design.marker == 2, "the marker was not restored"

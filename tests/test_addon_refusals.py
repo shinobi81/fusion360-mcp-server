@@ -274,42 +274,6 @@ def test_an_unknown_rule_type_is_refused_as_a_refusal(bound_handler):
 #: the last one empties this set.  A row here is a debt, not an exemption.
 _UNCLASSIFIED_BASELINE: frozenset[tuple[str, str]] = frozenset(
     {
-        ("handler_features.py", "Body '…' …, so no point can select an edge"),
-        ("handler_features.py", "No near-horizontal …-facing planar face on '…'"),
-        (
-            "handler_primitives.py",
-            "Undo aborted: stepping the timeline back to … changed the design type "
-            + "from … to …. The marker was restored. If the design is stuck in direct "
-            + "mode, call set_design_type('parametric') to capture history again, "
-            + "then delete the failed feature explicitly.",
-        ),
-        (
-            "handler_primitives.py",
-            "Undo command is not available in the current workspace. The design was "
-            + "NOT modified — delete the failed feature explicitly instead.",
-        ),
-        (
-            "handler_primitives.py",
-            "delete_all did not clear the design — remaining: …. Deleted: …. "
-            + "Failures: …",
-        ),
-        (
-            "handler_sketch.py",
-            "Invalid result_option … — use 1 (thorough), 2 (fast), or 3 (may adjust "
-            + "geometry within tolerance).",
-        ),
-        ("handler_sketch.py", "Unknown axis: … - use x or y"),
-        (
-            "handler_sketch.py",
-            "autoConstrain returned no result — the sketch is not eligible for "
-            + "geometry adjustment. Retry with result_option 1 or 2.",
-        ),
-        ("handler_sketch.py", "count must be at least 1"),
-        (
-            "handler_sketch.py",
-            "symmetry needs symmetry_line — the index of the sketch line the two "
-            + "entities are mirrored about",
-        ),
         ("handler_surface.py", "No planar face found for stationary face"),
         (
             "handler_surface.py",
@@ -395,17 +359,22 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_features.py",
-            41,
+            42,
             "raise refusal: kind comes from _rules.target_body_refusal",
         ),
         (
             "handler_features.py",
-            93,
+            94,
             "raise refusal: kind comes from _rules.edge_selector_refusal",
         ),
-        ("handler_features.py", 976, "message is not a literal"),
-        ("handler_sketch.py", 293, "message is not a literal"),
-        ("handler_sketch.py", 434, "message is not a literal"),
+        ("handler_features.py", 984, "message is not a literal"),
+        (
+            "handler_sketch.py",
+            294,
+            "raise refusal: kind comes from _rules.symmetry_line_refusal",
+        ),
+        ("handler_sketch.py", 302, "message is not a literal"),
+        ("handler_sketch.py", 438, "message is not a literal"),
         (
             "handler_surface.py",
             120,
