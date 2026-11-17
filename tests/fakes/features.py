@@ -361,12 +361,12 @@ class FakePatchInput:
     only ``NewBodyFeatureOperation``/``NewComponentFeatureOperation`` are accepted
     for the operation (``adsk.fusion.PatchFeatures.createInput``'s own docstring).
 
-    ``continuity`` and ``groupContinuity`` are the names the stub lists, and they
-    are here because they are the input's identity, not because the handler sets
-    one: both stay ``None`` until a call site writes them.  Fusion's own instances
-    also accept arbitrary attribute names, so a call site that writes a name the
-    SDK does not ship (``boundaryContinuity``) leaves these ``None`` - a silent
-    no-op, which is what makes the real names worth declaring.
+    ``continuity`` and ``groupContinuity`` are the names the stub lists.  The
+    retired ``continuity`` stays ``None``; ``groupContinuity`` is the one
+    ``patch_surface`` writes, and Fusion's own instances also accept arbitrary
+    attribute names, so a call site that writes a name the SDK does not ship
+    (``boundaryContinuity``) leaves it ``None`` - a silent no-op, which is what
+    makes the real name worth declaring.
     """
 
     def __init__(self, boundary_curve, operation):
