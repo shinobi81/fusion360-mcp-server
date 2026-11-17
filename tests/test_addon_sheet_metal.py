@@ -121,7 +121,9 @@ def test_an_unfold_of_a_body_with_no_flat_face_builds_no_input(bound_handler):
 
     assert raised.value.error_kind == "GEOMETRY_UNSUPPORTED"
     assert str(raised.value) == "No planar face found for stationary face"
-    assert raised.value.hints == ("Pass a stationary_face_index for a planar face.",)
+    assert raised.value.hints == (
+        "Pick a body with a planar face to use as the stationary face.",
+    )
     assert design.rootComponent.features.unfoldFeatures.inputs == []
 
 

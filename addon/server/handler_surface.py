@@ -321,7 +321,7 @@ class SurfaceCommands(_Contract):
         raise _hints.Refusal(
             "GEOMETRY_UNSUPPORTED",
             "No planar face found for stationary face",
-            hints=("Pass a stationary_face_index for a planar face.",),
+            hints=("Pick a body with a planar face to use as the stationary face.",),
         )
 
     def flat_pattern(self, body_name: str):
