@@ -308,12 +308,14 @@ def test_set_appearance_on_a_component_that_is_not_there_is_name_not_found(
     """The component is searched for by name, through the occurrences.
 
     ``_component_by_name`` is shared with every other command that resolves one, so
-    this pins the hint a caller gets wherever the miss happens.
+    this pins the hint a caller gets wherever the miss happens — and that the refusal
+    comes before the library appearance is copied, so a failed call leaves the
+    design's own collection untouched.
     """
     library = FakeMaterialLibrary(
         "Fusion Appearance Library", [FakeAppearance("Brass")]
     )
-    handler, _design, plate = _handler_and_bodies(bound_handler, _app_with(library))
+    handler, design, plate = _handler_and_bodies(bound_handler, _app_with(library))
 
     with pytest.raises(RuntimeError, match="Component 'Bracket' not found") as raised:
         handler.set_appearance("Bracket", "Brass", target_type="component")
@@ -323,6 +325,7 @@ def test_set_appearance_on_a_component_that_is_not_there_is_name_not_found(
         ["Call list_components for the component names."],
     )
     assert plate.appearance is None
+    assert design.appearances.count == 0, "a refusal copies nothing into the design"
 
 
 def test_set_appearance_on_a_face_lands_on_that_face_and_not_the_body(bound_handler):

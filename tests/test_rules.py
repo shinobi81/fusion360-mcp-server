@@ -110,7 +110,7 @@ def test_the_handler_and_the_mock_refuse_an_unknown_rule_type_alike(bound_handle
     with pytest.raises(addon_hints.Refusal) as raised:
         handler.ruled_surface("Body1", edge_index=0, rule_type="Tangent")
 
-    refused = mock._ruled_surface({"rule_type": "Tangent"})
+    refused = mock._ruled_surface({"body_name": "Body1", "rule_type": "Tangent"})
 
     assert refused["error_kind"] == raised.value.error_kind
     assert refused["error_message"] == str(raised.value)
@@ -252,10 +252,24 @@ PARAMETER_REFUSALS = [
         ),
     ),
     # ``handler_base._body_by_name``: any tool that names a body reaches it, so the
-    # row rides on the one that takes nothing else.
+    # rows ride on tools from two domains — a check wired per tool, not per domain.
     (
         "get_physical_properties",
         {"body_name": ""},
+        "INVALID_INPUT",
+        "A body name is required",
+        ("Pass a body name; get_scene_info lists the bodies in this design.",),
+    ),
+    (
+        "move_body",
+        {"body_name": ""},
+        "INVALID_INPUT",
+        "A body name is required",
+        ("Pass a body name; get_scene_info lists the bodies in this design.",),
+    ),
+    (
+        "set_color",
+        {"body_name": "", "red": 255, "green": 0, "blue": 0},
         "INVALID_INPUT",
         "A body name is required",
         ("Pass a body name; get_scene_info lists the bodies in this design.",),
@@ -283,6 +297,8 @@ PARAMETER_REFUSALS = [
         "construction_method",
         "perpendicular_axis",
         "body_name_required",
+        "body_name_required_move",
+        "body_name_required_color",
         "point3d_shape",
     ],
 )

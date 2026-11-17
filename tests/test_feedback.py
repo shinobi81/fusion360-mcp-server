@@ -202,12 +202,25 @@ class TestMockForcedError:
         assert result["hints"] == []
 
 
+#: The names these commands look up, under the parameter each takes them by.  They
+#: are given because the body-naming mocks refuse an empty or absent one, the way
+#: ``_body_by_name`` does; a refused call is not a mutation, so it carries no deltas
+#: and TestMockDeltas would fail on it for the right reason.
+_MUTATION_MOCK_NAMES = {
+    "boolean_operation": {"target_body": "Body1", "tool_body": "Body2"},
+    "set_appearance": {"target_name": "Body1"},
+    "project_geometry": {"source_name": "Body1"},
+    "stitch_surfaces": {"body_names": ["Body1"]},
+}
+
+
 class TestMockDeltas:
     """Mutation mocks carry a deltas sub-dict; read-only mocks do not."""
 
     def test_mutation_has_deltas(self):
         for cmd in _MUTATION_MOCKS:
-            result = mock_command(cmd, {})
+            params = {"body_name": "Body1", **_MUTATION_MOCK_NAMES.get(cmd, {})}
+            result = mock_command(cmd, params)
             if cmd == "undo":
                 # undo removes work: the synthetic "body appeared" deltas would
                 # report growth, so it deliberately carries none.

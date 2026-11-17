@@ -883,8 +883,14 @@ class TestMockSurfaceOps:
         assert result["thread_class"] == "6H"
 
     def test_an_unknown_rule_type_is_refused_like_the_handler(self):
-        """Mock mode must not echo a call Fusion rejects with ok: true."""
-        result = mock_command("ruled_surface", {"rule_type": "Tangent"})
+        """Mock mode must not echo a call Fusion rejects with ok: true.
+
+        The body is named because ``ruled_surface`` looks it up before it judges the
+        rule type — the handler would refuse an empty name first, too.
+        """
+        result = mock_command(
+            "ruled_surface", {"body_name": "Body1", "rule_type": "Tangent"}
+        )
 
         assert result["ok"] is False
         assert "normal" in result["error_message"]
@@ -1155,3 +1161,94 @@ class TestMockFallback:
         assert "warning" in result
         assert result["mode"] == "mock"
         assert result["params_received"] == {"x": 1}
+
+
+#: Every mock handler whose add-in counterpart passes an empty name straight into
+#: ``_body_by_name``: the tool, the call that proves it, and the parameters that name
+#: nothing.  ``body_name_required_refusal`` is judged from the parameters alone, so mock
+#: mode has to answer it or a development run reports work the add-in never does.
+EMPTY_BODY_NAME = [
+    # ``handler_base._body_by_name`` is shared; each row is one of its call sites.
+    ("create_construction_axis", {"method": "edge", "body_name": ""}),
+    ("cam_create_setup", {"body_name": ""}),
+    ("export_stl", {"body_name": ""}),
+    ("export_step", {"body_name": ""}),
+    ("rectangular_pattern", {"body_name": ""}),
+    ("circular_pattern", {"body_name": ""}),
+    ("create_thread", {"body_name": ""}),
+    ("draft_faces", {"body_name": ""}),
+    ("split_body", {"body_name": ""}),
+    ("split_face", {"body_name": ""}),
+    ("offset_faces", {"body_name": ""}),
+    ("scale_body", {"body_name": ""}),
+    ("rename_body", {"body_name": ""}),
+    ("move_body", {"body_name": ""}),
+    ("get_physical_properties", {"body_name": ""}),
+    ("set_color", {"body_name": ""}),
+    ("thicken_surface", {"body_name": ""}),
+    ("ruled_surface", {"body_name": "", "edge_index": 0}),
+    ("trim_surface", {"body_name": ""}),
+    ("create_flange", {"body_name": ""}),
+    ("create_bend", {"body_name": ""}),
+    ("flat_pattern", {"body_name": ""}),
+    ("unfold", {"body_name": ""}),
+    # The same lookup under the tool's own parameter name.
+    ("boolean_operation", {"target_body": "", "tool_body": "Body2"}),
+    ("boolean_operation", {"target_body": "Body1", "tool_body": ""}),
+    ("project_geometry", {"source_name": ""}),
+    ("stitch_surfaces", {"body_names": ["Body1", ""]}),
+    ("set_appearance", {"target_name": "", "target_type": "body"}),
+    ("set_appearance", {"target_name": "", "target_type": "face"}),
+    ("extrude", {"target_body": "", "operation": "cut"}),
+]
+
+
+@pytest.mark.parametrize(
+    ("command", "params"), EMPTY_BODY_NAME, ids=[c for c, _p in EMPTY_BODY_NAME]
+)
+def test_an_empty_body_name_is_refused(command, params):
+    """``move_body({"body_name": ""})`` used to answer ``ok: true`` here.
+
+    ``body_name`` is a required string with no ``minLength``, so ``""`` passes the
+    schema gate and reaches both modes; the add-in refuses it in ``_body_by_name``
+    before Fusion is asked, and a mock that answered would teach a sequence real mode
+    rejects.
+    """
+    refused = mock_command(command, params)
+
+    assert refused["ok"] is False
+    assert refused["error_kind"] == "INVALID_INPUT"
+    assert refused["error_message"] == "A body name is required"
+    assert refused["hints"] == [
+        "Pass a body name; get_scene_info lists the bodies in this design."
+    ]
+
+
+@pytest.mark.parametrize(
+    ("command", "params"),
+    [
+        # body_name is unused on this branch: two points, not a body edge.
+        (
+            "create_construction_axis",
+            {
+                "method": "two_points",
+                "point_one": [0, 0, 0],
+                "point_two": [1, 0, 0],
+                "body_name": "",
+            },
+        ),
+        # An empty splitting_body means "cut with the plane", not "look up nothing".
+        ("split_body", {"body_name": "Body1", "splitting_body": ""}),
+        # The same for trim_surface's tool_name: tool_plane answers instead.
+        (
+            "trim_surface",
+            {"body_name": "Body1", "tool_name": "", "tool_plane": "xy"},
+        ),
+        # _body_or_index: an empty body_name means "use body_index", never a lookup.
+        ("fillet", {"body_name": "", "edge_selection": "all", "radius": 0.5}),
+    ],
+    ids=["unused-branch", "splitting-body", "trim-tool-name", "body-or-index"],
+)
+def test_an_empty_name_the_handler_does_not_look_up_is_not_refused(command, params):
+    """The check is the lookup's: an empty name a caller may use is not refused."""
+    assert mock_command(command, params)["ok"] is True

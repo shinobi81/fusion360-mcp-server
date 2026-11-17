@@ -491,6 +491,17 @@ class SceneCommands:
                 ),
             )
 
+        # The target is resolved before anything is copied: a refusal here must not
+        # leave an appearance in the design's own collection for a call that failed.
+        if target_type == "body":
+            target = self._body_by_name(target_name)
+        elif target_type == "component":
+            target = self._component_by_name(target_name)
+        elif target_type == "face":
+            target = self._body_by_name(target_name).faces.item(face_index)
+        else:
+            target = None
+
         # Library appearances must be copied into the design before
         # assignment — assigning a library appearance directly is
         # version-dependent and known to fail on recent Fusion builds.
@@ -505,16 +516,8 @@ class SceneCommands:
                 hints=("Copy the appearance into the document first, then set it.",),
             )
 
-        if target_type == "body":
-            body = self._body_by_name(target_name)
-            body.appearance = local
-        elif target_type == "component":
-            comp = self._component_by_name(target_name)
-            comp.appearance = local
-        elif target_type == "face":
-            body = self._body_by_name(target_name)
-            face = body.faces.item(face_index)
-            face.appearance = local
+        if target is not None:
+            target.appearance = local
 
         return {"applied": True, "target": target_name, "appearance": appearance_name}
 
