@@ -77,44 +77,63 @@ the same. Each asserts on data rather than on behaviour.
 
 Nothing else is queued behind this section; sections 1 and 2 are both closed.
 
-## 3. The add-in's untested half - open
+## 3. The add-in's untested half - in progress, and the audit paid for itself
 
-The combined coverage floor is 59 and `addon/server` sits at 60, so the floor is not the
-problem the number describes: it was set low on purpose, because the add-in's CAM, view
-sheet and viewport families only run inside Fusion. The cost is that a large share of the
-add-in has never been executed by anything, and a module nobody runs is a module where a
-refusal's wording, a missing `participantBodies` or a renamed API call can sit unnoticed.
+The combined coverage floor is 59 and `addon/server` sat at 60, so the floor was not the
+problem the number described: it was set low on purpose, because the add-in's CAM, view
+sheet and viewport families only run inside Fusion. The cost was that a large share of the
+add-in had never been executed by anything, and a module nobody runs is a module where a
+renamed API call sits unnoticed.
 
-Measured on 0.8.5 (`coverage report --include="addon/server/*"`):
+**Measured on 0.8.5, before the work:**
 
-| Module | Cover | What the missing lines reach |
+| Module | Then | Now | What the missing lines reached |
+| --- | --- | --- | --- |
+| `handler_cam` | 17% | 17% | setups, operations, toolpaths, post-processing |
+| `handler_surface` | 22% | 69% | patch, stitch, thicken, ruled, trim, sheet metal |
+| `handler_export` | 23% | 23% | STL/STEP/F3D, view sheets, the generic `export` |
+| `handler_scene` | 41% | 92% | scene description, measurement, bounding box, object info |
+| `socket_server` | 48% | 100% | framing, malformed input, timeouts, disconnects |
+| `handler_assembly` | 62% | 90% | joints, components, rigid groups |
+| `handler_features` | 81% | 98% | features, and the eight edit commands |
+| `handler_primitives` | 71% | 96% | the direct primitives and the parametric box |
+| `addon/server` total | 60% | 80% | |
+
+Suite 1245 -> 1379 passing tests; the combined figure 69.97% -> 85.22%. The 59 floor did
+not move, which was the point.
+
+### What the audit found
+
+The tests were the cheap part. Reading each handler against the shipped binding - because
+a fake must declare Fusion's arity, not the handler's - turned up seven commands that
+could never have worked:
+
+| Command | What was wrong | State |
 | --- | --- | --- |
-| `handler_cam` | 17% | setups, operations, toolpaths, post-processing |
-| `handler_surface` | 22% | patch, stitch, thicken, ruled, trim |
-| `handler_export` | 23% | STL/STEP/F3D, view sheets, the generic `export` |
-| `handler_scene` | 41% | scene description, measurement, bounding box, object info |
-| `socket_server` | 48% | framing, malformed input, timeouts, disconnects |
-| `handler_assembly` | 62% | joints, components, rigid groups |
+| `unfold` | `createInput(bends, stationary)`; the shipped signature takes the stationary face alone and the bends go on the input | fixed (#130) |
+| `flat_pattern` | `root.features.flatPatternFeatures` does not exist; a component creates a flat pattern | fixed (#130) |
+| `thicken_surface` | `isSymmetric` and `isChainSelection` were swapped, so `direction` never made anything symmetric | fixed (#130) |
+| `scale_body` | per-axis branch passed five arguments to a three-argument `createInput`; non-uniform is `setToNonUniform` | fixed (#131) |
+| `create_construction_axis("perpendicular_at_point")` | handed a `ConstructionPlane` to a `BRepFace` parameter; now refuses and names the missing argument | fixed (#131) |
+| `patch_surface` | wrote a property Fusion does not ship, so `continuity` was a silent no-op | fixed to `groupContinuity`; the argument is inert for sketch curves until the tool takes edges (#131) |
+| `create_flange`, `create_bend`, `trim_surface` | `FlangeFeatures` has no `createInput`; there is no `bendFeatures` at all; `TrimFeatures.createInput` takes the tool alone | **still broken**, recorded in the PRs, not repaired |
 
-The order of work is the order a test can be trusted in, not the order of the numbers:
+### What is left
 
-1. **`socket_server` first, because it needs no `adsk` at all** - a real socket round-trip
-   is a test of our framing, our timeouts and our refusals, not of an imitation of
-   Autodesk's API. Then the part of `handler_scene` and `handler_assembly` that the design,
-   body and occurrence fakes already model: object info, measurement, bounding box,
-   parameters, components, construction planes and axes. Those two groups are where a test
-   proves something about our code rather than about a fake we wrote.
-   The rest of `handler_scene` is not free: the fakes model no appearance, physical
-   properties, mesh body or document, so `set_appearance`, `get_physical_properties`,
-   `compare_meshes` and `new_document` need the fake extended before a test can mean
-   anything.
-2. **Then the three API-heavy modules, at the call boundary.** A fake that declares the
-   real signature pins that the handler called it with those arguments; it does not pin
-   that Fusion accepts them. That is a weaker claim and worth stating as one in each
-   test's docstring, the way `test_addon_hole.py` already does.
-3. **Only then measure against Fusion 2706** - the new tests' claim about Fusion belongs
-   in the PR body with the version it was run on, and a line the fakes exercise is not
-   evidence that the feature works.
+1. **One Fusion 2706 session.** Every fix above is header-and-binding evidence; none was
+   run inside Fusion. That session also answers the open question behind four call sites
+   that pass a raw `Point3D` where Fusion documents a point entity (`scale_body`'s anchor,
+   `create_construction_plane("three_points")`, `create_construction_axis("two_points")`,
+   and the point half of `perpendicular_at_point`). If Fusion refuses those, three more
+   commands are affected.
+2. **Repair the three dead sheet-metal and surface commands.** `create_flange` and
+   `create_bend` need `FlangeFeatures.createEdgeFlangeInput` and the `FoldFeatures` API;
+   `trim_surface` needs a keep-cells decision from `TrimFeatureInput.bRepCells`. Each is
+   a design decision, not an arity swap.
+3. **`handler_cam` (17%) and `handler_export` (23%)** remain where they were: a CAM
+   `Product` and an `exportManager`/`viewport` are the two largest fakes in the tree, and
+   the behaviour they would cover is the behaviour a fake cannot settle - a view sheet
+   either renders or it does not. Those belong in a Fusion session, not in a fake.
 
 Not part of this: moving the 59 floor. Raising it to whatever the new figure becomes is
 a number chasing its own measurement; the reason to write these tests is the refusals
