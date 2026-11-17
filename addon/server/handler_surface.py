@@ -1,4 +1,6 @@
-"""Surface and sheet-metal commands: patch, stitch, thicken, flange, unfold.
+"""Surface and sheet metal: ``patch_surface``, ``stitch_surfaces``,
+``thicken_surface``, ``ruled_surface``, ``trim_surface``, ``create_flange``,
+``create_bend``, ``flat_pattern``, ``unfold``.
 
 The commands and the helpers only they call.  A helper a second domain needs lives
 in ``handler_base``; this module imports nothing from another domain and nothing
@@ -62,12 +64,15 @@ class SurfaceCommands:
             faces.add(face)
 
         thickens = root.features.thickenFeatures
+        # Shipped: createInput(inputFaces, thickness, isSymmetric, operation,
+        # isChainSelection=True).  The fifth argument is left out so Fusion's
+        # default applies; ThickenFeatureInput has no direction member, so
+        # "positive" and "negative" both mean the same one-sided thicken.
         inp = thickens.createInput(
             faces,
             adsk.core.ValueInput.createByReal(thickness),
-            False,
-            adsk.fusion.FeatureOperations.NewBodyFeatureOperation,
             direction == "symmetric",
+            adsk.fusion.FeatureOperations.NewBodyFeatureOperation,
         )
         feat = thickens.add(inp)
         return {"feature_name": feat.name, "thickness": thickness}
@@ -172,14 +177,27 @@ class SurfaceCommands:
         else:
             raise RuntimeError("bend_line_sketch is required")
 
+    def _stationary_face(self, body):
+        """The face a flat pattern or an unfold stays fixed to: the first planar one.
+
+        Both commands need it and Fusion's rules are the same for both - a flat
+        pattern wants "a planar face in the sheet metal body that is on the top or
+        bottom of the part" (``Component.h:351-352``), and the unfold's stationary
+        face is what ``createInput`` takes (``UnfoldFeatures.h:63``).  A body with
+        no planar face has nothing to fix, so the refusal is shared too.
+        """
+        for face in body.faces:
+            if face.geometry.surfaceType == adsk.core.SurfaceTypes.PlaneSurfaceType:
+                return face
+        raise RuntimeError("No planar face found for stationary face")
+
     def flat_pattern(self, body_name: str):
         root = self._root()
         body = self._body_by_name(body_name)
 
-        flat_patterns = root.features.flatPatternFeatures
-        inp = flat_patterns.createInput(body)
-        feat = flat_patterns.add(inp)
-        return {"feature_name": feat.name}
+        # There is no flat-pattern feature collection: a component creates one.
+        flat_pattern = root.createFlatPattern(self._stationary_face(body))
+        return {"feature_name": flat_pattern.name}
 
     def unfold(self, body_name: str, bend_indices: list | None = None):
         root = self._root()
@@ -187,26 +205,12 @@ class SurfaceCommands:
 
         unfolds = root.features.unfoldFeatures
 
-        bends = adsk.core.ObjectCollection.create()
+        # createInput takes the stationary face alone; the bends go on the input.
+        inp = unfolds.createInput(self._stationary_face(body))
         if bend_indices:
-            for idx in bend_indices:
-                # Get bend faces from sheet metal body
-                bends.add(body.faces.item(idx))
+            inp.bendFaces = [body.faces.item(idx) for idx in bend_indices]
         else:
-            # Unfold all bends
-            for face in body.faces:
-                bends.add(face)
+            inp.isUnfoldAllBends = True
 
-        # Find stationary face (first planar face)
-        stationary = None
-        for face in body.faces:
-            if face.geometry.surfaceType == adsk.core.SurfaceTypes.PlaneSurfaceType:
-                stationary = face
-                break
-
-        if not stationary:
-            raise RuntimeError("No planar face found for stationary face")
-
-        inp = unfolds.createInput(bends, stationary)
         feat = unfolds.add(inp)
         return {"feature_name": feat.name}

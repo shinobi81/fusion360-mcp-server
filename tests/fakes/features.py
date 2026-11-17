@@ -353,6 +353,183 @@ class FakeRuledSurfaceFeatures:
         return FakeFeature(f"Ruled Surface{len(self.inputs)}")
 
 
+class FakePatchInput:
+    """``PatchFeatureInput``: the two ``createInput`` arguments, under Fusion's names.
+
+    The shipped signature is ``createInput(boundaryCurve, operation)`` - the
+    boundary may be a sketch profile, an edge, an ObjectCollection or a Path, and
+    only ``NewBodyFeatureOperation``/``NewComponentFeatureOperation`` are accepted
+    for the operation (``adsk.fusion.PatchFeatures.createInput``'s own docstring).
+
+    ``continuity`` and ``groupContinuity`` are the names the stub lists, and they
+    are here because they are the input's identity, not because the handler sets
+    one: both stay ``None`` until a call site writes them.  Fusion's own instances
+    also accept arbitrary attribute names, so a call site that writes a name the
+    SDK does not ship (``boundaryContinuity``) leaves these ``None`` - a silent
+    no-op, which is what makes the real names worth declaring.
+    """
+
+    def __init__(self, boundary_curve, operation):
+        self.boundaryCurve = boundary_curve
+        self.operation = operation
+        self.continuity = None
+        self.groupContinuity = None
+
+
+class FakePatchFeatures:
+    """``root.features.patchFeatures``: two positional arguments, as in the SDK.
+
+    A one- or three-argument call is a ``TypeError`` here as it is in the binding.
+    The patched surface itself is not modelled - that needs the boundary's
+    geometry - so the reply can only be built from what the call passed.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakePatchInput] = []
+        self.added: list[FakePatchInput] = []
+        self.created: list[FakeFeature] = []
+
+    @property
+    def last_input(self) -> FakePatchInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(self, boundary_curve, operation) -> FakePatchInput:
+        created = FakePatchInput(boundary_curve, operation)
+        self.inputs.append(created)
+        return created
+
+    def add(self, inp: FakePatchInput) -> FakeFeature:
+        if not isinstance(inp, FakePatchInput):
+            raise TypeError("patchFeatures.add takes the input createInput made")
+        self.added.append(inp)
+        feature = FakeFeature(f"Patch{len(self.added)}")
+        self.created.append(feature)
+        return feature
+
+
+class FakeStitchInput:
+    """``stitchFeatures.createInput(stitchSurfaces, tolerance, operation)``.
+
+    ``stitchSurfaces`` is the ``ObjectCollection`` of open bodies the handler
+    assembled by name; ``tolerance`` is the ``ValueInput``.  Nothing is set on the
+    input afterwards, so the three attributes are the ``createInput`` arguments.
+    """
+
+    def __init__(self, stitch_surfaces, tolerance, operation):
+        self.stitchSurfaces = stitch_surfaces
+        self.tolerance = tolerance
+        self.operation = operation
+
+
+class FakeStitchFeatures:
+    """``root.features.stitchFeatures``: three arguments, the last optional.
+
+    The shipped signature is ``createInput(stitchSurfaces, tolerance,
+    operation=NewBodyFeatureOperation)``, so the operation may be left out; the
+    fake then records the fake runtime's spelling of that default (``new_body``).
+    Whether the surfaces actually touch - and therefore whether they stitch at
+    all - is Fusion's judgement about geometry this fake does not carry, so it
+    records the request and refuses nothing beyond a wrong arity or a wrong
+    ``add`` argument.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakeStitchInput] = []
+        self.added: list[FakeStitchInput] = []
+        self.created: list[FakeFeature] = []
+
+    @property
+    def last_input(self) -> FakeStitchInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(
+        self, stitch_surfaces, tolerance, operation="new_body"
+    ) -> FakeStitchInput:
+        created = FakeStitchInput(stitch_surfaces, tolerance, operation)
+        self.inputs.append(created)
+        return created
+
+    def add(self, inp: FakeStitchInput) -> FakeFeature:
+        if not isinstance(inp, FakeStitchInput):
+            raise TypeError("stitchFeatures.add takes the input createInput made")
+        self.added.append(inp)
+        feature = FakeFeature(f"Stitch{len(self.added)}")
+        self.created.append(feature)
+        return feature
+
+
+class FakeThickenInput:
+    """``ThickenFeatureInput``: the four required ``createInput`` arguments.
+
+    ``thickness`` stays the ``ValueInput`` Fusion was handed, so a test reads
+    whether the call site passed a real; ``operation`` is the enum member.
+    ``isChainSelection`` carries Fusion's shipped default of ``True`` when the
+    call site omits the fifth argument.
+
+    There is no direction or flip member: the shipped properties are
+    ``inputFaces``, ``thickness``, ``isSymmetric``, ``operation``,
+    ``isChainSelection``, ``targetBaseFeature``, ``creationOccurrence`` and
+    ``thickenType``.  So ``positive`` and ``negative`` cannot be modelled as
+    different calls, which is the API's limit rather than the fake's.
+    """
+
+    def __init__(
+        self,
+        input_faces,
+        thickness,
+        is_symmetric,
+        operation,
+        is_chain_selection,
+    ):
+        self.inputFaces = input_faces
+        self.thickness = thickness
+        self.isSymmetric = is_symmetric
+        self.operation = operation
+        self.isChainSelection = is_chain_selection
+
+
+class FakeThickenFeatures:
+    """``root.features.thickenFeatures``: Fusion's five-argument ``createInput``.
+
+    ``createInput(inputFaces, thickness, isSymmetric, operation,
+    isChainSelection=True)`` is the shipped signature, so a missing required
+    argument or a sixth one is a ``TypeError``.  The thickened solid is not
+    modelled: where it lands depends on the faces' normals and the thickness,
+    which this fake does not carry.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakeThickenInput] = []
+        self.added: list[FakeThickenInput] = []
+        self.created: list[FakeFeature] = []
+
+    @property
+    def last_input(self) -> FakeThickenInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(
+        self,
+        input_faces,
+        thickness,
+        is_symmetric,
+        operation,
+        is_chain_selection=True,
+    ) -> FakeThickenInput:
+        created = FakeThickenInput(
+            input_faces, thickness, is_symmetric, operation, is_chain_selection
+        )
+        self.inputs.append(created)
+        return created
+
+    def add(self, inp: FakeThickenInput) -> FakeFeature:
+        if not isinstance(inp, FakeThickenInput):
+            raise TypeError("thickenFeatures.add takes the input createInput made")
+        self.added.append(inp)
+        feature = FakeFeature(f"Thicken{len(self.added)}")
+        self.created.append(feature)
+        return feature
+
+
 class FakeMirrorInput:
     """``mirrorFeatures.createInput(objects, mirrorPlane)``: two arguments, no setters.
 
@@ -778,6 +955,66 @@ class FakeMoveFeatures:
             raise TypeError("moveFeatures.add takes the input createInput made")
         self.added.append(inp)
         feature = FakeFeature(f"Move{len(self.added)}")
+        self.created.append(feature)
+        return feature
+
+
+class FakeUnfoldFeatureInput:
+    """``UnfoldFeatureInput``: the stationary face up front, the bends afterwards.
+
+    Read from ``Fusion/SheetMetal/UnfoldFeatureInput.h``: ``stationaryFace``
+    (``:46-47``, "The stationary face is set when createInput is called but can be
+    changed before calling add"), ``bendFaces`` (``:54-55``, a
+    ``std::vector<core::Ptr<BRepFace>>`` - the inner or outer cylindrical face of
+    each bend), and ``isUnfoldAllBends`` (``:61-62``), which ``:58-59`` says unfolds
+    every bend and **ignores** ``bendFaces`` when true, defaulting to false.
+
+    The two later properties start at Fusion's defaults - no bend faces and the flag
+    off - so a call site that sets neither is visible rather than defaulted, and a
+    call site that sets both is visible too, since Fusion would read only the flag.
+    """
+
+    def __init__(self, stationary_face):
+        self.stationaryFace = stationary_face
+        self.bendFaces: list = []
+        self.isUnfoldAllBends: bool = False
+
+
+class FakeUnfoldFeatures:
+    """``root.features.unfoldFeatures``: ``createInput`` takes the stationary face
+    alone.
+
+    ``UnfoldFeatures.h:63`` ships ``createInput(const core::Ptr<BRepFace>&
+    stationaryFace)`` - **one** argument, the face that stays fixed.  The handler
+    used to pass ``(bends, stationary)``, a collection first, which Fusion answers
+    with ``TypeError: Wrong number or type of arguments`` on every call; declaring
+    the arity here is what keeps that call from coming back, so a two- or
+    three-argument call is a ``TypeError`` in the fake too.
+
+    The face is not type-checked and the unfold itself is not modelled: whether a
+    face is a bend's wall, and what the flattened body looks like, is Fusion's
+    judgement about geometry this fake does not carry.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakeUnfoldFeatureInput] = []
+        self.added: list[FakeUnfoldFeatureInput] = []
+        self.created: list[FakeFeature] = []
+
+    @property
+    def last_input(self) -> FakeUnfoldFeatureInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(self, stationary_face) -> FakeUnfoldFeatureInput:
+        created = FakeUnfoldFeatureInput(stationary_face)
+        self.inputs.append(created)
+        return created
+
+    def add(self, inp: FakeUnfoldFeatureInput) -> FakeFeature:
+        if not isinstance(inp, FakeUnfoldFeatureInput):
+            raise TypeError("unfoldFeatures.add takes the input createInput made")
+        self.added.append(inp)
+        feature = FakeFeature(f"Unfold{len(self.added)}")
         self.created.append(feature)
         return feature
 
