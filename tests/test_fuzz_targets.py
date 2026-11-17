@@ -10,6 +10,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from addon.server import hints as addon_hints  # noqa: E402
 from addon.server.hole_geometry import plane_z_at  # noqa: E402
 from addon.server.parameter_units import expression_for  # noqa: E402
 from fuzz.fuzz_hints_classify import check, classify  # noqa: E402
@@ -85,8 +86,9 @@ def test_geometry_is_total_over_non_finite_normals():
 
 
 def test_a_vertical_plane_raises_rather_than_returning_nan():
-    with pytest.raises(ValueError):
+    with pytest.raises(addon_hints.Refusal) as raised:
         plane_z_at((0.0, 0.0, 0.0), (0.0, 0.0, 1.0), 2.0, 3.0)
+    assert raised.value.error_kind == "GEOMETRY_UNSUPPORTED"
 
 
 def test_geometry_is_total_for_a_payload_shorter_than_the_record():

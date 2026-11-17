@@ -211,6 +211,8 @@ _MUTATION_MOCK_NAMES = {
     "set_appearance": {"target_name": "Body1"},
     "project_geometry": {"source_name": "Body1"},
     "stitch_surfaces": {"body_names": ["Body1"]},
+    # ``trim_surface`` now refuses a call with neither tool, as the handler does.
+    "trim_surface": {"tool_name": "Cutter", "keep_cells": [0]},
 }
 
 

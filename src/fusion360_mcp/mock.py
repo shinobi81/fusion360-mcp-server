@@ -27,11 +27,13 @@ from ._rules import (
     export_body_refusal,
     export_target_refusal,
     joint_geometry_refusal,
+    keep_cells_refusal,
     perpendicular_axis_refusal,
     point3d_refusal,
     rigid_group_size_refusal,
     rule_type_refusal,
     sketch_plane_z_note,
+    surface_tool_refusal,
     symmetry_line_refusal,
     target_body_refusal,
 )
@@ -1393,9 +1395,16 @@ def _ruled_surface(p: dict) -> dict:
 
 
 def _trim_surface(p: dict) -> dict:
-    # ``tool_name`` is guarded in the handler: empty means "trim with tool_plane".
+    # The handler looks the body up before it judges the tool, so an empty name
+    # refuses here too; the tool choice and the cell selector are parameter-only.
     if refused := _body_name_required_error(p):
         return refused
+    if tool_refusal := surface_tool_refusal(
+        {"tool_name": p.get("tool_name"), "tool_plane": p.get("tool_plane")}
+    ):
+        return _refusal_error(tool_refusal)
+    if cells_refusal := keep_cells_refusal({"keep_cells": p.get("keep_cells")}):
+        return _refusal_error(cells_refusal)
     return {
         "body_name": p.get("body_name", "Surface1"),
         "kept_cells": p.get("keep_cells", [0]),

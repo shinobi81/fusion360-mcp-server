@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from . import fusion_api as adsk
+from . import hints as _hints
 from . import rules as _rules
 
 if TYPE_CHECKING:  # pragma: no cover - the mixin's contract, for type checkers only
@@ -164,19 +165,13 @@ class SurfaceCommands(_Contract):
         """
         root = self._root()
         target = self._body_by_name(body_name)
-        if bool(tool_name) == bool(tool_plane):
-            raise RuntimeError(
-                "trim_surface needs exactly one of tool_name (a body) or "
-                "tool_plane (xy, xz or yz)"
-            )
-        kept = set()
-        for index in keep_cells:
-            try:
-                kept.add(int(index))
-            except (TypeError, ValueError):
-                raise RuntimeError(
-                    f"keep_cells takes cell indices, not {index!r}"
-                ) from None
+        if tool_refusal := _rules.surface_tool_refusal(
+            {"tool_name": tool_name, "tool_plane": tool_plane}
+        ):
+            raise tool_refusal
+        if cells_refusal := _rules.keep_cells_refusal({"keep_cells": keep_cells}):
+            raise cells_refusal
+        kept = {int(index) for index in keep_cells}
 
         trims = root.features.trimFeatures
         tool = self._body_by_name(tool_name) if tool_name else None
@@ -187,9 +182,14 @@ class SurfaceCommands(_Contract):
         try:
             cells = inp.bRepCells
             if kept and (min(kept) < 0 or max(kept) >= cells.count):
-                raise RuntimeError(
+                raise _hints.Refusal(
+                    "INVALID_INPUT",
                     f"keep_cells {sorted(kept)} is out of range - this trim "
-                    f"produced {cells.count} cell(s), indexed from 0"
+                    f"produced {cells.count} cell(s), indexed from 0",
+                    hints=(
+                        f"keep_cells counts from 0; {cells.count} cells were "
+                        "produced.",
+                    ),
                 )
             for index in range(cells.count):
                 cells.item(index).isSelected = index not in kept
@@ -260,13 +260,20 @@ class SurfaceCommands(_Contract):
         ``inp.bendLines.add(line, angle, position, relief)``
         (``SheetMetal/FoldFeatures.h:64``, ``FoldBendLineDefinitions.h:60``).
         The stationary face is a caller decision here rather than a guess: a fold
-        about the wrong face bends the part the wrong way.
+        about the wrong face bends the part the wrong way.  ``line_position``'s
+        three values are a schema enum, so the gate refuses a fourth before this
+        runs; the mapping is indexed rather than defaulted, so a caller that reaches
+        the add-in around the gate cannot fold at a silently chosen position.
         """
         root = self._root()
         body = self._body_by_name(body_name)
         sketch = self._sketch_by_name(bend_line_sketch)
         if sketch.sketchCurves.sketchLines.count == 0:
-            raise RuntimeError(f"{bend_line_sketch} has no line to bend along")
+            raise _hints.Refusal(
+                "GEOMETRY_UNSUPPORTED",
+                f"{bend_line_sketch} has no line to bend along",
+                hints=("Bend along a sketch line that crosses the face.",),
+            )
         bend_line = sketch.sketchCurves.sketchLines.item(0)
 
         positions = {
@@ -277,12 +284,7 @@ class SurfaceCommands(_Contract):
             "end": adsk.fusion.FoldBendLinePositionTypes
             .EndFoldBendLinePositionType,
         }
-        position = positions.get(line_position)
-        if position is None:
-            raise RuntimeError(
-                f"line_position {line_position!r} is not one of "
-                f"{', '.join(sorted(positions))}"
-            )
+        position = positions[line_position]
 
         folds = root.features.foldFeatures
         inp = folds.createInput(body.faces.item(stationary_face_index))
@@ -316,7 +318,11 @@ class SurfaceCommands(_Contract):
         for face in body.faces:
             if face.geometry.surfaceType == adsk.core.SurfaceTypes.PlaneSurfaceType:
                 return face
-        raise RuntimeError("No planar face found for stationary face")
+        raise _hints.Refusal(
+            "GEOMETRY_UNSUPPORTED",
+            "No planar face found for stationary face",
+            hints=("Pass a stationary_face_index for a planar face.",),
+        )
 
     def flat_pattern(self, body_name: str):
         root = self._root()
@@ -343,38 +349,6 @@ class SurfaceCommands(_Contract):
         return {"feature_name": feat.name}
 
 
-_INSIDE_KEEPS = {"inside": True, "outside": False}
-_PLANE_KEEPS = {"positive": True, "negative": False}
-
-
-def _keep_inside(keep: str) -> bool:
-    """Translate ``keep`` for a body tool, or refuse the word that does not fit.
-
-    A body has an inside; a plane does not, so the two vocabularies are kept
-    apart rather than one silently standing in for the other.
-    """
-    try:
-        return _INSIDE_KEEPS[keep]
-    except KeyError:
-        raise RuntimeError(
-            f"keep {keep!r} does not apply to a body tool - use one of "
-            f"{', '.join(sorted(_INSIDE_KEEPS))}; a plane tool takes "
-            f"{', '.join(sorted(_PLANE_KEEPS))}"
-        ) from None
-
-
-def _keep_positive(keep: str) -> bool:
-    """Translate ``keep`` for a construction-plane tool: the side its normal names."""
-    try:
-        return _PLANE_KEEPS[keep]
-    except KeyError:
-        raise RuntimeError(
-            f"keep {keep!r} does not apply to a plane tool - use one of "
-            f"{', '.join(sorted(_PLANE_KEEPS))}; a body tool takes "
-            f"{', '.join(sorted(_INSIDE_KEEPS))}"
-        ) from None
-
-
 def _inside_body(body, point) -> bool:
     """``BRepBody.pointContainment``: is the point inside the tool's solid?"""
     return (
@@ -388,14 +362,22 @@ def _first_planar_face(body):
     for face in body.faces:
         if adsk.core.Plane.cast(face.geometry) is not None:
             return face
-    raise RuntimeError(f"{body.name} has no planar face to take a side from")
+    raise _hints.Refusal(
+        "GEOMETRY_UNSUPPORTED",
+        f"{body.name} has no planar face to take a side from",
+        hints=("Only a planar face can take a keep side; pass keep_cells instead.",),
+    )
 
 
 def _on_positive_side(plane, point) -> bool:
     """Which side of the plane the point is on, relative to its normal."""
     geometry = adsk.core.Plane.cast(plane.geometry)
     if geometry is None:
-        raise RuntimeError(f"{getattr(plane, 'name', 'the trim tool')} is not planar")
+        raise _hints.Refusal(
+            "GEOMETRY_UNSUPPORTED",
+            f"{getattr(plane, 'name', 'the trim tool')} is not planar",
+            hints=("Trim with a planar tool, or pick a different body.",),
+        )
     normal, origin = geometry.normal, geometry.origin
     return (
         (point.x - origin.x) * normal.x

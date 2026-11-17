@@ -300,6 +300,53 @@ def rule_type_refusal(rule_type: str) -> _hints.Refusal | None:
     )
 
 
+def surface_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal a ``trim_surface`` tool choice earns, or None when it has one.
+
+    A trim takes exactly one tool, and the two parameters are alternatives; a call
+    with both or neither has not said what to trim with, so Fusion is never asked.
+    ``params`` carries ``tool_name`` and ``tool_plane`` as the caller sent them,
+    ``None`` meaning unset.  Whether either names something that exists needs the
+    design.
+    """
+    if bool(params.get("tool_name")) != bool(params.get("tool_plane")):
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        "trim_surface needs exactly one of tool_name (a body) or tool_plane "
+        "(xy, xz or yz)",
+        hints=("Pass tool_name (a body), or tool_plane (xy, xz or yz), but not both.",),
+    )
+
+
+#: What ``int()`` raises for a value that is not an index.  A tuple in a name,
+#: not ``except (TypeError, ValueError):``, because ``src/fusion360_mcp/_rules.py``
+#: mirrors this file and is format-gated: ruff's PEP 758 pass rewrites the
+#: parenthesised form to ``except TypeError, ValueError:``, which Fusion's own
+#: interpreter rejects.
+_INDEX_ERRORS = (TypeError, ValueError)
+
+
+def keep_cells_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal a ``trim_surface`` cell selector earns, or None when it is usable.
+
+    ``params`` carries ``keep_cells`` as the caller sent it.  A cell is named by its
+    index, so a word is a caller mistake Fusion cannot report; the indices are
+    converted here the way the handler converts them, which is why a numeric string
+    is accepted.  Whether an index is in range needs the cells Fusion computes.
+    """
+    for index in params.get("keep_cells") or ():
+        try:
+            int(index)
+        except _INDEX_ERRORS:
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"keep_cells takes cell indices, not {index!r}",
+                hints=("Pass whole-number cell indices, counted from 0.",),
+            )
+    return None
+
+
 def _export_format(params: Mapping[str, Any]) -> str:
     """The format an ``export`` call names, from ``format`` or the path's extension.
 

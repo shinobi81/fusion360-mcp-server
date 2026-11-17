@@ -15,7 +15,7 @@ import pytest
 from addon.server import hints as addon_hints
 from addon.server import rules
 from fusion360_mcp import _rules, mock
-from tests.fakes.bodies import body_with_edges
+from tests.fakes.bodies import FakeBody, body_with_edges
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
 
 #: Refused from the parameters alone, so no body is ever touched.
@@ -339,6 +339,23 @@ PARAMETER_REFUSALS = [
         "Provide setup_name, operation_name, or generate_all=true",
         ("Pass setup_name, setup_name and operation_name, or generate_all=true.",),
     ),
+    # Surface trim: the tool and the cell indices are judged from the parameters
+    # alone, before Fusion computes any cell to check an index against.
+    (
+        "trim_surface",
+        {"body_name": "Surf1", "keep_cells": [0]},
+        "INVALID_INPUT",
+        "trim_surface needs exactly one of tool_name (a body) or tool_plane "
+        "(xy, xz or yz)",
+        ("Pass tool_name (a body), or tool_plane (xy, xz or yz), but not both.",),
+    ),
+    (
+        "trim_surface",
+        {"body_name": "Surf1", "keep_cells": ["left"], "tool_name": "Cutter"},
+        "INVALID_INPUT",
+        "keep_cells takes cell indices, not 'left'",
+        ("Pass whole-number cell indices, counted from 0.",),
+    ),
 ]
 
 
@@ -362,6 +379,8 @@ PARAMETER_REFUSALS = [
         "export_body_step",
         "symmetry_line",
         "cam_target",
+        "trim_tool",
+        "trim_keep_cells",
     ],
 )
 def test_the_validator_and_mock_agree(
@@ -380,7 +399,7 @@ def test_the_validator_and_mock_agree(
     ``hints=`` tuple falls through to the kind default here instead of shipping
     boilerplate.
     """
-    design = FakeDesign(features=0)
+    design = FakeDesign(features=0, bodies=[FakeBody("Surf1"), FakeBody("Cutter")])
     design.rootComponent.occurrences.add(FakeOccurrence(FakeComponent("A")))
     design.rootComponent.occurrences.add(FakeOccurrence(FakeComponent("B")))
     handler = bound_handler(design)
@@ -399,6 +418,14 @@ def test_the_validator_and_mock_agree(
     assert refused["error_kind"] == expected_kind
     assert refused["error_message"] == expected_message
     assert refused["hints"] == list(expected_hints)
+
+
+def test_a_usable_trim_target_is_refused_by_neither_side():
+    """The table above must not have turned a call Fusion accepts into a refusal."""
+    assert rules.surface_tool_refusal({"tool_name": "Cutter"}) is None
+    assert rules.surface_tool_refusal({"tool_plane": "xy"}) is None
+    assert rules.keep_cells_refusal({"keep_cells": [0, 2]}) is None
+    assert rules.keep_cells_refusal({}) is None
 
 
 def test_a_usable_export_or_cam_target_is_refused_by_neither_side():

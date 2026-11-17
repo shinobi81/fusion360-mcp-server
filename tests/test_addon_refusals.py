@@ -270,39 +270,9 @@ def test_an_unknown_rule_type_is_refused_as_a_refusal(bound_handler):
 # resort — so such an assertion could never fail.  The advice a converted site carries
 # is authored with the site (D9); the kind is what has to be mechanical.
 
-#: Raises that still reach a caller as ``UNKNOWN``.  PRs 4a-8 delete their own rows;
-#: the last one empties this set.  A row here is a debt, not an exemption.
-_UNCLASSIFIED_BASELINE: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("handler_surface.py", "No planar face found for stationary face"),
-        (
-            "handler_surface.py",
-            "keep … does not apply to a body tool - use one of …; a plane tool "
-            + "takes …",
-        ),
-        (
-            "handler_surface.py",
-            "keep … does not apply to a plane tool - use one of …; a body tool "
-            + "takes …",
-        ),
-        ("handler_surface.py", "keep_cells takes cell indices, not …"),
-        (
-            "handler_surface.py",
-            "keep_cells … is out of range - this trim produced … cell(s), indexed "
-            + "from 0",
-        ),
-        ("handler_surface.py", "line_position … is not one of …"),
-        (
-            "handler_surface.py",
-            "trim_surface needs exactly one of tool_name (a body) or tool_plane "
-            + "(xy, xz or yz)",
-        ),
-        ("handler_surface.py", "… has no line to bend along"),
-        ("handler_surface.py", "… has no planar face to take a side from"),
-        ("handler_surface.py", "… is not planar"),
-        ("hole_geometry.py", "plane is vertical: no unique Z above (x, y)"),
-    }
-)
+#: Raises that still reach a caller as ``UNKNOWN``: empty since Task 8 typed the last
+#: eleven.  A row here is a debt, not an exemption; a new row is a regression.
+_UNCLASSIFIED_BASELINE: frozenset[tuple[str, str]] = frozenset()
 
 #: Raises the static walk cannot judge, each with why.  Never silently skipped.
 _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
@@ -377,8 +347,18 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ("handler_sketch.py", 438, "message is not a literal"),
         (
             "handler_surface.py",
-            120,
+            121,
             "raise refusal: kind comes from _rules.rule_type_refusal",
+        ),
+        (
+            "handler_surface.py",
+            171,
+            "raise tool_refusal: kind comes from _rules.surface_tool_refusal",
+        ),
+        (
+            "handler_surface.py",
+            173,
+            "raise cells_refusal: kind comes from _rules.keep_cells_refusal",
         ),
         (
             "handler_export.py",

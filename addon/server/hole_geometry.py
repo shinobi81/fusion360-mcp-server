@@ -6,6 +6,8 @@ rules can be unit-tested without a running Fusion instance.
 
 from __future__ import annotations
 
+from . import hints as _hints
+
 # Minimum |normal.z| for a planar face to count as horizontal, i.e. to be a
 # candidate "top"/"bottom" face. 0.99995 allows roughly 0.6 degrees of tilt.
 HORIZONTAL_FACE_MIN_NZ = 0.99995
@@ -46,5 +48,9 @@ def plane_z_at(
     nx, ny, nz = normal
     ox, oy, oz = origin
     if nz == 0:
-        raise ValueError("plane is vertical: no unique Z above (x, y)")
+        raise _hints.Refusal(
+            "GEOMETRY_UNSUPPORTED",
+            "plane is vertical: no unique Z above (x, y)",
+            hints=("Move the sketch plane so it is not vertical.",),
+        )
     return oz - (nx * (x - ox) + ny * (y - oy)) / nz

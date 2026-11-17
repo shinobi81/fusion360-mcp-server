@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import pytest
 
+from addon.server import hints as addon_hints
 from tests.fakes.bodies import FakeBody, FakeEdges, FakeFace
 from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeDesign
@@ -104,16 +105,23 @@ def test_an_unfold_without_bend_indices_asks_for_every_bend(bound_handler):
 
 
 def test_an_unfold_of_a_body_with_no_flat_face_builds_no_input(bound_handler):
-    """The refusal happens before anything is handed to Fusion."""
+    """The refusal happens before anything is handed to Fusion.
+
+    The body has no planar face to stay fixed, so the arguments are fine and the
+    body lacks the geometry: ``GEOMETRY_UNSUPPORTED``.
+    """
     faces = FakeCollection([FakeFace(planar=False), FakeFace(planar=False)])
     design = FakeDesign(
         bodies=[FakeBody("DecoyBody"), FakeBody("Tube", faces=faces)],
     )
     handler = bound_handler(design)
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(addon_hints.Refusal) as raised:
         handler.unfold("Tube")
 
+    assert raised.value.error_kind == "GEOMETRY_UNSUPPORTED"
+    assert str(raised.value) == "No planar face found for stationary face"
+    assert raised.value.hints == ("Pass a stationary_face_index for a planar face.",)
     assert design.rootComponent.features.unfoldFeatures.inputs == []
 
 
@@ -269,6 +277,28 @@ def test_a_bend_adds_one_bend_line_with_its_angle_and_position(bound_handler):
     assert definitions[0].allowBendRelief is False
 
 
+def test_a_bend_refuses_a_sketch_with_no_line_before_touching_fusion(
+    bound_handler,
+):
+    """A fold needs a line to bend along, and the refusal names the sketch."""
+    body = FakeBody("Bracket", faces=FakeCollection([FakeFace(planar=True)]))
+    design = FakeDesign(
+        bodies=[FakeBody("DecoyBody"), body],
+        sketches=[FakeSketch(name="Blank")],
+    )
+    handler = bound_handler(design)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.create_bend(
+            "Bracket", stationary_face_index=0, bend_line_sketch="Blank"
+        )
+
+    assert raised.value.error_kind == "GEOMETRY_UNSUPPORTED"
+    assert str(raised.value) == "Blank has no line to bend along"
+    assert raised.value.hints == ("Bend along a sketch line that crosses the face.",)
+    assert design.rootComponent.features.foldFeatures.inputs == []
+
+
 def test_a_bend_defaults_to_the_mid_line_and_allows_relief(bound_handler):
     """The defaults are Fusion's centre position and relief on, and they are sent."""
     design, _body, _faces = _sheet_metal_design()
@@ -279,21 +309,3 @@ def test_a_bend_defaults_to_the_mid_line_and_allows_relief(bound_handler):
     definition = design.rootComponent.features.foldFeatures.inputs[0].bendLines.added[0]
     assert definition.linePosition == "Center"
     assert definition.allowBendRelief is True
-
-
-def test_a_bend_refuses_an_unknown_line_position_before_touching_fusion(
-    bound_handler,
-):
-    """An unshipped position is a refusal, not a silent centre."""
-    design, _body, _faces = _sheet_metal_design()
-    handler = bound_handler(design)
-
-    with pytest.raises(RuntimeError, match="line_position"):
-        handler.create_bend(
-            "Bracket",
-            stationary_face_index=1,
-            bend_line_sketch="Sketch1",
-            line_position="middle",
-        )
-
-    assert design.rootComponent.features.foldFeatures.inputs == []

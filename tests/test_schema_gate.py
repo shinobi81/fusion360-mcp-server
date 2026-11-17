@@ -35,6 +35,18 @@ CASES = [
     # ``auto_constrain`` judged its own ``result_option`` until this task; the enum is
     # what refuses a value outside the three Fusion defines now.
     ("auto_constrain", {"result_option": 4}, "Unknown result_option"),
+    # ``create_bend`` judged its own ``line_position`` until this task; the enum is
+    # what refuses a position outside start/center/end now.
+    (
+        "create_bend",
+        {
+            "body_name": "Bracket",
+            "stationary_face_index": 0,
+            "bend_line_sketch": "Sketch1",
+            "line_position": "middle",
+        },
+        "Unknown line_position",
+    ),
 ]
 
 
