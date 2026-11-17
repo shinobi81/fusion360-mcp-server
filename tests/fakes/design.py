@@ -19,7 +19,7 @@ test fails.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import ClassVar
+from typing import ClassVar, cast
 
 from .appearance import FakeAppearances
 from .bodies import FakeBody, FakeFace
@@ -30,6 +30,8 @@ from .features import (
     FakeDraftFeatures,
     FakeExportManager,
     FakeFeature,
+    FakeFlangeFeatures,
+    FakeFoldFeatures,
     FakeInterference,
     FakeMirrorFeatures,
     FakeMoveFeatures,
@@ -44,6 +46,7 @@ from .features import (
     FakeStitchFeatures,
     FakeThickenFeatures,
     FakeThreadFeatures,
+    FakeTrimFeatures,
     FakeUnfoldFeatures,
 )
 from .mesh import FakeMeshBodies
@@ -51,6 +54,7 @@ from .runtime import (
     DIRECT,
     PARAMETRIC,
     FakeMatrix3D,
+    FakePlane,
     FakePoint3D,
     FakeUserCoordinateSystemGeometry,
     FakeValueInput,
@@ -168,9 +172,9 @@ class FakeUserParameters:
         self._parameters[name] = created
         return created
 
-    def remove(self, parameter: FakeParameter) -> None:
+    def remove(self, item: FakeParameter) -> None:
         """What ``FakeDeletable.deleteMe()`` calls; Fusion's deletion is per item."""
-        self._parameters.pop(parameter.name, None)
+        self._parameters.pop(item.name, None)
 
     def itemByName(self, name: str) -> FakeParameter | None:
         return self._parameters.get(name)
@@ -356,7 +360,7 @@ class FakeOccurrences(FakeCollection):
                 f"addNewComponent takes a Matrix3D, not {type(matrix).__name__}"
             )
         occurrence = FakeOccurrence(FakeComponent(f"Component{self.count + 1}"))
-        return super().add(occurrence)
+        return cast(FakeOccurrence, super().add(occurrence))
 
 
 class FakeAxes:
@@ -371,13 +375,30 @@ class FakeAxes:
         self.zConstructionAxis = FakeDeletable("Z")
 
 
+class FakeConstructionPlane(FakeDeletable):
+    """A base construction plane: named, deletable, and carrying its geometry.
+
+    ``trim_surface`` reads ``geometry`` to decide which side of a plane tool a
+    cell is on, so the plane needs one.  Only a construction plane has geometry -
+    every other deletable in the fakes must not grow one.
+    """
+
+    def __init__(self, name: str, normal: tuple[float, float, float]):
+        super().__init__(name)
+        self.geometry = FakePlane((0.0, 0.0, 0.0), normal)
+
+
 class FakePlanes:
-    """The three base construction planes, as ``_construction_plane`` expects."""
+    """The three base construction planes, as ``_construction_plane`` expects.
+
+    The normals are this fixture's claim, not a measurement: Fusion's XY plane
+    runs +Z, and the other two follow the axis their name names.
+    """
 
     def __init__(self):
-        self.xYConstructionPlane = FakeDeletable("XY")
-        self.yZConstructionPlane = FakeDeletable("YZ")
-        self.xZConstructionPlane = FakeDeletable("XZ")
+        self.xYConstructionPlane = FakeConstructionPlane("XY", (0, 0, 1))
+        self.yZConstructionPlane = FakeConstructionPlane("YZ", (1, 0, 0))
+        self.xZConstructionPlane = FakeConstructionPlane("XZ", (0, 1, 0))
 
 
 class FakeRevolveInput:
@@ -817,6 +838,9 @@ class FakeFeatures:
         self.splitFaceFeatures = FakeSplitFaceFeatures()
         self.thickenFeatures = FakeThickenFeatures()
         self.unfoldFeatures = FakeUnfoldFeatures()
+        self.flangeFeatures = FakeFlangeFeatures()
+        self.foldFeatures = FakeFoldFeatures()
+        self.trimFeatures = FakeTrimFeatures()
         self.offsetFeatures = FakeOffsetFacesFeatures()
         self.scaleFeatures = FakeScaleFeatures()
         self.moveFeatures = FakeMoveFeatures()
@@ -1207,7 +1231,9 @@ class _FakeConstructionCollection(FakeCollection):
     def add(self, item) -> FakeDeletable:
         if not isinstance(item, self._INPUT):
             raise TypeError(f"add takes the input createInput returned, got {item!r}")
-        return super().add(FakeDeletable(f"{self._NAME}{self.count + 1}"))
+        return cast(
+            FakeDeletable, super().add(FakeDeletable(f"{self._NAME}{self.count + 1}"))
+        )
 
 
 class FakeConstructionPlanes(_FakeConstructionCollection):
@@ -1268,7 +1294,7 @@ class FakeUserCoordinateSystems(FakeCollection):
     def add(self, item) -> FakeDeletable:
         if not isinstance(item, FakeUserCoordinateSystemInput):
             raise TypeError("add takes the input createInput returned")
-        return super().add(FakeDeletable(f"UCS{self.count + 1}"))
+        return cast(FakeDeletable, super().add(FakeDeletable(f"UCS{self.count + 1}")))
 
 
 class FakeRigidGroup(FakeDeletable):
@@ -1315,10 +1341,10 @@ class FakeRigidGroups:
         self.added.append(group)
         return group
 
-    def remove(self, group: FakeRigidGroup) -> None:
+    def remove(self, item: FakeRigidGroup) -> None:
         """What ``FakeDeletable.deleteMe()`` calls."""
-        if group in self._items:
-            self._items.remove(group)
+        if item in self._items:
+            self._items.remove(item)
 
 
 class FakeRoot:

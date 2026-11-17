@@ -9,6 +9,19 @@ design rather than merely recorded a call.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import Protocol
+
+
+class RemovableCollection(Protocol):
+    """What ``deleteMe()`` needs of the collection an item lives in.
+
+    Structural rather than nominal: ``FakeCollection`` is one, and so are the
+    two collections that carry their own ``remove`` without inheriting it
+    (``FakeUserParameters``, ``FakeRigidGroups``).  ``deleteMe`` only ever calls
+    ``remove``, so that is the whole contract.
+    """
+
+    def remove(self, item) -> None: ...
 
 
 class FakeItemCollection:
@@ -40,7 +53,7 @@ class FakeDeletable:
 
     def __init__(self, name: str = "Item1"):
         self.name = name
-        self._collection: FakeCollection | None = None
+        self._collection: RemovableCollection | None = None
 
     def deleteMe(self) -> None:
         if self._collection is not None:

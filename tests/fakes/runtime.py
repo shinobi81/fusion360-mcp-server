@@ -455,6 +455,35 @@ def _surface_continuity_types() -> types.SimpleNamespace:
     )
 
 
+def _point_containment() -> types.SimpleNamespace:
+    """``PointContainment``: what ``BRepBody.pointContainment`` answers.
+
+    Read from the shipped stub (``adsk/fusion.py``, ``PointContainment``):
+    ``InsidePointContainment``, ``OutsidePointContainment`` and
+    ``OnPointContainment``, and nothing else.  ``trim_surface`` compares against
+    the inside member, so the values are the attribute names a test can assert.
+    """
+    return types.SimpleNamespace(
+        InsidePointContainment="InsidePointContainment",
+        OutsidePointContainment="OutsidePointContainment",
+        OnPointContainment="OnPointContainment",
+    )
+
+
+def _fold_bend_line_positions() -> types.SimpleNamespace:
+    """``FoldBendLinePositionTypes``: where the bend line sits in the flat state.
+
+    Read from the shipped stub (``adsk/fusion.py``,
+    ``FoldBendLinePositionTypes``): start, center and end, spelled with the
+    ``FoldBendLinePositionType`` suffix.
+    """
+    return types.SimpleNamespace(
+        StartFoldBendLinePositionType="Start",
+        CenterFoldBendLinePositionType="Center",
+        EndFoldBendLinePositionType="End",
+    )
+
+
 def _pattern_distance_types() -> types.SimpleNamespace:
     """``PatternDistanceType``: the member ``rectangular_pattern`` asks for.
 
@@ -522,6 +551,8 @@ def install() -> None:
         DimensionOrientations=_dimension_orientations(),
         RuledSurfaceTypes=_ruled_surface_types(),
         SurfaceContinuityTypes=_surface_continuity_types(),
+        PointContainment=_point_containment(),
+        FoldBendLinePositionTypes=_fold_bend_line_positions(),
         PatternDistanceType=_pattern_distance_types(),
         ThreadInfo=importlib.import_module("tests.fakes.features").FakeThreadInfo,
         ThreadDataQuery=importlib.import_module(

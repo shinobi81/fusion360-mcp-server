@@ -27,10 +27,16 @@ from __future__ import annotations
 
 import pytest
 
-from tests.fakes.bodies import FakeBody, FakeFace, body_with_edges
+from tests.fakes.bodies import (
+    FakeBody,
+    FakeBoundingBox,
+    FakeFace,
+    FakePhysicalProperties,
+    body_with_edges,
+)
 from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeDesign
-from tests.fakes.runtime import PARAMETRIC
+from tests.fakes.runtime import PARAMETRIC, FakePoint3D
 from tests.fakes.sketch import FakeSketch
 
 
@@ -222,3 +228,119 @@ def test_an_unknown_rule_type_is_refused_as_invalid_input(bound_handler):
     kind, hints = classify(str(raised.value))
     assert kind == "INVALID_INPUT"
     assert any("normal or tangent" in hint for hint in hints), hints
+
+
+# ── trim_surface ───────────────────────────────────────────────────────
+
+
+def _cells_of(design) -> list:
+    """The cells the last trim input carries, with the input proven to exist."""
+    created = design.rootComponent.features.trimFeatures.last_input
+    assert created is not None
+    return [created.bRepCells.item(i) for i in range(created.bRepCells.count)]
+
+
+def _cell_at(x: float, y: float) -> FakeBody:
+    """A transient cell whose centroid sits at ``(x, y, 0)``."""
+    return FakeBody(
+        "Cell",
+        physical_properties=FakePhysicalProperties(center_of_mass=(x, y, 0.0)),
+    )
+
+
+def _trim_design(cells):
+    """A target surface, a tool solid around the origin, and Fusion's cells."""
+    tool = FakeBody("Cutter", bounding_box=FakeBoundingBox((-1, -1, -1), (1, 1, 1)))
+    design = FakeDesign(bodies=[FakeBody("DecoyBody"), FakeBody("Surf1"), tool])
+    design.rootComponent.features.trimFeatures.cell_bodies = cells
+    return design, tool
+
+
+def test_a_trim_keeping_the_inside_removes_the_outside_cells(bound_handler):
+    """A **selected** cell is removed, so keeping the inside selects the rest.
+
+    ``BRepCell.isSelected`` means "trim this away" for a trim feature
+    (``Features/BRepCell.h:40-45``) - the opposite of a boundary fill - so the
+    side the caller keeps must be the unselected one.
+    """
+    design, _tool = _trim_design([_cell_at(0.0, 0.0), _cell_at(5.0, 0.0)])
+    handler = bound_handler(design)
+
+    handler.trim_surface("Surf1", keep="inside", tool_name="Cutter")
+
+    cells = _cells_of(design)
+    assert cells[0].isSelected is False
+    assert cells[1].isSelected is True
+
+
+def test_a_trim_keeping_the_outside_removes_the_inside_cells(bound_handler):
+    """The same two cells, the opposite selection: ``keep`` really moves it."""
+    design, _tool = _trim_design([_cell_at(0.0, 0.0), _cell_at(5.0, 0.0)])
+    handler = bound_handler(design)
+
+    handler.trim_surface("Surf1", keep="outside", tool_name="Cutter")
+
+    cells = _cells_of(design)
+    assert cells[0].isSelected is True
+    assert cells[1].isSelected is False
+
+
+def test_a_trim_against_a_plane_keeps_the_side_its_normal_points_to(bound_handler):
+    """A plane has no inside, so ``positive`` means the normal's side.
+
+    The XY plane at the origin runs +Z, and both cells here sit at z=0, so the
+    test moves one of them below the plane: that is what separates the sides.
+    """
+    below = _cell_at(0.0, 0.0)
+    below.physicalProperties.centerOfMass = FakePoint3D(0.0, 0.0, -2.0)
+    above = _cell_at(0.0, 0.0)
+    above.physicalProperties.centerOfMass = FakePoint3D(0.0, 0.0, 2.0)
+    design = FakeDesign(bodies=[FakeBody("DecoyBody"), FakeBody("Surf1")])
+    design.rootComponent.features.trimFeatures.cell_bodies = [below, above]
+    handler = bound_handler(design)
+
+    handler.trim_surface("Surf1", keep="positive", tool_plane="xy")
+
+    cells = _cells_of(design)
+    assert cells[0].isSelected is True
+    assert cells[1].isSelected is False
+
+
+def test_a_trim_cancels_the_transaction_when_fusion_refuses(bound_handler):
+    """``createInput`` opens a transaction; leaving it open can crash Fusion.
+
+    With nothing selected the fake's ``add`` refuses, as Fusion does, so the
+    handler must cancel before re-raising - the header says an open transaction
+    leaves Fusion in a bad state.
+    """
+    design, _tool = _trim_design([_cell_at(0.0, 0.0)])
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError):
+        handler.trim_surface("Surf1", keep="inside", tool_name="Cutter")
+
+    created = design.rootComponent.features.trimFeatures.last_input
+    assert created is not None
+    assert created.cancelled is True
+
+
+def test_a_trim_takes_either_a_body_or_a_plane_and_refuses_both(bound_handler):
+    """Two tools, or none, is a refusal before Fusion is asked for anything."""
+    design, _tool = _trim_design([])
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError, match="exactly one of"):
+        handler.trim_surface(
+            "Surf1", keep="inside", tool_name="Cutter", tool_plane="xy"
+        )
+
+    assert design.rootComponent.features.trimFeatures.inputs == []
+
+
+def test_a_trim_refuses_the_word_that_does_not_fit_the_tool(bound_handler):
+    """``positive`` is a plane word; a body tool takes ``inside``/``outside``."""
+    design, _tool = _trim_design([_cell_at(0.0, 0.0)])
+    handler = bound_handler(design)
+
+    with pytest.raises(RuntimeError, match="does not apply to a body tool"):
+        handler.trim_surface("Surf1", keep="positive", tool_name="Cutter")
