@@ -1,4 +1,6 @@
-"""Surface and sheet metal: patch, stitch, thicken, flange, flat pattern, unfold.
+"""Surface and sheet metal: ``patch_surface``, ``stitch_surfaces``,
+``thicken_surface``, ``ruled_surface``, ``trim_surface``, ``create_flange``,
+``create_bend``, ``flat_pattern``, ``unfold``.
 
 The commands and the helpers only they call.  A helper a second domain needs lives
 in ``handler_base``; this module imports nothing from another domain and nothing
@@ -62,12 +64,15 @@ class SurfaceCommands:
             faces.add(face)
 
         thickens = root.features.thickenFeatures
+        # Shipped: createInput(inputFaces, thickness, isSymmetric, operation,
+        # isChainSelection=True).  The fifth argument is left out so Fusion's
+        # default applies; ThickenFeatureInput has no direction member, so
+        # "positive" and "negative" both mean the same one-sided thicken.
         inp = thickens.createInput(
             faces,
             adsk.core.ValueInput.createByReal(thickness),
-            False,
-            adsk.fusion.FeatureOperations.NewBodyFeatureOperation,
             direction == "symmetric",
+            adsk.fusion.FeatureOperations.NewBodyFeatureOperation,
         )
         feat = thickens.add(inp)
         return {"feature_name": feat.name, "thickness": thickness}

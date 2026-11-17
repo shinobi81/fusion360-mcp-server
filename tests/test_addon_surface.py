@@ -13,13 +13,22 @@ express linkage, so its ``is_linked`` argument was dropped.
 The fakes below declare Fusion's arity and input types, and refuse anything else
 the way Fusion does, which is what makes these tests fail on the old code instead
 of passing for the wrong reason.
+
+``thicken_surface`` is here for a different shape of defect: the argument names
+were right but the values were crossed, so ``direction`` never reached
+``isSymmetric``.  ``ThickenFeatures.createInput`` ships
+``(inputFaces, thickness, isSymmetric, operation, isChainSelection=True)``, and
+``ThickenFeatureInput`` has no direction member - so the tool's ``positive`` and
+``negative`` are the same one-sided thicken, which the tests pin rather than
+paper over.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from tests.fakes.bodies import FakeBody, body_with_edges
+from tests.fakes.bodies import FakeBody, FakeFace, body_with_edges
+from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeDesign
 from tests.fakes.runtime import PARAMETRIC
 from tests.fakes.sketch import FakeSketch
@@ -124,6 +133,56 @@ def test_a_stitch_of_bodies_that_do_not_touch_still_hands_over_both(bound_handle
     assert created.tolerance.value == 0.05
     assert created.operation == "new_body"
     assert out == {"feature_name": "Stitch1", "body_count": 2}
+
+
+def _thicken_design() -> tuple[FakeDesign, FakeBody]:
+    """A decoy body first; the named surface carries two faces in a known order."""
+    faces = FakeCollection([FakeFace(planar=True), FakeFace(planar=False)])
+    surface = FakeBody("Surface", faces=faces)
+    return FakeDesign(bodies=[FakeBody("DecoyBody"), surface]), surface
+
+
+def test_a_symmetric_thicken_sets_the_symmetric_flag_on_the_named_body(
+    bound_handler,
+):
+    """``direction="symmetric"`` reaches ``isSymmetric``, for the named body's faces.
+
+    The decoy body is first in the root, so a lookup that took the first body
+    would thicken the wrong one.  The fifth argument, ``isChainSelection``, is
+    omitted and so stays at Fusion's shipped default of ``True``.
+    """
+    design, surface = _thicken_design()
+    handler = bound_handler(design)
+
+    out = handler.thicken_surface("Surface", thickness=0.2)
+
+    created = design.rootComponent.features.thickenFeatures.inputs[0]
+    assert list(created.inputFaces) == list(surface.faces)
+    assert created.isSymmetric is True
+    assert created.isChainSelection is True
+    assert (created.thickness.kind, created.thickness.value) == ("real", 0.2)
+    assert created.operation == "new_body"
+    assert out == {"feature_name": "Thicken1", "thickness": 0.2}
+
+
+def test_both_one_sided_directions_are_indistinguishable_at_the_api(bound_handler):
+    """``positive`` and ``negative`` reach Fusion as the same one-sided thicken.
+
+    The shipped ``ThickenFeatureInput`` has no direction or flip member, so the
+    tool's three direction names describe two behaviours: symmetric or not.  A
+    handler that invented a distinction would have to write a property Fusion
+    does not ship, and this fake would raise on it rather than record it.
+    """
+    design, _surface = _thicken_design()
+    handler = bound_handler(design)
+
+    handler.thicken_surface("Surface", thickness=0.2, direction="positive")
+    handler.thicken_surface("Surface", thickness=0.2, direction="negative")
+
+    first, second = design.rootComponent.features.thickenFeatures.inputs
+    assert (first.isSymmetric, second.isSymmetric) == (False, False)
+    assert (first.isChainSelection, second.isChainSelection) == (True, True)
+    assert first.thickness.value == second.thickness.value == 0.2
 
 
 def test_an_unknown_rule_type_is_refused_as_invalid_input(bound_handler):

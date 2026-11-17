@@ -422,8 +422,11 @@ class FakeStitchInput:
 
 
 class FakeStitchFeatures:
-    """``root.features.stitchFeatures``: three positional arguments.
+    """``root.features.stitchFeatures``: three arguments, the last optional.
 
+    The shipped signature is ``createInput(stitchSurfaces, tolerance,
+    operation=NewBodyFeatureOperation)``, so the operation may be left out; the
+    fake then records the fake runtime's spelling of that default (``new_body``).
     Whether the surfaces actually touch - and therefore whether they stitch at
     all - is Fusion's judgement about geometry this fake does not carry, so it
     records the request and refuses nothing beyond a wrong arity or a wrong
@@ -439,7 +442,9 @@ class FakeStitchFeatures:
     def last_input(self) -> FakeStitchInput | None:
         return self.inputs[-1] if self.inputs else None
 
-    def createInput(self, stitch_surfaces, tolerance, operation) -> FakeStitchInput:
+    def createInput(
+        self, stitch_surfaces, tolerance, operation="new_body"
+    ) -> FakeStitchInput:
         created = FakeStitchInput(stitch_surfaces, tolerance, operation)
         self.inputs.append(created)
         return created
@@ -449,6 +454,78 @@ class FakeStitchFeatures:
             raise TypeError("stitchFeatures.add takes the input createInput made")
         self.added.append(inp)
         feature = FakeFeature(f"Stitch{len(self.added)}")
+        self.created.append(feature)
+        return feature
+
+
+class FakeThickenInput:
+    """``ThickenFeatureInput``: the four required ``createInput`` arguments.
+
+    ``thickness`` stays the ``ValueInput`` Fusion was handed, so a test reads
+    whether the call site passed a real; ``operation`` is the enum member.
+    ``isChainSelection`` carries Fusion's shipped default of ``True`` when the
+    call site omits the fifth argument.
+
+    There is no direction or flip member: the shipped properties are
+    ``inputFaces``, ``thickness``, ``isSymmetric``, ``operation``,
+    ``isChainSelection``, ``targetBaseFeature``, ``creationOccurrence`` and
+    ``thickenType``.  So ``positive`` and ``negative`` cannot be modelled as
+    different calls, which is the API's limit rather than the fake's.
+    """
+
+    def __init__(
+        self,
+        input_faces,
+        thickness,
+        is_symmetric,
+        operation,
+        is_chain_selection,
+    ):
+        self.inputFaces = input_faces
+        self.thickness = thickness
+        self.isSymmetric = is_symmetric
+        self.operation = operation
+        self.isChainSelection = is_chain_selection
+
+
+class FakeThickenFeatures:
+    """``root.features.thickenFeatures``: Fusion's five-argument ``createInput``.
+
+    ``createInput(inputFaces, thickness, isSymmetric, operation,
+    isChainSelection=True)`` is the shipped signature, so a missing required
+    argument or a sixth one is a ``TypeError``.  The thickened solid is not
+    modelled: where it lands depends on the faces' normals and the thickness,
+    which this fake does not carry.
+    """
+
+    def __init__(self):
+        self.inputs: list[FakeThickenInput] = []
+        self.added: list[FakeThickenInput] = []
+        self.created: list[FakeFeature] = []
+
+    @property
+    def last_input(self) -> FakeThickenInput | None:
+        return self.inputs[-1] if self.inputs else None
+
+    def createInput(
+        self,
+        input_faces,
+        thickness,
+        is_symmetric,
+        operation,
+        is_chain_selection=True,
+    ) -> FakeThickenInput:
+        created = FakeThickenInput(
+            input_faces, thickness, is_symmetric, operation, is_chain_selection
+        )
+        self.inputs.append(created)
+        return created
+
+    def add(self, inp: FakeThickenInput) -> FakeFeature:
+        if not isinstance(inp, FakeThickenInput):
+            raise TypeError("thickenFeatures.add takes the input createInput made")
+        self.added.append(inp)
+        feature = FakeFeature(f"Thicken{len(self.added)}")
         self.created.append(feature)
         return feature
 
@@ -878,106 +955,6 @@ class FakeMoveFeatures:
             raise TypeError("moveFeatures.add takes the input createInput made")
         self.added.append(inp)
         feature = FakeFeature(f"Move{len(self.added)}")
-        self.created.append(feature)
-        return feature
-
-
-class FakeFlangeInput:
-    """``FlangeFeatureInput``: the two ``createInput`` arguments and the three writes.
-
-    The *positional* arguments are recorded under names this fake chose
-    (``edge``, ``isTangentChain``) - no SDK text was to hand when it was written,
-    so only the count and the order come from the call site.  ``angle``,
-    ``height`` and ``bendRadius`` are the three properties ``create_flange``
-    writes, each starting ``None`` so a call that skipped one is visible rather
-    than defaulted to a value nobody asked for.
-    """
-
-    def __init__(self, edge, is_tangent_chain):
-        self.edge = edge
-        self.isTangentChain = is_tangent_chain
-        self.angle: FakeValueInput | None = None
-        self.height: FakeValueInput | None = None
-        self.bendRadius: FakeValueInput | None = None
-
-
-class FakeFlangeFeatures:
-    """``root.features.flangeFeatures``: two positional arguments, as called.
-
-    The arity is the handler's - ``createInput(edge, <flag>)`` - so a one- or
-    three-argument call is a ``TypeError``.  Whether the edge actually carries a
-    bend, and where the flange lands, is Fusion's judgement about geometry this
-    fake does not carry: it records the request and refuses nothing else.
-    """
-
-    def __init__(self):
-        self.inputs: list[FakeFlangeInput] = []
-        self.added: list[FakeFlangeInput] = []
-        self.created: list[FakeFeature] = []
-
-    @property
-    def last_input(self) -> FakeFlangeInput | None:
-        return self.inputs[-1] if self.inputs else None
-
-    def createInput(self, edge, is_tangent_chain) -> FakeFlangeInput:
-        created = FakeFlangeInput(edge, is_tangent_chain)
-        self.inputs.append(created)
-        return created
-
-    def add(self, inp: FakeFlangeInput) -> FakeFeature:
-        if not isinstance(inp, FakeFlangeInput):
-            raise TypeError("flangeFeatures.add takes the input createInput made")
-        self.added.append(inp)
-        feature = FakeFeature(f"Flange{len(self.added)}")
-        self.created.append(feature)
-        return feature
-
-
-class FakeBendInput:
-    """``BendFeatureInput``: the three ``createInput`` arguments and two writes.
-
-    ``baseObject``, ``bendLine`` and ``bendLineExtended`` are the fake's names for
-    the three positional arguments - the handler passes a body, a sketch line and
-    a boolean, in that order, and only that order is claimed here.  ``bendAngle``
-    and ``bendRadius`` are what ``create_bend`` writes, ``None`` until it does.
-    """
-
-    def __init__(self, base_object, bend_line, is_bend_line_extended):
-        self.baseObject = base_object
-        self.bendLine = bend_line
-        self.isBendLineExtended = is_bend_line_extended
-        self.bendAngle: FakeValueInput | None = None
-        self.bendRadius: FakeValueInput | None = None
-
-
-class FakeBendFeatures:
-    """``root.features.bendFeatures``: three positional arguments, as called.
-
-    Whether a bend line lies on the body - and therefore whether a bend is
-    possible at all - needs geometry, so the fake records the request and refuses
-    nothing but a wrong arity or an ``add`` of something ``createInput`` did not
-    make.
-    """
-
-    def __init__(self):
-        self.inputs: list[FakeBendInput] = []
-        self.added: list[FakeBendInput] = []
-        self.created: list[FakeFeature] = []
-
-    @property
-    def last_input(self) -> FakeBendInput | None:
-        return self.inputs[-1] if self.inputs else None
-
-    def createInput(self, base_object, bend_line, is_bend_line_extended):
-        created = FakeBendInput(base_object, bend_line, is_bend_line_extended)
-        self.inputs.append(created)
-        return created
-
-    def add(self, inp: FakeBendInput) -> FakeFeature:
-        if not isinstance(inp, FakeBendInput):
-            raise TypeError("bendFeatures.add takes the input createInput made")
-        self.added.append(inp)
-        feature = FakeFeature(f"Bend{len(self.added)}")
         self.created.append(feature)
         return feature
 
