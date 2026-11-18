@@ -24,8 +24,8 @@ _RULES: list[tuple[str, str, list[str]]] = [
         "INTERNAL_ERROR",
         [
             "This is an add-in defect, not an input problem.",
-            "Run `uv run python scripts/check_fusion_api.py` to see which adsk name "
-            "is missing in this Fusion build.",
+            "Run `scripts/check_fusion_api.py` to list the adsk names this Fusion "
+            "build lacks.",
         ],
     ),
     (
