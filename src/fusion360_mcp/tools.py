@@ -2507,6 +2507,11 @@ _IDEMPOTENT = _READ_ONLY | {
 
 for _t in TOOLS:
     _name = _t["name"]
+    # One loop rather than 97 schema edits: the gate validates every tool against
+    # this dict, and a client that skips the gate to reach :9876 directly must not
+    # be the only caller an undeclared argument slips past.  A tool's inputSchema
+    # lists every argument it accepts, so anything else is refused by name.
+    _t["inputSchema"]["additionalProperties"] = False
     _t["annotations"] = {
         "readOnlyHint": _name in _READ_ONLY,
         "destructiveHint": _name in _DESTRUCTIVE,

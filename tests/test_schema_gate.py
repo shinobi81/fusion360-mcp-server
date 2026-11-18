@@ -82,6 +82,35 @@ def test_a_command_that_is_not_a_tool_passes_through():
     assert server._schema_refusal("no_such_command", {"anything": 1}) is None
 
 
+def test_every_tool_refuses_arguments_it_does_not_declare():
+    """Live: ``create_box(name=...)`` and ``patch_surface(body_name=...)`` were
+    forwarded to the handler, raised ``TypeError``, and reached the caller as
+    ``UNKNOWN`` with no hints.  Every schema now closes that door.
+    """
+    undeclared = [
+        tool["name"]
+        for tool in tools.TOOLS
+        if tool["inputSchema"].get("additionalProperties") is not False
+    ]
+    assert undeclared == []
+
+
+def test_an_unknown_argument_is_refused_by_name():
+    envelope = server._schema_refusal(
+        "create_box", {"length": 1.0, "width": 1.0, "height": 1.0, "name": "x"}
+    )
+
+    assert envelope is not None
+    assert envelope["ok"] is False
+    assert envelope["error_kind"] == "INVALID_INPUT"
+    assert "name" in envelope["error_message"]
+
+
+def test_the_declared_arguments_still_pass():
+    params = {"length": 1.0, "width": 1.0, "height": 1.0}
+    assert server._schema_refusal("create_box", params) is None
+
+
 def test_send_treats_none_params_as_empty():
     """The server's own ``_read`` passes ``None``; validating it would refuse."""
     result = server._send("mock", "ping", None)

@@ -7,6 +7,7 @@ one domain owning it would make that domain's module the dependency of another.
 helper here cannot be unreachable, only under-sorted.
 """
 
+import inspect
 import time
 import traceback
 from contextlib import suppress
@@ -195,6 +196,21 @@ class HandlerBase:
         snap_before = self._snapshot() if is_mutation else None
 
         try:
+            # A client can reach :9876 directly and skip the server's schema gate
+            # (spec D12), so the handler's own signature is the last check: an
+            # argument the tool does not declare - or a missing one - must arrive
+            # as a typed refusal, not a bare TypeError that classifies as UNKNOWN.
+            try:
+                inspect.signature(handler).bind(**params)
+            except TypeError as exc:
+                raise _hints.Refusal(
+                    "INVALID_INPUT",
+                    f"{cmd_type}: {exc}",
+                    hints=(
+                        "An argument is missing, or is not one this tool declares.",
+                        "docs/TOOLS.md and get_object_info name each tool's arguments.",
+                    ),
+                ) from None
             t0 = time.monotonic()
             result = handler(**params)
             elapsed = time.monotonic() - t0

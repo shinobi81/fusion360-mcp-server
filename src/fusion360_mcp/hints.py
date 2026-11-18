@@ -415,10 +415,13 @@ _RULES: list[tuple[str, str, list[str]]] = [
     (
         # Fusion's own "N : InternalValidationError": the API refused the input's
         # STATE (a property unset, or a value it will not accept) rather than the
-        # call's arguments.  Unclassified it reaches the caller as UNKNOWN with no
-        # hints, which is the failure mode every rule here exists to stop.
+        # call's arguments.  The first hint below already says so, which is why the
+        # kind is FUSION_REFUSED: a caller told the arguments are fine must not be
+        # handed INVALID_INPUT's advice to fix them.  Unclassified it reaches the
+        # caller as UNKNOWN with no hints, which is the failure mode every rule here
+        # exists to stop.
         r"InternalValidationError",
-        "INVALID_INPUT",
+        "FUSION_REFUSED",
         [
             "Fusion rejected the input's state, not its arguments.",
             "A required property may be unset, or a value it will not accept.",
@@ -476,6 +479,22 @@ _RULES: list[tuple[str, str, list[str]]] = [
             "The face reports no usable axis, so no direction can be resolved.",
             "Build the joint from a different face: the geometry is the problem.",
             "Use get_object_info on the body to find another cylindrical face.",
+        ],
+    ),
+    (
+        # Found live on 2706: create_flange on a body whose component carries no
+        # sheet-metal rule answers "3 : component has no sheet metal rule", and
+        # unclassified it reached the caller as UNKNOWN with no hints.  The fix is
+        # a different body, not a different argument, so the kind is
+        # GEOMETRY_UNSUPPORTED - and it sits above the generic INVALID_INPUT rule
+        # below so that rule's units-and-enums advice cannot shadow it.
+        r"\bcomponent has no sheet[- ]metal rule\b",
+        "GEOMETRY_UNSUPPORTED",
+        [
+            # One literal per hint, never two adjacent ones: CodeQL reads the
+            # latter as a possibly missing comma.
+            "The component has no sheet-metal rule, so Fusion cannot flange it.",
+            "Pick a body in a component with a sheet-metal rule, or convert it.",
         ],
     ),
     (

@@ -273,6 +273,41 @@ def test_an_unknown_rule_type_is_refused_as_a_refusal(bound_handler):
     assert str(raised.value) == CONVERTED[6]
 
 
+# ── the dispatch guard: a direct-wire caller gets a typed refusal ──
+
+
+def test_an_undeclared_argument_is_refused_by_the_dispatch(bound_handler):
+    """Live: ``create_box(name=...)`` raised ``TypeError`` and the wire said UNKNOWN.
+
+    A client can reach :9876 directly and skip the server's schema gate (D12), so
+    ``execute_command`` binds the handler's own signature and refuses the mismatch
+    as INVALID_INPUT, naming the argument.
+    """
+    handler = bound_handler(FakeDesign(bodies=[]))
+
+    out = handler.execute_command(
+        {
+            "type": "create_box",
+            "params": {"length": 1.0, "width": 1.0, "height": 1.0, "name": "x"},
+        }
+    )
+
+    result = out["result"]
+    assert result["ok"] is False
+    assert result["error_kind"] == "INVALID_INPUT"
+    assert "name" in result["error_message"]
+    assert result["hints"]
+
+
+def test_a_declared_argument_set_still_dispatches(bound_handler):
+    """The guard must not refuse a call the schema admits: ``ping`` has no params."""
+    handler = bound_handler(FakeDesign(bodies=[]))
+
+    out = handler.execute_command({"type": "ping", "params": {}})
+
+    assert out["result"] == {"pong": True, "ok": True}
+
+
 # ── the guard: no raise reaches a caller as UNKNOWN ──────────────────
 
 # Both walks assert the kind a typed refusal states; neither asserts that it yields
@@ -294,12 +329,12 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_base.py",
-            284,
+            300,
             "raise refusal: kind comes from _rules.point3d_refusal",
         ),
         (
             "handler_base.py",
-            289,
+            305,
             "raise refusal: kind comes from _rules.body_name_required_refusal",
         ),
         (

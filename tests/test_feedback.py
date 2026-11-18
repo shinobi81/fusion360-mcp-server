@@ -387,10 +387,21 @@ class TestFusionRefusals:
     every rule in the table exists to stop.
     """
 
-    def test_an_internal_validation_error_is_advice_not_unknown(self):
-        kind, hints = classify("2 : InternalValidationError : res")
+    def test_an_internal_validation_error_is_a_fusion_refusal(self):
+        """The rule's own advice says the arguments were fine, so the kind agrees.
 
-        assert kind == "INVALID_INPUT"
+        Live: ``trim_surface`` on a solid answered ``2 :
+        InternalValidationError : this->executeStep(editingFeature)`` and reached
+        the caller as ``INVALID_INPUT`` while the hint printed beside it said
+        "Fusion rejected the input's state, not its arguments."  A caller told the
+        arguments are fine must not be told to fix them.  Pattern and hints are
+        unchanged; only the kind moved.
+        """
+        kind, hints = classify(
+            "2 : InternalValidationError : this->executeStep(editingFeature)"
+        )
+
+        assert kind == "FUSION_REFUSED"
         assert hints, "an opaque Fusion refusal still needs a next step"
 
     def test_a_generic_argument_refusal_is_advice_not_unknown(self):
@@ -424,6 +435,18 @@ class TestLiveRefusalsFromFusion:
 
         assert kind == "INVALID_INPUT"
         assert any("free edge" in hint for hint in hints), hints
+
+    def test_a_component_without_a_sheet_metal_rule_says_which_body_to_use(self):
+        """Live: ``create_flange`` answers ``3 : component has no sheet metal rule``.
+
+        It matched no rule, so the caller got ``UNKNOWN`` with no hints.  The fix
+        is a different body, not a different argument, so the kind is
+        ``GEOMETRY_UNSUPPORTED``.
+        """
+        kind, hints = classify("3 : component has no sheet metal rule")
+
+        assert kind == "GEOMETRY_UNSUPPORTED"
+        assert any("sheet-metal rule" in hint for hint in hints), hints
 
 
 class TestThreadSizeRefusal:
