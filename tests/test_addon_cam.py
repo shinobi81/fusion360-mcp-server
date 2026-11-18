@@ -18,6 +18,13 @@ from types import SimpleNamespace
 import pytest
 
 from addon.server import hints as addon_hints
+from tests.fakes.cam import (
+    FakeCAMProduct,
+    FakeCompletedFlagFuture,
+    FakeCounterFuture,
+    FakeGenerationFlagFuture,
+    FakeNoFlagFuture,
+)
 
 
 def _items(*items):
@@ -191,3 +198,59 @@ def test_an_operation_name_in_two_setups_names_both(handler_module):
     message = str(raised.value)
     assert "Setup1" in message and "Setup2" in message
     assert any("setup_name" in hint for hint in raised.value.hints)
+
+
+@pytest.mark.parametrize(
+    "future_factory",
+    [FakeGenerationFlagFuture, FakeCompletedFlagFuture, FakeCounterFuture],
+    ids=["isGenerationCompleted", "isCompleted", "counters"],
+)
+def test_wait_future_polls_the_completion_field_the_future_has(
+    handler_module, future_factory
+):
+    """Each shape completes by polling; a read of an absent field would raise."""
+    future = future_factory()
+
+    handler_module.CommandHandler._wait_future(future, timeout=0.01)
+
+    assert future._reads >= 2
+
+
+def test_wait_future_times_out_when_the_completion_flag_never_flips(handler_module):
+    future = FakeGenerationFlagFuture(completed_after=None)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(future, timeout=0.01)
+
+    assert raised.value.error_kind == "TIMEOUT"
+    assert str(raised.value) == (
+        "Toolpath generation did not finish within 0.01s. The operation may still "
+        "complete in the background — check with cam_list_operations before "
+        "regenerating."
+    )
+
+
+def test_wait_future_refuses_a_future_with_no_completion_field(handler_module):
+    """No flag means nothing was verified, so the caller gets a typed refusal."""
+    future = FakeNoFlagFuture()
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(future, timeout=0.01)
+
+    assert raised.value.error_kind == "INTERNAL_ERROR"
+    assert "FakeNoFlagFuture" in str(raised.value)
+    assert any("cam_list_operations" in hint for hint in raised.value.hints)
+
+
+def test_operation_only_generation_reaches_generate_toolpath(handler_module):
+    """The operation-only scope runs the real wait and reports what it generated."""
+    operation = _operation("Rough1")
+    setup = _setup_with_operations("Setup1", operation)
+    cam = FakeCAMProduct([setup], FakeGenerationFlagFuture(completed_after=1))
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: cam
+
+    result = handler.cam_generate_toolpath(operation_name="Rough1")
+
+    assert result == {"generated": True, "scope": "operation", "operation": "Rough1"}
+    assert cam.generated == [operation]

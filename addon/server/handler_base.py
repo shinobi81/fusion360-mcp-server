@@ -505,18 +505,58 @@ class HandlerBase:
     def _wait_future(future, timeout: float = 25.0):
         """Wait for a CAM generation future, bounded so a runaway
         generation fails as a structured error instead of freezing the
-        main thread past the bridge timeout."""
-        is_completed = getattr(future, "isCompleted", None)
-        if is_completed is None:
-            future.wait()
-            return
+        main thread past the bridge timeout.
+
+        ``GenerateToolpathFuture`` documents ``isGenerationCompleted``; other
+        futures may spell it ``isCompleted`` or expose only the completed/total
+        counters, so probe those in order.  Only a field this object actually
+        has is polled: the old fallback called ``future.wait()``, which the
+        2706 build does not define, so every generation call raised
+        ``AttributeError``.
+        """
+        flag = next(
+            (
+                name
+                for name in ("isGenerationCompleted", "isCompleted")
+                if getattr(future, name, None) is not None
+            ),
+            None,
+        )
+        if flag is not None:
+            def is_done() -> bool:
+                return bool(getattr(future, flag))
+
+        elif (
+            getattr(future, "numberOfCompleted", None) is not None
+            and getattr(future, "numberOfOperations", None) is not None
+        ):
+            def is_done() -> bool:
+                return future.numberOfCompleted >= future.numberOfOperations
+
+        else:
+            # Returning success would report a generation nothing verified.  The
+            # caller cannot make Fusion expose a completion field, so this is an
+            # add-in defect; the advice points at the state it can check instead.
+            raise _hints.Refusal(
+                "INTERNAL_ERROR",
+                f"Fusion exposed no completion flag on {type(future).__name__}; "
+                "check cam_list_operations before regenerating.",
+                hints=(
+                    "Call cam_list_operations to see whether the toolpath was "
+                    "generated anyway.",
+                    "This is an add-in defect; report the Fusion build and the "
+                    "future type.",
+                ),
+            )
+
         deadline = time.monotonic() + timeout
-        while not future.isCompleted:
+        while not is_done():
             if time.monotonic() > deadline:
-                raise RuntimeError(
+                raise _hints.Refusal(
+                    "TIMEOUT",
                     f"Toolpath generation did not finish within {timeout}s. "
                     "The operation may still complete in the background — "
-                    "check with cam_list_operations before regenerating."
+                    "check with cam_list_operations before regenerating.",
                 )
             time.sleep(0.1)
 
