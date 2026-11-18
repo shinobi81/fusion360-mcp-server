@@ -154,6 +154,26 @@ def test_new_document_without_a_design_product_is_a_design_type_mismatch(
 # ── set_design_type ──────────────────────────────────────────────────
 
 
+def test_an_unsupported_design_type_is_refused_with_a_kind(bound_handler):
+    """The guard behind the gate: only an MCP caller is refused before this point.
+
+    Spec D12 keeps the add-in's own checks behind the schema gate, because a client
+    can talk to ``:9876`` directly.  Without a test here the guard could be deleted
+    again and no suite would notice — the direct-wire caller would be told
+    ``{"value": null, "ok": true}`` for a switch that never happened.
+    """
+    handler = bound_handler(FakeDesign(features=0))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.set_design_type("hybrid")
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert str(raised.value) == (
+        "Invalid design_type 'hybrid'. Use 'parametric' or 'direct'."
+    )
+    assert raised.value.hints
+
+
 def test_set_design_type_to_parametric_switches_a_direct_design_with_features(
     bound_handler, monkeypatch
 ):
