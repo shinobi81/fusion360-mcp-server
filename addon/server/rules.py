@@ -448,7 +448,8 @@ def cam_target_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
         "INVALID_INPUT",
         "Provide setup_name, operation_name, or generate_all=true",
         hints=(
-            "Pass setup_name, and operation_name to narrow it to one operation.",
+            "Pass operation_name to generate that one operation, or setup_name "
+            "for all of that setup's.",
             "generate_all=true generates every setup's toolpaths.",
         ),
     )

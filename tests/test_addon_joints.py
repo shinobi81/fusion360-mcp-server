@@ -353,6 +353,7 @@ def test_an_as_built_joint_names_the_missing_components(bound_handler):
         "create_as_built_joint",
         component_one="Missing",
         component_two="B",
+        joint_type="rigid",
     )
 
     _assert_refused(

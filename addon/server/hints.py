@@ -160,6 +160,20 @@ _RULES: list[tuple[str, str, list[str]]] = [
         ],
     ),
     (
+        # Fusion's own CAM generation failure ("3 : generation failed").
+        # ``_wait_future`` re-raises it for the handler to classify and nothing
+        # did, so it reached the caller as UNKNOWN with no hints.  REGEN_FAILED
+        # comes earlier and keeps "Regeneration failed": that is a feature
+        # rebuild, not a toolpath.
+        r"generation fail",
+        "FUSION_REFUSED",
+        [
+            "Fusion failed to generate the toolpath.",
+            "cam_list_operations reports what happened: check has_toolpath.",
+            "Fix the operation's parameters or tool, then generate it again.",
+        ],
+    ),
+    (
         # Every feature tool raises this itself for a mistyped ``operation``.
         # Without a rule it classified as UNKNOWN with no hints, so a caller that
         # wrote ``union`` was told nothing at all. Anchored on the quoted name so
@@ -558,6 +572,20 @@ _RULES: list[tuple[str, str, list[str]]] = [
             "the account's entitlement changes.",
             "Use an approach that does not need this API, or run it under a "
             "Fusion subscription that includes it.",
+        ],
+    ),
+    (
+        # Fusion prefixes most of its own failures with an error number: "3 :
+        # invalid free edge", "2 : InternalValidationError ...".  The specific
+        # rules above own the numbered messages they recognise; a numbered
+        # message none of them claims is still Fusion refusing the call, not an
+        # add-in defect, and used to fall through to UNKNOWN with no hints.
+        # Last in the table so every specific rule wins by first match.
+        r"^\d+\s*:",
+        "FUSION_REFUSED",
+        [
+            "Fusion refused the call and gave no cause this server recognises.",
+            "Check the design's state and the arguments, then retry or change it.",
         ],
     ),
 ]

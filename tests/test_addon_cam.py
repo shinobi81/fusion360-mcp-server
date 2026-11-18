@@ -170,7 +170,31 @@ def test_an_operation_name_alone_generates_it_across_setups(handler_module):
 
     result = handler.cam_generate_toolpath(operation_name="Rough1")
 
-    assert result == {"generated": True, "scope": "operation", "operation": "Rough1"}
+    assert result == {
+        "generated": True,
+        "scope": "operation",
+        "setup": "Setup2",
+        "operation": "Rough1",
+    }
+    assert generated == [operation]
+
+
+def test_setup_and_operation_generation_reports_the_setup(handler_module):
+    """The narrowed path knows the setup it resolved, so the reply names it too."""
+    operation = _operation("Rough1")
+    cam = _cam(_setup_with_operations("Setup1", operation))
+    generated = []
+    cam.generateToolpath = generated.append
+    handler = _generating_handler(handler_module, cam)
+
+    result = handler.cam_generate_toolpath(setup_name="Setup1", operation_name="Rough1")
+
+    assert result == {
+        "generated": True,
+        "scope": "operation",
+        "setup": "Setup1",
+        "operation": "Rough1",
+    }
     assert generated == [operation]
 
 
@@ -202,6 +226,29 @@ def test_an_operation_name_in_two_setups_names_both(handler_module):
     message = str(raised.value)
     assert "Setup1" in message and "Setup2" in message
     assert any("setup_name" in hint for hint in raised.value.hints)
+
+
+def test_a_name_held_twice_in_one_setup_refuses_instead_of_picking_one(
+    handler_module,
+):
+    """Fusion lets operations be renamed, so one setup can hold two of a name.
+
+    The old scan took the first match per setup, so this ambiguity looked like a
+    single match and the first operation was generated silently.
+    """
+    first = _operation("Rough1")
+    second = _operation("Rough1")
+    cam = _cam(_setup_with_operations("Setup1", first, second), _setup("Setup2"))
+    generated = []
+    cam.generateToolpath = generated.append
+    handler = _generating_handler(handler_module, cam)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_generate_toolpath(operation_name="Rough1")
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert "Setup1" in str(raised.value)
+    assert generated == []
 
 
 @pytest.mark.parametrize(
@@ -267,14 +314,27 @@ def test_wait_future_times_out_when_generation_never_starts(handler_module):
         "complete in the background — check with cam_list_operations before "
         "regenerating."
     )
+    assert raised.value.hints == (
+        "The wait is the add-in's own bound (25 s), not the bridge's 30 s timeout.",
+        "cam_list_operations reports whether the toolpath finished in the background.",
+    )
 
 
 def test_wait_future_lets_an_unrelated_runtime_error_out(handler_module):
-    """Only "Generation not started" is tolerated; a real failure is Fusion's."""
+    """Only "Generation not started" is tolerated; a real failure is Fusion's.
+
+    Re-raising it is only half the answer: the handler classifies what the wait
+    raises, so the message has to reach the caller with a kind and advice rather
+    than ``UNKNOWN`` with none.
+    """
     future = FakeGenerationFailureFuture()
 
-    with pytest.raises(RuntimeError, match="3 : generation failed"):
+    with pytest.raises(RuntimeError, match="3 : generation failed") as raised:
         handler_module.CommandHandler._wait_future(future, timeout=0.01)
+
+    kind, hints = addon_hints.classify(str(raised.value))
+    assert kind == "FUSION_REFUSED"
+    assert any("cam_list_operations" in hint for hint in hints)
 
 
 def test_wait_future_polls_through_not_started_counters(handler_module):
@@ -296,5 +356,10 @@ def test_operation_only_generation_reaches_generate_toolpath(handler_module):
 
     result = handler.cam_generate_toolpath(operation_name="Rough1")
 
-    assert result == {"generated": True, "scope": "operation", "operation": "Rough1"}
+    assert result == {
+        "generated": True,
+        "scope": "operation",
+        "setup": "Setup1",
+        "operation": "Rough1",
+    }
     assert cam.generated == [operation]

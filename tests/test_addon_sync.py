@@ -277,26 +277,50 @@ def test_every_handler_declares_exactly_its_schema_properties(handler_module):
     The schema is what an MCP caller is validated against; the handler's signature
     is what a direct-wire caller reaches, through the dispatch bind.  An argument
     only one side declares is either unreachable or unvalidated, so the two sets
-    must be equal rather than merely overlapping.
+    must be equal rather than merely overlapping.  The same holds for required-ness:
+    an argument the schema makes mandatory must not have a handler default, or the
+    direct-wire caller skips a check the MCP caller gets, and the reverse would
+    refuse a call the schema permits.  A ``None`` handler default is the add-in's
+    own "unset" - the handler refuses it with a typed message - so the schema is
+    deliberately the stricter side there.
     """
     from fusion360_mcp.tools import TOOLS
 
     mismatched = {}
     for tool in TOOLS:
         name = tool["name"]
+        signature = inspect.signature(getattr(handler_module.CommandHandler, name))
         parameters = [
-            parameter
-            for parameter in inspect.signature(
-                getattr(handler_module.CommandHandler, name)
-            ).parameters
-            if parameter != "self"
+            parameter for parameter in signature.parameters if parameter != "self"
         ]
-        declared = list((tool["inputSchema"].get("properties") or {}))
+        schema = tool["inputSchema"]
+        declared = list(schema.get("properties") or {})
+        entry = {}
         if set(parameters) != set(declared):
-            mismatched[name] = {
-                "handler_only": sorted(set(parameters) - set(declared)),
-                "schema_only": sorted(set(declared) - set(parameters)),
-            }
+            entry["handler_only"] = sorted(set(parameters) - set(declared))
+            entry["schema_only"] = sorted(set(declared) - set(parameters))
+
+        required = set(schema.get("required") or ())
+        no_default = {
+            parameter
+            for parameter in parameters
+            if signature.parameters[parameter].default is inspect.Parameter.empty
+        }
+        schema_requires = required - {
+            parameter
+            for parameter in required
+            if parameter in signature.parameters
+            and signature.parameters[parameter].default is None
+        }
+        if no_default != schema_requires:
+            entry["schema_required_handler_optional"] = sorted(
+                schema_requires - no_default
+            )
+            entry["handler_required_schema_optional"] = sorted(
+                no_default - schema_requires
+            )
+        if entry:
+            mismatched[name] = entry
 
     assert not mismatched, mismatched
 

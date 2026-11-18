@@ -114,13 +114,21 @@ def _send(
     declares invalid.  ``params=None`` is what some callers pass; validating it
     as ``None`` against the schema's ``{"type": "object"}`` would refuse
     ``ping``, so it is normalised to ``{}`` before validation.  An explicit
-    ``null`` for an optional property means the same as omitting it, so
-    ``None``-valued parameters are dropped and the handler's default applies;
-    a required property left ``null`` is still refused as missing.
+    ``null`` for a declared optional property means the same as omitting it, so
+    that ``None`` is dropped and the handler's default applies; a required
+    property left ``null`` is still refused as missing.  Only declared keys are
+    dropped: an undeclared key stays in the call, so ``additionalProperties:
+    false`` still refuses it by name however its value is spelled.
     """
     if params is None:
         params = {}
-    params = {name: value for name, value in params.items() if value is not None}
+    spec = get_tool_by_name(command_type) or {}
+    declared = set((spec.get("inputSchema") or {}).get("properties") or ())
+    params = {
+        name: value
+        for name, value in params.items()
+        if value is not None or name not in declared
+    }
     refusal = _schema_refusal(command_type, params)
     if refusal is not None:
         return refusal

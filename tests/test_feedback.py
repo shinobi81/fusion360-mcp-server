@@ -415,6 +415,18 @@ class TestFusionRefusals:
         assert kind == "INVALID_INPUT"
         assert any("thickness" in hint for hint in hints)
 
+    def test_a_bare_numbered_fusion_failure_is_a_fusion_refusal(self):
+        """Fusion numbers its own failures; an unrecognised one must not be UNKNOWN.
+
+        The numbered messages the table already owns ("3 : Some input argument is
+        invalid", "2 : InternalValidationError ...") are matched by their own rules
+        above this one, so a bare number falls through to the general rule only.
+        """
+        kind, hints = classify("3 : something new")
+
+        assert kind == "FUSION_REFUSED"
+        assert hints, "an opaque Fusion refusal still needs a next step"
+
     def test_a_non_positive_shell_thickness_is_advice_not_unknown(self):
         kind, hints = classify("thickness must be positive, got 0.0 cm")
 

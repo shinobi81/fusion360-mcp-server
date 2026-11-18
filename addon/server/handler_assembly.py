@@ -598,7 +598,7 @@ class AssemblyCommands:
         self,
         component_one: str,
         component_two: str,
-        joint_type: str = "rigid",
+        joint_type: str,
         body_one: str | None = None,
         face_one: int | None = None,
         body_two: str | None = None,

@@ -59,6 +59,23 @@ class TestSendRouting:
         assert result.get("error_message") is None
         assert result["sketch_name"] == "Sketch_mock_xy"
 
+    def test_an_explicit_null_undeclared_key_is_still_refused(self):
+        """Dropping every ``None`` let a misspelt argument past the gate.
+
+        ``sketch_nam`` is not in the schema, so ``additionalProperties: false``
+        refuses it when it carries a value; a ``None`` used to erase it before
+        validation, and the call then succeeded against the default sketch — a
+        wrong call reported as success.
+        """
+        result = _send(
+            "mock",
+            "draw_rectangle",
+            {"width": 1, "height": 1, "sketch_nam": None},
+        )
+        assert result["ok"] is False
+        assert result["error_kind"] == "INVALID_INPUT"
+        assert "sketch_nam" in result["error_message"]
+
     def test_an_explicit_null_required_is_still_refused(self):
         """Dropping it leaves the required property missing, which the gate refuses."""
         result = _send("mock", "draw_rectangle", {"width": None, "height": 1})

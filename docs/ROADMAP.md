@@ -187,13 +187,18 @@ and asks the running Fusion whether it exists - 193 references, none missing on
    inconsistency reads as a decision rather than an oversight. The work above changed the
    tag of the 88 with none; a rule that already answered with a kind kept it, even where
    the new taxonomy disagrees: the CAM `setup/operation not found` rule is still
-   `INVALID_INPUT`, and so is `no faces matched`. Those tags are what a client may already
-   branch on, so changing them is a client-visible change with its own evidence and
-   release note, not a ride-along. One retag did ship with this work, because the
-   rule's own hint already said so: `InternalValidationError` used to answer
-   `INVALID_INPUT` and now reports `FUSION_REFUSED` (measured on Fusion 2706.1.17:
-   `2 : InternalValidationError …`), pinned by
-   `test_an_internal_validation_error_is_a_fusion_refusal` in `tests/test_feedback.py`.
+   `INVALID_INPUT`, and so is `no faces matched`. Those tags are what a client may
+   already branch on, so changing them is a client-visible change with its own evidence
+   and release note, not a ride-along. One new path is deliberately asymmetric:
+   `cam_generate_toolpath(operation_name=…)` answers `NAME_NOT_FOUND`, because its hint
+   names the list to enumerate, while the CAM `setup/operation not found` rule still
+   answers `INVALID_INPUT`; the two coexist because retagging that rule is the deferred
+   change above, and the new search raises its own typed refusal rather than that
+   message. One retag did ship with this work, because the rule's own hint already said
+   so: `InternalValidationError` used to answer `INVALID_INPUT` and now reports
+   `FUSION_REFUSED` (measured on Fusion 2706.1.17: `2 : InternalValidationError …`),
+   pinned by `test_an_internal_validation_error_is_a_fusion_refusal` in
+   `tests/test_feedback.py`.
 3. **`handler_cam` (39%) and `handler_export` (44%)** - up from 17% and 23%, because the
    refusal work had to drive their refusal paths - are the two modules the coverage work
    left where they were. A CAM `Product` and an `exportManager`/`viewport` are the largest

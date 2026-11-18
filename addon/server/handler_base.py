@@ -208,8 +208,8 @@ class HandlerBase:
                     f"{cmd_type}: {exc}",
                     hints=(
                         "An argument is missing, or is not one this tool declares.",
-                        "docs/TOOLS.md lists each tool's arguments; compare "
-                        "the call against it.",
+                        "Compare the call against the tool's inputSchema "
+                        "(list_tools) or its row in docs/TOOLS.md.",
                     ),
                 ) from None
             t0 = time.monotonic()
@@ -589,6 +589,12 @@ class HandlerBase:
                     f"Toolpath generation did not finish within {timeout}s. "
                     "The operation may still complete in the background — "
                     "check with cam_list_operations before regenerating.",
+                    hints=(
+                        "The wait is the add-in's own bound (25 s), not the "
+                        "bridge's 30 s timeout.",
+                        "cam_list_operations reports whether the toolpath "
+                        "finished in the background.",
+                    ),
                 )
             time.sleep(0.1)
 

@@ -2338,7 +2338,11 @@ TOOLS: list[dict] = [
         },
         operation_name={
             "type": "string",
-            "description": ("Specific operation name (overrides setup_name)"),
+            "description": (
+                "Specific operation name; searched in every setup unless "
+                "setup_name narrows it. generate_all=true takes precedence "
+                "over both."
+            ),
         },
         generate_all={
             "type": "boolean",

@@ -81,10 +81,10 @@ class CamCommands:
         matches = []
         for i in range(cam.setups.count):
             setup = cam.setups.item(i)
-            try:
-                matches.append((setup, self._find_operation(setup, name)))
-            except RuntimeError:
-                continue
+            for j in range(setup.operations.count):
+                operation = setup.operations.item(j)
+                if operation.name == name:
+                    matches.append((setup, operation))
         return matches
 
     def cam_list_setups(self):
@@ -364,19 +364,25 @@ class CamCommands:
                     ),
                 )
             if len(matches) > 1:
-                setups = ", ".join(setup.name for setup, _operation in matches)
+                setups = ", ".join(
+                    dict.fromkeys(setup.name for setup, _operation in matches)
+                )
                 raise _hints.Refusal(
                     "INVALID_INPUT",
-                    f"Operation '{operation_name}' is in more than one setup: "
-                    f"{setups}",
-                    hints=("Pass setup_name to choose which setup to generate.",),
+                    f"Operation '{operation_name}' matches {len(matches)} "
+                    f"operations in: {setups}",
+                    hints=(
+                        "Pass setup_name to choose which setup to generate.",
+                        "Rename duplicate operations so the name selects one.",
+                    ),
                 )
-            _setup, operation = matches[0]
+            setup, operation = matches[0]
             future = cam.generateToolpath(operation)
             self._wait_future(future)
             return {
                 "generated": True,
                 "scope": "operation",
+                "setup": setup.name,
                 "operation": operation_name,
             }
 
@@ -388,6 +394,7 @@ class CamCommands:
             return {
                 "generated": True,
                 "scope": "operation",
+                "setup": setup.name,
                 "operation": operation_name,
             }
 
