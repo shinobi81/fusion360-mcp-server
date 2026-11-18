@@ -22,8 +22,12 @@ from tests.fakes.cam import (
     FakeCAMProduct,
     FakeCompletedFlagFuture,
     FakeCounterFuture,
+    FakeGenerationFailureFuture,
     FakeGenerationFlagFuture,
+    FakeNeverStartedFuture,
     FakeNoFlagFuture,
+    FakeNotStartedCounterFuture,
+    FakeNotStartedFuture,
 )
 
 
@@ -240,6 +244,46 @@ def test_wait_future_refuses_a_future_with_no_completion_field(handler_module):
     assert raised.value.error_kind == "INTERNAL_ERROR"
     assert "FakeNoFlagFuture" in str(raised.value)
     assert any("cam_list_operations" in hint for hint in raised.value.hints)
+
+
+def test_wait_future_polls_through_a_not_started_flag(handler_module):
+    """The flag raises until generation begins; that is present-and-not-done."""
+    future = FakeNotStartedFuture(starts_after=3)
+
+    handler_module.CommandHandler._wait_future(future, timeout=0.01)
+
+    assert future._reads >= 3
+
+
+def test_wait_future_times_out_when_generation_never_starts(handler_module):
+    future = FakeNeverStartedFuture()
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(future, timeout=0.01)
+
+    assert raised.value.error_kind == "TIMEOUT"
+    assert str(raised.value) == (
+        "Toolpath generation did not finish within 0.01s. The operation may still "
+        "complete in the background — check with cam_list_operations before "
+        "regenerating."
+    )
+
+
+def test_wait_future_lets_an_unrelated_runtime_error_out(handler_module):
+    """Only "Generation not started" is tolerated; a real failure is Fusion's."""
+    future = FakeGenerationFailureFuture()
+
+    with pytest.raises(RuntimeError, match="3 : generation failed"):
+        handler_module.CommandHandler._wait_future(future, timeout=0.01)
+
+
+def test_wait_future_polls_through_not_started_counters(handler_module):
+    """The counter pair gets the same tolerant read as the boolean flag."""
+    future = FakeNotStartedCounterFuture()
+
+    handler_module.CommandHandler._wait_future(future, timeout=0.01)
+
+    assert future._reads >= 2
 
 
 def test_operation_only_generation_reaches_generate_toolpath(handler_module):

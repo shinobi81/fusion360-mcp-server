@@ -509,29 +509,61 @@ class HandlerBase:
 
         ``GenerateToolpathFuture`` documents ``isGenerationCompleted``; other
         futures may spell it ``isCompleted`` or expose only the completed/total
-        counters, so probe those in order.  Only a field this object actually
-        has is polled: the old fallback called ``future.wait()``, which the
-        2706 build does not define, so every generation call raised
+        counters, so probe those in order.  On 2706.1.17 the property *raises*
+        ``RuntimeError("3 : Generation not started")`` until generation begins,
+        rather than answering ``False``, so every read below is wrapped: "not
+        started" means the field exists and is not complete, while any other
+        ``RuntimeError`` is Fusion's own and is re-raised for the handler to
+        classify.  The old fallback called ``future.wait()``, which the 2706
+        build does not define, so every generation call raised
         ``AttributeError``.
         """
-        flag = next(
-            (
-                name
-                for name in ("isGenerationCompleted", "isCompleted")
-                if getattr(future, name, None) is not None
-            ),
-            None,
-        )
-        if flag is not None:
-            def is_done() -> bool:
-                return bool(getattr(future, flag))
 
-        elif (
-            getattr(future, "numberOfCompleted", None) is not None
-            and getattr(future, "numberOfOperations", None) is not None
-        ):
+        def read_field(name: str) -> tuple[bool, Any]:
+            """Return (field exists, value); "not started" is (True, None).
+
+            ``AttributeError`` means this future does not spell the field that
+            way, so probing can try the next spelling.  Fusion's own
+            ``RuntimeError`` proves the field is there but cannot answer yet, so
+            it is treated as present and not complete; a different RuntimeError
+            is a real failure and must reach the caller.
+            """
+            try:
+                return True, getattr(future, name)
+            except AttributeError:
+                return False, None
+            except RuntimeError as exc:
+                if "Generation not started" in str(exc):
+                    return True, None
+                raise
+
+        flag = None
+        for name in ("isGenerationCompleted", "isCompleted"):
+            present, _value = read_field(name)
+            if present:
+                flag = name
+                break
+        if flag is not None:
+
             def is_done() -> bool:
-                return future.numberOfCompleted >= future.numberOfOperations
+                present, value = read_field(flag)
+                return present and bool(value)
+
+        elif all(
+            read_field(name)[0]
+            for name in ("numberOfCompleted", "numberOfOperations")
+        ):
+
+            def is_done() -> bool:
+                completed_present, completed = read_field("numberOfCompleted")
+                total_present, total = read_field("numberOfOperations")
+                return (
+                    completed_present
+                    and total_present
+                    and completed is not None
+                    and total is not None
+                    and completed >= total
+                )
 
         else:
             # Returning success would report a generation nothing verified.  The

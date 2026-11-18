@@ -2,15 +2,18 @@
 
 ``GenerateToolpathFuture`` on Fusion 2706.1.17 exposes ``isGenerationCompleted``
 and the ``numberOfCompleted`` / ``numberOfOperations`` pair; it has neither
-``isCompleted`` nor ``wait``.  These fakes model one shape each rather than a
-convenient superset, so reading a field a shape does not have raises
-``AttributeError`` exactly as SWIG does -- a handler that invents ``wait()``
-cannot pass by finding it here.
+``isCompleted`` nor ``wait``.  It also *raises* ``RuntimeError("3 : Generation not
+started")`` when a completion field is read before generation begins.  These fakes
+model one shape each rather than a convenient superset, so reading a field a
+shape does not have raises ``AttributeError`` exactly as SWIG does -- a handler
+that invents ``wait()`` cannot pass by finding it here.
 """
 
 from __future__ import annotations
 
 from .collection import FakeItemCollection
+
+_NOT_STARTED = "3 : Generation not started"
 
 
 class _PollingFuture:
@@ -64,6 +67,58 @@ class FakeCounterFuture(_PollingFuture):
 
 class FakeNoFlagFuture:
     """A future exposing no completion field this add-in knows how to read."""
+
+
+class FakeNotStartedFuture:
+    """``isGenerationCompleted`` raises "not started" for the first reads.
+
+    Measured on 2706.1.17: ``cam.generateToolpath`` returns the future before
+    generation starts, and the property raises until it does.  The first
+    ``starts_after - 1`` reads raise, then it answers ``True``.
+    """
+
+    def __init__(self, starts_after: int = 3):
+        self._starts_after = starts_after
+        self._reads = 0
+
+    @property
+    def isGenerationCompleted(self) -> bool:
+        self._reads += 1
+        if self._reads < self._starts_after:
+            raise RuntimeError(_NOT_STARTED)
+        return True
+
+
+class FakeNeverStartedFuture:
+    """``isGenerationCompleted`` raises "not started" forever."""
+
+    @property
+    def isGenerationCompleted(self) -> bool:
+        raise RuntimeError(_NOT_STARTED)
+
+
+class FakeGenerationFailureFuture:
+    """A getter failing for a reason other than "not started"."""
+
+    @property
+    def isGenerationCompleted(self) -> bool:
+        raise RuntimeError("3 : generation failed")
+
+
+class FakeNotStartedCounterFuture(FakeCounterFuture):
+    """The counter pair raises "not started" once, then answers normally."""
+
+    def __init__(self):
+        super().__init__(number_of_operations=2, completed_after=2)
+        self._not_started = True
+
+    @property
+    def numberOfCompleted(self) -> int:
+        if self._not_started:
+            self._not_started = False
+            self._reads += 1
+            raise RuntimeError(_NOT_STARTED)
+        return super().numberOfCompleted
 
 
 class FakeCAMProduct:
