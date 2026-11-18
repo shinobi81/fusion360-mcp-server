@@ -423,17 +423,24 @@ def export_body_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
 def cam_target_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal a ``cam_generate_toolpath`` with nothing to generate earns, or None.
 
-    ``operation_name`` alone is not enough - an operation is found through its setup -
-    but the message is unchanged, so it still names ``operation_name`` as an
-    alternative.  Judged before the CAM product is looked up: the caller can fix this
-    call without Fusion, and the add-in's other parameter checks come first too.
+    ``operation_name`` alone is enough: the handler searches every setup for it and
+    refuses a name held by more than one until a setup narrows it.  Judged before the
+    CAM product is looked up: the caller can fix this call without Fusion, and the
+    add-in's other parameter checks come first too.
     """
-    if params.get("generate_all") or params.get("setup_name"):
+    if (
+        params.get("generate_all")
+        or params.get("setup_name")
+        or params.get("operation_name")
+    ):
         return None
     return _hints.Refusal(
         "INVALID_INPUT",
         "Provide setup_name, operation_name, or generate_all=true",
-        hints=("Pass setup_name, operation_name, or generate_all=true.",),
+        hints=(
+            "Pass setup_name, and operation_name to narrow it to one operation.",
+            "generate_all=true generates every setup's toolpaths.",
+        ),
     )
 
 

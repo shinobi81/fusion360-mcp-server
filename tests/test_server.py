@@ -49,6 +49,23 @@ class TestSendRouting:
         assert result["name"] == "TestBody"
         assert result["mode"] == "mock"
 
+    def test_an_explicit_null_optional_is_treated_as_absent(self):
+        """``null`` for an optional property means unset, so the default applies."""
+        result = _send(
+            "mock",
+            "draw_rectangle",
+            {"width": 1, "height": 1, "sketch_name": None},
+        )
+        assert result.get("error_message") is None
+        assert result["sketch_name"] == "Sketch_mock_xy"
+
+    def test_an_explicit_null_required_is_still_refused(self):
+        """Dropping it leaves the required property missing, which the gate refuses."""
+        result = _send("mock", "draw_rectangle", {"width": None, "height": 1})
+        assert result["ok"] is False
+        assert result["error_kind"] == "INVALID_INPUT"
+        assert "width" in result["error_message"]
+
     def test_mock_mode_all_tools_succeed(self):
         """Every registered tool should succeed through mock routing."""
         from fusion360_mcp.tools import TOOLS

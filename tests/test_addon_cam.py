@@ -130,3 +130,64 @@ def test_a_post_that_exists_is_returned_as_given_or_resolved(handler_module, tmp
 
     assert handler._resolve_post(str(post)) == str(post)
     assert handler._resolve_post("fanuc") == str(post)
+
+
+def _operation(name: str) -> SimpleNamespace:
+    return SimpleNamespace(name=name)
+
+
+def _setup_with_operations(name: str, *operations) -> SimpleNamespace:
+    setup = _setup(name)
+    setup.operations = _items(*operations)
+    return setup
+
+
+def _generating_handler(handler_module, cam):
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: cam
+    handler._wait_future = lambda _future: None
+    return handler
+
+
+def test_an_operation_name_alone_generates_it_across_setups(handler_module):
+    """``operation_name`` is a target on its own, as the schema says it is."""
+    operation = _operation("Rough1")
+    cam = _cam(_setup("Setup1"), _setup_with_operations("Setup2", operation))
+    generated = []
+    cam.generateToolpath = generated.append
+    handler = _generating_handler(handler_module, cam)
+
+    result = handler.cam_generate_toolpath(operation_name="Rough1")
+
+    assert result == {"generated": True, "scope": "operation", "operation": "Rough1"}
+    assert generated == [operation]
+
+
+def test_an_unknown_operation_name_is_name_not_found(handler_module):
+    """No setup holds it, and the hint names the list that would."""
+    cam = _cam(_setup_with_operations("Setup1", _operation("Finishing")))
+    handler = _generating_handler(handler_module, cam)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_generate_toolpath(operation_name="Rough1")
+
+    assert raised.value.error_kind == "NAME_NOT_FOUND"
+    assert "'Rough1'" in str(raised.value)
+    assert any("cam_list_operations" in hint for hint in raised.value.hints)
+
+
+def test_an_operation_name_in_two_setups_names_both(handler_module):
+    """A shared name is ambiguous, so the refusal says which setups hold it."""
+    cam = _cam(
+        _setup_with_operations("Setup1", _operation("Rough1")),
+        _setup_with_operations("Setup2", _operation("Rough1")),
+    )
+    handler = _generating_handler(handler_module, cam)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_generate_toolpath(operation_name="Rough1")
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    message = str(raised.value)
+    assert "Setup1" in message and "Setup2" in message
+    assert any("setup_name" in hint for hint in raised.value.hints)

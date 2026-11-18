@@ -76,6 +76,17 @@ class CamCommands:
                 return op
         raise RuntimeError(f"Operation '{name}' not found in setup '{setup.name}'")
 
+    def _operations_named(self, cam, name: str):
+        """Every ``(setup, operation)`` pair named *name*, in the tree's order."""
+        matches = []
+        for i in range(cam.setups.count):
+            setup = cam.setups.item(i)
+            try:
+                matches.append((setup, self._find_operation(setup, name)))
+            except RuntimeError:
+                continue
+        return matches
+
     def cam_list_setups(self):
         cam = self._get_cam()
         result = []
@@ -326,7 +337,11 @@ class CamCommands:
         # Judged before the CAM product is looked up: the caller can fix this call
         # without it, and the message names the arguments that would work.
         if refusal := _rules.cam_target_refusal(
-            {"setup_name": setup_name, "generate_all": generate_all}
+            {
+                "setup_name": setup_name,
+                "operation_name": operation_name,
+                "generate_all": generate_all,
+            }
         ):
             raise refusal
 
@@ -336,6 +351,34 @@ class CamCommands:
             future = cam.generateAllToolpaths(False)
             self._wait_future(future)
             return {"generated": True, "scope": "all"}
+
+        if operation_name and not setup_name:
+            matches = self._operations_named(cam, operation_name)
+            if not matches:
+                raise _hints.Refusal(
+                    "NAME_NOT_FOUND",
+                    f"Operation '{operation_name}' not found in any setup",
+                    hints=(
+                        "Call cam_list_operations to see the operations each setup "
+                        "holds.",
+                    ),
+                )
+            if len(matches) > 1:
+                setups = ", ".join(setup.name for setup, _operation in matches)
+                raise _hints.Refusal(
+                    "INVALID_INPUT",
+                    f"Operation '{operation_name}' is in more than one setup: "
+                    f"{setups}",
+                    hints=("Pass setup_name to choose which setup to generate.",),
+                )
+            _setup, operation = matches[0]
+            future = cam.generateToolpath(operation)
+            self._wait_future(future)
+            return {
+                "generated": True,
+                "scope": "operation",
+                "operation": operation_name,
+            }
 
         if operation_name and setup_name:
             setup = self._find_setup(cam, setup_name)

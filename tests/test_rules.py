@@ -337,7 +337,10 @@ PARAMETER_REFUSALS = [
         {},
         "INVALID_INPUT",
         "Provide setup_name, operation_name, or generate_all=true",
-        ("Pass setup_name, operation_name, or generate_all=true.",),
+        (
+            "Pass setup_name, and operation_name to narrow it to one operation.",
+            "generate_all=true generates every setup's toolpaths.",
+        ),
     ),
     # Surface trim: the tool and the cell indices are judged from the parameters
     # alone, before Fusion computes any cell to check an index against.
@@ -436,6 +439,7 @@ def test_a_usable_export_or_cam_target_is_refused_by_neither_side():
     assert rules.export_body_refusal({"format": "f3d"}) is None
     assert rules.cam_target_refusal({"generate_all": True}) is None
     assert rules.cam_target_refusal({"setup_name": "Setup1"}) is None
+    assert rules.cam_target_refusal({"operation_name": "Rough1"}) is None
 
 
 @pytest.mark.parametrize("symmetry_line", [0, 2])

@@ -180,15 +180,20 @@ and asks the running Fusion whether it exists - 193 references, none missing on
    opens at `[0.8.5]` because the packaging guard fails an entry written ahead of the
    version being cut, so entries are written once, at release. The note owes the PRs
    merged since `v0.8.5` (`#125`-`#137`) and this work's entry: the six new kinds, the
-   schema gate, the refusals that moved from `UNKNOWN` to a kind, and the gate's own
-   sentences for the rows it answers.
+   schema gate, the refusals that moved from `UNKNOWN` to a kind, the
+   `InternalValidationError` retag from `INVALID_INPUT` to `FUSION_REFUSED`, and the
+   gate's own sentences for the rows it answers.
 2. **Retag the rules that already carry a kind** - deferred, and named here so the
    inconsistency reads as a decision rather than an oversight. The work above changed the
    tag of the 88 with none; a rule that already answered with a kind kept it, even where
    the new taxonomy disagrees: the CAM `setup/operation not found` rule is still
    `INVALID_INPUT`, and so is `no faces matched`. Those tags are what a client may already
    branch on, so changing them is a client-visible change with its own evidence and
-   release note, not a ride-along.
+   release note, not a ride-along. One retag did ship with this work, because the
+   rule's own hint already said so: `InternalValidationError` used to answer
+   `INVALID_INPUT` and now reports `FUSION_REFUSED` (measured on Fusion 2706.1.17:
+   `2 : InternalValidationError …`), pinned by
+   `test_an_internal_validation_error_is_a_fusion_refusal` in `tests/test_feedback.py`.
 3. **`handler_cam` (39%) and `handler_export` (44%)** - up from 17% and 23%, because the
    refusal work had to drive their refusal paths - are the two modules the coverage work
    left where they were. A CAM `Product` and an `exportManager`/`viewport` are the largest

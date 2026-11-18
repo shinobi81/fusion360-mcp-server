@@ -24,7 +24,8 @@ CASES = [
     # value in the schema's enum is dispatched, so the gate is the only refusal.
     ("create_construction_plane", {"method": "cant"}, "Unknown method"),
     ("create_construction_axis", {"method": "spiral"}, "Unknown method"),
-    # ``set_design_type`` used to judge this itself; the enum is what refuses it now.
+    # ``set_design_type`` has a handler guard for a direct-wire caller; the enum is
+    # what refuses this MCP caller.
     ("set_design_type", {"design_type": "hybrid"}, "design_type"),
     # The enums whose handler raises this task deleted: the gate is the only
     # refusal for a value the schema already forbids.

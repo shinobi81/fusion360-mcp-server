@@ -208,7 +208,8 @@ class HandlerBase:
                     f"{cmd_type}: {exc}",
                     hints=(
                         "An argument is missing, or is not one this tool declares.",
-                        "docs/TOOLS.md and get_object_info name each tool's arguments.",
+                        "docs/TOOLS.md lists each tool's arguments; compare "
+                        "the call against it.",
                     ),
                 ) from None
             t0 = time.monotonic()

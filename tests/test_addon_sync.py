@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import inspect
 import subprocess
 import sys
 from pathlib import Path
@@ -268,6 +269,36 @@ def test_tools_match_addon_dispatch():
         f"  tools without handler: {sorted(tool_names - dispatch)}\n"
         f"  handlers without tool: {sorted(dispatch - tool_names)}"
     )
+
+
+def test_every_handler_declares_exactly_its_schema_properties(handler_module):
+    """A handler's signature and its schema name the same arguments, both ways.
+
+    The schema is what an MCP caller is validated against; the handler's signature
+    is what a direct-wire caller reaches, through the dispatch bind.  An argument
+    only one side declares is either unreachable or unvalidated, so the two sets
+    must be equal rather than merely overlapping.
+    """
+    from fusion360_mcp.tools import TOOLS
+
+    mismatched = {}
+    for tool in TOOLS:
+        name = tool["name"]
+        parameters = [
+            parameter
+            for parameter in inspect.signature(
+                getattr(handler_module.CommandHandler, name)
+            ).parameters
+            if parameter != "self"
+        ]
+        declared = list((tool["inputSchema"].get("properties") or {}))
+        if set(parameters) != set(declared):
+            mismatched[name] = {
+                "handler_only": sorted(set(parameters) - set(declared)),
+                "schema_only": sorted(set(declared) - set(parameters)),
+            }
+
+    assert not mismatched, mismatched
 
 
 def test_an_annotated_table_is_read_the_same_as_a_plain_one(tmp_path):

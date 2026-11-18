@@ -177,7 +177,7 @@ def test_a_refusal_with_no_matching_rule_takes_its_kind_default():
 )
 def test_the_three_wordings_that_never_matched(message, kind):
     """Rule 43 said only ``timeout``, rule 9 only ``is not finite``, rule 2 only
-    ``no profiles? in sketch`` — so the add-in's own three sentences were UNKNOWN."""
+    ``no profiles? in sketch`` — two of the add-in's own sentences were UNKNOWN."""
     assert addon_hints.classify(message)[0] == kind
 
 
@@ -329,12 +329,12 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_base.py",
-            300,
+            301,
             "raise refusal: kind comes from _rules.point3d_refusal",
         ),
         (
             "handler_base.py",
-            305,
+            306,
             "raise refusal: kind comes from _rules.body_name_required_refusal",
         ),
         (
@@ -417,7 +417,7 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_cam.py",
-            331,
+            346,
             "raise refusal: kind comes from _rules.cam_target_refusal",
         ),
     }
