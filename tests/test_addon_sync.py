@@ -271,6 +271,14 @@ def test_tools_match_addon_dispatch():
     )
 
 
+#: Schema-required arguments whose handler default is ``None``, and why each is safe.
+#: ``add_joint`` requires ``face_one``/``face_two`` in its schema, and the handler
+#: refuses an omitted pair through ``rules.joint_geometry_refusal``, so the schema is
+#: deliberately the stricter side.  Anything new has to be added here, with the reason
+#: it is safe, before the required-ness test passes.
+NONE_DEFAULT_REQUIRED = {"add_joint": {"face_one", "face_two"}}
+
+
 def test_every_handler_declares_exactly_its_schema_properties(handler_module):
     """A handler's signature and its schema name the same arguments, both ways.
 
@@ -282,7 +290,9 @@ def test_every_handler_declares_exactly_its_schema_properties(handler_module):
     direct-wire caller skips a check the MCP caller gets, and the reverse would
     refuse a call the schema permits.  A ``None`` handler default is the add-in's
     own "unset" - the handler refuses it with a typed message - so the schema is
-    deliberately the stricter side there.
+    deliberately the stricter side there, but only for the parameters
+    ``NONE_DEFAULT_REQUIRED`` names: a new one fails this test until it is added
+    there with the reason it is safe.
     """
     from fusion360_mcp.tools import TOOLS
 
@@ -306,12 +316,7 @@ def test_every_handler_declares_exactly_its_schema_properties(handler_module):
             for parameter in parameters
             if signature.parameters[parameter].default is inspect.Parameter.empty
         }
-        schema_requires = required - {
-            parameter
-            for parameter in required
-            if parameter in signature.parameters
-            and signature.parameters[parameter].default is None
-        }
+        schema_requires = required - NONE_DEFAULT_REQUIRED.get(name, set())
         if no_default != schema_requires:
             entry["schema_required_handler_optional"] = sorted(
                 schema_requires - no_default

@@ -182,7 +182,8 @@ def as_built_geometry_refusal(
 
     Fusion refuses the input with "Geometry should not be null if joint motion is
     not rigid", so only ``rigid`` works without geometry.  ``joint_type`` decides
-    it, and an omitted one is the handler's ``rigid`` default.
+    it: ``add_joint`` defaults it to ``rigid``; ``create_as_built_joint`` requires
+    it, and the parameter bind refuses the omission first.
     """
     joint_type = params.get("joint_type", "rigid")
     if joint_type == "rigid":

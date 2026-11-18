@@ -207,6 +207,14 @@ and asks the running Fusion whether it exists - 193 references, none missing on
 4. **`create_construction_axis("perpendicular_at_point")`** refuses by design: it
    needs a `BRepFace`, which the tool has no argument for. Making it work means adding a
    face parameter, a schema decision rather than a repair.
+5. **`_find_operation` still picks the first same-named operation, and two commands
+   call it that way.** `cam_post_process` and `cam_get_operation_info` resolve
+   `operation_name` inside one setup with a first-match scan, so a setup holding two
+   operations of one name silently picks the first. For `cam_post_process` that means
+   generating G-code for an operation the caller did not name. The scan is pre-existing
+   and outside the refusal typing - `cam_generate_toolpath` now refuses the ambiguity
+   on both of its paths - so turning it into a refusal is a follow-up with its own
+   evidence.
 
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.

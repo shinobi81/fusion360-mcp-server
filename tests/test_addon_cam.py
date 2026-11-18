@@ -198,6 +198,47 @@ def test_setup_and_operation_generation_reports_the_setup(handler_module):
     assert generated == [operation]
 
 
+def test_an_unknown_operation_in_a_named_setup_is_name_not_found(handler_module):
+    """Narrowing the setup does not change what a missing name earns."""
+    cam = _cam(_setup_with_operations("Setup1", _operation("Finishing")))
+    handler = _generating_handler(handler_module, cam)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_generate_toolpath(setup_name="Setup1", operation_name="Rough1")
+
+    assert raised.value.error_kind == "NAME_NOT_FOUND"
+    assert "Setup1" in str(raised.value)
+    assert raised.value.hints == (
+        "Call cam_list_setups, then cam_list_operations with a setup_name, "
+        "to see the real names.",
+    )
+
+
+def test_a_duplicate_inside_the_named_setup_refuses_instead_of_picking_one(
+    handler_module,
+):
+    """Naming the setup narrows the search, not a duplicate inside it.
+
+    ``setup_name`` plus ``operation_name`` used to go through ``_find_operation``,
+    which takes the first operation of that name: two renames and the call
+    generated one of them, reporting a success the other would also have.
+    """
+    cam = _cam(
+        _setup_with_operations("Setup6", _operation("Face6"), _operation("Face6"))
+    )
+    generated = []
+    cam.generateToolpath = generated.append
+    handler = _generating_handler(handler_module, cam)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_generate_toolpath(setup_name="Setup6", operation_name="Face6")
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert str(raised.value) == "Setup 'Setup6' holds 2 operations named 'Face6'"
+    assert raised.value.hints == ("Rename one so the name selects it.",)
+    assert generated == []
+
+
 def test_an_unknown_operation_name_is_name_not_found(handler_module):
     """No setup holds it, and the hint names the list that would."""
     cam = _cam(_setup_with_operations("Setup1", _operation("Finishing")))
@@ -248,6 +289,10 @@ def test_a_name_held_twice_in_one_setup_refuses_instead_of_picking_one(
 
     assert raised.value.error_kind == "INVALID_INPUT"
     assert "Setup1" in str(raised.value)
+    # One setup holds both, so narrowing to it cannot tell them apart.
+    assert raised.value.hints == (
+        "Rename duplicate operations so the name selects one.",
+    )
     assert generated == []
 
 

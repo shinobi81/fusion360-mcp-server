@@ -23,6 +23,13 @@ from . import rules as _rules
 
 log = get_logger("handler")
 
+# The advice a name-based refusal gives: ``cam_list_operations`` needs a setup, so
+# the chain that reaches the real names starts at the setups.
+_OPERATION_LIST_HINT = (
+    "Call cam_list_setups, then cam_list_operations with a setup_name, to see the "
+    "real names."
+)
+
 
 class CamCommands:
 
@@ -76,15 +83,22 @@ class CamCommands:
                 return op
         raise RuntimeError(f"Operation '{name}' not found in setup '{setup.name}'")
 
+    def _setup_operations_named(self, setup, name: str):
+        """Every operation in *setup* named *name*, in the tree's order."""
+        named = []
+        for i in range(setup.operations.count):
+            operation = setup.operations.item(i)
+            if operation.name == name:
+                named.append(operation)
+        return named
+
     def _operations_named(self, cam, name: str):
         """Every ``(setup, operation)`` pair named *name*, in the tree's order."""
         matches = []
         for i in range(cam.setups.count):
             setup = cam.setups.item(i)
-            for j in range(setup.operations.count):
-                operation = setup.operations.item(j)
-                if operation.name == name:
-                    matches.append((setup, operation))
+            for operation in self._setup_operations_named(setup, name):
+                matches.append((setup, operation))
         return matches
 
     def cam_list_setups(self):
@@ -358,23 +372,22 @@ class CamCommands:
                 raise _hints.Refusal(
                     "NAME_NOT_FOUND",
                     f"Operation '{operation_name}' not found in any setup",
-                    hints=(
-                        "Call cam_list_operations to see the operations each setup "
-                        "holds.",
-                    ),
+                    hints=(_OPERATION_LIST_HINT,),
                 )
             if len(matches) > 1:
-                setups = ", ".join(
+                setup_names = list(
                     dict.fromkeys(setup.name for setup, _operation in matches)
                 )
+                hints = ["Rename duplicate operations so the name selects one."]
+                if len(setup_names) > 1:
+                    hints.insert(
+                        0, "Pass setup_name to choose which setup to generate."
+                    )
                 raise _hints.Refusal(
                     "INVALID_INPUT",
                     f"Operation '{operation_name}' matches {len(matches)} "
-                    f"operations in: {setups}",
-                    hints=(
-                        "Pass setup_name to choose which setup to generate.",
-                        "Rename duplicate operations so the name selects one.",
-                    ),
+                    f"operations in: {', '.join(setup_names)}",
+                    hints=tuple(hints),
                 )
             setup, operation = matches[0]
             future = cam.generateToolpath(operation)
@@ -388,8 +401,21 @@ class CamCommands:
 
         if operation_name and setup_name:
             setup = self._find_setup(cam, setup_name)
-            op = self._find_operation(setup, operation_name)
-            future = cam.generateToolpath(op)
+            named = self._setup_operations_named(setup, operation_name)
+            if not named:
+                raise _hints.Refusal(
+                    "NAME_NOT_FOUND",
+                    f"Operation '{operation_name}' not found in setup '{setup.name}'",
+                    hints=(_OPERATION_LIST_HINT,),
+                )
+            if len(named) > 1:
+                raise _hints.Refusal(
+                    "INVALID_INPUT",
+                    f"Setup '{setup.name}' holds {len(named)} operations named "
+                    f"'{operation_name}'",
+                    hints=("Rename one so the name selects it.",),
+                )
+            future = cam.generateToolpath(named[0])
             self._wait_future(future)
             return {
                 "generated": True,

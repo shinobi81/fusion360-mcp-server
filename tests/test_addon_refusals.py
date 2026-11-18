@@ -417,7 +417,7 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_cam.py",
-            346,
+            360,
             "raise refusal: kind comes from _rules.cam_target_refusal",
         ),
     }
