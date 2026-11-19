@@ -235,7 +235,10 @@ def test_a_duplicate_inside_the_named_setup_refuses_instead_of_picking_one(
 
     assert raised.value.error_kind == "INVALID_INPUT"
     assert str(raised.value) == "Setup 'Setup6' holds 2 operations named 'Face6'"
-    assert raised.value.hints == ("Rename one so the name selects it.",)
+    assert raised.value.hints == (
+        "There is no CAM rename tool; rename one with execute_code "
+        "(operation.name = ...) so the name selects it.",
+    )
     assert generated == []
 
 
@@ -291,7 +294,8 @@ def test_a_name_held_twice_in_one_setup_refuses_instead_of_picking_one(
     assert "Setup1" in str(raised.value)
     # One setup holds both, so narrowing to it cannot tell them apart.
     assert raised.value.hints == (
-        "Rename duplicate operations so the name selects one.",
+        "There is no CAM rename tool; rename the duplicates with "
+        "execute_code (operation.name = ...) so the name selects one.",
     )
     assert generated == []
 

@@ -378,7 +378,14 @@ class CamCommands:
                 setup_names = list(
                     dict.fromkeys(setup.name for setup, _operation in matches)
                 )
-                hints = ["Rename duplicate operations so the name selects one."]
+                # Fusion suffixes an operation name to keep it unique inside its setup
+                # (measured live: renaming Face11 to Face10 produced Face101), so a
+                # setup holds at most one match; matches spanning more than one setup
+                # are therefore one apiece, and setup_name always resolves them.
+                hints = [
+                    "There is no CAM rename tool; rename the duplicates with "
+                    "execute_code (operation.name = ...) so the name selects one."
+                ]
                 if len(setup_names) > 1:
                     hints.insert(
                         0, "Pass setup_name to choose which setup to generate."
@@ -413,7 +420,10 @@ class CamCommands:
                     "INVALID_INPUT",
                     f"Setup '{setup.name}' holds {len(named)} operations named "
                     f"'{operation_name}'",
-                    hints=("Rename one so the name selects it.",),
+                    hints=(
+                        "There is no CAM rename tool; rename one with execute_code "
+                        "(operation.name = ...) so the name selects it.",
+                    ),
                 )
             future = cam.generateToolpath(named[0])
             self._wait_future(future)

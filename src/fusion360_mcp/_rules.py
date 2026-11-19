@@ -424,10 +424,11 @@ def export_body_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
 def cam_target_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal a ``cam_generate_toolpath`` with nothing to generate earns, or None.
 
-    ``operation_name`` alone is enough: the handler searches every setup for it and
-    refuses a name held by more than one until a setup narrows it.  Judged before the
-    CAM product is looked up: the caller can fix this call without Fusion, and the
-    add-in's other parameter checks come first too.
+    ``operation_name`` alone is enough: the handler searches every setup for it,
+    refuses a name held by more than one, and the narrowed search refuses a name held
+    twice inside a setup as well.  Judged before the CAM product is looked up: the
+    caller can fix this call without Fusion, and the add-in's other parameter checks
+    come first too.
     """
     if (
         params.get("generate_all")
