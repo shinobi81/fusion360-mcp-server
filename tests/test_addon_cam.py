@@ -236,7 +236,7 @@ def test_a_duplicate_inside_the_named_setup_refuses_instead_of_picking_one(
     assert raised.value.error_kind == "INVALID_INPUT"
     assert str(raised.value) == "Setup 'Setup6' holds 2 operations named 'Face6'"
     assert raised.value.hints == (
-        "There is no CAM rename tool; rename one with execute_code "
+        "There is no CAM rename tool; rename all but one with execute_code "
         "(operation.name = ...) so the name selects it.",
     )
     assert generated == []

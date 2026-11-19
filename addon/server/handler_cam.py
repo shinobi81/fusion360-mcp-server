@@ -378,10 +378,11 @@ class CamCommands:
                 setup_names = list(
                     dict.fromkeys(setup.name for setup, _operation in matches)
                 )
-                # Fusion suffixes an operation name to keep it unique inside its setup
-                # (measured live: renaming Face11 to Face10 produced Face101), so a
-                # setup holds at most one match; matches spanning more than one setup
-                # are therefore one apiece, and setup_name always resolves them.
+                # Assigning an operation a name already taken *inside its setup* is
+                # suffixed by Fusion (measured live: renaming Face11 to Face10 produced
+                # Face101), so a rename cannot leave two matches in one setup. The
+                # narrowed branch below stays as the guard for the create path, which
+                # no measurement rules out.
                 hints = [
                     "There is no CAM rename tool; rename the duplicates with "
                     "execute_code (operation.name = ...) so the name selects one."
@@ -421,8 +422,8 @@ class CamCommands:
                     f"Setup '{setup.name}' holds {len(named)} operations named "
                     f"'{operation_name}'",
                     hints=(
-                        "There is no CAM rename tool; rename one with execute_code "
-                        "(operation.name = ...) so the name selects it.",
+                        "There is no CAM rename tool; rename all but one with "
+                        "execute_code (operation.name = ...) so the name selects it.",
                     ),
                 )
             future = cam.generateToolpath(named[0])
