@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import pytest
 
+from addon.server import hints as addon_hints
 from fusion360_mcp.hints import classify
 from fusion360_mcp.mock import mock_command
 from tests.fakes.design import FakeDesign
@@ -122,3 +123,35 @@ def test_mock_mode_keeps_its_default_without_a_name(method, kwargs):
 
     reported = result.get("sketch_name", result.get("sketch"))
     assert reported == "Sketch_mock_xy"
+
+
+# ── the guards behind the gate ──────────────────────────────────────────────────
+# The schema gate refuses these values before an MCP call reaches the add-in, and
+# `test_schema_gate.py` pins that. Spec D12 keeps the add-in's own checks behind it
+# anyway, because a client can talk to `:9876` directly — and without a test here,
+# deleting the guards again would leave a green suite and a direct-wire caller with
+# `ok: true` and geometry on the wrong point.
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"count": 0, "radius": 1.0, "spacing": 2.0}, "count must be at least 1"),
+        (
+            {"count": 2, "radius": 1.0, "spacing": 2.0, "axis": "q"},
+            "Unknown axis: q - use x or y",
+        ),
+    ],
+)
+def test_a_draw_circles_guard_still_answers_a_direct_wire_caller(
+    bound_handler, kwargs, message
+):
+    """Both guards fire before the sketch is resolved, so a design is not needed."""
+    handler = bound_handler(FakeDesign())
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.draw_circles(**kwargs)
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert str(raised.value) == message
+    assert raised.value.hints

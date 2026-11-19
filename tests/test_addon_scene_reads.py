@@ -32,6 +32,7 @@ import math
 
 import pytest
 
+from addon.server import hints as addon_hints
 from addon.server.hints import classify
 from tests.fakes.bodies import FakeBody, FakeBoundingBox
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
@@ -213,11 +214,17 @@ def test_measure_angle_reports_degrees_not_radians(bound_handler):
 
 
 def test_measure_angle_of_a_name_that_is_not_a_body_refuses(bound_handler):
+    """The name was searched for as a body and is not one: enumerate and retry."""
     design = FakeDesign(features=0, bodies=[FakeBody("A")])
     handler = bound_handler(design, _measuring_app(FakeMeasureManager()))
 
-    with pytest.raises(RuntimeError, match="Entity 'Ghost' not found"):
+    with pytest.raises(RuntimeError, match="Entity 'Ghost' not found") as raised:
         handler.measure_angle("A", "Ghost")
+
+    assert addon_hints.classify(raised.value) == (
+        "NAME_NOT_FOUND",
+        ["Call get_scene_info for the entity names in this design."],
+    )
 
 
 def test_get_parameters_lists_what_the_design_holds(bound_handler):
@@ -267,15 +274,35 @@ def test_delete_parameter_removes_only_the_one_it_names(bound_handler):
 def test_delete_parameter_of_a_name_that_is_not_there_refuses(bound_handler):
     """The refusal names the parameter and deletes nothing.
 
-    This message reaches the caller as ``error_kind: UNKNOWN`` with no hints:
-    ``hints.py`` has no rule for "Parameter '<name>' not found", and that file is
-    canonical and mirrored, so it is out of this commit's reach.  The test pins
-    the message; the classification gap is reported with the pull request.
+    ``NAME_NOT_FOUND`` says the next move is to enumerate: the hint names
+    ``get_parameters``, which is the command that lists what the design has.
     """
     design = FakeDesign(features=2)
 
-    with pytest.raises(RuntimeError, match="Parameter 'width' not found"):
+    with pytest.raises(RuntimeError, match="Parameter 'width' not found") as raised:
         bound_handler(design).delete_parameter("width")
+
+    assert addon_hints.classify(raised.value) == (
+        "NAME_NOT_FOUND",
+        ["Call get_parameters for the names this design has."],
+    )
+
+
+def test_set_parameter_of_a_name_that_is_not_there_refuses(bound_handler):
+    """``set_parameter`` writes an expression, so it needs the parameter to exist.
+
+    The value is finite, which is what makes this the name's refusal rather than the
+    argument's: ``set_parameter`` judges the number first, then looks the name up.
+    """
+    design = FakeDesign(features=2)
+
+    with pytest.raises(RuntimeError, match="Parameter 'width' not found") as raised:
+        bound_handler(design).set_parameter("width", 5.0)
+
+    assert addon_hints.classify(raised.value) == (
+        "NAME_NOT_FOUND",
+        ["Call get_parameters for the names this design has."],
+    )
 
 
 @pytest.mark.parametrize(

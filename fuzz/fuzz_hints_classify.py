@@ -14,16 +14,22 @@ KNOWN_KINDS = frozenset(
         "BODY_NOT_FOUND",
         "BOOLEAN_NO_OP",
         "DESIGN_TYPE_MISMATCH",
+        "FUSION_REFUSED",
+        "GEOMETRY_UNSUPPORTED",
+        "INTERNAL_ERROR",
         "INVALID_INPUT",
+        "NAME_NOT_FOUND",
         "NOT_ENTITLED",
         "NO_ACTIVE_DESIGN",
         "PROFILE_NOT_CLOSED",
         "REGEN_FAILED",
+        "SCRIPT_ERROR",
         "SELF_INTERSECTION",
         "SKETCH_NOT_FOUND",
         "TIMEOUT",
         "UNKNOWN_COMMAND",
         "UNKNOWN",
+        "WORKSPACE_UNAVAILABLE",
     }
 )
 # Spelled out rather than derived from `_RULES` on purpose. A set computed from

@@ -10,6 +10,8 @@ from contextlib import suppress
 from typing import Any, ClassVar
 
 from . import fusion_api as adsk
+from . import hints as _hints
+from . import rules as _rules
 
 
 def _vector(v) -> list:
@@ -150,6 +152,8 @@ class AssemblyCommands:
     ):
         root = self._root()
         planes = root.constructionPlanes
+        if refusal := _rules.construction_method_refusal({"method": method}):
+            raise refusal
         inp = planes.createInput()
 
         if method == "offset":
@@ -172,10 +176,6 @@ class AssemblyCommands:
             p2 = self._point3d(point_two, "point_two")
             p3 = self._point3d(point_three, "point_three")
             inp.setByThreePoints(p1, p2, p3)
-        elif method == "tangent":
-            raise RuntimeError("Tangent plane needs face selection—use execute_code")
-        else:
-            raise RuntimeError(f"Unknown method: {method}")
 
         plane_obj = planes.add(inp)
         return {"created": True, "name": plane_obj.name, "method": method}
@@ -192,6 +192,11 @@ class AssemblyCommands:
     ):
         root = self._root()
         axes = root.constructionAxes
+        # Shipped: setByPerpendicularAtPoint(face: BRepFace, pointEntity).  The tool
+        # has no face parameter to give it, so the call cannot be built; the enum
+        # value stays in the schema for wire compatibility.
+        if refusal := _rules.perpendicular_axis_refusal({"method": method}):
+            raise refusal
         inp = axes.createInput()
 
         if method == "two_points":
@@ -206,17 +211,6 @@ class AssemblyCommands:
             body = self._body_by_name(body_name)
             edge = body.edges.item(edge_index)
             inp.setByEdge(edge)
-        elif method == "perpendicular_at_point":
-            # Shipped: setByPerpendicularAtPoint(face: BRepFace, pointEntity).
-            # The tool has no face parameter to give it, so the call cannot be
-            # built; the enum value stays in the schema for wire compatibility.
-            raise RuntimeError(
-                "Perpendicular axis needs a B-Rep face, which this tool has no "
-                "parameter for — use execute_code; the method stays in the "
-                "schema for wire compatibility"
-            )
-        else:
-            raise RuntimeError(f"Unknown method: {method}")
 
         axis_obj = axes.add(inp)
         return {"created": True, "name": axis_obj.name, "method": method}
@@ -303,17 +297,25 @@ class AssemblyCommands:
                     f"Body '{body_name}' not found in component '{component.name}'"
                 )
         elif len(bodies) != 1:
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "INVALID_INPUT",
                 f"Component '{component.name}' has {len(bodies)} bodies; "
-                f"pass '{label}' to choose which body carries the joint geometry"
+                f"pass '{label}' to choose which body carries the joint geometry",
+                hints=(
+                    "Pass body_name to say which body carries the joint geometry.",
+                ),
             )
 
         body = bodies[0]
         if face_index is None or not (0 <= face_index < body.faces.count):
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "INVALID_INPUT",
                 f"Face index {face_index} is out of range for body '{body.name}' "
                 f"({body.faces.count} faces). Enumerate them with get_object_info "
-                f"and pick a cylindrical face."
+                f"and pick a cylindrical face.",
+                hints=(
+                    "Face indices run from 0; enumerate with get_object_info.",
+                ),
             )
         return body.faces.item(face_index)
 
@@ -341,25 +343,23 @@ class AssemblyCommands:
         root = self._root()
         joints = root.joints
 
-        if joint_type not in self._JOINT_MOTION_SETTERS:
-            raise RuntimeError(
-                f"Unknown joint type: {joint_type}. "
-                f"Use one of {sorted(self._JOINT_MOTION_SETTERS)}"
-            )
-
         occ1 = self._occurrence_by_component(component_one)
         occ2 = self._occurrence_by_component(component_two)
         if not occ1 or not occ2:
-            raise RuntimeError("One or both components not found")
-        if occ1 == occ2:
-            raise RuntimeError("component_one and component_two must differ")
-
-        if face_one is None or face_two is None:
-            raise RuntimeError(
-                "add_joint needs joint geometry: pass face_one/face_two "
-                "(and body_one/body_two when a component holds more than one body). "
-                "Component origin points are not valid joint geometry."
+            raise _hints.Refusal(
+                "NAME_NOT_FOUND",
+                "One or both components not found",
+                hints=("Call list_components to see the component names.",),
             )
+        if component_refusal := _rules.components_differ_refusal(
+            {"component_one": component_one, "component_two": component_two}
+        ):
+            raise component_refusal
+
+        if geometry_refusal := _rules.joint_geometry_refusal(
+            {"face_one": face_one, "face_two": face_two}
+        ):
+            raise geometry_refusal
 
         faces = (
             self._joint_face(occ1, body_one, face_one, "body_one"),
@@ -367,17 +367,7 @@ class AssemblyCommands:
         )
 
         quadrant_attr = self._JOINT_QUADRANTS.get(quadrant)
-        if quadrant_attr is None:
-            raise RuntimeError(
-                "Unknown quadrant: "
-                f"{quadrant}. Use one of {sorted(self._JOINT_QUADRANTS)}"
-            )
         key_point_attr = self._JOINT_KEY_POINTS.get(key_point)
-        if key_point_attr is None:
-            raise RuntimeError(
-                "Unknown key_point: "
-                f"{key_point}. Use one of {sorted(self._JOINT_KEY_POINTS)}"
-            )
         quadrant_value = getattr(adsk.fusion.JointQuadrantAngleTypes, quadrant_attr)
         key_point_value = getattr(adsk.fusion.JointKeyPointTypes, key_point_attr)
 
@@ -565,15 +555,22 @@ class AssemblyCommands:
         key = (axis or "").lower()
         attr = self._JOINT_AXES.get(key)
         if attr is None:
-            raise RuntimeError(
-                f"Unknown axis: {axis}. Use one of {sorted(self._JOINT_AXES)}"
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"Unknown axis: {axis}. Use one of {sorted(self._JOINT_AXES)}",
+                hints=(
+                    "Pass x, y or z; the axis is resolved against the joint's own "
+                    "axes.",
+                ),
             )
         if frame is None:
             # Only reachable for a joint whose motion takes no direction at all
             # (rigid), which returns before this is called; a frame is mandatory
             # for anything else, so ask for one rather than guessing.
-            raise RuntimeError(
-                f"A joint frame is required to place axis '{axis}' — internal error"
+            raise _hints.Refusal(
+                "INTERNAL_ERROR",
+                f"A joint frame is required to place axis '{axis}' — internal error",
+                hints=("Report this with the traceback.",),
             )
 
         wanted = self._WORLD_AXES[key]
@@ -601,7 +598,7 @@ class AssemblyCommands:
         self,
         component_one: str,
         component_two: str,
-        joint_type: str = "rigid",
+        joint_type: str,
         body_one: str | None = None,
         face_one: int | None = None,
         body_two: str | None = None,
@@ -624,27 +621,29 @@ class AssemblyCommands:
         """
         root = self._root()
 
-        if joint_type not in self._JOINT_MOTION_SETTERS:
-            raise RuntimeError(
-                f"Unknown joint type: {joint_type}. "
-                f"Use one of {sorted(self._JOINT_MOTION_SETTERS)}"
-            )
-
         occ1 = self._occurrence_by_component(component_one)
         occ2 = self._occurrence_by_component(component_two)
         if not occ1 or not occ2:
-            raise RuntimeError("One or both components not found")
-        if occ1 == occ2:
-            raise RuntimeError("component_one and component_two must differ")
+            raise _hints.Refusal(
+                "NAME_NOT_FOUND",
+                "One or both components not found",
+                hints=("Call list_components to see the component names.",),
+            )
+        if component_refusal := _rules.components_differ_refusal(
+            {"component_one": component_one, "component_two": component_two}
+        ):
+            raise component_refusal
 
         geometry = None
         if joint_type != "rigid":
-            if face_one is None or face_two is None:
-                raise RuntimeError(
-                    f"A {joint_type} as-built joint needs geometry: pass "
-                    "face_one/face_two (and body_one/body_two when a component "
-                    "holds more than one body). Only 'rigid' works without it."
-                )
+            if geometry_refusal := _rules.as_built_geometry_refusal(
+                {
+                    "joint_type": joint_type,
+                    "face_one": face_one,
+                    "face_two": face_two,
+                }
+            ):
+                raise geometry_refusal
             face = self._joint_face(occ1, body_one, face_one, "body_one")
 
             # ``asBuiltJoints.createInput`` takes a single geometry, so face_two
@@ -653,10 +652,6 @@ class AssemblyCommands:
             self._joint_face(occ2, body_two, face_two, "body_two")
             quadrant_attr = self._JOINT_QUADRANTS.get(quadrant)
             key_point_attr = self._JOINT_KEY_POINTS.get(key_point)
-            if quadrant_attr is None or key_point_attr is None:
-                raise RuntimeError(
-                    f"Unknown quadrant/key_point: {quadrant}/{key_point}"
-                )
             geometry = adsk.fusion.JointGeometry.createByCylinderOrConeFace(
                 face,
                 getattr(adsk.fusion.JointQuadrantAngleTypes, quadrant_attr),
@@ -716,39 +711,58 @@ class AssemblyCommands:
                     break
             if joint is None:
                 kind = "as-built " if as_built else ""
-                raise RuntimeError(
+                raise _hints.Refusal(
+                    "NAME_NOT_FOUND",
                     f"{kind}joint '{joint_name}' not found "
-                    f"({collection.count} {kind}joints in the design)"
+                    f"({collection.count} {kind}joints in the design)",
+                    hints=("Call get_scene_info to list the joints in this design.",),
                 )
         else:
             if collection.count == 0:
-                raise RuntimeError(
+                raise _hints.Refusal(
+                    "INVALID_INPUT",
                     "No as-built joints in the design; pass as_built=False for "
-                    "regular joints or create one first"
+                    "regular joints or create one first",
+                    hints=(
+                        "Pass as_built=False for regular joints, or create an "
+                        "as-built joint first.",
+                    ),
                 )
             joint = collection.item(joint_index)
 
         motion = joint.jointMotion
         motion_kind = motion.objectType.split("::")[-1]
         if motion_kind == "RigidJointMotion":
-            raise RuntimeError(
-                f"'{joint.name}' is a rigid joint; it has no value to drive"
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"'{joint.name}' is a rigid joint; it has no value to drive",
+                hints=(
+                    "A rigid joint has no driven value; use a revolute or slider "
+                    "joint.",
+                ),
             )
 
         kinds = self._JOINT_VALUE_ATTRIBUTES.get(motion_kind)
         if kinds is None:
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "INVALID_INPUT",
                 f"'{joint.name}' has motion {motion_kind}, which this command "
                 f"cannot drive; known types: "
-                f"{sorted(self._JOINT_VALUE_ATTRIBUTES)}"
+                f"{sorted(self._JOINT_VALUE_ATTRIBUTES)}",
+                hints=("Drive only the value kinds the joint's motion has.",),
             )
 
         if value_kind:
             attribute = kinds.get(value_kind)
             if attribute is None:
-                raise RuntimeError(
+                raise _hints.Refusal(
+                    "INVALID_INPUT",
                     f"value_kind '{value_kind}' does not apply to {motion_kind}; "
-                    f"use one of {sorted(kinds)}"
+                    f"use one of {sorted(kinds)}",
+                    hints=(
+                        "A value_kind valid for another joint's motion does not "
+                        "apply here; use one this motion has.",
+                    ),
                 )
         else:
             attribute = kinds.get("rotation") or next(iter(kinds.values()))
@@ -765,11 +779,16 @@ class AssemblyCommands:
 
         read_back = getattr(joint.jointMotion, attribute)
         if abs(read_back - target) > 1e-6:
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
                 f"Fusion did not keep the requested value on '{joint.name}' "
                 f"(set {target:.6f} {value_units}, read back "
                 f"{read_back:.6f}). A design.computeAll() after setting a joint "
-                f"value resets it to zero."
+                f"value resets it to zero.",
+                hints=(
+                    "Re-read the value with set_joint_value, and avoid computeAll "
+                    "after setting it.",
+                ),
             )
 
         return {
@@ -786,15 +805,19 @@ class AssemblyCommands:
     def create_rigid_group(self, component_names: list, include_children: bool = True):
         root = self._root()
         occs = adsk.core.ObjectCollection.create()
+        resolved_names = []
 
         for name in component_names:
             for occ in root.allOccurrences:
                 if occ.component.name == name:
                     occs.add(occ)
+                    resolved_names.append(name)
                     break
 
-        if occs.count < 2:
-            raise RuntimeError("Need at least 2 components for rigid group")
+        if refusal := _rules.rigid_group_size_refusal(
+            {"component_names": resolved_names}
+        ):
+            raise refusal
 
         groups = root.rigidGroups
         groups.add(occs, include_children)

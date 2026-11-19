@@ -100,6 +100,13 @@ _JOINT_TYPE = {
     "default": "rigid",
 }
 
+# ``create_as_built_joint`` requires ``joint_type``, so its schema must not advertise
+# a default: jsonschema never applies one, and a client that reads it and omits the
+# field would be refused by the schema that advertised it.
+_JOINT_TYPE_REQUIRED = {
+    key: value for key, value in _JOINT_TYPE.items() if key != "default"
+}
+
 _JOINT_KEY_POINT = {
     "type": "string",
     "enum": ["start", "middle", "center", "end"],
@@ -120,10 +127,15 @@ _AS_BUILT_KEY_POINT = {
 }
 
 
-def _joint_properties(key_point: dict) -> dict:
-    """The joint arguments both joint tools share, in schema order."""
+def _joint_properties(key_point: dict, joint_type: dict = _JOINT_TYPE) -> dict:
+    """The joint arguments both joint tools share, in schema order.
+
+    ``joint_type`` is ``_JOINT_TYPE`` for ``add_joint``, where the handler defaults an
+    omitted one to ``rigid``; ``create_as_built_joint`` requires the argument and
+    passes ``_JOINT_TYPE_REQUIRED``, which advertises no default.
+    """
     return {
-        "joint_type": _JOINT_TYPE,
+        "joint_type": joint_type,
         "body_one": {
             "type": "string",
             "description": (
@@ -1811,7 +1823,7 @@ TOOLS: list[dict] = [
         ],
         component_one={"type": "string"},
         component_two={"type": "string"},
-        **_joint_properties(_AS_BUILT_KEY_POINT),
+        **_joint_properties(_AS_BUILT_KEY_POINT, _JOINT_TYPE_REQUIRED),
     ),
     _tool(
         "create_rigid_group",
@@ -2338,7 +2350,11 @@ TOOLS: list[dict] = [
         },
         operation_name={
             "type": "string",
-            "description": ("Specific operation name (overrides setup_name)"),
+            "description": (
+                "Specific operation name; searched in every setup unless "
+                "setup_name narrows it. generate_all=true takes precedence "
+                "over both."
+            ),
         },
         generate_all={
             "type": "boolean",
@@ -2507,6 +2523,11 @@ _IDEMPOTENT = _READ_ONLY | {
 
 for _t in TOOLS:
     _name = _t["name"]
+    # One loop rather than 97 schema edits: the gate validates every tool against
+    # this dict, and a client that skips the gate to reach :9876 directly must not
+    # be the only caller an undeclared argument slips past.  A tool's inputSchema
+    # lists every argument it accepts, so anything else is refused by name.
+    _t["inputSchema"]["additionalProperties"] = False
     _t["annotations"] = {
         "readOnlyHint": _name in _READ_ONLY,
         "destructiveHint": _name in _DESTRUCTIVE,

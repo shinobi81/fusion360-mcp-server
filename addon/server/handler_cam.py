@@ -17,9 +17,18 @@ from typing import Any
 
 from . import fusion_api as adsk
 from . import get_logger
+from . import hints as _hints
 from . import parameter_units as _param_units
+from . import rules as _rules
 
 log = get_logger("handler")
+
+# The advice a name-based refusal gives: ``cam_list_operations`` needs a setup, so
+# the chain that reaches the real names starts at the setups.
+_OPERATION_LIST_HINT = (
+    "Call cam_list_setups, then cam_list_operations with a setup_name, to see the "
+    "real names."
+)
 
 
 class CamCommands:
@@ -52,9 +61,11 @@ class CamCommands:
                 cam_product = _find_cam_product()
 
         if cam_product is None:
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "WORKSPACE_UNAVAILABLE",
                 "No CAM workspace found. Open the Manufacturing workspace "
-                "in Fusion 360 at least once to initialise it."
+                "in Fusion 360 at least once to initialise it.",
+                hints=("Open the Manufacturing workspace once, then retry.",),
             )
         return cam_product
 
@@ -71,6 +82,24 @@ class CamCommands:
             if op.name == name:
                 return op
         raise RuntimeError(f"Operation '{name}' not found in setup '{setup.name}'")
+
+    def _setup_operations_named(self, setup, name: str):
+        """Every operation in *setup* named *name*, in the tree's order."""
+        named = []
+        for i in range(setup.operations.count):
+            operation = setup.operations.item(i)
+            if operation.name == name:
+                named.append(operation)
+        return named
+
+    def _operations_named(self, cam, name: str):
+        """Every ``(setup, operation)`` pair named *name*, in the tree's order."""
+        matches = []
+        for i in range(cam.setups.count):
+            setup = cam.setups.item(i)
+            for operation in self._setup_operations_named(setup, name):
+                matches.append((setup, operation))
+        return matches
 
     def cam_list_setups(self):
         cam = self._get_cam()
@@ -275,8 +304,12 @@ class CamCommands:
 
         op = setup.operations.add(op_input)
         if op is None:
-            raise RuntimeError(
-                f"Fusion rejected strategy '{strategy}' for setup '{setup_name}'"
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
+                f"Fusion rejected strategy '{strategy}' for setup '{setup_name}'",
+                hints=(
+                    "Check the strategy name against cam_create_operation's schema.",
+                ),
             )
 
         # Operation parameters (stepdown, feeds, speeds...) only exist on
@@ -315,6 +348,17 @@ class CamCommands:
         operation_name: str | None = None,
         generate_all: bool = False,
     ):
+        # Judged before the CAM product is looked up: the caller can fix this call
+        # without it, and the message names the arguments that would work.
+        if refusal := _rules.cam_target_refusal(
+            {
+                "setup_name": setup_name,
+                "operation_name": operation_name,
+                "generate_all": generate_all,
+            }
+        ):
+            raise refusal
+
         cam = self._get_cam()
 
         if generate_all:
@@ -322,14 +366,72 @@ class CamCommands:
             self._wait_future(future)
             return {"generated": True, "scope": "all"}
 
-        if operation_name and setup_name:
-            setup = self._find_setup(cam, setup_name)
-            op = self._find_operation(setup, operation_name)
-            future = cam.generateToolpath(op)
+        if operation_name and not setup_name:
+            matches = self._operations_named(cam, operation_name)
+            if not matches:
+                raise _hints.Refusal(
+                    "NAME_NOT_FOUND",
+                    f"Operation '{operation_name}' not found in any setup",
+                    hints=(_OPERATION_LIST_HINT,),
+                )
+            if len(matches) > 1:
+                setup_names = list(
+                    dict.fromkeys(setup.name for setup, _operation in matches)
+                )
+                # Assigning an operation a name already taken *inside its setup* is
+                # suffixed by Fusion (measured live: renaming Face11 to Face10 produced
+                # Face101), so a rename cannot leave two matches in one setup. The
+                # narrowed branch below stays as the guard for the create path, which
+                # no measurement rules out.
+                hints = [
+                    "There is no CAM rename tool; rename the duplicates with "
+                    "execute_code (operation.name = ...) so the name selects one."
+                ]
+                if len(setup_names) > 1:
+                    hints.insert(
+                        0, "Pass setup_name to choose which setup to generate."
+                    )
+                raise _hints.Refusal(
+                    "INVALID_INPUT",
+                    f"Operation '{operation_name}' matches {len(matches)} "
+                    f"operations in: {', '.join(setup_names)}",
+                    hints=tuple(hints),
+                )
+            setup, operation = matches[0]
+            future = cam.generateToolpath(operation)
             self._wait_future(future)
             return {
                 "generated": True,
                 "scope": "operation",
+                "setup": setup.name,
+                "operation": operation_name,
+            }
+
+        if operation_name and setup_name:
+            setup = self._find_setup(cam, setup_name)
+            named = self._setup_operations_named(setup, operation_name)
+            if not named:
+                raise _hints.Refusal(
+                    "NAME_NOT_FOUND",
+                    f"Operation '{operation_name}' not found in setup '{setup.name}'",
+                    hints=(_OPERATION_LIST_HINT,),
+                )
+            if len(named) > 1:
+                raise _hints.Refusal(
+                    "INVALID_INPUT",
+                    f"Setup '{setup.name}' holds {len(named)} operations named "
+                    f"'{operation_name}'",
+                    hints=(
+                        "There is no CAM rename tool; rename all but one with "
+                        "execute_code (operation.name = ...) so the name selects it.",
+                    ),
+                )
+            future = cam.generateToolpath(named[0])
+            self._wait_future(future)
+            return {
+                "generated": True,
+                "scope": "operation",
+                "setup": setup.name,
                 "operation": operation_name,
             }
 
@@ -342,7 +444,39 @@ class CamCommands:
             self._wait_future(future)
             return {"generated": True, "scope": "setup", "setup": setup_name}
 
-        raise RuntimeError("Provide setup_name, operation_name, or generate_all=true")
+    def _resolve_post(self, path: str) -> str:
+        """The ``.cps`` file a ``post_processor`` names, or a refusal naming *path*.
+
+        A full path (or anything ending in ``.cps``) is taken as given; a short name
+        is resolved against the build's own post folder, which current builds do not
+        provide - posts are cloud-library based.
+
+        Split out of ``cam_post_process`` so the refusal is reachable without a CAM
+        ``Product``: a missing file is the caller's path, not the design or the build.
+        """
+        if path.endswith(".cps") or os.path.sep in path:
+            post_config = path
+        else:
+            cam = self._get_cam()
+            post_folder = getattr(cam, "genericPostFolder", None)
+            if not post_folder:
+                raise _hints.Refusal(
+                    "FUSION_REFUSED",
+                    "This Fusion build has no local generic post folder "
+                    "(posts are cloud-library based). Pass the full path to "
+                    "the .cps file in 'post_processor' instead of a short "
+                    "name.",
+                    hints=("Pass the full path to a .cps file in post_processor.",),
+                )
+            post_config = os.path.join(post_folder, f"{path}.cps")
+
+        if not os.path.isfile(post_config):
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"Post processor not found: {post_config}",
+                hints=("Pass a .cps path that exists on this machine.",),
+            )
+        return post_config
 
     def cam_post_process(
         self,
@@ -358,23 +492,7 @@ class CamCommands:
         if not output_folder:
             output_folder = os.path.join(os.path.expanduser("~"), "Desktop")
 
-        # Accept a full path to a .cps file, or resolve a short name against
-        # the legacy local post folder when the build still provides one.
-        if post_processor.endswith(".cps") or os.path.sep in post_processor:
-            post_config = post_processor
-        else:
-            post_folder = getattr(cam, "genericPostFolder", None)
-            if not post_folder:
-                raise RuntimeError(
-                    "This Fusion build has no local generic post folder "
-                    "(posts are cloud-library based). Pass the full path to "
-                    "the .cps file in 'post_processor' instead of a short "
-                    "name."
-                )
-            post_config = os.path.join(post_folder, f"{post_processor}.cps")
-
-        if not os.path.isfile(post_config):
-            raise RuntimeError(f"Post processor not found: {post_config}")
+        post_config = self._resolve_post(post_processor)
 
         units = (
             adsk.cam.PostOutputUnitOptions.MillimetersOutput

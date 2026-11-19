@@ -7,6 +7,7 @@ one domain owning it would make that domain's module the dependency of another.
 helper here cannot be unreachable, only under-sorted.
 """
 
+import inspect
 import time
 import traceback
 from contextlib import suppress
@@ -195,6 +196,22 @@ class HandlerBase:
         snap_before = self._snapshot() if is_mutation else None
 
         try:
+            # A client can reach :9876 directly and skip the server's schema gate
+            # (spec D12), so the handler's own signature is the last check: an
+            # argument the tool does not declare - or a missing one - must arrive
+            # as a typed refusal, not a bare TypeError that classifies as UNKNOWN.
+            try:
+                inspect.signature(handler).bind(**params)
+            except TypeError as exc:
+                raise _hints.Refusal(
+                    "INVALID_INPUT",
+                    f"{cmd_type}: {exc}",
+                    hints=(
+                        "An argument is missing, or is not one this tool declares.",
+                        "Compare the call against the tool's inputSchema "
+                        "(list_tools) or its row in docs/TOOLS.md.",
+                    ),
+                ) from None
             t0 = time.monotonic()
             result = handler(**params)
             elapsed = time.monotonic() - t0
@@ -277,15 +294,16 @@ class HandlerBase:
 
         The construction tools take optional point lists; unpacking None raised
         TypeError from inside Fusion's binding, which said nothing a caller could
-        act on.
+        act on.  The check is judged from the parameter alone, so it lives in
+        ``rules`` and mock mode answers it identically.
         """
-        if not values or len(values) != 3:
-            raise RuntimeError(f"{label} must be [x, y, z] in centimetres")
+        if refusal := _rules.point3d_refusal({label: values}):
+            raise refusal
         return adsk.core.Point3D.create(*values)
 
     def _body_by_name(self, name: str | None):
-        if not name:
-            raise RuntimeError("A body name is required")
+        if refusal := _rules.body_name_required_refusal({"body_name": name}):
+            raise refusal
         root = self._root()
         # Search root bodies first
         for i in range(root.bRepBodies.count):
@@ -318,7 +336,11 @@ class HandlerBase:
         for occ in root.allOccurrences:
             if occ.component.name == name:
                 return occ.component
-        raise RuntimeError(f"Component '{name}' not found")
+        raise _hints.Refusal(
+            "NAME_NOT_FOUND",
+            f"Component '{name}' not found",
+            hints=("Call list_components for the component names.",),
+        )
 
     def _construction_plane(self, plane: str | None):
         root = self._root()
@@ -331,7 +353,11 @@ class HandlerBase:
         # xy would build geometry nobody asked for.
         p = m.get((plane or "").lower())
         if p is None:
-            raise RuntimeError(f"Unknown plane {plane!r} — use xy, yz, or xz")
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"Unknown plane {plane!r} — use xy, yz, or xz",
+                hints=("Pass xy, yz or xz; the plane is lowercased, so XZ works.",),
+            )
         return p
 
     def _construction_axis(self, axis: str):
@@ -344,7 +370,11 @@ class HandlerBase:
         # Lowercased like _construction_plane, so "X" and "x" name the same axis.
         a = m.get((axis or "").lower())
         if a is None:
-            raise RuntimeError(f"Unknown axis '{axis}' — use x, y, or z")
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"Unknown axis '{axis}' — use x, y, or z",
+                hints=("Pass x, y or z; the axis is lowercased, so Y works.",),
+            )
         return a
 
     @staticmethod
@@ -465,24 +495,106 @@ class HandlerBase:
                 item.isSuppressed = suppressed
                 key = "suppressed" if suppressed else "unsuppressed"
                 return {key: True, "feature": feature_name}
-        raise RuntimeError(f"Feature '{feature_name}' not found in timeline")
+        raise _hints.Refusal(
+            "NAME_NOT_FOUND",
+            f"Feature '{feature_name}' not found in timeline",
+            hints=("Call get_scene_info for the timeline feature names.",),
+        )
 
     @staticmethod
     def _wait_future(future, timeout: float = 25.0):
         """Wait for a CAM generation future, bounded so a runaway
         generation fails as a structured error instead of freezing the
-        main thread past the bridge timeout."""
-        is_completed = getattr(future, "isCompleted", None)
-        if is_completed is None:
-            future.wait()
-            return
+        main thread past the bridge timeout.
+
+        ``GenerateToolpathFuture`` documents ``isGenerationCompleted``; other
+        futures may spell it ``isCompleted`` or expose only the completed/total
+        counters, so probe those in order.  On 2706.1.17 the property *raises*
+        ``RuntimeError("3 : Generation not started")`` until generation begins,
+        rather than answering ``False``, so every read below is wrapped: "not
+        started" means the field exists and is not complete, while any other
+        ``RuntimeError`` is Fusion's own and is re-raised for the handler to
+        classify.  The old fallback called ``future.wait()``, which the 2706
+        build does not define, so every generation call raised
+        ``AttributeError``.
+        """
+
+        def read_field(name: str) -> tuple[bool, Any]:
+            """Return (field exists, value); "not started" is (True, None).
+
+            ``AttributeError`` means this future does not spell the field that
+            way, so probing can try the next spelling.  Fusion's own
+            ``RuntimeError`` proves the field is there but cannot answer yet, so
+            it is treated as present and not complete; a different RuntimeError
+            is a real failure and must reach the caller.
+            """
+            try:
+                return True, getattr(future, name)
+            except AttributeError:
+                return False, None
+            except RuntimeError as exc:
+                if "Generation not started" in str(exc):
+                    return True, None
+                raise
+
+        flag = None
+        for name in ("isGenerationCompleted", "isCompleted"):
+            present, _value = read_field(name)
+            if present:
+                flag = name
+                break
+        if flag is not None:
+
+            def is_done() -> bool:
+                present, value = read_field(flag)
+                return present and bool(value)
+
+        elif all(
+            read_field(name)[0]
+            for name in ("numberOfCompleted", "numberOfOperations")
+        ):
+
+            def is_done() -> bool:
+                completed_present, completed = read_field("numberOfCompleted")
+                total_present, total = read_field("numberOfOperations")
+                return (
+                    completed_present
+                    and total_present
+                    and completed is not None
+                    and total is not None
+                    and completed >= total
+                )
+
+        else:
+            # Returning success would report a generation nothing verified.  The
+            # caller cannot make Fusion expose a completion field, so this is an
+            # add-in defect; the advice points at the state it can check instead.
+            raise _hints.Refusal(
+                "INTERNAL_ERROR",
+                f"Fusion exposed no completion flag on {type(future).__name__}; "
+                "check cam_list_operations before regenerating.",
+                hints=(
+                    "Call cam_list_operations to see whether the toolpath was "
+                    "generated anyway.",
+                    "This is an add-in defect; report the Fusion build and the "
+                    "future type.",
+                ),
+            )
+
         deadline = time.monotonic() + timeout
-        while not future.isCompleted:
+        while not is_done():
             if time.monotonic() > deadline:
-                raise RuntimeError(
+                raise _hints.Refusal(
+                    "TIMEOUT",
                     f"Toolpath generation did not finish within {timeout}s. "
                     "The operation may still complete in the background — "
-                    "check with cam_list_operations before regenerating."
+                    "check with cam_list_operations before regenerating.",
+                    hints=(
+                        "The wait is the add-in's own bound (25 s), not the "
+                        "bridge's 30 s timeout.",
+                        "cam_list_operations reports whether the toolpath "
+                        "finished in the background.",
+                    ),
                 )
             time.sleep(0.1)
 

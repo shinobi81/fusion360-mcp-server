@@ -15,8 +15,8 @@ import pytest
 from addon.server import hints as addon_hints
 from addon.server import rules
 from fusion360_mcp import _rules, mock
-from tests.fakes.bodies import body_with_edges
-from tests.fakes.design import FakeDesign
+from tests.fakes.bodies import FakeBody, body_with_edges
+from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
 
 #: Refused from the parameters alone, so no body is ever touched.
 BAD_EDGE_SELECTORS = [
@@ -110,7 +110,7 @@ def test_the_handler_and_the_mock_refuse_an_unknown_rule_type_alike(bound_handle
     with pytest.raises(addon_hints.Refusal) as raised:
         handler.ruled_surface("Body1", edge_index=0, rule_type="Tangent")
 
-    refused = mock._ruled_surface({"rule_type": "Tangent"})
+    refused = mock._ruled_surface({"body_name": "Body1", "rule_type": "Tangent"})
 
     assert refused["error_kind"] == raised.value.error_kind
     assert refused["error_message"] == str(raised.value)
@@ -185,6 +185,310 @@ def test_a_selector_that_is_not_a_list_is_refused_with_its_own_hints(params, mes
         "An edge selector is a list; nothing was written.",
         "Pass edge_indices as whole numbers, or edge_points as [x, y, z] triples.",
     ]
+
+
+#: One parameter set per ``rules.py`` validator: the tool it belongs to, the
+#: parameters that earn the refusal, and the exact kind, sentence and hints both
+#: modes answer.  The tool is a column because two validators share the same
+#: parameters (``add_joint`` and ``create_as_built_joint`` differ only by
+#: ``joint_type``), and because a shared ``handler_base`` helper is reached through
+#: the tools that call it rather than one of its own.
+PARAMETER_REFUSALS = [
+    (
+        "add_joint",
+        {"component_one": "A", "component_two": "A", "face_one": 0, "face_two": 0},
+        "INVALID_INPUT",
+        "component_one and component_two must differ",
+        ("Pass two different components; a joint needs two.",),
+    ),
+    (
+        "add_joint",
+        {"component_one": "A", "component_two": "B"},
+        "INVALID_INPUT",
+        "add_joint needs joint geometry: pass face_one/face_two "
+        "(and body_one/body_two when a component holds more than one body). "
+        "Component origin points are not valid joint geometry.",
+        (
+            "Pass face_one and face_two.",
+            "Add body_one/body_two when the component holds more than one body.",
+        ),
+    ),
+    (
+        "create_as_built_joint",
+        {"component_one": "A", "component_two": "B", "joint_type": "revolute"},
+        "INVALID_INPUT",
+        "A revolute as-built joint needs geometry: pass face_one/face_two "
+        "(and body_one/body_two when a component holds more than one body). "
+        "Only 'rigid' works without it.",
+        ("Pass face_one and face_two, or use joint_type='rigid'.",),
+    ),
+    (
+        "create_rigid_group",
+        {"component_names": ["A"]},
+        "INVALID_INPUT",
+        "Need at least 2 components for rigid group",
+        ("Pass at least two component names.",),
+    ),
+    (
+        "create_construction_plane",
+        {"method": "tangent"},
+        "INVALID_INPUT",
+        "Tangent plane needs face selection—use execute_code",
+        (
+            "create_construction_plane has no face parameter; build this plane "
+            "with execute_code.",
+        ),
+    ),
+    (
+        "create_construction_axis",
+        {"method": "perpendicular_at_point"},
+        "INVALID_INPUT",
+        "Perpendicular axis needs a B-Rep face, which this tool has no "
+        "parameter for — use execute_code; the method stays in the schema for "
+        "wire compatibility",
+        (
+            "The schema advertises this method for wire compatibility; "
+            "use execute_code.",
+        ),
+    ),
+    # ``handler_base._body_by_name``: any tool that names a body reaches it, so the
+    # rows ride on tools from two domains — a check wired per tool, not per domain.
+    (
+        "get_physical_properties",
+        {"body_name": ""},
+        "INVALID_INPUT",
+        "A body name is required",
+        ("Pass a body name; get_scene_info lists the bodies in this design.",),
+    ),
+    (
+        "move_body",
+        {"body_name": ""},
+        "INVALID_INPUT",
+        "A body name is required",
+        ("Pass a body name; get_scene_info lists the bodies in this design.",),
+    ),
+    (
+        "set_color",
+        {"body_name": "", "red": 255, "green": 0, "blue": 0},
+        "INVALID_INPUT",
+        "A body name is required",
+        ("Pass a body name; get_scene_info lists the bodies in this design.",),
+    ),
+    # ``handler_base._point3d``: reached by both construction tools, and judged per
+    # point so the message names the one that is wrong.
+    (
+        "create_construction_plane",
+        {"method": "three_points", "point_one": [0, 0]},
+        "INVALID_INPUT",
+        "point_one must be [x, y, z] in centimetres",
+        ("Pass three numbers, in centimetres: [x, y, z].",),
+    ),
+    # Export and CAM: a format and a body, and a toolpath target, are all judged
+    # before Fusion is asked.
+    (
+        "export",
+        {},
+        "INVALID_INPUT",
+        "Specify format (stl/step/f3d) or file_path with extension",
+        (
+            "Pass format='stl', 'step' or 'f3d', or a file_path that ends in one "
+            "of those.",
+        ),
+    ),
+    # A path that names a format the tool cannot write keeps the sentence the handler
+    # raised before the validator existed (D2); it is the one way around the enum.
+    (
+        "export",
+        {"file_path": "model.obj"},
+        "INVALID_INPUT",
+        "Unknown format: obj. Expected: stl, step, f3d",
+        (
+            "Pass format='stl', 'step' or 'f3d', or a file_path that ends in one "
+            "of those.",
+        ),
+    ),
+    (
+        "export",
+        {"format": "stl"},
+        "INVALID_INPUT",
+        "body_name required for STL export",
+        ("Pass body_name naming the body to export.",),
+    ),
+    (
+        "export",
+        {"format": "step"},
+        "INVALID_INPUT",
+        "body_name required for STEP export",
+        ("Pass body_name naming the body to export.",),
+    ),
+    # A symmetry constraint's third entity, judged from the parameters alone: mock
+    # mode has no sketch to look the index up in, and the handler refuses it before
+    # it reads one, so both sides answer the same sentence.
+    (
+        "add_constraint",
+        {"constraint_type": "symmetry", "entity_one": 0, "entity_two": 1},
+        "INVALID_INPUT",
+        "symmetry needs symmetry_line — the index of the sketch line the two "
+        "entities are mirrored about",
+        ("Pass symmetry_line: the index of a sketch line to mirror about.",),
+    ),
+    (
+        "cam_generate_toolpath",
+        {},
+        "INVALID_INPUT",
+        "Provide setup_name, operation_name, or generate_all=true",
+        (
+            "Pass operation_name to generate that one operation, or setup_name "
+            "for all of that setup's.",
+            "generate_all=true generates every setup's toolpaths.",
+        ),
+    ),
+    # Surface trim: the tool and the cell indices are judged from the parameters
+    # alone, before Fusion computes any cell to check an index against.
+    (
+        "trim_surface",
+        {"body_name": "Surf1", "keep_cells": [0]},
+        "INVALID_INPUT",
+        "trim_surface needs exactly one of tool_name (a body) or tool_plane "
+        "(xy, xz or yz)",
+        ("Pass tool_name (a body), or tool_plane (xy, xz or yz), but not both.",),
+    ),
+    (
+        "trim_surface",
+        {"body_name": "Surf1", "keep_cells": ["left"], "tool_name": "Cutter"},
+        "INVALID_INPUT",
+        "keep_cells takes cell indices, not 'left'",
+        ("Pass whole-number cell indices, counted from 0.",),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("command", "params", "expected_kind", "expected_message", "expected_hints"),
+    PARAMETER_REFUSALS,
+    ids=[
+        "components_differ",
+        "joint_geometry",
+        "as_built_geometry",
+        "rigid_group_size",
+        "construction_method",
+        "perpendicular_axis",
+        "body_name_required",
+        "body_name_required_move",
+        "body_name_required_color",
+        "point3d_shape",
+        "export_target",
+        "export_unknown_format",
+        "export_body_stl",
+        "export_body_step",
+        "symmetry_line",
+        "cam_target",
+        "trim_tool",
+        "trim_keep_cells",
+    ],
+)
+def test_the_validator_and_mock_agree(
+    bound_handler,
+    command,
+    params,
+    expected_kind,
+    expected_message,
+    expected_hints,
+):
+    """The handler raises and mock mode answers with the exact sentence and hints.
+
+    The whole message is pinned, not a fragment: once these rows leave
+    ``_UNCLASSIFIED_BASELINE``, a reflowed em dash or an added period would
+    otherwise stay green.  The hints are pinned too, so a validator that drops its
+    ``hints=`` tuple falls through to the kind default here instead of shipping
+    boilerplate.
+    """
+    design = FakeDesign(features=0, bodies=[FakeBody("Surf1"), FakeBody("Cutter")])
+    design.rootComponent.occurrences.add(FakeOccurrence(FakeComponent("A")))
+    design.rootComponent.occurrences.add(FakeOccurrence(FakeComponent("B")))
+    handler = bound_handler(design)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        getattr(handler, command)(**params)
+
+    assert raised.value.error_kind == expected_kind
+    assert str(raised.value) == expected_message
+    assert list(raised.value.hints) == list(expected_hints)
+    assert addon_hints.classify(raised.value)[1] == list(expected_hints)
+
+    refused = mock.mock_command(command, params)
+
+    assert refused["ok"] is False
+    assert refused["error_kind"] == expected_kind
+    assert refused["error_message"] == expected_message
+    assert refused["hints"] == list(expected_hints)
+
+
+def test_a_usable_trim_target_is_refused_by_neither_side():
+    """The table above must not have turned a call Fusion accepts into a refusal."""
+    assert rules.surface_tool_refusal({"tool_name": "Cutter"}) is None
+    assert rules.surface_tool_refusal({"tool_plane": "xy"}) is None
+    assert rules.keep_cells_refusal({"keep_cells": [0, 2]}) is None
+    assert rules.keep_cells_refusal({}) is None
+
+
+def test_a_usable_export_or_cam_target_is_refused_by_neither_side():
+    """The table above must not have turned a call Fusion accepts into a refusal."""
+    assert rules.export_target_refusal({"format": "stl"}) is None
+    assert rules.export_target_refusal({"file_path": "out.step"}) is None
+    assert rules.export_body_refusal({"format": "stl", "body_name": "Body1"}) is None
+    assert rules.export_body_refusal({"format": "f3d"}) is None
+    assert rules.cam_target_refusal({"generate_all": True}) is None
+    assert rules.cam_target_refusal({"setup_name": "Setup1"}) is None
+    assert rules.cam_target_refusal({"operation_name": "Rough1"}) is None
+
+
+@pytest.mark.parametrize("symmetry_line", [0, 2])
+def test_a_symmetry_line_index_is_refused_by_neither_side(symmetry_line):
+    """A line index is an index: 0 is the first line, not "unset".
+
+    ``is not None`` is what keeps a falsy index usable, and nothing else pins it —
+    the refusal row passes no line at all, and the handler test that adds one
+    passes 2.
+    """
+    params = {"constraint_type": "symmetry", "symmetry_line": symmetry_line}
+
+    assert rules.symmetry_line_refusal(params) is None
+    refused = mock.mock_command(
+        "add_constraint",
+        {
+            "constraint_type": "symmetry",
+            "entity_one": 0,
+            "entity_two": 1,
+            "symmetry_line": symmetry_line,
+        },
+    )
+    assert refused["ok"] is True
+
+
+@pytest.mark.parametrize(
+    ("params", "message"),
+    [
+        ({}, "Specify format (stl/step/f3d) or file_path with extension"),
+        (
+            {"file_path": "model.igs"},
+            "Unknown format: igs. Expected: stl, step, f3d",
+        ),
+    ],
+)
+def test_the_export_target_refusal_keeps_both_sentences(params, message):
+    """D2: a named-but-unsupported format reads as the raise it replaced.
+
+    ``export`` infers the format from ``file_path``, so ``model.igs`` reaches the
+    validator without meeting the gate; the old final ``Unknown format`` raise is the
+    sentence that answered it, and the plan freezes message text.  Only the call that
+    names nothing keeps the older ``Specify format`` sentence.
+    """
+    refusal = rules.export_target_refusal(params)
+
+    assert refusal is not None
+    assert refusal.error_kind == "INVALID_INPUT"
+    assert str(refusal) == message
 
 
 def test_the_mirror_carries_the_same_validation():

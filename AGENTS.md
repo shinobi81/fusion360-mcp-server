@@ -149,9 +149,24 @@ exception: `ok: false`, `error_kind`, `error_message`, `hints`, `traceback`.
 `error_kind` is a stable tag to branch on — `PROFILE_NOT_CLOSED`, `SKETCH_NOT_FOUND`,
 `BODY_NOT_FOUND`, `SELF_INTERSECTION`, `REGEN_FAILED`, `BOOLEAN_NO_OP`, `AXIS_OUT_OF_PLANE`,
 `INVALID_INPUT`, `NO_ACTIVE_DESIGN`, `DESIGN_TYPE_MISMATCH`, `NOT_ENTITLED`, `TIMEOUT`,
-`UNKNOWN_COMMAND`, `UNKNOWN`. `NOT_ENTITLED` is Fusion refusing the API for this account
-(seen on `auto_constrain`: "not available since user is restricted") — not a parameter
-problem, so use an approach that does not need that API.
+`UNKNOWN_COMMAND`, `NAME_NOT_FOUND`, `GEOMETRY_UNSUPPORTED`, `FUSION_REFUSED`,
+`WORKSPACE_UNAVAILABLE`, `SCRIPT_ERROR`, `INTERNAL_ERROR`, `UNKNOWN`. `NOT_ENTITLED` is
+Fusion refusing the API for this account (seen on `auto_constrain`: "not available since
+user is restricted") — not a parameter problem, so use an approach that does not need that
+API.
+
+Six of these say what the caller's next move is:
+
+- `NAME_NOT_FOUND` — enumerate the design (`get_scene_info`, `list_components`), then retry
+  by name.
+- `GEOMETRY_UNSUPPORTED` — pick a different face or edge; the body does not have that
+  geometry.
+- `FUSION_REFUSED` — Fusion did not do what was asked: check the state, then retry or
+  change the call.
+- `WORKSPACE_UNAVAILABLE` — open the workspace (Manufacturing, a viewport, the appearance
+  library), once.
+- `SCRIPT_ERROR` — fix the script `execute_code` was handed.
+- `INTERNAL_ERROR` — a bug in the add-in; report it.
 
 Four measured behaviours, worth reading instead of guessing:
 

@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import pytest
 
+from addon.server import hints as addon_hints
 from tests.fakes.app import FakeApplication
 from tests.fakes.appearance import (
     FakeAppearance,
@@ -231,20 +232,26 @@ def test_set_appearance_falls_back_past_a_library_holding_no_appearances(
 def test_set_appearance_that_fusion_does_not_have_refuses_and_assigns_nothing(
     bound_handler,
 ):
-    """The handler's own refusal, which classifies as UNKNOWN today, not INVALID_INPUT.
+    """The library exists and has no appearance of that name.
 
-    ``addon/server/hints.py`` has no rule for "Appearance '<name>' not found", and
-    this task may not add one; asserted here is the behaviour - the call raises and
-    nothing is assigned - rather than the message or the ``error_kind``.
+    ``NAME_NOT_FOUND`` says the next move is to pick a name the library does have,
+    which is the hint's advice; nothing is copied into the design and nothing is
+    assigned.
     """
     library = FakeMaterialLibrary(
         "Fusion Appearance Library", [FakeAppearance("Steel")]
     )
     handler, design, plate = _handler_and_bodies(bound_handler, _app_with(library))
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(
+        RuntimeError, match="Appearance 'Unobtainium' not found"
+    ) as raised:
         handler.set_appearance("Plate", "Unobtainium")
 
+    assert addon_hints.classify(raised.value) == (
+        "NAME_NOT_FOUND",
+        ["Use an appearance name from the library, e.g. 'Steel - Satin'."],
+    )
     assert plate.appearance is None
     assert design.appearances.count == 0, "a name Fusion does not have copies nothing"
 
@@ -252,14 +259,73 @@ def test_set_appearance_that_fusion_does_not_have_refuses_and_assigns_nothing(
 def test_set_appearance_with_no_appearance_library_refuses_and_assigns_nothing(
     bound_handler,
 ):
-    """Fusion's libraries are the application's, so no library means no appearance."""
+    """Fusion's libraries are the application's, so no library means no appearance.
+
+    ``WORKSPACE_UNAVAILABLE`` is the kind for a workspace that is not open: the
+    Appearance panel initialises the library, and opening it once is the fix.
+    """
     handler, design, plate = _handler_and_bodies(bound_handler, FakeApplication())
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="No appearance library found") as raised:
         handler.set_appearance("Plate", "Steel")
 
+    assert addon_hints.classify(raised.value) == (
+        "WORKSPACE_UNAVAILABLE",
+        ["Open the Appearance panel once in Fusion, then retry."],
+    )
     assert plate.appearance is None
     assert design.appearances.count == 0
+
+
+def test_set_appearance_that_cannot_be_copied_is_fusion_refused(
+    bound_handler, monkeypatch
+):
+    """``addByCopy`` answered None, so there is no design-local appearance to assign.
+
+    ``FakeAppearances.addByCopy`` always returns the copy, so the collection is
+    replaced here with one that copies nothing.  ``FUSION_REFUSED`` says Fusion did
+    not do what was asked; the hint names the manual step that makes it work.
+    """
+    library = FakeMaterialLibrary(
+        "Fusion Appearance Library", [FakeAppearance("Steel")]
+    )
+    handler, design, plate = _handler_and_bodies(bound_handler, _app_with(library))
+    monkeypatch.setattr(design.appearances, "addByCopy", lambda *_args: None)
+
+    with pytest.raises(RuntimeError, match="Could not copy appearance") as raised:
+        handler.set_appearance("Plate", "Steel")
+
+    assert addon_hints.classify(raised.value) == (
+        "FUSION_REFUSED",
+        ["Copy the appearance into the document first, then set it."],
+    )
+    assert plate.appearance is None
+
+
+def test_set_appearance_on_a_component_that_is_not_there_is_name_not_found(
+    bound_handler,
+):
+    """The component is searched for by name, through the occurrences.
+
+    ``_component_by_name`` is shared with every other command that resolves one, so
+    this pins the hint a caller gets wherever the miss happens — and that the refusal
+    comes before the library appearance is copied, so a failed call leaves the
+    design's own collection untouched.
+    """
+    library = FakeMaterialLibrary(
+        "Fusion Appearance Library", [FakeAppearance("Brass")]
+    )
+    handler, design, plate = _handler_and_bodies(bound_handler, _app_with(library))
+
+    with pytest.raises(RuntimeError, match="Component 'Bracket' not found") as raised:
+        handler.set_appearance("Bracket", "Brass", target_type="component")
+
+    assert addon_hints.classify(raised.value) == (
+        "NAME_NOT_FOUND",
+        ["Call list_components for the component names."],
+    )
+    assert plate.appearance is None
+    assert design.appearances.count == 0, "a refusal copies nothing into the design"
 
 
 def test_set_appearance_on_a_face_lands_on_that_face_and_not_the_body(bound_handler):

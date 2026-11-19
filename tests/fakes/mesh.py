@@ -62,7 +62,8 @@ class FakeMeshBody(FakeDeletable):
     than claiming they are the same object.
     """
 
-    def __init__(self, name: str, mesh: FakePolygonMesh):
+    def __init__(self, name: str, mesh: FakePolygonMesh | None):
+        """``mesh=None`` is a mesh body Fusion has not computed one for."""
         super().__init__(name)
         self.mesh = mesh
         self.displayMesh = None

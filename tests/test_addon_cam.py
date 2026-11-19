@@ -1,0 +1,414 @@
+"""CAM refusals: the workspace, a rejected strategy, and the post-processor lookup.
+
+``cam_post_process`` resolved a short post name and a full ``.cps`` path in one
+block, so the ``INVALID_INPUT`` for a path that is not there was only reachable with
+a CAM ``Product``.  ``_resolve_post`` is that block, and the tests below drive it
+directly; the others replace ``_get_cam`` with a stub product or a product-less
+``CommandHandler``.
+
+The stubs are the smallest shape each method reads, not a model of the CAM tree:
+``_find_setup`` wants ``setups.count``/``item(i)``, and a rejected strategy is
+``operations.add`` answering ``None``.
+"""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import pytest
+
+from addon.server import hints as addon_hints
+from tests.fakes.cam import (
+    FakeCAMProduct,
+    FakeCompletedFlagFuture,
+    FakeCounterFuture,
+    FakeGenerationFailureFuture,
+    FakeGenerationFlagFuture,
+    FakeNeverStartedFuture,
+    FakeNoFlagFuture,
+    FakeNotStartedCounterFuture,
+    FakeNotStartedFuture,
+)
+
+
+def _items(*items):
+    """A Fusion collection: ``count`` and ``item(i)``."""
+    return SimpleNamespace(count=len(items), item=lambda index: items[index])
+
+
+def _setup(name: str = "Setup1", operation=None) -> SimpleNamespace:
+    """A setup whose ``operations.add`` answers *operation*; ``None`` is rejected."""
+    return SimpleNamespace(
+        name=name,
+        isValid=True,
+        operations=SimpleNamespace(
+            count=0,
+            createInput=lambda _strategy: SimpleNamespace(name=None),
+            add=lambda _input: operation,
+        ),
+    )
+
+
+def _cam(*setups, generic_post=None) -> SimpleNamespace:
+    return SimpleNamespace(setups=_items(*setups), genericPostFolder=generic_post)
+
+
+def _handler(handler_module):
+    """A handler with no ``__init__``: these methods read no dispatch table."""
+    return handler_module.CommandHandler.__new__(handler_module.CommandHandler)
+
+
+def _no_cam_product(_product_type: str):
+    """``products.itemByProductType``: Fusion raises when the product is absent."""
+    raise RuntimeError("no CAM product")
+
+
+def test_no_manufacture_workspace_is_workspace_unavailable(handler_module):
+    """``_get_cam`` activates the workspace on demand; with none, it says so."""
+    handler = _handler(handler_module)
+    handler.app = SimpleNamespace(
+        activeDocument=SimpleNamespace(
+            products=SimpleNamespace(itemByProductType=_no_cam_product)
+        )
+    )
+    handler.ui = SimpleNamespace(workspaces=SimpleNamespace(itemById=lambda _id: None))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_list_setups()
+
+    assert raised.value.error_kind == "WORKSPACE_UNAVAILABLE"
+    assert str(raised.value) == (
+        "No CAM workspace found. Open the Manufacturing workspace in Fusion 360 "
+        "at least once to initialise it."
+    )
+    assert raised.value.hints == ("Open the Manufacturing workspace once, then retry.",)
+
+
+def test_a_rejected_strategy_is_fusion_refused(handler_module):
+    """The schema's enum refuses a typo; this is a name Fusion itself rejects."""
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(_setup(operation=None))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation("Setup1", "face")
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert str(raised.value) == "Fusion rejected strategy 'face' for setup 'Setup1'"
+    assert raised.value.hints == (
+        "Check the strategy name against cam_create_operation's schema.",
+    )
+
+
+def test_a_short_post_name_with_no_local_folder_is_fusion_refused(handler_module):
+    """The build has no local posts, so no argument but a full path can work."""
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(_setup(), generic_post=None)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_post_process("Setup1", post_processor="fanuc")
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert str(raised.value) == (
+        "This Fusion build has no local generic post folder "
+        "(posts are cloud-library based). Pass the full path to "
+        "the .cps file in 'post_processor' instead of a short "
+        "name."
+    )
+    assert raised.value.hints == (
+        "Pass the full path to a .cps file in post_processor.",
+    )
+
+
+def test_a_missing_post_processor_names_the_path(handler_module):
+    """D6: a filesystem path is INVALID_INPUT, and the hints name the path."""
+    handler = handler_module.CommandHandler.__new__(handler_module.CommandHandler)
+    with pytest.raises(addon_hints.Refusal) as caught:
+        handler._resolve_post("/nope.cps")
+    assert caught.value.error_kind == "INVALID_INPUT"
+    assert any(".cps" in hint or "/nope.cps" in hint for hint in caught.value.hints)
+    assert not any("get_scene_info" in hint for hint in caught.value.hints)
+    assert str(caught.value) == "Post processor not found: /nope.cps"
+    assert caught.value.hints == ("Pass a .cps path that exists on this machine.",)
+
+
+def test_a_post_that_exists_is_returned_as_given_or_resolved(handler_module, tmp_path):
+    """The lookup keeps both routes: a full path verbatim, a short name against
+    the build's own folder."""
+    post = tmp_path / "fanuc.cps"
+    post.write_text("", encoding="utf-8")
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: SimpleNamespace(genericPostFolder=str(tmp_path))
+
+    assert handler._resolve_post(str(post)) == str(post)
+    assert handler._resolve_post("fanuc") == str(post)
+
+
+def _operation(name: str) -> SimpleNamespace:
+    return SimpleNamespace(name=name)
+
+
+def _setup_with_operations(name: str, *operations) -> SimpleNamespace:
+    setup = _setup(name)
+    setup.operations = _items(*operations)
+    return setup
+
+
+def _generating_handler(handler_module, cam):
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: cam
+    handler._wait_future = lambda _future: None
+    return handler
+
+
+def test_an_operation_name_alone_generates_it_across_setups(handler_module):
+    """``operation_name`` is a target on its own, as the schema says it is."""
+    operation = _operation("Rough1")
+    cam = _cam(_setup("Setup1"), _setup_with_operations("Setup2", operation))
+    generated = []
+    cam.generateToolpath = generated.append
+    handler = _generating_handler(handler_module, cam)
+
+    result = handler.cam_generate_toolpath(operation_name="Rough1")
+
+    assert result == {
+        "generated": True,
+        "scope": "operation",
+        "setup": "Setup2",
+        "operation": "Rough1",
+    }
+    assert generated == [operation]
+
+
+def test_setup_and_operation_generation_reports_the_setup(handler_module):
+    """The narrowed path knows the setup it resolved, so the reply names it too."""
+    operation = _operation("Rough1")
+    cam = _cam(_setup_with_operations("Setup1", operation))
+    generated = []
+    cam.generateToolpath = generated.append
+    handler = _generating_handler(handler_module, cam)
+
+    result = handler.cam_generate_toolpath(setup_name="Setup1", operation_name="Rough1")
+
+    assert result == {
+        "generated": True,
+        "scope": "operation",
+        "setup": "Setup1",
+        "operation": "Rough1",
+    }
+    assert generated == [operation]
+
+
+def test_an_unknown_operation_in_a_named_setup_is_name_not_found(handler_module):
+    """Narrowing the setup does not change what a missing name earns."""
+    cam = _cam(_setup_with_operations("Setup1", _operation("Finishing")))
+    handler = _generating_handler(handler_module, cam)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_generate_toolpath(setup_name="Setup1", operation_name="Rough1")
+
+    assert raised.value.error_kind == "NAME_NOT_FOUND"
+    assert "Setup1" in str(raised.value)
+    assert raised.value.hints == (
+        "Call cam_list_setups, then cam_list_operations with a setup_name, "
+        "to see the real names.",
+    )
+
+
+def test_a_duplicate_inside_the_named_setup_refuses_instead_of_picking_one(
+    handler_module,
+):
+    """Naming the setup narrows the search, not a duplicate inside it.
+
+    ``setup_name`` plus ``operation_name`` used to go through ``_find_operation``,
+    which takes the first operation of that name: two renames and the call
+    generated one of them, reporting a success the other would also have.
+    """
+    cam = _cam(
+        _setup_with_operations("Setup6", _operation("Face6"), _operation("Face6"))
+    )
+    generated = []
+    cam.generateToolpath = generated.append
+    handler = _generating_handler(handler_module, cam)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_generate_toolpath(setup_name="Setup6", operation_name="Face6")
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert str(raised.value) == "Setup 'Setup6' holds 2 operations named 'Face6'"
+    assert raised.value.hints == (
+        "There is no CAM rename tool; rename all but one with execute_code "
+        "(operation.name = ...) so the name selects it.",
+    )
+    assert generated == []
+
+
+def test_an_unknown_operation_name_is_name_not_found(handler_module):
+    """No setup holds it, and the hint names the list that would."""
+    cam = _cam(_setup_with_operations("Setup1", _operation("Finishing")))
+    handler = _generating_handler(handler_module, cam)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_generate_toolpath(operation_name="Rough1")
+
+    assert raised.value.error_kind == "NAME_NOT_FOUND"
+    assert "'Rough1'" in str(raised.value)
+    assert any("cam_list_operations" in hint for hint in raised.value.hints)
+
+
+def test_an_operation_name_in_two_setups_names_both(handler_module):
+    """A shared name is ambiguous, so the refusal says which setups hold it."""
+    cam = _cam(
+        _setup_with_operations("Setup1", _operation("Rough1")),
+        _setup_with_operations("Setup2", _operation("Rough1")),
+    )
+    handler = _generating_handler(handler_module, cam)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_generate_toolpath(operation_name="Rough1")
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    message = str(raised.value)
+    assert "Setup1" in message and "Setup2" in message
+    assert any("setup_name" in hint for hint in raised.value.hints)
+
+
+def test_a_name_held_twice_in_one_setup_refuses_instead_of_picking_one(
+    handler_module,
+):
+    """Fusion lets operations be renamed, so one setup can hold two of a name.
+
+    The old scan took the first match per setup, so this ambiguity looked like a
+    single match and the first operation was generated silently.
+    """
+    first = _operation("Rough1")
+    second = _operation("Rough1")
+    cam = _cam(_setup_with_operations("Setup1", first, second), _setup("Setup2"))
+    generated = []
+    cam.generateToolpath = generated.append
+    handler = _generating_handler(handler_module, cam)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_generate_toolpath(operation_name="Rough1")
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert "Setup1" in str(raised.value)
+    # One setup holds both, so narrowing to it cannot tell them apart.
+    assert raised.value.hints == (
+        "There is no CAM rename tool; rename the duplicates with "
+        "execute_code (operation.name = ...) so the name selects one.",
+    )
+    assert generated == []
+
+
+@pytest.mark.parametrize(
+    "future_factory",
+    [FakeGenerationFlagFuture, FakeCompletedFlagFuture, FakeCounterFuture],
+    ids=["isGenerationCompleted", "isCompleted", "counters"],
+)
+def test_wait_future_polls_the_completion_field_the_future_has(
+    handler_module, future_factory
+):
+    """Each shape completes by polling; a read of an absent field would raise."""
+    future = future_factory()
+
+    handler_module.CommandHandler._wait_future(future, timeout=0.01)
+
+    assert future._reads >= 2
+
+
+def test_wait_future_times_out_when_the_completion_flag_never_flips(handler_module):
+    future = FakeGenerationFlagFuture(completed_after=None)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(future, timeout=0.01)
+
+    assert raised.value.error_kind == "TIMEOUT"
+    assert str(raised.value) == (
+        "Toolpath generation did not finish within 0.01s. The operation may still "
+        "complete in the background — check with cam_list_operations before "
+        "regenerating."
+    )
+
+
+def test_wait_future_refuses_a_future_with_no_completion_field(handler_module):
+    """No flag means nothing was verified, so the caller gets a typed refusal."""
+    future = FakeNoFlagFuture()
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(future, timeout=0.01)
+
+    assert raised.value.error_kind == "INTERNAL_ERROR"
+    assert "FakeNoFlagFuture" in str(raised.value)
+    assert any("cam_list_operations" in hint for hint in raised.value.hints)
+
+
+def test_wait_future_polls_through_a_not_started_flag(handler_module):
+    """The flag raises until generation begins; that is present-and-not-done."""
+    future = FakeNotStartedFuture(starts_after=3)
+
+    handler_module.CommandHandler._wait_future(future, timeout=0.01)
+
+    assert future._reads >= 3
+
+
+def test_wait_future_times_out_when_generation_never_starts(handler_module):
+    future = FakeNeverStartedFuture()
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(future, timeout=0.01)
+
+    assert raised.value.error_kind == "TIMEOUT"
+    assert str(raised.value) == (
+        "Toolpath generation did not finish within 0.01s. The operation may still "
+        "complete in the background — check with cam_list_operations before "
+        "regenerating."
+    )
+    assert raised.value.hints == (
+        "The wait is the add-in's own bound (25 s), not the bridge's 30 s timeout.",
+        "cam_list_operations reports whether the toolpath finished in the background.",
+    )
+
+
+def test_wait_future_lets_an_unrelated_runtime_error_out(handler_module):
+    """Only "Generation not started" is tolerated; a real failure is Fusion's.
+
+    Re-raising it is only half the answer: the handler classifies what the wait
+    raises, so the message has to reach the caller with a kind and advice rather
+    than ``UNKNOWN`` with none.
+    """
+    future = FakeGenerationFailureFuture()
+
+    with pytest.raises(RuntimeError, match="3 : generation failed") as raised:
+        handler_module.CommandHandler._wait_future(future, timeout=0.01)
+
+    kind, hints = addon_hints.classify(str(raised.value))
+    assert kind == "FUSION_REFUSED"
+    assert any("cam_list_operations" in hint for hint in hints)
+
+
+def test_wait_future_polls_through_not_started_counters(handler_module):
+    """The counter pair gets the same tolerant read as the boolean flag."""
+    future = FakeNotStartedCounterFuture()
+
+    handler_module.CommandHandler._wait_future(future, timeout=0.01)
+
+    assert future._reads >= 2
+
+
+def test_operation_only_generation_reaches_generate_toolpath(handler_module):
+    """The operation-only scope runs the real wait and reports what it generated."""
+    operation = _operation("Rough1")
+    setup = _setup_with_operations("Setup1", operation)
+    cam = FakeCAMProduct([setup], FakeGenerationFlagFuture(completed_after=1))
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: cam
+
+    result = handler.cam_generate_toolpath(operation_name="Rough1")
+
+    assert result == {
+        "generated": True,
+        "scope": "operation",
+        "setup": "Setup1",
+        "operation": "Rough1",
+    }
+    assert cam.generated == [operation]

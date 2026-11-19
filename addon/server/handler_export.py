@@ -21,6 +21,8 @@ import time
 from contextlib import suppress
 
 from . import fusion_api as adsk
+from . import hints as _hints
+from . import rules as _rules
 
 
 class ExportCommands:
@@ -186,12 +188,6 @@ class ExportCommands:
         image_size = image_size or [1200, 900]
         width, height = int(image_size[0]), int(image_size[1])
 
-        unknown = [v for v in views if v not in self._VIEW_DIRS]
-        if unknown:
-            raise RuntimeError(
-                f"Unknown views: {unknown}. Valid: {sorted(self._VIEW_DIRS)}"
-            )
-
         if output_dir is None:
             ts = time.strftime("%Y%m%d_%H%M%S")
             output_dir = os.path.join(
@@ -323,30 +319,39 @@ class ExportCommands:
         fmt = format.lower() if format else None
         if not fmt and file_path:
             fmt = os.path.splitext(file_path)[1].lstrip(".").lower()
-        if not fmt:
-            raise RuntimeError(
-                "Specify format (stl/step/f3d) or file_path with extension"
-            )
-
-        if fmt == "stl":
-            if not body_name:
-                raise RuntimeError("body_name required for STL export")
-            return self.export_stl(body_name, file_path)
-        if fmt in ("step", "stp"):
-            if not body_name:
-                raise RuntimeError("body_name required for STEP export")
-            return self.export_step(body_name, file_path)
+        if target_refusal := _rules.export_target_refusal(
+            {"format": fmt, "file_path": file_path}
+        ):
+            raise target_refusal
+        # F3D exports the document, so it takes no body; the body check and the
+        # narrowing assert behind it belong to the two body exports only.
         if fmt == "f3d":
             return self.export_f3d(file_path)
+        if body_refusal := _rules.export_body_refusal(
+            {"format": fmt, "body_name": body_name}
+        ):
+            raise body_refusal
+        # export_body_refusal refused an empty name, which is what lets the two body
+        # exports below take a str.
+        assert body_name is not None
 
-        raise RuntimeError(f"Unknown format: {fmt}. Expected: stl, step, f3d")
+        if fmt == "stl":
+            return self.export_stl(body_name, file_path)
+
+        # export_target_refusal refused every format outside _rules.EXPORT_FORMATS,
+        # and stl/f3d are dispatched above, so this is step or stp.
+        return self.export_step(body_name, file_path)
 
     def import_mesh(
         self, file_path: str, component_name: str | None = None, units: str = "mm"
     ):
         """Import mesh file (STL/OBJ/3MF) as mesh body. Values returned in cm."""
         if not os.path.exists(file_path):
-            raise RuntimeError(f"Mesh file not found: {file_path}")
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"Mesh file not found: {file_path}",
+                hints=("Pass a path to a file that exists.",),
+            )
 
         target = (
             self._component_by_name(component_name) if component_name else self._root()
@@ -359,10 +364,6 @@ class ExportCommands:
             "in": adsk.fusion.MeshUnits.InchMeshUnit,
             "ft": adsk.fusion.MeshUnits.FootMeshUnit,
         }
-        if units not in unit_map:
-            raise RuntimeError(
-                f"Unknown units '{units}'. Expected one of: {sorted(unit_map)}"
-            )
 
         mesh_body = None  # bound by whichever import path below succeeds
         try:
@@ -375,11 +376,21 @@ class ExportCommands:
             mesh_body = target.meshBodies.addByFile(file_path, unit_map[units])
         if mesh_list is not None:
             if mesh_list.count == 0:
-                raise RuntimeError(f"No mesh bodies imported from {file_path}")
+                raise _hints.Refusal(
+                    "FUSION_REFUSED",
+                    f"No mesh bodies imported from {file_path}",
+                    hints=(
+                        "The file has no mesh body; check it in a viewer first.",
+                    ),
+                )
             mesh_body = mesh_list.item(0)
 
         if mesh_body is None:
-            raise RuntimeError(f"No mesh body imported from {file_path}")
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
+                f"No mesh body imported from {file_path}",
+                hints=("The file has no mesh body; check it in a viewer first.",),
+            )
         bb = mesh_body.boundingBox
         return {
             "imported": True,
@@ -417,7 +428,11 @@ class ExportCommands:
         """
         viewport = self.app.activeViewport
         if viewport is None:
-            raise RuntimeError("No active viewport")
+            raise _hints.Refusal(
+                "WORKSPACE_UNAVAILABLE",
+                "No active viewport",
+                hints=("Open a viewport in Fusion, then retry.",),
+            )
 
         # Clamp dimensions — an oversized capture would stall the main
         # thread and produce an enormous base64 payload.
@@ -426,12 +441,9 @@ class ExportCommands:
 
         repositioned = view != "current"
         if repositioned:
-            spec = self._VIEW_DIRS.get(view)
-            if spec is None:
-                raise RuntimeError(
-                    f"Unknown view '{view}'. "
-                    f"Expected: current, {', '.join(self._VIEW_DIRS)}"
-                )
+            # The schema enum refuses an unknown view in both modes; a socket caller
+            # that bypasses it gets the KeyError naming the value it asked for.
+            spec = self._VIEW_DIRS[view]
             orig = viewport.camera
             orig_state = {
                 "eye": (orig.eye.x, orig.eye.y, orig.eye.z),
@@ -453,7 +465,14 @@ class ExportCommands:
             try:
                 ok = viewport.saveAsImageFile(path, int(width), int(height))
                 if not ok or not os.path.exists(path):
-                    raise RuntimeError("saveAsImageFile returned false")
+                    raise _hints.Refusal(
+                        "FUSION_REFUSED",
+                        "saveAsImageFile returned false",
+                        hints=(
+                            "Retry the export; if it recurs the viewport cannot "
+                            "render this view.",
+                        ),
+                    )
                 with open(path, "rb") as f:
                     data = f.read()
             finally:

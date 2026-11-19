@@ -9,6 +9,8 @@ import math
 from typing import ClassVar
 
 from . import fusion_api as adsk
+from . import hints as _hints
+from . import rules as _rules
 
 
 class SketchCommands:
@@ -228,11 +230,26 @@ class SketchCommands:
         across the inserts and restoring the previous value afterwards removes
         that: measured at 100 circles, 68 ms against 912 ms. The restore is in a
         ``finally`` so a bad parameter cannot leave the sketch unsolved.
+
+        ``count`` and ``axis`` are judged by the schema too: the gate refuses a
+        value it forbids first for MCP callers, and the checks below are the
+        direct-wire defence D12 requires.
         """
+        # The gate refuses these first for MCP callers, and a client on :9876 can
+        # reach this method without it: count=-5 would report added: -5, and
+        # axis="q" would put every circle on one point.
         if count < 1:
-            raise RuntimeError("count must be at least 1")
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                "count must be at least 1",
+                hints=("Pass count as a whole number of circles, at least 1.",),
+            )
         if axis not in ("x", "y"):
-            raise RuntimeError(f"Unknown axis: {axis} - use x or y")
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"Unknown axis: {axis} - use x or y",
+                hints=("Pass axis='x' or axis='y'.",),
+            )
 
         sketch = self._sketch(sketch_name)
         previous_deferred = sketch.isComputeDeferred
@@ -284,6 +301,14 @@ class SketchCommands:
         symmetry_line: int | None = None,
         sketch_name: str | None = None,
     ):
+        # symmetry is the one type that needs a third entity, and its mirror line is a
+        # parameter of its own: judged here, before the sketch is read, so mock mode
+        # answers the same sentence instead of rehearsing a call Fusion refuses.
+        if refusal := _rules.symmetry_line_refusal(
+            {"constraint_type": constraint_type, "symmetry_line": symmetry_line}
+        ):
+            raise refusal
+
         sketch = self._sketch(sketch_name)
         constraints = sketch.geometricConstraints
         curves = list(sketch.sketchCurves)
@@ -328,17 +353,12 @@ class SketchCommands:
                 f"- sketch '{sketch.name}' has {len(curves)} curve(s)"
             )
 
-        # symmetry is the only constraint needing a third entity; resolve it here
-        # so the map below just names it and a missing index is a clear refusal.
+        # symmetry's mirror line is resolved here so the map below just names it; a
+        # call that omitted it was refused above, from the parameters alone.
         mirror_line = None
         if symmetry_line is not None:
             mirror_line = self._curve_by_index(
                 sketch, curves, symmetry_line, "symmetry_line"
-            )
-        elif constraint_type == "symmetry":
-            raise RuntimeError(
-                "symmetry needs symmetry_line — the index of the sketch line the "
-                "two entities are mirrored about"
             )
 
         constraint_map = {
@@ -377,23 +397,23 @@ class SketchCommands:
             2: adsk.fusion.AutoConstrainResultTypes.Option2AutoConstrainResultType,
             3: adsk.fusion.AutoConstrainResultTypes.Option3AutoConstrainResultType,
         }
-        option = option_map.get(result_option)
-        if option is None:
-            raise RuntimeError(
-                f"Invalid result_option {result_option} — use 1 (thorough), "
-                "2 (fast), or 3 (may adjust geometry within tolerance)."
-            )
+        # The schema's enum is what refuses a value outside the three, so the key is
+        # present here; indexing rather than ``.get`` keeps a caller that reached the
+        # add-in around the gate from handing Fusion a ``None`` option.
+        option = option_map[result_option]
 
         ac_input = sketch.createAutoConstrainInput()
         ac_input.resultOption = option
         result = sketch.autoConstrain(ac_input)
         if result is None:
             # Option 3 returns null when the sketch is not eligible for
-            # geometry adjustment.
-            raise RuntimeError(
+            # geometry adjustment.  Fusion declined to run, so this is not our bug.
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
                 "autoConstrain returned no result — the sketch is not "
                 "eligible for geometry adjustment. Retry with "
-                "result_option 1 or 2."
+                "result_option 1 or 2.",
+                hints=("Retry auto_constrain with result_option 1 or 2.",),
             )
 
         return {

@@ -1,4 +1,4 @@
-"""Table-and-schema agreement for the joint tools — and nothing else.
+"""Table-and-schema agreement for the joint tools, and the kinds their refusals carry.
 
 The add-in's *tables* are read from the imported ``CommandHandler`` class, not parsed
 out of its source: the add-in is importable under pytest (see
@@ -8,7 +8,7 @@ a call no parser could evaluate would now be read rather than missed.  What this
 asserts has not changed: a table is data, not behaviour, and a table asserting itself
 proves nothing.
 
-**Every claim about behaviour has moved out.** It used to be the other way round:
+**Every claim about how a joint is built has moved out.** It used to be the opposite:
 this file parsed the source to check that ``add_joint`` returned certain keys, did
 not swallow exceptions, drove joint values without recomputing, converted degrees
 inside the right branch, and validated a face it cannot build from. A source scan
@@ -27,6 +27,12 @@ be behavioural by nature: the schema is data, and a table asserting itself prove
 nothing. Each test fails when the add-in's table and the published tool schema
 drift apart - schema against data, which no behavioural test can catch because the
 schema is data too.
+
+The exception is the last section: the refusals the joint handlers raise after the
+schema has admitted a call — a body count, a face index, a lookup, an axis or a joint
+value — asserted through ``execute_command`` as ``error_kind``, message and exact
+hints. Those three are what the wire carries; no table read can say whether the raise
+site chose them.
 """
 
 from __future__ import annotations
@@ -34,6 +40,9 @@ from __future__ import annotations
 import pytest
 
 from fusion360_mcp.tools import TOOLS
+from tests.fakes.bodies import FakeBody, FakeFace
+from tests.fakes.collection import FakeCollection
+from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
 
 
 @pytest.fixture
@@ -219,4 +228,279 @@ def test_as_built_joint_schema_mirrors_add_joint():
         f"makes the snapping/non-snapping pair confusing.\n"
         f"  only in add_joint: {sorted(add - built)}\n"
         f"  only in create_as_built_joint: {sorted(built - add)}"
+    )
+
+
+# ── the refusals the joint handlers raise ───────────────────────────
+
+
+def _joint_design(body_counts=(1, 1)) -> FakeDesign:
+    """Components A and B, each holding *body_counts* single-faced bodies.
+
+    ``FakeFace()``'s default joint frame is the measured cylinder frame, so the
+    refusals below exercise the same geometry as the behavioural joint tests.
+    """
+    design = FakeDesign(features=0)
+    for name, count in zip(("A", "B"), body_counts, strict=True):
+        bodies = [
+            FakeBody(
+                f"{name}Body" if count == 1 else f"{name}Body{index + 1}",
+                faces=FakeCollection([FakeFace()]),
+            )
+            for index in range(count)
+        ]
+        component = FakeComponent(name, bodies)
+        design.rootComponent.occurrences.add(FakeOccurrence(component))
+    return design
+
+
+def _result(handler, command: str, **params):
+    """Run *command* through the dispatch envelope, as the socket does."""
+    return handler.execute_command({"type": command, "params": params})["result"]
+
+
+def _assert_refused(result, kind: str, message: str, hint: str) -> None:
+    assert result["ok"] is False
+    assert result["error_kind"] == kind
+    assert result["error_message"] == message
+    assert result["hints"] == [hint]
+
+
+def _first_joint(handler, joint_type: str = "slider"):
+    """Create one joint and return it, for the refusals that need live state."""
+    handler.add_joint(
+        component_one="A",
+        component_two="B",
+        joint_type=joint_type,
+        body_one="ABody",
+        face_one=0,
+        body_two="BBody",
+        face_two=0,
+        axis="z",
+    )
+    return handler._root().joints.item(0)
+
+
+def test_a_component_with_several_bodies_asks_for_body_name(bound_handler):
+    handler = bound_handler(_joint_design((2, 1)))
+
+    result = _result(
+        handler,
+        "add_joint",
+        component_one="A",
+        component_two="B",
+        face_one=0,
+        face_two=0,
+    )
+
+    _assert_refused(
+        result,
+        "INVALID_INPUT",
+        "Component 'A' has 2 bodies; pass 'body_one' to choose which body "
+        "carries the joint geometry",
+        "Pass body_name to say which body carries the joint geometry.",
+    )
+
+
+def test_a_face_index_outside_the_body_names_the_range(bound_handler):
+    handler = bound_handler(_joint_design())
+
+    result = _result(
+        handler,
+        "add_joint",
+        component_one="A",
+        component_two="B",
+        body_one="ABody",
+        face_one=99,
+        body_two="BBody",
+        face_two=0,
+    )
+
+    _assert_refused(
+        result,
+        "INVALID_INPUT",
+        "Face index 99 is out of range for body 'ABody' (1 faces). Enumerate "
+        "them with get_object_info and pick a cylindrical face.",
+        "Face indices run from 0; enumerate with get_object_info.",
+    )
+
+
+def test_add_joint_names_the_missing_components(bound_handler):
+    handler = bound_handler(_joint_design())
+
+    result = _result(
+        handler,
+        "add_joint",
+        component_one="Missing",
+        component_two="B",
+        face_one=0,
+        face_two=0,
+    )
+
+    _assert_refused(
+        result,
+        "NAME_NOT_FOUND",
+        "One or both components not found",
+        "Call list_components to see the component names.",
+    )
+
+
+def test_an_as_built_joint_names_the_missing_components(bound_handler):
+    handler = bound_handler(_joint_design())
+
+    result = _result(
+        handler,
+        "create_as_built_joint",
+        component_one="Missing",
+        component_two="B",
+        joint_type="rigid",
+    )
+
+    _assert_refused(
+        result,
+        "NAME_NOT_FOUND",
+        "One or both components not found",
+        "Call list_components to see the component names.",
+    )
+
+
+def test_an_unknown_axis_says_which_axis(bound_handler):
+    handler = bound_handler(_joint_design())
+
+    result = _result(
+        handler,
+        "add_joint",
+        component_one="A",
+        component_two="B",
+        joint_type="slider",
+        body_one="ABody",
+        face_one=0,
+        body_two="BBody",
+        face_two=0,
+        axis="w",
+    )
+
+    _assert_refused(
+        result,
+        "INVALID_INPUT",
+        "Unknown axis: w. Use one of ['x', 'y', 'z']",
+        "Pass x, y or z; the axis is resolved against the joint's own axes.",
+    )
+
+
+def test_a_direction_motion_without_a_frame_is_an_internal_error(
+    bound_handler, monkeypatch
+):
+    """Unreachable from the arguments: no public path builds a motion without a frame.
+
+    The guard is still the right refusal for a regression in that plumbing, so the
+    frame is removed here rather than the branch left untested.
+    """
+    handler = bound_handler(_joint_design())
+    monkeypatch.setattr(handler, "_joint_frame", lambda geometry: None)
+
+    result = _result(
+        handler,
+        "add_joint",
+        component_one="A",
+        component_two="B",
+        joint_type="slider",
+        body_one="ABody",
+        face_one=0,
+        body_two="BBody",
+        face_two=0,
+    )
+
+    _assert_refused(
+        result,
+        "INTERNAL_ERROR",
+        "A joint frame is required to place axis 'x' — internal error",
+        "Report this with the traceback.",
+    )
+
+
+def test_a_missing_joint_name_lists_the_design(bound_handler):
+    handler = bound_handler(_joint_design())
+    _first_joint(handler)
+
+    result = _result(
+        handler,
+        "set_joint_value",
+        value=1.0,
+        joint_name="Missing",
+        as_built=False,
+    )
+
+    _assert_refused(
+        result,
+        "NAME_NOT_FOUND",
+        "joint 'Missing' not found (1 joints in the design)",
+        "Call get_scene_info to list the joints in this design.",
+    )
+
+
+def test_no_as_built_joints_says_to_change_as_built(bound_handler):
+    handler = bound_handler(_joint_design())
+
+    result = _result(handler, "set_joint_value", value=1.0)
+
+    _assert_refused(
+        result,
+        "INVALID_INPUT",
+        "No as-built joints in the design; pass as_built=False for regular "
+        "joints or create one first",
+        "Pass as_built=False for regular joints, or create an as-built joint first.",
+    )
+
+
+def test_an_undriveable_motion_names_the_known_types(bound_handler):
+    handler = bound_handler(_joint_design())
+    joint = _first_joint(handler)
+
+    class UnknownMotion:
+        # A sentinel, not a Fusion type: the undriveable-motion branch is a
+        # forward-compat guard, so no real motion name can reach it. Do not
+        # "fix" this into an API name.
+        objectType = "adsk::fusion::SphericalJointMotion"
+
+    joint.jointMotion = UnknownMotion()
+
+    result = _result(
+        handler,
+        "set_joint_value",
+        value=1.0,
+        joint_name=joint.name,
+        as_built=False,
+    )
+
+    _assert_refused(
+        result,
+        "INVALID_INPUT",
+        "'Joint1' has motion SphericalJointMotion, which this command cannot "
+        "drive; known types: ['BallJointMotion', 'CylindricalJointMotion', "
+        "'PinSlotJointMotion', 'PlanarJointMotion', 'RevoluteJointMotion', "
+        "'SliderJointMotion']",
+        "Drive only the value kinds the joint's motion has.",
+    )
+
+
+def test_a_value_kind_from_another_motion_is_refused(bound_handler):
+    handler = bound_handler(_joint_design())
+    joint = _first_joint(handler)
+
+    result = _result(
+        handler,
+        "set_joint_value",
+        value=1.0,
+        joint_name=joint.name,
+        as_built=False,
+        value_kind="pitch",
+    )
+
+    _assert_refused(
+        result,
+        "INVALID_INPUT",
+        "value_kind 'pitch' does not apply to SliderJointMotion; use one of ['slide']",
+        "A value_kind valid for another joint's motion does not apply here; "
+        "use one this motion has.",
     )

@@ -28,6 +28,7 @@ from __future__ import annotations
 import pytest
 
 import fusion360_mcp.mock as mock_mod
+from addon.server import hints as addon_hints
 from fusion360_mcp.hints import classify
 from fusion360_mcp.tools import TOOLS
 from tests.fakes.design import FakeDesign
@@ -123,6 +124,50 @@ def test_the_symmetry_line_is_indexed_like_the_two_entities(bound_handler):
 
     assert classify(raised.value)[0] == "INVALID_INPUT"
     assert "symmetry_line" in str(raised.value)
+
+
+def test_a_symmetry_without_a_line_is_refused_from_the_parameters(bound_handler):
+    """The one constraint needing a third entity says which index is missing.
+
+    Judged before the sketch is read, so the answer names the missing input rather
+    than the sketch a design happens to hold - and mock mode, which has no sketch,
+    answers the same sentence.
+    """
+    handler = bound_handler(FakeDesign(features=0))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.add_constraint("symmetry", entity_one=0, entity_two=1)
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert str(raised.value) == (
+        "symmetry needs symmetry_line — the index of the sketch line the two "
+        "entities are mirrored about"
+    )
+    assert raised.value.hints == (
+        "Pass symmetry_line: the index of a sketch line to mirror about.",
+    )
+
+
+def test_a_symmetry_line_of_zero_names_the_first_line(bound_handler):
+    """Index 0 is a line, not "unset": the validator tests ``is not None``.
+
+    A truthiness check would refuse it, and the caller would have no way to mirror
+    about the sketch's first line.  The handler and mock mode both accept it.
+    """
+    design, sketch = four_curve_design()
+    handler = bound_handler(design)
+    params = {
+        "constraint_type": "symmetry",
+        "entity_one": 0,
+        "entity_two": 1,
+        "symmetry_line": 0,
+    }
+
+    assert handler.add_constraint(**params) == {
+        "sketch": sketch.name,
+        "constraint_type": "symmetry",
+    }
+    assert mock_mod.mock_command("add_constraint", dict(params))["ok"] is True
 
 
 @pytest.mark.parametrize("index", [1.5, 4.0, True])

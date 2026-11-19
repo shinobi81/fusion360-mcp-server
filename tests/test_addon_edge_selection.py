@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import pytest
 
+from addon.server import hints as addon_hints
 from fusion360_mcp.hints import classify
 from fusion360_mcp.mock import mock_command
 from tests.fakes.bodies import (
@@ -598,6 +599,24 @@ def test_a_point_far_from_every_edge_names_the_distance_and_the_nearest(select):
     assert "9.000" in message, "and how far off the point actually was"
     assert "nearest is edge 0" in message, "and which edge it almost hit"
     assert classify(raised.value)[0] == "INVALID_INPUT"
+
+
+def test_a_body_with_no_edges_cannot_be_selected_by_a_point(select):
+    """The point is usable and the *body* is short of geometry, so the hint says so.
+
+    Nothing about the arguments is wrong, which is why this is
+    ``GEOMETRY_UNSUPPORTED``: another body is the fix, not another point.
+    """
+    with pytest.raises(addon_hints.Refusal) as raised:
+        select([], "all", points=[[0.0, 0.0, 0.0]])
+
+    assert raised.value.error_kind == "GEOMETRY_UNSUPPORTED"
+    assert str(raised.value) == (
+        "Body 'Plate' has no edges, so no point can select an edge"
+    )
+    assert raised.value.hints == (
+        "Choose a body whose face has edges and reports a usable parameter range.",
+    )
 
 
 def test_a_wider_tolerance_accepts_a_further_point(select):

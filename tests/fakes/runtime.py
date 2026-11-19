@@ -398,6 +398,22 @@ def _mesh_refinement_settings() -> types.SimpleNamespace:
     return types.SimpleNamespace(MeshRefinementMedium="medium")
 
 
+def _mesh_units() -> types.SimpleNamespace:
+    """``MeshUnits``: the five members ``import_mesh``'s unit map names.
+
+    All five are reachable - the map is the tool's whole ``units`` enum - so all five
+    are modelled; their values are the member names so a test can assert which unit
+    reached ``MeshBodies.add``.
+    """
+    return types.SimpleNamespace(
+        MillimeterMeshUnit="MillimeterMeshUnit",
+        CentimeterMeshUnit="CentimeterMeshUnit",
+        MeterMeshUnit="MeterMeshUnit",
+        InchMeshUnit="InchMeshUnit",
+        FootMeshUnit="FootMeshUnit",
+    )
+
+
 def _auto_constrain_result_types() -> types.SimpleNamespace:
     """``AutoConstrainResultTypes``: the three options ``auto_constrain`` maps to.
 
@@ -562,6 +578,7 @@ def install() -> None:
             "tests.fakes.features"
         ).FakeThreadDataQuery,
         MeshRefinementSettings=_mesh_refinement_settings(),
+        MeshUnits=_mesh_units(),
         TemporaryBRepManager=_primitives().FakeTemporaryBRepManager,
     )
     cam = module("adsk.cam")

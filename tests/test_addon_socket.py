@@ -23,6 +23,7 @@ import sys
 import threading
 import time
 from contextlib import suppress
+from typing import cast
 
 import pytest
 
@@ -30,6 +31,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from addon.server import hints as addon_hints  # noqa: E402
 from addon.server import socket_server  # noqa: E402
 from addon.server.socket_server import Fusion360MCPServer  # noqa: E402
 from tests.fakes.design import FakeDesign  # noqa: E402
@@ -49,7 +51,7 @@ class _RecordingBridge:
     def __init__(self):
         self.commands = []
         self.reply = {"status": "success", "result": {"ok": True}}
-        self.error = None
+        self.error: BaseException | None = None
         self.arrived = threading.Event()
         self._released = threading.Event()
         self._released.set()
@@ -518,7 +520,7 @@ def test_a_quiet_accept_loop_waits_out_its_timeouts_then_fails_loudly():
     listener = _ScriptedListener(
         socket.timeout(), socket.timeout(), OSError("listener died")
     )
-    server._socket = listener
+    server._socket = cast(socket.socket, listener)
 
     with pytest.raises(OSError, match="listener died"):
         server._accept_loop()
@@ -533,7 +535,7 @@ def test_an_accept_error_after_stop_ends_the_loop_quietly():
     listener = _ScriptedListener(
         lambda: setattr(server, "_running", False), OSError("stopped")
     )
-    server._socket = listener
+    server._socket = cast(socket.socket, listener)
 
     server._accept_loop()
 
@@ -643,7 +645,8 @@ def test_execute_code_reports_a_syntax_error_without_chaining_it(bound_handler):
     ``execute_code`` turns a ``SyntaxError`` into a ``RuntimeError`` whose text is
     the diagnostic the agent reads.  Raised bare inside the ``except``, Python also
     attaches the original as ``__context__``, so the rendered traceback shows the
-    syntax error twice.
+    syntax error twice.  The kind is ``SCRIPT_ERROR``: the script is what has to be
+    fixed, not a parameter.
     """
     handler = bound_handler(FakeDesign())
 
@@ -655,6 +658,10 @@ def test_execute_code_reports_a_syntax_error_without_chaining_it(bound_handler):
     assert "def (" in message and "^" in message, (
         "the offending line and its caret are the only view of the source the agent "
         "gets once the chained block is suppressed"
+    )
+    assert addon_hints.classify(raised.value) == (
+        "SCRIPT_ERROR",
+        ["Fix the script's syntax; the namespace is rebuilt per call."],
     )
     assert raised.value.__suppress_context__ is True
     # ``from None`` and ``from exc`` both suppress the context; only the cause
