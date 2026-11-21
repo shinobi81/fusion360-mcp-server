@@ -6,6 +6,10 @@ package, so its copy is canonical.  Edit that file and run
 ``uv run python scripts/sync_mirrors.py``; hand edits here are overwritten.
 """
 
+# fmt: off
+# `src/` is format-gated and `addon/` is not, so this rendered body is exempt:
+# reformatting it here would edit a file the gate does not own.
+
 import re
 
 # Each entry: (regex applied to str(exc), error_kind, hints)

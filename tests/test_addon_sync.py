@@ -120,6 +120,37 @@ def test_every_declared_mirror_carries_the_generated_header(mirror):
     assert "GENERATED, do not edit" in text.split("\n\n")[0], mirror
 
 
+@pytest.mark.parametrize("mirror", _declared_mirrors(), ids=str)
+def test_every_declared_mirror_turns_the_formatter_off(mirror):
+    """The mirror is format-gated, its canonical file is not.
+
+    ``addon/`` is exempt from ``ruff format`` because Fusion's interpreter is not the
+    one ``requires-python`` describes, while ``src/`` is gated.  So a mirror rendered
+    verbatim from an add-in file can be reformatted into a shape the canonical file
+    does not have, and ``--check`` then asks a maintainer to rewrite ``addon/`` to
+    satisfy a gate that does not cover it.  Measured cost of the gap: fourteen unstaged
+    drift patches against this branch, each one reverted.
+
+    ``# fmt: off`` before the body, with no ``# fmt: on``, is what keeps the two gates
+    from fighting: the whole rendered body is exempt and the header still gets checked.
+    """
+    text = (REPO_ROOT / mirror).read_text(encoding="utf-8")
+    lines = text.splitlines()
+    first_statement = next(
+        index
+        for index, line in enumerate(lines)
+        if line.startswith(("import ", "from ", "_"))
+    )
+
+    assert "# fmt: off" in lines[:first_statement], (
+        f"{mirror}: add `# fmt: off` above the first statement, or the format gate "
+        "will reformat a copy of a file it does not own"
+    )
+    assert "# fmt: on" not in text, (
+        f"{mirror}: a `# fmt: on` re-arms the formatter over a rendered body"
+    )
+
+
 def test_no_mirror_is_stale():
     """``--check`` is the guard; its diff belongs in the assertion, not the stream."""
     result = subprocess.run(
