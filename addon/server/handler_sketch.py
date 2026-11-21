@@ -6,14 +6,21 @@ from ``command_handler``.  Mixed into ``command_handler.CommandHandler``.
 """
 
 import math
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from . import fusion_api as adsk
 from . import hints as _hints
 from . import rules as _rules
 
+if TYPE_CHECKING:  # pragma: no cover - the mixin's contract, for type checkers only
+    # Not inherited at runtime: ``CommandHandler`` supplies the base.  The reason this
+    # exists at all is stated once, above ``class HandlerBase``.
+    from .handler_base import HandlerBase as _Contract
+else:  # pragma: no cover - unchanged runtime hierarchy: ``object``
+    _Contract = object
 
-class SketchCommands:
+
+class SketchCommands(_Contract):
     @staticmethod
     def _plane_point(x: float, y: float):
         """A sketch-space point lying **on** the sketch plane.

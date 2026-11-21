@@ -7,7 +7,7 @@ from ``command_handler``.  Mixed into ``command_handler.CommandHandler``.
 
 import math
 from contextlib import suppress
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from . import fusion_api as adsk
 from . import hints as _hints
@@ -15,8 +15,15 @@ from . import hole_geometry as _hole_geom
 from . import parameter_units as _param_units
 from . import rules as _rules
 
+if TYPE_CHECKING:  # pragma: no cover - the mixin's contract, for type checkers only
+    # Not inherited at runtime: ``CommandHandler`` supplies the base.  The reason this
+    # exists at all is stated once, above ``class HandlerBase``.
+    from .handler_base import HandlerBase as _Contract
+else:  # pragma: no cover - unchanged runtime hierarchy: ``object``
+    _Contract = object
 
-class FeatureCommands:
+
+class FeatureCommands(_Contract):
     # How far an edge's extent may sit from a plane and still count as lying in
     # it, and how much x/y extent still counts as no extent at all. 1e-3 cm is
     # 10 µm — the tolerance the coarse selectors already used as their threshold,

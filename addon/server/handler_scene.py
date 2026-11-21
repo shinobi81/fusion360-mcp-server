@@ -10,6 +10,7 @@ import io
 import math
 import traceback
 from contextlib import redirect_stdout
+from typing import TYPE_CHECKING
 
 from . import fusion_api as adsk
 from . import get_logger
@@ -19,7 +20,15 @@ from . import parameter_units as _param_units
 log = get_logger("handler")
 
 
-class SceneCommands:
+if TYPE_CHECKING:  # pragma: no cover - the mixin's contract, for type checkers only
+    # Not inherited at runtime: ``CommandHandler`` supplies the base.  The reason this
+    # exists at all is stated once, above ``class HandlerBase``.
+    from .handler_base import HandlerBase as _Contract
+else:  # pragma: no cover - unchanged runtime hierarchy: ``object``
+    _Contract = object
+
+
+class SceneCommands(_Contract):
     def new_document(self, name: str | None = None):
         """Create a design document and make it active.
 

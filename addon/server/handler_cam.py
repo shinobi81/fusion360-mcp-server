@@ -13,7 +13,7 @@ activated for the document, so the lookup activates it on demand.
 
 import os
 from contextlib import suppress
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from . import fusion_api as adsk
 from . import get_logger
@@ -31,7 +31,15 @@ _OPERATION_LIST_HINT = (
 )
 
 
-class CamCommands:
+if TYPE_CHECKING:  # pragma: no cover - the mixin's contract, for type checkers only
+    # Not inherited at runtime: ``CommandHandler`` supplies the base.  The reason this
+    # exists at all is stated once, above ``class HandlerBase``.
+    from .handler_base import HandlerBase as _Contract
+else:  # pragma: no cover - unchanged runtime hierarchy: ``object``
+    _Contract = object
+
+
+class CamCommands(_Contract):
 
     def _get_cam(self):
         """Get the CAM product from the active document.
@@ -375,9 +383,12 @@ class CamCommands:
                     hints=(_OPERATION_LIST_HINT,),
                 )
             if len(matches) > 1:
-                setup_names = list(
-                    dict.fromkeys(setup.name for setup, _operation in matches)
-                )
+                # How many matches each setup holds: ``setup_name`` only narrows the
+                # search, so it is advice only for the setups holding exactly one.
+                counts: dict[str, int] = {}
+                for setup, _operation in matches:
+                    counts[setup.name] = counts.get(setup.name, 0) + 1
+                setup_names = list(counts)
                 # Assigning an operation a name already taken *inside its setup* is
                 # suffixed by Fusion (measured live: renaming Face11 to Face10 produced
                 # Face101), so a rename cannot leave two matches in one setup. The
@@ -387,10 +398,22 @@ class CamCommands:
                     "There is no CAM rename tool; rename the duplicates with "
                     "execute_code (operation.name = ...) so the name selects one."
                 ]
-                if len(setup_names) > 1:
-                    hints.insert(
-                        0, "Pass setup_name to choose which setup to generate."
-                    )
+                resolvable = [name for name, count in counts.items() if count == 1]
+                ambiguous = [name for name, count in counts.items() if count > 1]
+                if len(counts) > 1:
+                    if not ambiguous:
+                        hints.insert(
+                            0, "Pass setup_name to choose which setup to generate."
+                        )
+                    elif resolvable:
+                        hints.insert(
+                            0,
+                            "Pass setup_name to narrow it: "
+                            + ", ".join(f"'{name}'" for name in resolvable)
+                            + " holds one of them, while "
+                            + ", ".join(f"'{name}'" for name in ambiguous)
+                            + " holds more than one, so narrowing there cannot help.",
+                        )
                 raise _hints.Refusal(
                     "INVALID_INPUT",
                     f"Operation '{operation_name}' matches {len(matches)} "

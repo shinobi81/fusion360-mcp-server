@@ -19,13 +19,21 @@ import os
 import tempfile
 import time
 from contextlib import suppress
+from typing import TYPE_CHECKING
 
 from . import fusion_api as adsk
 from . import hints as _hints
 from . import rules as _rules
 
+if TYPE_CHECKING:  # pragma: no cover - the mixin's contract, for type checkers only
+    # Not inherited at runtime: ``CommandHandler`` supplies the base.  The reason this
+    # exists at all is stated once, above ``class HandlerBase``.
+    from .handler_base import HandlerBase as _Contract
+else:  # pragma: no cover - unchanged runtime hierarchy: ``object``
+    _Contract = object
 
-class ExportCommands:
+
+class ExportCommands(_Contract):
 
     def _export_body(self, kind: str, body_name: str, file_path: str | None) -> dict:
         """Export one body as STL or STEP, hiding its siblings when it is nested.

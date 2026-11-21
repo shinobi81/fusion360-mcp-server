@@ -5,6 +5,8 @@ in ``handler_base``; this module imports nothing from another domain and nothing
 from ``command_handler``.  Mixed into ``command_handler.CommandHandler``.
 """
 
+from typing import TYPE_CHECKING
+
 from . import fusion_api as adsk
 from . import get_logger
 from . import hints as _hints
@@ -13,7 +15,15 @@ from . import parameter_units as _param_units
 log = get_logger("handler")
 
 
-class PrimitiveCommands:
+if TYPE_CHECKING:  # pragma: no cover - the mixin's contract, for type checkers only
+    # Not inherited at runtime: ``CommandHandler`` supplies the base.  The reason this
+    # exists at all is stated once, above ``class HandlerBase``.
+    from .handler_base import HandlerBase as _Contract
+else:  # pragma: no cover - unchanged runtime hierarchy: ``object``
+    _Contract = object
+
+
+class PrimitiveCommands(_Contract):
     def delete_all(self):
         """Clear the active design: unwind the timeline, then sweep leftovers.
 

@@ -328,6 +328,41 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
             "raise NotImplementedError: no Refusal bound to it",
         ),
         (
+            "handler_assembly.py",
+            164,
+            "raise refusal: kind comes from _rules.construction_method_refusal",
+        ),
+        (
+            "handler_assembly.py",
+            207,
+            "raise refusal: kind comes from _rules.perpendicular_axis_refusal",
+        ),
+        (
+            "handler_assembly.py",
+            372,
+            "raise component_refusal: kind comes from _rules.components_differ_refusal",
+        ),
+        (
+            "handler_assembly.py",
+            377,
+            "raise geometry_refusal: kind comes from _rules.joint_geometry_refusal",
+        ),
+        (
+            "handler_assembly.py",
+            652,
+            "raise component_refusal: kind comes from _rules.components_differ_refusal",
+        ),
+        (
+            "handler_assembly.py",
+            663,
+            "raise geometry_refusal: kind comes from _rules.as_built_geometry_refusal",
+        ),
+        (
+            "handler_assembly.py",
+            839,
+            "raise refusal: kind comes from _rules.rigid_group_size_refusal",
+        ),
+        (
             "handler_base.py",
             301,
             "raise refusal: kind comes from _rules.point3d_refusal",
@@ -338,58 +373,50 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
             "raise refusal: kind comes from _rules.body_name_required_refusal",
         ),
         (
-            "handler_assembly.py",
-            156,
-            "raise refusal: kind comes from _rules.construction_method_refusal",
+            "handler_cam.py",
+            368,
+            "raise refusal: kind comes from _rules.cam_target_refusal",
         ),
         (
-            "handler_assembly.py",
-            199,
-            "raise refusal: kind comes from _rules.perpendicular_axis_refusal",
+            "handler_export.py",
+            333,
+            "raise target_refusal: kind comes from _rules.export_target_refusal",
         ),
         (
-            "handler_assembly.py",
-            357,
-            "raise component_refusal: kind comes from _rules.components_differ_refusal",
-        ),
-        (
-            "handler_assembly.py",
-            362,
-            "raise geometry_refusal: kind comes from _rules.joint_geometry_refusal",
-        ),
-        (
-            "handler_assembly.py",
-            635,
-            "raise component_refusal: kind comes from _rules.components_differ_refusal",
-        ),
-        (
-            "handler_assembly.py",
-            646,
-            "raise geometry_refusal: kind comes from _rules.as_built_geometry_refusal",
-        ),
-        (
-            "handler_assembly.py",
-            820,
-            "raise refusal: kind comes from _rules.rigid_group_size_refusal",
+            "handler_export.py",
+            341,
+            "raise body_refusal: kind comes from _rules.export_body_refusal",
         ),
         (
             "handler_features.py",
-            42,
+            49,
             "raise refusal: kind comes from _rules.target_body_refusal",
         ),
         (
             "handler_features.py",
-            94,
+            101,
             "raise refusal: kind comes from _rules.edge_selector_refusal",
         ),
-        ("handler_features.py", 987, "message is not a literal"),
+        (
+            "handler_features.py",
+            994,
+            "message is not a literal",
+        ),
         (
             "handler_sketch.py",
-            310,
+            317,
             "raise refusal: kind comes from _rules.symmetry_line_refusal",
         ),
-        ("handler_sketch.py", 318, "message is not a literal"),
-        ("handler_sketch.py", 454, "message is not a literal"),
+        (
+            "handler_sketch.py",
+            325,
+            "message is not a literal",
+        ),
+        (
+            "handler_sketch.py",
+            461,
+            "message is not a literal",
+        ),
         (
             "handler_surface.py",
             121,
@@ -404,21 +431,6 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
             "handler_surface.py",
             173,
             "raise cells_refusal: kind comes from _rules.keep_cells_refusal",
-        ),
-        (
-            "handler_export.py",
-            325,
-            "raise target_refusal: kind comes from _rules.export_target_refusal",
-        ),
-        (
-            "handler_export.py",
-            333,
-            "raise body_refusal: kind comes from _rules.export_body_refusal",
-        ),
-        (
-            "handler_cam.py",
-            360,
-            "raise refusal: kind comes from _rules.cam_target_refusal",
         ),
     }
 )

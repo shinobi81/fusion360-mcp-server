@@ -7,7 +7,7 @@ from ``command_handler``.  Mixed into ``command_handler.CommandHandler``.
 
 import math
 from contextlib import suppress
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from . import fusion_api as adsk
 from . import hints as _hints
@@ -31,7 +31,15 @@ def _is_zero(vector) -> bool:
     return squared <= _DEGENERATE_AXIS_SQUARED
 
 
-class AssemblyCommands:
+if TYPE_CHECKING:  # pragma: no cover - the mixin's contract, for type checkers only
+    # Not inherited at runtime: ``CommandHandler`` supplies the base.  The reason this
+    # exists at all is stated once, above ``class HandlerBase``.
+    from .handler_base import HandlerBase as _Contract
+else:  # pragma: no cover - unchanged runtime hierarchy: ``object``
+    _Contract = object
+
+
+class AssemblyCommands(_Contract):
     # joint_type -> (JointInput setter, number of direction arguments it takes).
     # The arities were verified against the running Fusion API: one direction for
     # revolute/slider/cylindrical/planar, two for pin_slot and ball, none for rigid.
@@ -286,8 +294,15 @@ class AssemblyCommands:
                 return occ
         return None
 
-    def _joint_face(self, occ, body_name: str | None, face_index: int, label: str):
-        """Resolve one cylindrical face used as joint geometry."""
+    def _joint_face(
+        self, occ, body_name: str | None, face_index: int | None, label: str
+    ):
+        """Resolve one cylindrical face used as joint geometry.
+
+        ``face_index`` is optional in both joint commands, and the ``None`` case is
+        refused below - the annotation says so rather than claiming a face is always
+        named.
+        """
         component = occ.component
         bodies = [b for b in component.bRepBodies]
         if body_name:
@@ -366,8 +381,10 @@ class AssemblyCommands:
             self._joint_face(occ2, body_two, face_two, "body_two"),
         )
 
-        quadrant_attr = self._JOINT_QUADRANTS.get(quadrant)
-        key_point_attr = self._JOINT_KEY_POINTS.get(key_point)
+        # Indexed, not ``.get()``: the schema's enum is these keys, and the gate in
+        # ``_send`` refuses anything else before either mode reads the call.
+        quadrant_attr = self._JOINT_QUADRANTS[quadrant]
+        key_point_attr = self._JOINT_KEY_POINTS[key_point]
         quadrant_value = getattr(adsk.fusion.JointQuadrantAngleTypes, quadrant_attr)
         key_point_value = getattr(adsk.fusion.JointKeyPointTypes, key_point_attr)
 
@@ -650,8 +667,10 @@ class AssemblyCommands:
             # cannot be used to build the joint. It is still resolved, so an
             # unresolvable body_two/face_two is reported rather than ignored.
             self._joint_face(occ2, body_two, face_two, "body_two")
-            quadrant_attr = self._JOINT_QUADRANTS.get(quadrant)
-            key_point_attr = self._JOINT_KEY_POINTS.get(key_point)
+            # Indexed, not ``.get()``: same reason as in ``add_joint`` - the enum gate
+            # is what keeps these keys present.
+            quadrant_attr = self._JOINT_QUADRANTS[quadrant]
+            key_point_attr = self._JOINT_KEY_POINTS[key_point]
             geometry = adsk.fusion.JointGeometry.createByCylinderOrConeFace(
                 face,
                 getattr(adsk.fusion.JointQuadrantAngleTypes, quadrant_attr),

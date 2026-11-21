@@ -220,8 +220,11 @@ def test_a_duplicate_inside_the_named_setup_refuses_instead_of_picking_one(
     """Naming the setup narrows the search, not a duplicate inside it.
 
     ``setup_name`` plus ``operation_name`` used to go through ``_find_operation``,
-    which takes the first operation of that name: two renames and the call
-    generated one of them, reporting a success the other would also have.
+    which takes the first operation of that name: given such a pair the call
+    generated one of them, reporting a success the other would also have.  The
+    fixture is the shape the create path could leave behind - Fusion *suffixes* a
+    rename that would duplicate a name inside a setup (measured: ``Face11`` renamed
+    to ``Face10`` became ``Face101``), so a rename cannot produce this pair.
     """
     cam = _cam(
         _setup_with_operations("Setup6", _operation("Face6"), _operation("Face6"))
@@ -255,6 +258,55 @@ def test_an_unknown_operation_name_is_name_not_found(handler_module):
     assert any("cam_list_operations" in hint for hint in raised.value.hints)
 
 
+def test_a_name_held_twice_in_every_setup_does_not_advise_setup_name(handler_module):
+    """``setup_name`` is only advice when narrowing to one setup can resolve it.
+
+    Two matches in Setup1 *and* two in Setup2 make the generic "pass setup_name"
+    hint a round trip into the narrowed refusal, which refuses for the same reason.
+    """
+    cam = _cam(
+        _setup_with_operations("Setup1", _operation("Rough1"), _operation("Rough1")),
+        _setup_with_operations("Setup2", _operation("Rough1"), _operation("Rough1")),
+    )
+    generated = []
+    cam.generateToolpath = generated.append
+    handler = _generating_handler(handler_module, cam)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_generate_toolpath(operation_name="Rough1")
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert "Setup1" in str(raised.value) and "Setup2" in str(raised.value)
+    assert not any("setup_name" in hint for hint in raised.value.hints)
+    assert generated == []
+
+
+def test_a_partial_duplicate_advises_only_the_setup_that_can_resolve_it(
+    handler_module,
+):
+    """One in Setup1 and two in Setup2: ``setup_name="Setup1"`` does resolve it.
+
+    The generic advice is still the right advice here, but only for a setup holding
+    one match - so the hint names that setup and says why the other cannot help.
+    """
+    cam = _cam(
+        _setup_with_operations("Setup1", _operation("Rough1")),
+        _setup_with_operations("Setup2", _operation("Rough1"), _operation("Rough1")),
+    )
+    generated = []
+    cam.generateToolpath = generated.append
+    handler = _generating_handler(handler_module, cam)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_generate_toolpath(operation_name="Rough1")
+
+    pointing = [hint for hint in raised.value.hints if "setup_name" in hint]
+    assert pointing, "Setup1 holds exactly one, so narrowing to it resolves the name"
+    assert "'Setup1'" in pointing[0]
+    assert "'Setup2'" in pointing[0] and "more than one" in pointing[0]
+    assert generated == []
+
+
 def test_an_operation_name_in_two_setups_names_both(handler_module):
     """A shared name is ambiguous, so the refusal says which setups hold it."""
     cam = _cam(
@@ -275,10 +327,12 @@ def test_an_operation_name_in_two_setups_names_both(handler_module):
 def test_a_name_held_twice_in_one_setup_refuses_instead_of_picking_one(
     handler_module,
 ):
-    """Fusion lets operations be renamed, so one setup can hold two of a name.
+    """The ambiguity one setup can hold, which narrowing to it cannot resolve.
 
-    The old scan took the first match per setup, so this ambiguity looked like a
-    single match and the first operation was generated silently.
+    A rename is suffixed rather than allowed to duplicate a name inside its setup,
+    so this pair is a shape the create path could leave behind and no measurement
+    rules out.  The old scan took the first match per setup, so this ambiguity
+    looked like a single match and the first operation was generated silently.
     """
     first = _operation("Rough1")
     second = _operation("Rough1")
