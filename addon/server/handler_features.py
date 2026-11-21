@@ -7,15 +7,23 @@ from ``command_handler``.  Mixed into ``command_handler.CommandHandler``.
 
 import math
 from contextlib import suppress
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from . import fusion_api as adsk
+from . import hints as _hints
 from . import hole_geometry as _hole_geom
 from . import parameter_units as _param_units
 from . import rules as _rules
 
+if TYPE_CHECKING:  # pragma: no cover - the mixin's contract, for type checkers only
+    # Not inherited at runtime: ``CommandHandler`` supplies the base.  The reason this
+    # exists at all is stated once, above ``class HandlerBase``.
+    from .handler_base import HandlerBase as _Contract
+else:  # pragma: no cover - unchanged runtime hierarchy: ``object``
+    _Contract = object
 
-class FeatureCommands:
+
+class FeatureCommands(_Contract):
     # How far an edge's extent may sit from a plane and still count as lying in
     # it, and how much x/y extent still counts as no extent at all. 1e-3 cm is
     # 10 µm — the tolerance the coarse selectors already used as their threshold,
@@ -328,8 +336,13 @@ class FeatureCommands:
                     else f"reported no usable parameter range on any of its "
                     f"{body.edges.count} edge(s)"
                 )
-                raise RuntimeError(
-                    f"Body '{body.name}' {reason}, so no point can select an edge"
+                raise _hints.Refusal(
+                    "GEOMETRY_UNSUPPORTED",
+                    f"Body '{body.name}' {reason}, so no point can select an edge",
+                    hints=(
+                        "Choose a body whose face has edges and reports a usable "
+                        "parameter range.",
+                    ),
                 )
             distance, edge, index = best
             # Tolerance before ambiguity: a point far from everything that happens
@@ -843,9 +856,14 @@ class FeatureCommands:
                 best_key, target_face = key, face
 
         if target_face is None:
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "GEOMETRY_UNSUPPORTED",
                 f"No near-horizontal {face_selection}-facing planar face on "
-                f"'{body.name}'"
+                f"'{body.name}'",
+                hints=(
+                    "Pick a body whose faces include a near-horizontal plane (top "
+                    "or bottom).",
+                ),
             )
 
         # Place the hole centre. center_x / center_y are model-space XY, so the

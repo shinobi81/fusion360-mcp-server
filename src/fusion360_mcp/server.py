@@ -12,11 +12,14 @@ from pathlib import Path
 
 import anyio
 import click
+import jsonschema.exceptions
+import jsonschema.validators
 import mcp.types as types
 from mcp.server.lowlevel import Server
 from pydantic import AnyUrl
 
 from . import addon_install
+from . import hints as _hints
 from .connection import (
     _DEFAULT_HOST,
     _DEFAULT_PORT,
@@ -35,6 +38,68 @@ logging.basicConfig(
 log = logging.getLogger("fusion360_mcp.server")
 
 
+def _gate_message(err: jsonschema.exceptions.ValidationError) -> str:
+    """Describe the rejected field: in the add-in's voice where it shapes the
+    keyword, otherwise the field name plus ``jsonschema``'s own text.
+
+    ``jsonschema``'s messages name the keyword (``'q' is not one of ...``); a
+    caller should not have to read the schema to fix the call, so the shapes this
+    gate knows are reworded.  A validator it does not shape falls through to
+    ``err.message``, prefixed with the field name when there is one, so an
+    unhandled constraint is visible rather than silently reworded.
+    """
+    prop = next(
+        (part for part in reversed(err.absolute_path) if isinstance(part, str)), ""
+    )
+    if err.validator == "enum":
+        values = err.validator_value
+        if isinstance(values, (list, tuple)):
+            allowed = ", ".join(str(value) for value in values)
+            return f"Unknown {prop}: {err.instance!r}. Expected one of: {allowed}"
+    if err.validator == "minimum":
+        return f"{prop} must be at least {err.validator_value}, got {err.instance}"
+    if err.validator == "maximum":
+        return f"{prop} must be at most {err.validator_value}, got {err.instance}"
+    if err.validator == "type":
+        return f"{prop} must be of type {err.validator_value}, got {err.instance!r}"
+    if err.validator == "minItems":
+        return f"{prop} needs at least {err.validator_value} items"
+    if err.validator == "maxItems":
+        return f"{prop} allows at most {err.validator_value} items"
+    if err.validator == "required":
+        # ``absolute_path`` is empty for ``required``: the message is the only
+        # place the missing property's name appears.
+        missing = re.search(r"'([^']+)'", err.message)
+        return f"{missing.group(1) if missing else err.message} is required"
+    return f"{prop}: {err.message}" if prop else err.message
+
+
+def _schema_refusal(command_type: str, params: dict) -> dict | None:
+    """Refuse arguments the tool's own schema forbids, before Fusion sees them.
+
+    One gate for both modes: ``_send`` is the only path to the add-in or to mock
+    mode, so an enum or a minimum the schema declares is enforced once.  Messages
+    come from ``_gate_message``: the add-in's voice for the shapes it knows,
+    ``jsonschema``'s own text otherwise.
+    """
+    spec = get_tool_by_name(command_type)
+    if spec is None:
+        return None
+    schema = spec.get("inputSchema") or {}
+    if "properties" not in schema:
+        return None
+    cls = jsonschema.validators.validator_for(schema)
+    for err in cls(schema).iter_errors(params):
+        return {
+            "ok": False,
+            "error_kind": "INVALID_INPUT",
+            "error_message": _gate_message(err),
+            "hints": list(_hints._KIND_HINTS["INVALID_INPUT"]),
+            "traceback": "",
+        }
+    return None
+
+
 def _send(
     mode: str,
     command_type: str,
@@ -43,7 +108,30 @@ def _send(
     host: str = _DEFAULT_HOST,
     port: int = _DEFAULT_PORT,
 ) -> dict:
-    """Route a command through either the real TCP connection or mock."""
+    """Route a command through either the real TCP connection or mock.
+
+    The tool's schema is enforced first, so neither mode sees arguments it
+    declares invalid.  ``params=None`` is what some callers pass; validating it
+    as ``None`` against the schema's ``{"type": "object"}`` would refuse
+    ``ping``, so it is normalised to ``{}`` before validation.  An explicit
+    ``null`` for a declared optional property means the same as omitting it, so
+    that ``None`` is dropped and the handler's default applies; a required
+    property left ``null`` is still refused as missing.  Only declared keys are
+    dropped: an undeclared key stays in the call, so ``additionalProperties:
+    false`` still refuses it by name however its value is spelled.
+    """
+    if params is None:
+        params = {}
+    spec = get_tool_by_name(command_type) or {}
+    declared = set((spec.get("inputSchema") or {}).get("properties") or ())
+    params = {
+        name: value
+        for name, value in params.items()
+        if value is not None or name not in declared
+    }
+    refusal = _schema_refusal(command_type, params)
+    if refusal is not None:
+        return refusal
     if mode == "mock":
         return mock_command(command_type, params)
     conn = get_connection(host=host, port=port)

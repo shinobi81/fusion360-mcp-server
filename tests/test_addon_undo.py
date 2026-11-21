@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import pytest
 
+from addon.server import hints as addon_hints
 from tests.fakes.design import FakeCommandDefinition, FakeDesign, FakeUI
 from tests.fakes.runtime import DIRECT, PARAMETRIC
 
@@ -163,20 +164,49 @@ class TestDirectModeFallback:
         assert "get_scene_info" in combined
 
     def test_missing_undo_command_still_refuses(self, rig):
+        """No undo command means this workspace cannot undo, so open one that can."""
         design, handler = rig(FakeDesign(design_type=DIRECT), with_undo=False)
 
-        with pytest.raises(RuntimeError, match="not available"):
+        with pytest.raises(addon_hints.Refusal) as raised:
             handler.undo()
 
+        assert raised.value.error_kind == "WORKSPACE_UNAVAILABLE"
+        assert str(raised.value) == (
+            "Undo command is not available in the current workspace. The design "
+            "was NOT modified — delete the failed feature explicitly instead."
+        )
+        assert raised.value.hints == (
+            "Undo needs a Parametric workspace; open one and retry.",
+        )
         assert design.undo_commands_executed == 0
 
 
 class TestDesignTypeGuard:
     def test_aborts_if_rolling_back_switches_the_design_type(self, rig):
+        """Fusion changed the design type under the undo: a Fusion outcome, not ours.
+
+        The whole sentence is pinned, tail included: this raise left
+        ``_UNCLASSIFIED_BASELINE``, so nothing else would notice a reword.  Both
+        halves read "Parametric" here because the handler restores the type before
+        it builds the message — the fake is what switches it — and that is exactly
+        the text a caller receives.
+        """
         design, handler = rig(FakeDesign(features=2, marker_switches_type=True))
 
-        with pytest.raises(RuntimeError, match="Undo aborted"):
+        with pytest.raises(addon_hints.Refusal) as raised:
             handler.undo()
 
+        assert raised.value.error_kind == "FUSION_REFUSED"
+        assert str(raised.value) == (
+            "Undo aborted: stepping the timeline back to 1 changed the design type "
+            "from Parametric to Parametric. The marker was restored. If the design is "
+            "stuck in direct mode, call set_design_type('parametric') to capture "
+            "history again, then delete the failed feature explicitly."
+        )
+        assert raised.value.hints == (
+            "If the design is stuck in direct mode, call "
+            "set_design_type('parametric'), then delete the failed feature "
+            "explicitly.",
+        )
         assert design.designType == PARAMETRIC, "design was left in direct mode"
         assert design.marker == 2, "the marker was not restored"

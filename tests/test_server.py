@@ -8,6 +8,34 @@ import pytest
 from fusion360_mcp.server import _send
 
 
+def _example_value(prop: dict):
+    """A value *prop*'s schema accepts, for the required-argument sweep."""
+    if "enum" in prop:
+        return prop["enum"][0]
+    kind = prop.get("type")
+    if kind == "array":
+        item_kind = (prop.get("items") or {}).get("type")
+        if item_kind == "array":
+            return [[0, 0], [0, 0]]
+        if item_kind == "integer":
+            return [0]
+        return ["X", "X"] if prop.get("minItems", 0) > 1 else ["X"]
+    if kind == "string":
+        return "X"
+    if "minimum" in prop:
+        return prop["minimum"]
+    if "oneOf" in prop:
+        return "X"
+    return 0
+
+
+def _minimal_args(tool: dict) -> dict:
+    """The required properties, filled with a value the schema accepts."""
+    props = tool["inputSchema"]["properties"]
+    required = tool["inputSchema"].get("required", [])
+    return {name: _example_value(props[name]) for name in required}
+
+
 class TestSendRouting:
     """_send must route to mock when mode='mock' and to TCP otherwise."""
 
@@ -21,12 +49,46 @@ class TestSendRouting:
         assert result["name"] == "TestBody"
         assert result["mode"] == "mock"
 
+    def test_an_explicit_null_optional_is_treated_as_absent(self):
+        """``null`` for an optional property means unset, so the default applies."""
+        result = _send(
+            "mock",
+            "draw_rectangle",
+            {"width": 1, "height": 1, "sketch_name": None},
+        )
+        assert result.get("error_message") is None
+        assert result["sketch_name"] == "Sketch_mock_xy"
+
+    def test_an_explicit_null_undeclared_key_is_still_refused(self):
+        """Dropping every ``None`` let a misspelt argument past the gate.
+
+        ``sketch_nam`` is not in the schema, so ``additionalProperties: false``
+        refuses it when it carries a value; a ``None`` used to erase it before
+        validation, and the call then succeeded against the default sketch — a
+        wrong call reported as success.
+        """
+        result = _send(
+            "mock",
+            "draw_rectangle",
+            {"width": 1, "height": 1, "sketch_nam": None},
+        )
+        assert result["ok"] is False
+        assert result["error_kind"] == "INVALID_INPUT"
+        assert "sketch_nam" in result["error_message"]
+
+    def test_an_explicit_null_required_is_still_refused(self):
+        """Dropping it leaves the required property missing, which the gate refuses."""
+        result = _send("mock", "draw_rectangle", {"width": None, "height": 1})
+        assert result["ok"] is False
+        assert result["error_kind"] == "INVALID_INPUT"
+        assert "width" in result["error_message"]
+
     def test_mock_mode_all_tools_succeed(self):
         """Every registered tool should succeed through mock routing."""
         from fusion360_mcp.tools import TOOLS
 
         for tool in TOOLS:
-            result = _send("mock", tool["name"], {})
+            result = _send("mock", tool["name"], _minimal_args(tool))
             assert isinstance(result, dict)
             assert result.get("mode") == "mock", (
                 f"Tool {tool['name']} missing mode=mock in mock response"

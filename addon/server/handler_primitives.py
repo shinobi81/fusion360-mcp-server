@@ -5,14 +5,25 @@ in ``handler_base``; this module imports nothing from another domain and nothing
 from ``command_handler``.  Mixed into ``command_handler.CommandHandler``.
 """
 
+from typing import TYPE_CHECKING
+
 from . import fusion_api as adsk
 from . import get_logger
+from . import hints as _hints
 from . import parameter_units as _param_units
 
 log = get_logger("handler")
 
 
-class PrimitiveCommands:
+if TYPE_CHECKING:  # pragma: no cover - the mixin's contract, for type checkers only
+    # Not inherited at runtime: ``CommandHandler`` supplies the base.  The reason this
+    # exists at all is stated once, above ``class HandlerBase``.
+    from .handler_base import HandlerBase as _Contract
+else:  # pragma: no cover - unchanged runtime hierarchy: ``object``
+    _Contract = object
+
+
+class PrimitiveCommands(_Contract):
     def delete_all(self):
         """Clear the active design: unwind the timeline, then sweep leftovers.
 
@@ -116,9 +127,13 @@ class PrimitiveCommands:
         }
 
         if any(v for k, v in remaining.items() if k != "timeline"):
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
                 f"delete_all did not clear the design — remaining: {remaining}. "
-                f"Deleted: {deleted}. Failures: {errors}"
+                f"Deleted: {deleted}. Failures: {errors}",
+                hints=(
+                    "Re-run delete_all; if bodies remain, delete them one at a time.",
+                ),
             )
 
         return {"deleted": deleted, "remaining": remaining, "errors": errors}
@@ -189,14 +204,20 @@ class PrimitiveCommands:
                 log.error("Could not restore design type after aborted undo: %s", exc)
             adsk.doEvents()
             parametric = adsk.fusion.DesignTypes.ParametricDesignType
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
                 f"Undo aborted: stepping the timeline back to "
                 f"{marker_before - 1} changed the design type from "
                 f"{'Parametric' if type_before == parametric else 'Direct'} to "
                 f"{'Parametric' if design.designType == parametric else 'Direct'}. "
                 f"The marker was restored. If the design is stuck in direct "
                 f"mode, call set_design_type('parametric') to capture history "
-                f"again, then delete the failed feature explicitly."
+                f"again, then delete the failed feature explicitly.",
+                hints=(
+                    "If the design is stuck in direct mode, call "
+                    "set_design_type('parametric'), then delete the failed "
+                    "feature explicitly.",
+                ),
             )
 
         if marker_after == marker_before:
@@ -234,10 +255,12 @@ class PrimitiveCommands:
         """Direct designs have no timeline; undo is issued, unverified."""
         cmd_def = self.ui.commandDefinitions.itemById("UndoCommand")
         if cmd_def is None:
-            raise RuntimeError(
+            raise _hints.Refusal(
+                "WORKSPACE_UNAVAILABLE",
                 "Undo command is not available in the current workspace. "
                 "The design was NOT modified — delete the failed feature "
-                "explicitly instead."
+                "explicitly instead.",
+                hints=("Undo needs a Parametric workspace; open one and retry.",),
             )
         cmd_def.execute()
         adsk.doEvents()

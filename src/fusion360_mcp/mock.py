@@ -18,9 +18,23 @@ from typing import Any
 
 from ._mutation_commands import MUTATION_COMMANDS
 from ._rules import (
+    as_built_geometry_refusal,
+    body_name_required_refusal,
+    cam_target_refusal,
+    components_differ_refusal,
+    construction_method_refusal,
     edge_selector_refusal,
+    export_body_refusal,
+    export_target_refusal,
+    joint_geometry_refusal,
+    keep_cells_refusal,
+    perpendicular_axis_refusal,
+    point3d_refusal,
+    rigid_group_size_refusal,
     rule_type_refusal,
     sketch_plane_z_note,
+    surface_tool_refusal,
+    symmetry_line_refusal,
     target_body_refusal,
 )
 from .hints import Refusal
@@ -252,15 +266,34 @@ def _draw_line(p: dict) -> dict:
     }
 
 
+def _body_name_required_error(p: dict, field: str = "body_name") -> dict | None:
+    """The add-in's refusal of a body lookup with no name, or None.
+
+    ``handler_base._body_by_name`` refuses an empty name before Fusion is asked, and
+    ``body_name_required_refusal`` is that same check, so mock mode answers it instead
+    of reporting work a body-less lookup cannot do.  ``field`` names the tool parameter
+    the handler passes in; the validator's own key is always ``body_name``, because the
+    refusal's sentence is the same whichever parameter was short.
+    """
+    refusal = body_name_required_refusal({"body_name": p.get(field)})
+    return None if refusal is None else _refusal_error(refusal)
+
+
 def _target_body_error(p: dict) -> dict | None:
     """The add-in's refusal of ``target_body`` on a new body, or None.
 
     ``target_body_refusal`` is the handler's own check, wording included, because
     the hint rule matches on it.  An unknown body name is *not* refused here:
-    mock mode has no design to look it up in.
+    mock mode has no design to look it up in — but an *empty* one is, because
+    ``_resolve_target_body`` looks it up and ``_body_by_name`` refuses it.  A missing
+    ``target_body`` is not refused: that is a new body, and the handler returns early.
     """
     refusal = target_body_refusal(p, p.get("operation", "new_body"))
-    return None if refusal is None else _refusal_error(refusal)
+    if refusal is not None:
+        return _refusal_error(refusal)
+    if p.get("target_body") == "":
+        return _body_name_required_error(p, "target_body")
+    return None
 
 
 def _extrude(p: dict) -> dict:
@@ -391,6 +424,8 @@ def _mirror(p: dict) -> dict:
 
 
 def _rename_body(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     return {
         "renamed": True,
         "old_name": p.get("body_name", "Body1"),
@@ -399,6 +434,8 @@ def _rename_body(p: dict) -> dict:
 
 
 def _move_body(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     return {
         "body_name": p.get("body_name", "Body1"),
         "translation": [p.get("x", 0), p.get("y", 0), p.get("z", 0)],
@@ -406,12 +443,19 @@ def _move_body(p: dict) -> dict:
 
 
 def _export_stl(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     name = p.get("body_name", "Body1")
     path = p.get("file_path", f"~/Desktop/{name}.stl")
     return {"body_name": name, "file_path": path}
 
 
 def _boolean_operation(p: dict) -> dict:
+    # Both names go straight into ``_body_by_name``, target first as the handler does.
+    for field in ("target_body", "tool_body"):
+        refused = _body_name_required_error(p, field)
+        if refused is not None:
+            return refused
     return {
         "target_body": p.get("target_body", "Body1"),
         "tool_body": p.get("tool_body", "Body2"),
@@ -541,6 +585,8 @@ def _create_hole(p: dict) -> dict:
 
 
 def _rectangular_pattern(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     return {
         "body_name": p.get("body_name", "Body1"),
         "x_count": p.get("x_count", 1),
@@ -550,6 +596,8 @@ def _rectangular_pattern(p: dict) -> dict:
 
 
 def _circular_pattern(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     return {
         "body_name": p.get("body_name", "Body1"),
         "count": p.get("count", 3),
@@ -569,6 +617,9 @@ def _create_component(p: dict) -> dict:
 
 
 def _add_joint(p: dict) -> dict:
+    refusal = components_differ_refusal(p) or joint_geometry_refusal(p)
+    if refusal is not None:
+        return _refusal_error(refusal)
     return {
         "component_one": p.get("component_one", "Comp1"),
         "component_two": p.get("component_two", "Comp2"),
@@ -623,6 +674,8 @@ def _list_components(_p: dict) -> dict:
 
 
 def _export_step(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     name = p.get("body_name", "Body1")
     path = p.get("file_path", f"~/Desktop/{name}.step")
     return {"body_name": name, "file_path": path}
@@ -648,6 +701,12 @@ def _export_view_sheet(p: dict) -> dict:
 
 
 def _export(p: dict) -> dict:
+    # Both checks are the add-in's, in its order: no usable format is judged before
+    # the body the format would need.  ``export_stl``/``export_step`` refuse an empty
+    # body name themselves, through ``_body_by_name``.
+    for refusal in (export_target_refusal(p), export_body_refusal(p)):
+        if refusal is not None:
+            return _refusal_error(refusal)
     fmt = (p.get("format") or "").lower()
     path = p.get("file_path", "")
     if not fmt and path:
@@ -791,11 +850,15 @@ def _curve_index_error(p: dict, fields: tuple[str, ...]) -> dict | None:
 
 
 def _add_constraint(p: dict) -> dict:
-    refusal = _entity_shape_error(
+    # First, because the handler refuses it before it reads a sketch: a symmetry call
+    # short of its mirror line is a parameter problem, not a sketch one.
+    if symmetry := symmetry_line_refusal(p):
+        return _refusal_error(symmetry)
+    refused = _entity_shape_error(
         p, "constraint", _CONSTRAINT_NEEDS_TWO, "constraint_type"
     ) or _curve_index_error(p, ("entity_one", "entity_two", "symmetry_line"))
-    if refusal is not None:
-        return refusal
+    if refused is not None:
+        return refused
     return {
         "constraint_type": p.get("constraint_type", "coincident"),
         "entity_one": p.get("entity_one", 0),
@@ -908,6 +971,19 @@ def _add_dimension(p: dict) -> dict:
 
 
 def _create_construction_plane(p: dict) -> dict:
+    refusal = construction_method_refusal(p)
+    if refusal is None and p.get("method") == "three_points":
+        # The add-in builds a Point3D per point on this branch only, so the points an
+        # offset or midplane call leaves unset are not judged.
+        refusal = point3d_refusal(
+            {
+                "point_one": p.get("point_one"),
+                "point_two": p.get("point_two"),
+                "point_three": p.get("point_three"),
+            }
+        )
+    if refusal is not None:
+        return _refusal_error(refusal)
     return {
         "plane_name": "ConstructionPlane_mock",
         "method": p.get("method", "offset"),
@@ -915,6 +991,21 @@ def _create_construction_plane(p: dict) -> dict:
 
 
 def _create_construction_axis(p: dict) -> dict:
+    refusal = perpendicular_axis_refusal(p)
+    if refusal is None and p.get("method") == "two_points":
+        refusal = point3d_refusal(
+            {
+                "point_one": p.get("point_one"),
+                "point_two": p.get("point_two"),
+            }
+        )
+    if refusal is not None:
+        return _refusal_error(refusal)
+    if p.get("method") == "edge":
+        # The only branch that names a body: the other two build from points or planes.
+        refused = _body_name_required_error(p)
+        if refused is not None:
+            return refused
     return {
         "axis_name": "ConstructionAxis_mock",
         "method": p.get("method", "two_points"),
@@ -976,6 +1067,8 @@ def _extend_curve(p: dict) -> dict:
 
 
 def _create_thread(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     is_internal = p.get("is_internal", False)
     requested_class = p.get("thread_class")
     return {
@@ -1003,6 +1096,8 @@ def _create_thread(p: dict) -> dict:
 
 
 def _draft_faces(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     return {
         "body_name": p.get("body_name", "Body1"),
         "angle": p.get("angle", 5),
@@ -1011,6 +1106,9 @@ def _draft_faces(p: dict) -> dict:
 
 
 def _split_body(p: dict) -> dict:
+    # ``splitting_body`` is guarded in the handler: empty means "cut with a plane".
+    if refused := _body_name_required_error(p):
+        return refused
     return {
         "body_name": p.get("body_name", "Body1"),
         "result_bodies": ["Body1", "Body1_split"],
@@ -1018,6 +1116,8 @@ def _split_body(p: dict) -> dict:
 
 
 def _split_face(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     return {
         "body_name": p.get("body_name", "Body1"),
         "faces_split": 2,
@@ -1025,6 +1125,8 @@ def _split_face(p: dict) -> dict:
 
 
 def _offset_faces(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     return {
         "body_name": p.get("body_name", "Body1"),
         "distance": p.get("distance", 0.5),
@@ -1032,6 +1134,8 @@ def _offset_faces(p: dict) -> dict:
 
 
 def _scale_body(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     return {
         "body_name": p.get("body_name", "Body1"),
         "scale": p.get("scale", 1.0),
@@ -1077,6 +1181,9 @@ def _create_torus(p: dict) -> dict:
 
 
 def _create_as_built_joint(p: dict) -> dict:
+    refusal = components_differ_refusal(p) or as_built_geometry_refusal(p)
+    if refusal is not None:
+        return _refusal_error(refusal)
     return {
         "component_one": p.get("component_one", "Comp1"),
         "component_two": p.get("component_two", "Comp2"),
@@ -1086,6 +1193,9 @@ def _create_as_built_joint(p: dict) -> dict:
 
 
 def _create_rigid_group(p: dict) -> dict:
+    refusal = rigid_group_size_refusal(p)
+    if refusal is not None:
+        return _refusal_error(refusal)
     return {
         "component_names": p.get("component_names", []),
         "rigid_group_name": "RigidGroup_mock",
@@ -1114,6 +1224,9 @@ def _measure_angle(p: dict) -> dict:
 
 
 def _get_physical_properties(p: dict) -> dict:
+    refusal = body_name_required_refusal(p)
+    if refusal is not None:
+        return _refusal_error(refusal)
     return {
         "body_name": p.get("body_name", "Body1"),
         "mass": 0.785,
@@ -1169,6 +1282,8 @@ def _create_ucs(p: dict) -> dict:
 
 
 def _set_color(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     r, g, b = p.get("red", 255), p.get("green", 0), p.get("blue", 0)
     alpha = round(p.get("opacity", 1.0) * 255)
     return {
@@ -1183,6 +1298,11 @@ def _set_color(p: dict) -> dict:
 
 
 def _set_appearance(p: dict) -> dict:
+    # A component name is resolved by ``_component_by_name``, not this lookup, so only
+    # the two body-shaped targets are judged here.
+    body_target = p.get("target_type", "body") in ("body", "face")
+    if body_target and (refused := _body_name_required_error(p, "target_name")):
+        return refused
     return {
         "target_name": p.get("target_name", "Body1"),
         "appearance_name": p.get("appearance_name", "Steel - Satin"),
@@ -1194,6 +1314,8 @@ def _set_appearance(p: dict) -> dict:
 
 
 def _project_geometry(p: dict) -> dict:
+    if refused := _body_name_required_error(p, "source_name"):
+        return refused
     return {
         "sketch": p.get("sketch_name", "Sketch1"),
         "source": p.get("source_name", "Body1"),
@@ -1231,6 +1353,10 @@ def _patch_surface(p: dict) -> dict:
 
 
 def _stitch_surfaces(p: dict) -> dict:
+    # Every name is looked up, so one empty entry refuses the call.
+    for name in p.get("body_names") or []:
+        if refused := _body_name_required_error({"body_name": name}):
+            return refused
     return {
         "body_names": p.get("body_names", []),
         "result_body": "StitchedBody_mock",
@@ -1239,6 +1365,8 @@ def _stitch_surfaces(p: dict) -> dict:
 
 
 def _thicken_surface(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     return {
         "body_name": p.get("body_name", "Surface1"),
         "thickness": p.get("thickness", 0.1),
@@ -1247,6 +1375,9 @@ def _thicken_surface(p: dict) -> dict:
 
 
 def _ruled_surface(p: dict) -> dict:
+    # The body is looked up before the rule_type is judged, so that refusal wins.
+    if refused := _body_name_required_error(p):
+        return refused
     # The handler refuses an unknown rule_type; a mock that echoed it with ok:true
     # would let an agent rehearse a call Fusion rejects (mock.py's own rule).
     rule_type = p.get("rule_type", "normal")
@@ -1264,6 +1395,16 @@ def _ruled_surface(p: dict) -> dict:
 
 
 def _trim_surface(p: dict) -> dict:
+    # The handler looks the body up before it judges the tool, so an empty name
+    # refuses here too; the tool choice and the cell selector are parameter-only.
+    if refused := _body_name_required_error(p):
+        return refused
+    if tool_refusal := surface_tool_refusal(
+        {"tool_name": p.get("tool_name"), "tool_plane": p.get("tool_plane")}
+    ):
+        return _refusal_error(tool_refusal)
+    if cells_refusal := keep_cells_refusal({"keep_cells": p.get("keep_cells")}):
+        return _refusal_error(cells_refusal)
     return {
         "body_name": p.get("body_name", "Surface1"),
         "kept_cells": p.get("keep_cells", [0]),
@@ -1277,6 +1418,8 @@ def _trim_surface(p: dict) -> dict:
 
 
 def _create_flange(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     return {
         "body_name": p.get("body_name", "SheetBody1"),
         "edge_index": p.get("edge_index", 0),
@@ -1286,6 +1429,8 @@ def _create_flange(p: dict) -> dict:
 
 
 def _create_bend(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     return {
         "body_name": p.get("body_name", "SheetBody1"),
         "stationary_face_index": p.get("stationary_face_index", 0),
@@ -1296,6 +1441,8 @@ def _create_bend(p: dict) -> dict:
 
 
 def _flat_pattern(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     return {
         "body_name": p.get("body_name", "SheetBody1"),
         "flat_pattern_name": "FlatPattern_mock",
@@ -1303,6 +1450,8 @@ def _flat_pattern(p: dict) -> dict:
 
 
 def _unfold(p: dict) -> dict:
+    if refused := _body_name_required_error(p):
+        return refused
     return {
         "body_name": p.get("body_name", "SheetBody1"),
         "bends_unfolded": len(p.get("bend_indices", [0, 1])),
@@ -1320,6 +1469,9 @@ def _cam_create_setup(p: dict) -> dict:
         refusal = _non_finite_error(p.get(key, 0))
         if refusal is not None:
             return refusal
+    # The body is looked up before the operation type is mapped, so that wins.
+    if refused := _body_name_required_error(p):
+        return refused
     # The handler maps the string onto adsk.cam.OperationTypes and refuses
     # anything it does not know, before an operation object exists.  Echoing an
     # arbitrary string described a setup Fusion would never create.
@@ -1359,6 +1511,10 @@ def _cam_create_operation(p: dict) -> dict:
 
 
 def _cam_generate_toolpath(p: dict) -> dict:
+    # The add-in refuses a call with no target before it looks up the CAM product, so
+    # mock mode must not report a toolpath a call never asked for.
+    if refusal := cam_target_refusal(p):
+        return _refusal_error(refusal)
     return {
         "setup_name": p.get("setup_name", "Setup1"),
         "operation_name": p.get("operation_name"),

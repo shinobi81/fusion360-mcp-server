@@ -1,8 +1,8 @@
 """Tests for create_hole's face picking and plane solving.
 
-``addon/server/hole_geometry.py`` is loaded by path so the test needs neither the
-add-in package nor the fake runtime: this module deliberately has no ``adsk``
-dependency.
+``addon/server/hole_geometry.py`` is imported as part of the add-in package, which
+loads without Fusion: the module deliberately has no ``adsk`` dependency.  It does
+import ``hints`` for the one refusal it raises, and that module is as pure as this one.
 
 The rules here are the pure ones - whether a face counts as horizontal, how two
 candidates rank, and where a plane sits above an (x, y).  The call site that
@@ -13,24 +13,12 @@ gone.
 
 from __future__ import annotations
 
-import importlib.util
 import math
-from pathlib import Path
 
 import pytest
 
-ADDON_SERVER = Path(__file__).resolve().parent.parent / "addon" / "server"
-
-
-def _load(path: Path, name: str):
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None, f"cannot load {path}"
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-hole_geometry = _load(ADDON_SERVER / "hole_geometry.py", "hole_geometry")
+from addon.server import hints as addon_hints
+from addon.server import hole_geometry
 
 
 def _nz(degrees_of_tilt: float) -> float:
@@ -94,5 +82,10 @@ class TestPlaneZAt:
         assert hole_geometry.plane_z_at(n, (0, 0, 0), 3.0, 0.0) != arbitrary_point_z
 
     def test_vertical_plane_is_rejected(self):
-        with pytest.raises(ValueError):
+        """A vertical plane has no unique Z above (x, y); the caller must move it."""
+        with pytest.raises(addon_hints.Refusal) as raised:
             hole_geometry.plane_z_at((1, 0, 0), (0, 0, 0), 1.0, 1.0)
+
+        assert raised.value.error_kind == "GEOMETRY_UNSUPPORTED"
+        assert str(raised.value) == "plane is vertical: no unique Z above (x, y)"
+        assert raised.value.hints == ("Move the sketch plane so it is not vertical.",)

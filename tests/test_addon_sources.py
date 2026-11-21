@@ -23,6 +23,8 @@ docstring must not be able to trip a guard that blocks every pull request.
 
 from __future__ import annotations
 
+import ast
+import importlib
 import io
 import tokenize
 from pathlib import Path
@@ -154,3 +156,95 @@ def test_the_add_in_tolerates_a_bad_port_like_the_server_does():
     assert "port = 9876" in add_in
     assert "def default_port() -> int:" in server
     assert "return 9876" in server
+
+
+# ---------------------------------------------------------------------------
+# The mixin contract: a domain class uses ``HandlerBase``'s members without
+# inheriting them.  ``handler_surface.py`` established the pattern; this keeps
+# the other seven from being the odd ones out, which is what a checker reports
+# as sixteen-odd ``reportAttributeAccessIssue`` findings.
+# ---------------------------------------------------------------------------
+
+HANDLER_DIR = ADDON / "server"
+#: ``handler_base`` *is* the base and ``command_handler`` composes it with the mixins,
+#: so neither declares the contract; every other ``handler_*.py`` is one mixin.
+NOT_A_MIXIN = frozenset({"handler_base.py", "command_handler.py"})
+
+
+def mixin_modules() -> list[Path]:
+    return sorted(
+        path
+        for path in HANDLER_DIR.glob("handler_*.py")
+        if path.name not in NOT_A_MIXIN
+    )
+
+
+def declares_the_base_contract(tree: ast.Module) -> bool:
+    """Whether the module aliases ``HandlerBase`` to ``_Contract``."""
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If):
+            continue
+        if not (isinstance(node.test, ast.Name) and node.test.id == "TYPE_CHECKING"):
+            continue
+        for statement in node.body:
+            if not (isinstance(statement, ast.ImportFrom) and statement.level == 1):
+                continue
+            if statement.module != "handler_base":
+                continue
+            if any(
+                alias.name == "HandlerBase" and alias.asname == "_Contract"
+                for alias in statement.names
+            ):
+                return True
+    return False
+
+
+@pytest.mark.parametrize("path", mixin_modules(), ids=lambda path: path.stem)
+def test_a_mixin_declares_the_base_contract_to_the_type_checker(path):
+    """``self._root`` and friends exist at call time, not by inheritance.
+
+    ``CommandHandler`` composes ``HandlerBase`` with one mixin per domain, so a
+    mixin's own class body has none of the base's members.  Naming the base under
+    ``TYPE_CHECKING`` shows a checker the contract without touching the hierarchy
+    ``CommandHandler`` builds at runtime - which is what makes this a declaration
+    and not an import.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    mixins = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name.endswith("Commands")
+    ]
+
+    assert mixins, f"{path.name} declares no *Commands class; is it still a mixin?"
+    assert declares_the_base_contract(tree), (
+        f"{path.name}: declare the contract - `if TYPE_CHECKING:` (import "
+        "TYPE_CHECKING from typing) with `from .handler_base import HandlerBase as "
+        "_Contract` inside it, and `else: _Contract = object`"
+    )
+    for node in mixins:
+        bases = [ast.unparse(base) for base in node.bases]
+        assert bases == ["_Contract"], (
+            f"{path.name}: {node.name} inherits {bases}; a mixin inherits the "
+            "contract only under TYPE_CHECKING, so the runtime base stays `object`"
+        )
+
+
+@pytest.mark.parametrize("path", mixin_modules(), ids=lambda path: path.stem)
+def test_no_mixin_inherits_the_base_at_runtime(path):
+    """The declaration must not move ``CommandHandler``'s hierarchy by one link."""
+    module = importlib.import_module(f"addon.server.{path.stem}")
+    mixins = [
+        value
+        for value in vars(module).values()
+        if isinstance(value, type)
+        and value.__module__ == module.__name__
+        and value.__name__.endswith("Commands")
+    ]
+
+    assert mixins, f"{path.stem} defines no *Commands class to import"
+    for cls in mixins:
+        assert cls.__bases__ == (object,), (
+            f"{path.stem}.{cls.__name__} inherits {cls.__bases__} at runtime; "
+            "`_Contract` must resolve to `object` outside a type checker"
+        )

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import inspect
 import subprocess
 import sys
 from pathlib import Path
@@ -117,6 +118,37 @@ def test_every_declared_mirror_carries_the_generated_header(mirror):
     text = (REPO_ROOT / mirror).read_text(encoding="utf-8")
 
     assert "GENERATED, do not edit" in text.split("\n\n")[0], mirror
+
+
+@pytest.mark.parametrize("mirror", _declared_mirrors(), ids=str)
+def test_every_declared_mirror_turns_the_formatter_off(mirror):
+    """The mirror is format-gated, its canonical file is not.
+
+    ``addon/`` is exempt from ``ruff format`` because Fusion's interpreter is not the
+    one ``requires-python`` describes, while ``src/`` is gated.  So a mirror rendered
+    verbatim from an add-in file can be reformatted into a shape the canonical file
+    does not have, and ``--check`` then asks a maintainer to rewrite ``addon/`` to
+    satisfy a gate that does not cover it.  Measured cost of the gap: fourteen unstaged
+    drift patches against this branch, each one reverted.
+
+    ``# fmt: off`` before the body, with no ``# fmt: on``, is what keeps the two gates
+    from fighting: the whole rendered body is exempt and the header still gets checked.
+    """
+    text = (REPO_ROOT / mirror).read_text(encoding="utf-8")
+    lines = text.splitlines()
+    first_statement = next(
+        index
+        for index, line in enumerate(lines)
+        if line.startswith(("import ", "from ", "_"))
+    )
+
+    assert "# fmt: off" in lines[:first_statement], (
+        f"{mirror}: add `# fmt: off` above the first statement, or the format gate "
+        "will reformat a copy of a file it does not own"
+    )
+    assert "# fmt: on" not in text, (
+        f"{mirror}: a `# fmt: on` re-arms the formatter over a rendered body"
+    )
 
 
 def test_no_mirror_is_stale():
@@ -241,8 +273,8 @@ def test_the_advertised_view_presets_are_the_ones_the_handler_handles():
 def test_export_view_sheet_offers_the_presets_without_current():
     """Its schema lists ``_VIEW_DIRS`` alone, so it does not take ``VIEW_PRESETS``.
 
-    "current" is not a view to render — ``export_view_sheet`` refuses it — so
-    adopting the wider tuple here would advertise a refusal.
+    "current" is not a view to render — the schema refuses it — so adopting the
+    wider tuple here would advertise a refusal.
     """
     from fusion360_mcp import tools
 
@@ -268,6 +300,65 @@ def test_tools_match_addon_dispatch():
         f"  tools without handler: {sorted(tool_names - dispatch)}\n"
         f"  handlers without tool: {sorted(dispatch - tool_names)}"
     )
+
+
+#: Schema-required arguments whose handler default is ``None``, and why each is safe.
+#: ``add_joint`` requires ``face_one``/``face_two`` in its schema, and the handler
+#: refuses an omitted pair through ``rules.joint_geometry_refusal``, so the schema is
+#: deliberately the stricter side.  Anything new has to be added here, with the reason
+#: it is safe, before the required-ness test passes.
+NONE_DEFAULT_REQUIRED = {"add_joint": {"face_one", "face_two"}}
+
+
+def test_every_handler_declares_exactly_its_schema_properties(handler_module):
+    """A handler's signature and its schema name the same arguments, both ways.
+
+    The schema is what an MCP caller is validated against; the handler's signature
+    is what a direct-wire caller reaches, through the dispatch bind.  An argument
+    only one side declares is either unreachable or unvalidated, so the two sets
+    must be equal rather than merely overlapping.  The same holds for required-ness:
+    an argument the schema makes mandatory must not have a handler default, or the
+    direct-wire caller skips a check the MCP caller gets, and the reverse would
+    refuse a call the schema permits.  A ``None`` handler default is the add-in's
+    own "unset" - the handler refuses it with a typed message - so the schema is
+    deliberately the stricter side there, but only for the parameters
+    ``NONE_DEFAULT_REQUIRED`` names: a new one fails this test until it is added
+    there with the reason it is safe.
+    """
+    from fusion360_mcp.tools import TOOLS
+
+    mismatched = {}
+    for tool in TOOLS:
+        name = tool["name"]
+        signature = inspect.signature(getattr(handler_module.CommandHandler, name))
+        parameters = [
+            parameter for parameter in signature.parameters if parameter != "self"
+        ]
+        schema = tool["inputSchema"]
+        declared = list(schema.get("properties") or {})
+        entry = {}
+        if set(parameters) != set(declared):
+            entry["handler_only"] = sorted(set(parameters) - set(declared))
+            entry["schema_only"] = sorted(set(declared) - set(parameters))
+
+        required = set(schema.get("required") or ())
+        no_default = {
+            parameter
+            for parameter in parameters
+            if signature.parameters[parameter].default is inspect.Parameter.empty
+        }
+        schema_requires = required - NONE_DEFAULT_REQUIRED.get(name, set())
+        if no_default != schema_requires:
+            entry["schema_required_handler_optional"] = sorted(
+                schema_requires - no_default
+            )
+            entry["handler_required_schema_optional"] = sorted(
+                no_default - schema_requires
+            )
+        if entry:
+            mismatched[name] = entry
+
+    assert not mismatched, mismatched
 
 
 def test_an_annotated_table_is_read_the_same_as_a_plain_one(tmp_path):

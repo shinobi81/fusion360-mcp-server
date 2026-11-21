@@ -86,6 +86,18 @@ MIRRORS: tuple[tuple[Path, Path, str], ...] = (
 )
 
 
+# ``src/`` is format-gated and ``addon/`` is not (ruff's ``exclude``), so a rendered
+# body can be reformatted into a shape its canonical file does not have - and the gate
+# then asks for a rewrite of a file it does not cover.  This turns the formatter off
+# for the whole rendered body; the header above it is still checked.
+_FORMAT_OFF = (
+    "# fmt: off\n"
+    "# `src/` is format-gated and `addon/` is not, so this rendered body is exempt:\n"
+    "# reformatting it here would edit a file the gate does not own.\n"
+    "\n"
+)
+
+
 def _is_docstring(node: ast.stmt) -> bool:
     return (
         isinstance(node, ast.Expr)
@@ -126,12 +138,13 @@ def _refuse_code_above_the_imports(canonical: Path, preamble: list[str]) -> None
 
 
 def render(canonical: Path, header: str) -> str:
-    """Return *header* followed by *canonical* from its first import line."""
+    """Return *header*, the formatter-off directive, then *canonical* from its first
+    import line."""
     lines = canonical.read_text(encoding="utf-8").splitlines(keepends=True)
     for index, line in enumerate(lines):
         if line.startswith(_IMPORT_PREFIXES):
             _refuse_code_above_the_imports(canonical, lines[:index])
-            return header + "".join(lines[index:])
+            return header + _FORMAT_OFF + "".join(lines[index:])
     raise ValueError(f"{canonical} has no import line: nothing to mirror")
 
 

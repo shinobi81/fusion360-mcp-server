@@ -36,6 +36,10 @@ SYNC = _generator()
 
 HEADER = '"""A generated mirror."""\n\n'
 
+#: What ``render`` puts between the header and the body: the formatter-off directive.
+#: Named here so a third element cannot be added without one of these tests seeing it.
+FORMAT_OFF = SYNC._FORMAT_OFF
+
 MARKER = "GENERATED, do not edit"
 
 #: Every mirror the tree ships, as ``MIRRORS`` must declare it.
@@ -67,7 +71,7 @@ def test_the_preamble_docstring_never_reaches_the_mirror(tmp_path):
 
     rendered = SYNC.render(canonical, HEADER)
 
-    assert rendered == HEADER + "import re\n\n\nRULES = [('a', 'b')]\n"
+    assert rendered == HEADER + FORMAT_OFF + "import re\n\n\nRULES = [('a', 'b')]\n"
     assert MARKER not in rendered
 
 
@@ -86,8 +90,8 @@ def test_a_future_import_is_a_cut_point_too(tmp_path):
 
     rendered = SYNC.render(canonical, HEADER)
 
-    assert rendered == (
-        HEADER + "from __future__ import annotations\n\n\nRULES = [('a', 'b')]\n"
+    assert rendered == HEADER + FORMAT_OFF + (
+        "from __future__ import annotations\n\n\nRULES = [('a', 'b')]\n"
     )
 
 
@@ -123,6 +127,17 @@ def test_every_mirror_the_tree_has_is_declared(canonical, mirror):
     pairs = {(canonical, mirror) for canonical, mirror, _ in SYNC.MIRRORS}
 
     assert (canonical, mirror) in pairs
+
+
+def test_the_render_directive_disarms_the_formatter_to_the_end_of_the_file():
+    """``src/`` is format-gated and ``addon/`` is not, so the body must be exempt.
+
+    A ``# fmt: on`` would re-arm the formatter over a rendered copy of a file this
+    package does not own - the tension that produced fourteen unstaged drift patches
+    against this branch, every one of them reverted.
+    """
+    assert FORMAT_OFF.startswith("# fmt: off\n")
+    assert "# fmt: on" not in FORMAT_OFF
 
 
 def test_check_survives_an_interpreter_that_strips_docstrings():
@@ -174,6 +189,6 @@ def test_writing_creates_a_mirror_that_does_not_exist_yet(tmp_path, monkeypatch)
 
     assert SYNC.main([]) == 0
     assert (tmp_path / "mirror.py").read_text(encoding="utf-8") == (
-        HEADER + "import re\n\nRULES = [1]\n"
+        HEADER + FORMAT_OFF + "import re\n\nRULES = [1]\n"
     )
     assert SYNC.main(["--check"]) == 0

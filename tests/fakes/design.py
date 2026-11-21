@@ -1220,8 +1220,10 @@ class _FakeConstructionCollection(FakeCollection):
         self.inputs: list[FakeConstructionInput] = []
 
     @property
-    def last_input(self) -> FakeConstructionInput | None:
-        return self.inputs[-1] if self.inputs else None
+    def last_input(self) -> FakeConstructionInput:
+        """The input the command just built; asking before any ran is a test bug."""
+        assert self.inputs, "no construction input was created"
+        return self.inputs[-1]
 
     def createInput(self) -> FakeConstructionInput:
         created = self._INPUT()
@@ -1277,8 +1279,10 @@ class FakeUserCoordinateSystems(FakeCollection):
         self.inputs: list[FakeUserCoordinateSystemInput] = []
 
     @property
-    def last_input(self) -> FakeUserCoordinateSystemInput | None:
-        return self.inputs[-1] if self.inputs else None
+    def last_input(self) -> FakeUserCoordinateSystemInput:
+        """The input the command just built; asking before any ran is a test bug."""
+        assert self.inputs, "no UCS input was created"
+        return self.inputs[-1]
 
     def createInput(self, geometry) -> FakeUserCoordinateSystemInput:
         if not isinstance(geometry, FakeUserCoordinateSystemGeometry):

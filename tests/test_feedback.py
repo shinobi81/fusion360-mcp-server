@@ -202,12 +202,27 @@ class TestMockForcedError:
         assert result["hints"] == []
 
 
+#: The names these commands look up, under the parameter each takes them by.  They
+#: are given because the body-naming mocks refuse an empty or absent one, the way
+#: ``_body_by_name`` does; a refused call is not a mutation, so it carries no deltas
+#: and TestMockDeltas would fail on it for the right reason.
+_MUTATION_MOCK_NAMES = {
+    "boolean_operation": {"target_body": "Body1", "tool_body": "Body2"},
+    "set_appearance": {"target_name": "Body1"},
+    "project_geometry": {"source_name": "Body1"},
+    "stitch_surfaces": {"body_names": ["Body1"]},
+    # ``trim_surface`` now refuses a call with neither tool, as the handler does.
+    "trim_surface": {"tool_name": "Cutter", "keep_cells": [0]},
+}
+
+
 class TestMockDeltas:
     """Mutation mocks carry a deltas sub-dict; read-only mocks do not."""
 
     def test_mutation_has_deltas(self):
         for cmd in _MUTATION_MOCKS:
-            result = mock_command(cmd, {})
+            params = {"body_name": "Body1", **_MUTATION_MOCK_NAMES.get(cmd, {})}
+            result = mock_command(cmd, params)
             if cmd == "undo":
                 # undo removes work: the synthetic "body appeared" deltas would
                 # report growth, so it deliberately carries none.
@@ -372,10 +387,21 @@ class TestFusionRefusals:
     every rule in the table exists to stop.
     """
 
-    def test_an_internal_validation_error_is_advice_not_unknown(self):
-        kind, hints = classify("2 : InternalValidationError : res")
+    def test_an_internal_validation_error_is_a_fusion_refusal(self):
+        """The rule's own advice says the arguments were fine, so the kind agrees.
 
-        assert kind == "INVALID_INPUT"
+        Live: ``trim_surface`` on a solid answered ``2 :
+        InternalValidationError : this->executeStep(editingFeature)`` and reached
+        the caller as ``INVALID_INPUT`` while the hint printed beside it said
+        "Fusion rejected the input's state, not its arguments."  A caller told the
+        arguments are fine must not be told to fix them.  Pattern and hints are
+        unchanged; only the kind moved.
+        """
+        kind, hints = classify(
+            "2 : InternalValidationError : this->executeStep(editingFeature)"
+        )
+
+        assert kind == "FUSION_REFUSED"
         assert hints, "an opaque Fusion refusal still needs a next step"
 
     def test_a_generic_argument_refusal_is_advice_not_unknown(self):
@@ -388,6 +414,18 @@ class TestFusionRefusals:
 
         assert kind == "INVALID_INPUT"
         assert any("thickness" in hint for hint in hints)
+
+    def test_a_bare_numbered_fusion_failure_is_a_fusion_refusal(self):
+        """Fusion numbers its own failures; an unrecognised one must not be UNKNOWN.
+
+        The numbered messages the table already owns ("3 : Some input argument is
+        invalid", "2 : InternalValidationError ...") are matched by their own rules
+        above this one, so a bare number falls through to the general rule only.
+        """
+        kind, hints = classify("3 : something new")
+
+        assert kind == "FUSION_REFUSED"
+        assert hints, "an opaque Fusion refusal still needs a next step"
 
     def test_a_non_positive_shell_thickness_is_advice_not_unknown(self):
         kind, hints = classify("thickness must be positive, got 0.0 cm")
@@ -409,6 +447,18 @@ class TestLiveRefusalsFromFusion:
 
         assert kind == "INVALID_INPUT"
         assert any("free edge" in hint for hint in hints), hints
+
+    def test_a_component_without_a_sheet_metal_rule_says_which_body_to_use(self):
+        """Live: ``create_flange`` answers ``3 : component has no sheet metal rule``.
+
+        It matched no rule, so the caller got ``UNKNOWN`` with no hints.  The fix
+        is a different body, not a different argument, so the kind is
+        ``GEOMETRY_UNSUPPORTED``.
+        """
+        kind, hints = classify("3 : component has no sheet metal rule")
+
+        assert kind == "GEOMETRY_UNSUPPORTED"
+        assert any("sheet-metal rule" in hint for hint in hints), hints
 
 
 class TestThreadSizeRefusal:

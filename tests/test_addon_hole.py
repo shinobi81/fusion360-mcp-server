@@ -20,6 +20,7 @@ import math
 
 import pytest
 
+from addon.server import hints as addon_hints
 from tests.fakes.bodies import FakeBody, FakeBoundingBox, FakeFace
 from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeDesign
@@ -185,6 +186,29 @@ def test_the_hole_centre_lands_on_the_face_where_the_caller_asked(bound_handler)
         pytest.approx(0.0, abs=1e-9)
     ), "the centre must lie on the face's plane, not above the representative point"
     assert result["resolved_center"] == pytest.approx([3.0, 4.0, placed.z])
+
+
+def test_a_body_with_no_horizontal_face_cannot_host_a_hole(bound_handler):
+    """A hole needs a near-horizontal planar face; a wall is not one.
+
+    The call is complete and the *body* lacks the face, so the kind is
+    ``GEOMETRY_UNSUPPORTED`` and the hint names the face to pick instead of asking
+    the caller to change an argument.
+    """
+    wall = FakeFace(
+        normal=(1.0, 0.0, 0.0),
+        bounding_box=FakeBoundingBox((0.0, 0.0, 0.0), (0.0, 10.0, 10.0)),
+    )
+    design = _design_with_faces(wall)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bound_handler(design).create_hole(diameter=1.0, depth=0.5, body_name="Shoe")
+
+    assert raised.value.error_kind == "GEOMETRY_UNSUPPORTED"
+    assert str(raised.value) == ("No near-horizontal top-facing planar face on 'Shoe'")
+    assert raised.value.hints == (
+        "Pick a body whose faces include a near-horizontal plane (top or bottom).",
+    )
 
 
 def test_the_top_face_is_chosen_by_its_own_highest_point(bound_handler):

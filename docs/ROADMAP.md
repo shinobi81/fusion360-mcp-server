@@ -118,6 +118,57 @@ could never have worked:
 | `patch_surface` | wrote a property Fusion does not ship, so `continuity` was a silent no-op | fixed to `groupContinuity`; the argument is inert for sketch curves until the tool takes edges (#131) |
 | `create_flange`, `create_bend`, `trim_surface` | `FlangeFeatures` has no `createInput`; there is no `bendFeatures` at all; `TrimFeatures.createInput` takes the tool alone | **fixed and proven live (#134)** |
 
+### What the refusal work found - done, on `typed-refusals`, not merged
+
+The roadmap's first item here - `hints.py` rules for the refusals that classify
+`UNKNOWN` - is done on the `typed-refusals` branch, which starts at `0bb4545`. The record
+is here rather than in the design document, because `docs/superpowers/` is git-ignored
+and the numbers are the durable half.
+
+The roadmap asked for one rules table, and the measurement is what rejected that shape:
+an AST walk of every `raise` in `addon/server` found **134** carrying a literal
+message, and pushing each message through the real `classify()` gave the before column.
+
+| | Before | After |
+| --- | --- | --- |
+| raises reaching a caller as `UNKNOWN` with no hints | **88** | **0** |
+| typed `Refusal` sites | 11, all in `rules.py` | 74, in 11 modules |
+| raises the walk cannot judge from source | 7 | 22, each pinned with its reason |
+
+The suite was green over all 88, and that is the part worth keeping: `classify()` ran
+**11 times** across 1393 tests, and every handler test asserted on the refusal it raised,
+never on the envelope a caller receives.
+
+Three instruments, chosen at the raise site by what the raiser can know - which is why a
+table was the wrong answer, since a table can only read a string:
+
+- **the schema gate** for what `tools.py` already declared and nothing read: 63 enum
+  properties and 78 minimum/maximum bounds, enforced in `_send` so real and mock mode
+  refuse alike before Fusion is touched. Roughly 20 of the 88 needed no new code - the
+  constraint was written down and unenforced.
+- **`rules.py`** for what the parameters alone decide: 17 validators, 18 site rows in
+  `tests/test_rules.py` that compare the handler's refusal with mock mode's envelope
+  sentence for sentence and hint for hint.
+- **`Refusal` at the site** for what needs live state - an index against a real face count,
+  a component with no planar face. 47 of the 88.
+
+The last 2 were existing rules whose pattern never matched the sentence the add-in
+actually raised; the third pattern widened in the same commit was defensive, because the
+live message already ended in `is not finite`. Six kinds came out of the work, chosen by
+the caller's next move rather than by which API failed: `NAME_NOT_FOUND`,
+`GEOMETRY_UNSUPPORTED`, `FUSION_REFUSED`, `WORKSPACE_UNAVAILABLE`, `SCRIPT_ERROR`,
+`INTERNAL_ERROR`. `INVALID_INPUT` stays for an unusable parameter, and
+`BODY_NOT_FOUND`/`SKETCH_NOT_FOUND` stay although `NAME_NOT_FOUND` covers them,
+because a client may already branch on them.
+
+`tests/test_addon_refusals.py` makes it a ratchet rather than a one-off audit. It
+fails on a raise that would reach a caller `UNKNOWN`, on a baseline row that no longer
+matches a site, and on any change to the 22 unjudgeable rows - a computed message, a
+`Protocol` body, or a kind that comes from a `rules.py` validator call, each with its
+reason written down. That count rose from 7 by design: the validators are what let mock
+mode answer the same sentence, and a kind returned from a function is not readable in the
+file that raises it.
+
 ### What is left
 
 Zero invented names remain, and that is now checked rather than hoped for:
@@ -125,15 +176,45 @@ Zero invented names remain, and that is now checked rather than hoped for:
 and asks the running Fusion whether it exists - 193 references, none missing on
 2706.1.17 (#135).
 
-1. **`hints.py` rules** for the refusals that still classify `UNKNOWN` — its own PR, with
-   `scripts/sync_mirrors.py`, because the table is canonical and mirrored.
-2. **`handler_cam` (17%) and `handler_export` (23%)** remain where they were: a CAM
-   `Product` and an `exportManager`/`viewport` are the two largest fakes in the tree, and
-   the behaviour they would cover is the behaviour a fake cannot settle - a view sheet
+1. **The 0.9.0 release note is unwritten, and `CHANGELOG.md` cannot tell you.** The file
+   opens at `[0.8.5]` because the packaging guard fails an entry written ahead of the
+   version being cut, so entries are written once, at release. The note owes the PRs
+   merged since `v0.8.5` (`#125`-`#137`) and this work's entry: the six new kinds, the
+   schema gate, the refusals that moved from `UNKNOWN` to a kind, the
+   `InternalValidationError` retag from `INVALID_INPUT` to `FUSION_REFUSED`, and the
+   gate's own sentences for the rows it answers.
+2. **Retag the rules that already carry a kind** - deferred, and named here so the
+   inconsistency reads as a decision rather than an oversight. The work above changed the
+   tag of the 88 with none; a rule that already answered with a kind kept it, even where
+   the new taxonomy disagrees: the CAM `setup/operation not found` rule is still
+   `INVALID_INPUT`, and so is `no faces matched`. Those tags are what a client may
+   already branch on, so changing them is a client-visible change with its own evidence
+   and release note, not a ride-along. One new path is deliberately asymmetric:
+   `cam_generate_toolpath(operation_name=…)` answers `NAME_NOT_FOUND`, because its hint
+   names the list to enumerate, while the CAM `setup/operation not found` rule still
+   answers `INVALID_INPUT`; the two coexist because retagging that rule is the deferred
+   change above, and the new search raises its own typed refusal rather than that
+   message. One retag did ship with this work, because the rule's own hint already said
+   so: `InternalValidationError` used to answer `INVALID_INPUT` and now reports
+   `FUSION_REFUSED` (measured on Fusion 2706.1.17: `2 : InternalValidationError …`),
+   pinned by `test_an_internal_validation_error_is_a_fusion_refusal` in
+   `tests/test_feedback.py`.
+3. **`handler_cam` (39%) and `handler_export` (44%)** - up from 17% and 23%, because the
+   refusal work had to drive their refusal paths - are the two modules the coverage work
+   left where they were. A CAM `Product` and an `exportManager`/`viewport` are the largest
+   fakes in the tree, and the lines left are the ones a fake cannot settle: a view sheet
    either renders or it does not. Those belong in a Fusion session, not in a fake.
-3. **`create_construction_axis("perpendicular_at_point")`** refuses by design: it
+4. **`create_construction_axis("perpendicular_at_point")`** refuses by design: it
    needs a `BRepFace`, which the tool has no argument for. Making it work means adding a
    face parameter, a schema decision rather than a repair.
+5. **`_find_operation` still picks the first same-named operation, and two commands
+   call it that way.** `cam_post_process` and `cam_get_operation_info` resolve
+   `operation_name` inside one setup with a first-match scan, so a setup holding two
+   operations of one name silently picks the first. For `cam_post_process` that means
+   generating G-code for an operation the caller did not name. The scan is pre-existing
+   and outside the refusal typing - `cam_generate_toolpath` now refuses the ambiguity
+   on both of its paths - so turning it into a refusal is a follow-up with its own
+   evidence.
 
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.

@@ -27,6 +27,8 @@ from __future__ import annotations
 
 import pytest
 
+from addon.server import hints as addon_hints
+from addon.server.handler_surface import _first_planar_face, _on_positive_side
 from tests.fakes.bodies import FakeBody, FakeFace, body_with_edges
 from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeDesign
@@ -285,13 +287,22 @@ def test_a_trim_reports_how_many_cells_it_had_to_choose_from(bound_handler):
 def test_a_trim_refuses_a_cell_index_past_the_end_before_fusion_adds(
     bound_handler,
 ):
-    """An out-of-range index is refused by us, and the transaction is cancelled."""
+    """An out-of-range index is refused by us, and the transaction is cancelled.
+
+    ``INVALID_INPUT``, not ``GEOMETRY_UNSUPPORTED``: the arguments are the mistake,
+    and an out-of-range index already answers that way at eleven other sites.
+    """
     design, _tool = _trim_design([FakeBody("Cell0"), FakeBody("Cell1")])
     handler = bound_handler(design)
 
-    with pytest.raises(RuntimeError, match="out of range"):
+    with pytest.raises(addon_hints.Refusal) as raised:
         handler.trim_surface("Surf1", keep_cells=[2], tool_name="Cutter")
 
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert str(raised.value) == (
+        "keep_cells [2] is out of range - this trim produced 2 cell(s), indexed from 0"
+    )
+    assert raised.value.hints == ("keep_cells counts from 0; 2 cells were produced.",)
     created = design.rootComponent.features.trimFeatures.last_input
     assert created is not None
     assert created.cancelled is True
@@ -320,11 +331,33 @@ def test_a_trim_takes_either_a_body_or_a_plane_and_refuses_both(bound_handler):
     design, _tool = _trim_design([])
     handler = bound_handler(design)
 
-    with pytest.raises(RuntimeError, match="exactly one of"):
+    with pytest.raises(addon_hints.Refusal) as raised:
         handler.trim_surface(
             "Surf1", keep_cells=[0], tool_name="Cutter", tool_plane="xy"
         )
 
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert str(raised.value) == (
+        "trim_surface needs exactly one of tool_name (a body) or tool_plane "
+        "(xy, xz or yz)"
+    )
+    assert raised.value.hints == (
+        "Pass tool_name (a body), or tool_plane (xy, xz or yz), but not both.",
+    )
+    assert design.rootComponent.features.trimFeatures.inputs == []
+
+
+def test_a_trim_refuses_a_cell_name_that_is_not_an_index(bound_handler):
+    """A cell is named by its index; a word is refused before the input exists."""
+    design, _tool = _trim_design([FakeBody("Cell0")])
+    handler = bound_handler(design)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.trim_surface("Surf1", keep_cells=["left"], tool_name="Cutter")
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert str(raised.value) == "keep_cells takes cell indices, not 'left'"
+    assert raised.value.hints == ("Pass whole-number cell indices, counted from 0.",)
     assert design.rootComponent.features.trimFeatures.inputs == []
 
 
@@ -338,3 +371,33 @@ def test_a_trim_reads_the_cells_of_a_plane_tool_too(bound_handler):
     created = design.rootComponent.features.trimFeatures.last_input
     assert created is not None
     assert created.trimTool is design.rootComponent.xYConstructionPlane
+
+
+# ── the side helpers ───────────────────────────────────────────────────
+# ``_first_planar_face`` and ``_on_positive_side`` predate the ``keep_cells`` trim
+# and have no call site today; the plan keeps them and types their refusals rather
+# than deleting them, so the kind and advice are pinned here directly.
+
+
+def test_a_side_helper_refuses_a_body_with_no_planar_face(handler_module):
+    """A side is measured from a plane, so a body without one cannot take a side."""
+    body = FakeBody("Tube", faces=FakeCollection([FakeFace(planar=False)]))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        _first_planar_face(body)
+
+    assert raised.value.error_kind == "GEOMETRY_UNSUPPORTED"
+    assert str(raised.value) == "Tube has no planar face to take a side from"
+    assert raised.value.hints == (
+        "Only a planar face can take a keep side; pass keep_cells instead.",
+    )
+
+
+def test_a_side_helper_refuses_a_tool_that_is_not_planar(handler_module):
+    """Which side of a non-plane a point is on has no answer."""
+    with pytest.raises(addon_hints.Refusal) as raised:
+        _on_positive_side(FakeFace(planar=False), object())
+
+    assert raised.value.error_kind == "GEOMETRY_UNSUPPORTED"
+    assert str(raised.value) == "the trim tool is not planar"
+    assert raised.value.hints == ("Trim with a planar tool, or pick a different body.",)

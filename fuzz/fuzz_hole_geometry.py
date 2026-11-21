@@ -10,6 +10,7 @@ picks the up/down face.
 import math
 import struct
 
+from addon.server import hints as _hints
 from addon.server.hole_geometry import face_rank_key, is_horizontal_face, plane_z_at
 
 
@@ -26,7 +27,10 @@ def check(data: bytes) -> None:
 
     try:
         z = plane_z_at((0.0, 0.0, nz), (0.0, 0.0, oz), x, y)
-    except ValueError:
+    except _hints.Refusal:
+        # A vertical plane has no unique Z, so the refusal is the expected answer
+        # rather than a crash for the fuzzer to report.  Reached through the module:
+        # a reload replaces the class, and a by-name import would keep the old one.
         assert nz == 0.0
     else:
         # Guard the whole input, not just the normal: an inf/nan origin or

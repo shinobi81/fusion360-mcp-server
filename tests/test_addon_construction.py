@@ -24,6 +24,7 @@ import math
 
 import pytest
 
+from addon.server import hints as addon_hints
 from tests.fakes.bodies import body_with_edges
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
 from tests.fakes.runtime import FakePoint3D
@@ -145,18 +146,84 @@ def test_create_construction_plane_by_three_points_passes_the_points_in_order(
 def test_create_construction_plane_needs_a_reference_or_an_offset(bound_handler):
     """``method="offset"`` with no plane has nothing to offset from.
 
-    The refusal names the planes the tool takes and creates nothing.  It reaches
-    the caller as ``error_kind: UNKNOWN`` with no hints — ``hints.py`` has no rule
-    for "Unknown plane" and that file is canonical and mirrored, so it is out of
-    this commit's reach.  The classification gap is reported with the pull request.
+    The refusal names the planes the tool takes and creates nothing.  It is
+    ``INVALID_INPUT``: the argument is what has to change, and the hint says the
+    value is lowercased, so ``XZ`` would have worked.
     """
     design = FakeDesign(features=2)
     root = design.rootComponent
 
-    with pytest.raises(RuntimeError, match="Unknown plane"):
+    with pytest.raises(RuntimeError, match="Unknown plane") as raised:
         bound_handler(design).create_construction_plane(method="offset", offset=2.5)
 
+    assert addon_hints.classify(raised.value) == (
+        "INVALID_INPUT",
+        ["Pass xy, yz or xz; the plane is lowercased, so XZ works."],
+    )
     assert root.constructionPlanes.count == 0, "no plane was created"
+
+
+def test_an_unknown_construction_axis_names_the_axis_it_takes(bound_handler):
+    """``method="angle"`` resolves its edge name as an axis; ``w`` is not one."""
+    design = FakeDesign(features=2)
+    root = design.rootComponent
+
+    with pytest.raises(RuntimeError, match="Unknown axis") as raised:
+        bound_handler(design).create_construction_plane(
+            method="angle", plane="xy", angle=30, edge_name="w"
+        )
+
+    assert addon_hints.classify(raised.value) == (
+        "INVALID_INPUT",
+        ["Pass x, y or z; the axis is lowercased, so Y works."],
+    )
+    assert root.constructionPlanes.count == 0
+
+
+def test_three_points_with_a_missing_point_names_that_point(bound_handler):
+    """The label is the parameter's name, and each point is judged in place.
+
+    ``point_one`` is complete and ``point_two`` is not, so the refusal names the
+    second: unpacking the short list into ``Point3D.create`` said nothing a caller
+    could act on.
+    """
+    design = FakeDesign(features=2)
+    root = design.rootComponent
+
+    with pytest.raises(RuntimeError, match="point_two must be") as raised:
+        bound_handler(design).create_construction_plane(
+            method="three_points",
+            point_one=[0, 0, 0],
+            point_two=[4, 0],
+            point_three=[0, 3, 0],
+        )
+
+    assert addon_hints.classify(raised.value) == (
+        "INVALID_INPUT",
+        ["Pass three numbers, in centimetres: [x, y, z]."],
+    )
+    assert root.constructionPlanes.count == 0
+
+
+def test_a_point_that_is_not_a_list_is_refused_rather_than_raising(bound_handler):
+    """``len()`` of a number is a TypeError, which reached the caller as UNKNOWN.
+
+    The shape is judged before the length for that reason: a bare ``3`` is not a
+    three-coordinate point, and neither is a string that happens to be three
+    characters long.
+    """
+    design = FakeDesign(features=2)
+
+    with pytest.raises(RuntimeError, match="point_one must be") as raised:
+        bound_handler(design).create_construction_plane(
+            method="three_points",
+            point_one=3,
+            point_two=[4, 0, 0],
+            point_three=[0, 3, 0],
+        )
+
+    assert addon_hints.classify(raised.value)[0] == "INVALID_INPUT"
+    assert design.rootComponent.constructionPlanes.count == 0
 
 
 def test_a_tangent_plane_is_refused_with_the_alternative(bound_handler):
@@ -169,13 +236,9 @@ def test_a_tangent_plane_is_refused_with_the_alternative(bound_handler):
     assert design.rootComponent.constructionPlanes.count == 0
 
 
-def test_an_unknown_construction_plane_method_is_refused(bound_handler):
-    design = FakeDesign(features=2)
-
-    with pytest.raises(RuntimeError, match="Unknown method: cant"):
-        bound_handler(design).create_construction_plane(method="cant")
-
-    assert design.rootComponent.constructionPlanes.count == 0
+# An unknown method no longer reaches the add-in: the schema gate refuses a value
+# outside the tool's enum before either mode sees it.  ``test_schema_gate.py`` owns
+# that assertion now.
 
 
 # ── construction axes ────────────────────────────────────────────────
@@ -250,16 +313,6 @@ def test_create_construction_axis_on_a_body_edge(bound_handler):
     created = design.rootComponent.constructionAxes.last_input
     assert created.setter == "setByEdge"
     assert created.args == (body.edges.item(1),), "the edge the caller named"
-
-
-def test_an_unknown_construction_axis_method_is_refused(bound_handler):
-    """ "spiral" is not one of the four, and no axis may be created for it."""
-    design = FakeDesign(features=2)
-
-    with pytest.raises(RuntimeError, match="Unknown method: spiral"):
-        bound_handler(design).create_construction_axis("spiral")
-
-    assert design.rootComponent.constructionAxes.count == 0
 
 
 # ── user coordinate systems ──────────────────────────────────────────
@@ -492,23 +545,21 @@ def test_auto_constrain_that_fusion_declines_to_run_is_refused(bound_handler):
     """Fusion answers ``None`` for a sketch it will not adjust; that is a refusal.
 
     The handler turns it into an error rather than reporting zero constraints and
-    zero dimensions, which would read as "your sketch needed nothing".
+    zero dimensions, which would read as "your sketch needed nothing".  Fusion
+    declined to run, so the kind is ``FUSION_REFUSED`` and the hint names the two
+    options that still work.
     """
     sketch = FakeSketch(name="Sketch1")
     sketch.auto_constrain_results["Option3AutoConstrainResultType"] = None
     handler = bound_handler(FakeDesign(features=0, sketches=[sketch]))
 
-    with pytest.raises(RuntimeError, match="not eligible for geometry adjustment"):
+    with pytest.raises(addon_hints.Refusal) as raised:
         handler.auto_constrain(result_option=3)
 
-
-@pytest.mark.parametrize("option", [0, 4, "1"])
-def test_an_auto_constrain_option_outside_the_three_is_refused(bound_handler, option):
-    """The option is judged before Fusion is asked, so nothing is constrained."""
-    sketch = FakeSketch(name="Sketch1")
-    handler = bound_handler(FakeDesign(features=0, sketches=[sketch]))
-
-    with pytest.raises(RuntimeError, match="Invalid result_option"):
-        handler.auto_constrain(result_option=option)
-
-    assert sketch.auto_constrain_inputs == []
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert str(raised.value) == (
+        "autoConstrain returned no result — the sketch is not eligible for "
+        "geometry adjustment. Retry with result_option 1 or 2."
+    )
+    assert raised.value.hints == ("Retry auto_constrain with result_option 1 or 2.",)
+    assert sketch.auto_constrain_inputs, "Fusion was asked before it declined"
