@@ -133,7 +133,7 @@ message, and pushing each message through the real `classify()` gave the before 
 | --- | --- | --- |
 | raises reaching a caller as `UNKNOWN` with no hints | **88** | **0** |
 | typed `Refusal` sites | 11, all in `rules.py` | 74, in 11 modules |
-| raises the walk cannot judge from source | 7 | 26, each pinned with its reason |
+| raises the walk cannot judge from source | 7 | 28, each pinned with its reason |
 
 The suite was green over all 88, and that is the part worth keeping: `classify()` ran
 **11 times** across 1393 tests, and every handler test asserted on the refusal it raised,
@@ -146,7 +146,7 @@ table was the wrong answer, since a table can only read a string:
   properties and 78 minimum/maximum bounds, enforced in `_send` so real and mock mode
   refuse alike before Fusion is touched. Roughly 20 of the 88 needed no new code - the
   constraint was written down and unenforced.
-- **`rules.py`** for what the parameters alone decide: 17 validators, 18 site rows in
+- **`rules.py`** for what the parameters alone decide: 20 validators, 18 site rows in
   `tests/test_rules.py` that compare the handler's refusal with mock mode's envelope
   sentence for sentence and hint for hint.
 - **`Refusal` at the site** for what needs live state - an index against a real face count,
@@ -163,7 +163,7 @@ because a client may already branch on them.
 
 `tests/test_addon_refusals.py` makes it a ratchet rather than a one-off audit. It
 fails on a raise that would reach a caller `UNKNOWN`, on a baseline row that no longer
-matches a site, and on any change to the 26 unjudgeable rows - a computed message, a
+matches a site, and on any change to the 28 unjudgeable rows - a computed message, a
 `Protocol` body, or a kind that comes from a `rules.py` validator call, each with its
 reason written down. That count rose from 7 by design: the validators are what let mock
 mode answer the same sentence, and a kind returned from a function is not readable in the
@@ -179,10 +179,13 @@ and asks the running Fusion whether it exists - 190 references, none missing on
 1. **The 0.9.0 release note is unwritten, and `CHANGELOG.md` cannot tell you.** The file
    opens at `[0.8.5]` because the packaging guard fails an entry written ahead of the
    version being cut, so entries are written once, at release. The note owes the PRs
-   merged since `v0.8.5` (`#125`-`#137`) and this work's entry: the six new kinds, the
-   schema gate, the refusals that moved from `UNKNOWN` to a kind, the
-   `InternalValidationError` retag from `INVALID_INPUT` to `FUSION_REFUSED`, and the
-   gate's own sentences for the rows it answers.
+   merged since `v0.8.5` (`#125`-`#143`): the six new kinds, the schema gate, the
+   refusals that moved from `UNKNOWN` to a kind, the `InternalValidationError` retag
+   from `INVALID_INPUT` to `FUSION_REFUSED`, the gate's own sentences for the rows it
+   answers, the three sheet-metal/surface repairs whose arguments were renamed
+   (`#134`), and `#143`'s caller-visible schema change - `cam_create_operation`'s
+   strategy enum replaced with ten measured names and two new arguments (`body_name`,
+   `face_indices`).
 2. **Retag the rules that already carry a kind** - deferred, and named here so the
    inconsistency reads as a decision rather than an oversight. The work above changed the
    tag of the 88 with none; a rule that already answered with a kind kept it, even where
@@ -232,6 +235,54 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    path and has no live envelope. The tests for `cam_post_process` and
    `cam_get_operation_info`, plus the generate path's own, are the proof that all three
    treat it one way; nothing proves Fusion can produce it.
+
+6. **A CAM operation still cannot generate, because it has no tool.** #143 fixed the
+   two causes in front of it - ten of the fifteen advertised strategy names were
+   invented, and five of them were Fusion's own (the other five here come from
+   `compatibleStrategies`, which answers 56, so the schema advertises the ten measured
+   rather than all 56) - and every
+   strategy's geometry parameter was left empty (`contours` / `pockets` /
+   `machiningBoundarySel`, discovered at run time and accepted with the same
+   `FaceContourSelection` for all five) - so `cam_create_operation` now
+   creates an operation with its faces selected. Generation then answers, measured on
+   2706.1.17: `hasError == True, error == "Toolpath requires tool to be selected."`
+   The operation has no tool, `cam.documentToolLibrary.count == 0`, and `Operation.tool`
+   accepts only a `Tool` - which Fusion builds from `Tool.createFromJson`,
+   `Tool.createFromP21File`, or a library entry (`DocumentToolLibrary.add`). The open
+   question is which tool JSON a document library starting empty will accept; it needs a
+   measurement, not a fake, and it is the last step between `cam_create_operation` and a
+   `has_toolpath: true` envelope.
+
+7. **No tool enumerates a body's faces.** `get_object_info` answers
+   `faces_count`/`edges_count`/`vertices_count` and a bounding box; `list_edges` exists
+   and a face equivalent does not. #143's `face_indices` therefore has to be discovered
+   through `execute_code` (`body.faces.item(i)`), which is what its hints now say. A
+   `list_faces` tool is a schema decision, not a repair, and the wrong-but-in-range index
+   it would prevent is accepted silently today. `Operation.deleteMe()` - the recovery
+   path's one call the name audit cannot see (`op` is a local) - was verified by hand on
+   2706.1.17: a scratch `face` operation was created, `deleteMe()` answered `True`, and
+   `setup.operations.count` returned to its previous value.
+8. **Mock's `cam_create_operation` and `cam_create_setup` replies differ from the
+   handlers'.** `cam_create_operation`: handler `{name, setup, strategy}` plus
+   `parameters_applied`/`parameters_failed`/`warning` (a live success carries
+   `parameters_applied` whenever the strategy exposes `tool_coolant`), mock
+   `{setup_name, operation_name, strategy}` plus the same `geometry` echo the handler
+   returns (`{parameter, face_indices}`).
+   `cam_create_setup`: handler `{name, body, operation_type, stock_applied|stock_failed,
+   warning}`, mock `{setup_name, body_name, operation_type, stock_mode}`. Ordering also
+   differs: the handler answers `WORKSPACE_UNAVAILABLE` or "Setup not found" before its
+   `tool_diameter` sentence, while mock answers `tool_diameter` third - so a call with
+   both faults earns two different sentences. An agent that
+   rehearses a key in mock mode then reads it against Fusion and gets a `KeyError`.
+   Pre-existing and pinned by `tests/test_mock.py`; left as a decision rather than a
+   ride-along on #143.
+
+9. **`cam_create_setup`'s `stock_mode` vocabulary does not match the handler's map.**
+   The schema advertises `relative_box`/`fixed_box`/`from_body`; `handler_cam.py` maps
+   `relative_box`/`fixed_box`/`relative_cylinder`/`fixed_cylinder`/`from_solid` and
+   passes an unmapped value through verbatim, so a schema-legal `from_body` reaches
+   Fusion as `from_body` and is reported as `stock_failed`. Read from the two files on
+   2026-11-23, not measured against Fusion; no test names `stock_mode` at all.
 
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.

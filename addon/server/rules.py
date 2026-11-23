@@ -61,6 +61,115 @@ JOINT_QUADRANTS = ("start", "quarter", "middle", "third_quarter")
 JOINT_KEY_POINTS = ("start", "middle", "center", "end")
 
 
+#: The CAM strategies ``cam_create_operation`` advertises, in Fusion's own spelling.
+#: Measured on 2706.1.17 against ``setup.operations.compatibleStrategies`` (56 names).
+#: Of the **fifteen** names this schema used to carry, **five** were Fusion's own -
+#: ``face``, ``bore``, ``slot``, ``trace``, ``engrave`` - and ten were invented
+#: (``2d_contour``, ``2d_pocket``, ``2d_adaptive``, ``3d_adaptive``, ``3d_pocket``,
+#: ``3d_contour``, ``3d_scallop``, ``3d_parallel``, ``drilling``, ``thread_milling``),
+#: which Fusion refused with ``3 : Unknown strategy``.  The five 2D/3D names here are
+#: the ones this tool now drives geometry for; a caller that needs one of the other 46
+#: can name it through ``execute_code``, and the refusal says so.
+CAM_STRATEGIES = (
+    "face",
+    "bore",
+    "slot",
+    "trace",
+    "engrave",
+    "contour2d",
+    "pocket2d",
+    "adaptive2d",
+    "adaptive",
+    "pocket_clearing",
+)
+
+#: The geometry parameter each strategy exposes, measured one operation at a time on
+#: 2706.1.17.  ``face`` has none - only the stock boundary - so a face selection cannot
+#: be given to it.  The handler discovers the same parameter at run time (only Fusion
+#: knows its name); this map is what mock mode answers from.
+CAM_GEOMETRY_PARAMETERS = {
+    "contour2d": "contours",
+    "pocket2d": "pockets",
+    "adaptive2d": "pockets",
+    "adaptive": "machiningBoundarySel",
+    "pocket_clearing": "machiningBoundarySel",
+}
+
+#: The strategies ``face_indices`` can be given to: the map's keys, in one place.
+CAM_GEOMETRY_STRATEGIES = tuple(CAM_GEOMETRY_PARAMETERS)
+
+
+def cam_strategy_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal an unknown CAM strategy earns, or None when it is usable.
+
+    The schema's enum is advisory: a socket caller is not the schema, and the name goes
+    straight into ``Operations.createInput``, where Fusion answers ``Unknown strategy``
+    from inside the CAM product - a ``FUSION_REFUSED`` that names no fix.  Judged from
+    the parameter alone, so mock mode refuses it too.
+    """
+    strategy = params.get("strategy")
+    if strategy in CAM_STRATEGIES:
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        f"Unknown strategy {strategy!r} - use one of: {', '.join(CAM_STRATEGIES)}",
+        hints=(
+            "Fusion names 56 strategies; for one outside this set, create the "
+            "operation through execute_code.",
+        ),
+    )
+
+
+def cam_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal a face selection earns when it cannot be applied, or None.
+
+    Judged on the parameters alone, in the order a caller gets wrong first: a
+    ``body_name`` with no ``face_indices`` (silently ignoring a supplied name is the
+    shape this repo keeps out of the wire), then the list's shape (a socket caller can
+    send anything), then the strategy, and last that a name was given at all.
+    """
+    faces = params.get("face_indices")
+    body_name = params.get("body_name")
+    strategy = params.get("strategy")
+
+    if faces is None:
+        if body_name is not None:
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                "body_name names the body face_indices select from - pass face_indices "
+                "too, or omit body_name",
+            )
+        return None
+    if not isinstance(faces, list):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"face_indices must be a list of face indices, not {type(faces).__name__}",
+        )
+    if not faces:
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            "face_indices is empty - name at least one face, or omit it",
+        )
+    for index in faces:
+        if isinstance(index, bool) or not isinstance(index, int):
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"Face index {index!r} is not a whole number - faces are indexed "
+                "0-based in the body's own order",
+            )
+    if strategy not in CAM_GEOMETRY_PARAMETERS:
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"Strategy {strategy!r} takes no geometry selection - use face_indices "
+            f"with one of: {', '.join(CAM_GEOMETRY_STRATEGIES)}",
+        )
+    if not body_name:
+        # The same sentence ``_body_by_name`` would raise, from the parameters alone -
+        # an empty name is not a name, and mock mode must answer what the add-in does.
+        return body_name_required_refusal({"body_name": body_name})
+    return None
+
+
 def joint_selector_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal an unknown joint type, quadrant or key point earns, or None.
 

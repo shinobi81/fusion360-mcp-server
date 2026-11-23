@@ -643,3 +643,114 @@ def test_two_faults_at_once_earn_the_same_refusal_on_both_sides(
     assert refused is not None
     assert refused["error_kind"] == raised.value.error_kind
     assert refused["error_message"] == str(raised.value)
+
+
+# ── the CAM strategy and its geometry ─────────────────────────────────
+
+
+def test_an_unknown_strategy_wins_over_an_unsupported_parameter(bare_handler):
+    """Mock's chain has to be the handler's chain: strategy, then tool_diameter.
+
+    Both are refusals, and a caller that gets "tool_diameter cannot be set" from mock
+    and "Unknown strategy" from Fusion has rehearsed a different call.
+    """
+    call = {"setup_name": "Setup1", "strategy": "2d_contour", "tool_diameter": 0.6}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_create_operation(**call)
+
+    refused = mock._cam_create_operation(call)
+
+    assert refused is not None
+    assert refused["error_message"] == str(raised.value)
+    assert "Unknown strategy" in refused["error_message"]
+
+
+def test_the_handler_and_the_mock_refuse_an_unknown_strategy_alike(bare_handler):
+    """The socket is not the schema: an unknown strategy reaches ``createInput``.
+
+    Measured on 2706.1.17: ten of the fifteen names this tool used to advertise were
+    refused by Fusion itself (``3 : Unknown strategy: 2d_contour``), so the vocabulary
+    is now Fusion's own - and a caller outside the schema must get a sentence, not a
+    ``FUSION_REFUSED`` from deep inside the CAM product.
+    """
+    call = {"setup_name": "Setup1", "strategy": "2d_contour"}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_create_operation(**call)
+
+    refused = mock._cam_create_operation(call)
+
+    assert refused is not None
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+
+
+def test_face_indices_on_a_strategy_without_a_geometry_parameter_is_refused(
+    bare_handler,
+):
+    """``face`` exposes no machining parameter - only ``stockContours`` (measured)."""
+    call = {"setup_name": "Setup1", "strategy": "face", "face_indices": [0]}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_create_operation(**call)
+
+    refused = mock._cam_create_operation(call)
+
+    assert refused is not None
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+
+
+#: Shapes a socket caller can send that must earn a sentence, not a ``TypeError``.
+BAD_FACE_SELECTIONS = [
+    {"strategy": "face", "body_name": "Body1", "face_indices": [0]},
+    {"strategy": "contour2d", "face_indices": [0]},
+    {"strategy": "contour2d", "body_name": "Body1"},
+    {"strategy": "contour2d", "body_name": "", "face_indices": [0]},
+    {"strategy": "contour2d", "body_name": "Body1", "face_indices": []},
+    {"strategy": "contour2d", "body_name": "Body1", "face_indices": "0"},
+    {"strategy": "contour2d", "body_name": "Body1", "face_indices": [0.5]},
+    {"strategy": "contour2d", "body_name": "Body1", "face_indices": [True]},
+    {"strategy": "contour2d", "body_name": "Body1", "face_indices": ["0"]},
+]
+
+
+@pytest.mark.parametrize("params", BAD_FACE_SELECTIONS)
+def test_every_bad_face_selection_is_refused_on_both_sides(bare_handler, params):
+    """A socket caller is not the schema, and an index is compared with ``<``.
+
+    Without this, a ``"0"`` or a ``True`` reached the range check as a ``TypeError`` -
+    which classifies as ``UNKNOWN`` with no hints - and a lone ``body_name`` was
+    ignored rather than refused.
+    """
+    call = {"setup_name": "Setup1", **params}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_create_operation(**call)
+
+    refused = mock._cam_create_operation(call)
+
+    assert refused is not None
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+
+
+def test_a_usable_strategy_and_selection_is_refused_by_neither_side():
+    """Every advertised strategy passes; a selection passes where one exists."""
+    assert (
+        mock._cam_create_operation({"strategy": "contour2d"}).get("error_kind") is None
+    )
+    for strategy in rules.CAM_STRATEGIES:
+        assert rules.cam_strategy_refusal({"strategy": strategy}) is None
+    assert set(rules.CAM_GEOMETRY_PARAMETERS) <= set(rules.CAM_STRATEGIES), (
+        "a parameter map key that is not an advertised strategy is refused one rule "
+        "earlier, so the geometry rule could never accept it"
+    )
+    for strategy in rules.CAM_GEOMETRY_STRATEGIES:
+        params = {"strategy": strategy, "body_name": "Body1", "face_indices": [0]}
+        assert rules.cam_geometry_refusal(params) is None
+    assert rules.cam_geometry_refusal({"strategy": "contour2d"}) is None

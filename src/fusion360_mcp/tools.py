@@ -12,6 +12,7 @@ import mcp.types as types
 # joint selectors are read by ``tools.py`` twice each (both joint tools), so a local
 # copy would be a fourth place to drift.
 from ._rules import (
+    CAM_STRATEGIES,
     EDGE_SELECTIONS,
     JOINT_KEY_POINTS,
     JOINT_QUADRANTS,
@@ -781,7 +782,7 @@ TOOLS: list[dict] = [
             "joint geometry. face_one/face_two are mandatory: a joint cannot be "
             "built from component origins, because a bare point carries no "
             "component association. Pass a cylindrical face on each side "
-            "(see get_object_info for the face indices) - for a hinge that is "
+            "(enumerate with execute_code body.faces.item(i)) - for a hinge that is "
             "the knuckle bore on each leaf. NOTE: creating a joint MOVES the "
             "components so the joint geometry becomes coincident - use "
             "create_as_built_joint when the parts are already positioned."
@@ -2273,24 +2274,14 @@ TOOLS: list[dict] = [
         },
         strategy={
             "type": "string",
-            "enum": [
-                "face",
-                "2d_contour",
-                "2d_pocket",
-                "2d_adaptive",
-                "3d_adaptive",
-                "3d_pocket",
-                "3d_contour",
-                "3d_scallop",
-                "3d_parallel",
-                "drilling",
-                "bore",
-                "thread_milling",
-                "slot",
-                "trace",
-                "engrave",
-            ],
-            "description": "Machining strategy",
+            "enum": list(CAM_STRATEGIES),
+            "description": (
+                "Machining strategy, in Fusion's own spelling. Measured against "
+                "Operations.compatibleStrategies on 2706.1.17: of the fifteen names "
+                "this schema carried, five were Fusion's (kept here) and ten were "
+                "invented and refused as 'Unknown strategy'; the five 2D/3D names "
+                "added here are the ones measured to expose a geometry parameter."
+            ),
         },
         name={
             "type": "string",
@@ -2337,6 +2328,25 @@ TOOLS: list[dict] = [
                 "through_tool",
             ],
             "default": "flood",
+        },
+        body_name={
+            "type": "string",
+            "description": (
+                "Body whose faces carry the operation's geometry; required with "
+                "face_indices. Only the five strategies with a measured geometry "
+                "parameter take a selection, and face is not one of them."
+            ),
+        },
+        face_indices={
+            "type": "array",
+            "items": {"type": "integer", "minimum": 0},
+            "minItems": 1,
+            "description": (
+                "Faces to machine, by 0-based index in the body's own order "
+                "(enumerate with execute_code body.faces.item(i)). Applied to the "
+                "strategy's geometry parameter (contours/pockets/"
+                "machiningBoundarySel). Refused for any strategy without one."
+            ),
         },
     ),
     _tool(

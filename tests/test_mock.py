@@ -972,12 +972,33 @@ class TestMockCAM:
             "cam_create_operation",
             {
                 "setup_name": "Setup1",
-                "strategy": "2d_adaptive",
+                "strategy": "adaptive2d",
                 "name": "Rough1",
             },
         )
-        assert result["strategy"] == "2d_adaptive"
+        assert result["strategy"] == "adaptive2d"
         assert result["operation_name"] == "Rough1"
+
+    def test_cam_create_operation_echoes_the_geometry_parameter(self):
+        """Mock answers the parameter name from the measured map, not from Fusion.
+
+        An agent that branches on ``geometry.parameter`` develops the sequence in mock
+        mode, so a replay that omitted it would KeyError on the call it rehearsed.
+        """
+        result = mock_command(
+            "cam_create_operation",
+            {
+                "setup_name": "Setup1",
+                "strategy": "pocket2d",
+                "body_name": "Body1",
+                "face_indices": [0],
+            },
+        )
+
+        assert result["geometry"] == {
+            "parameter": "pockets",
+            "face_indices": [0],
+        }
 
     def test_cam_generate_toolpath(self):
         result = mock_command(
@@ -1051,7 +1072,7 @@ class TestMockCAM:
         ["tool_number", "stepdown", "stepover", "feed_rate", "spindle_speed"],
     )
     def test_cam_create_operation_refuses_a_non_finite_number(self, field):
-        params = {"strategy": "2d_contour", field: float("inf")}
+        params = {"strategy": "contour2d", field: float("inf")}
         result = mock_command("cam_create_operation", params)
         assert result["ok"] is False
         assert result["error_kind"] == "INVALID_INPUT"
@@ -1062,7 +1083,7 @@ class TestMockCAM:
         That refusal used to classify as ``UNKNOWN`` with no hints — a new failure
         mode without a rule, which is what ``hints.py`` exists to prevent.
         """
-        params = {"strategy": "2d_contour", "tool_diameter": 0.6}
+        params = {"strategy": "contour2d", "tool_diameter": 0.6}
         result = mock_command("cam_create_operation", params)
         assert result["ok"] is False
         assert result["error_kind"] == "INVALID_INPUT"

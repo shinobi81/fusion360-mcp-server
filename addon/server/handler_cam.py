@@ -319,6 +319,85 @@ class CamCommands(_Contract):
             log.debug("CAM parameter %s=%r failed: %s", param_name, value, exc)
             return False
 
+    def _select_operation_geometry(self, op, faces: list) -> str:
+        """Apply a face selection to the operation's own geometry parameter.
+
+        The parameter name is strategy-dependent and only Fusion knows it - measured on
+        2706.1.17: ``contours`` for ``contour2d``, ``pockets`` for ``pocket2d`` and
+        ``adaptive2d``, ``machiningBoundarySel`` for ``adaptive`` and
+        ``pocket_clearing`` - so it is discovered rather than assumed: the one
+        CAD-contour value that is not the stock boundary.  ``FaceContourSelection`` was
+        measured to be accepted by all five of those parameters.
+
+        Reaching the discovery failure means the measurement moved under us, and the
+        operation is removed again rather than left half-configured; the strategy is
+        read *before* the delete, because a deleted Fusion object may refuse reads.
+        """
+        parameter = next(
+            (
+                candidate
+                for candidate in op.parameters
+                if candidate.name != "stockContours"
+                and hasattr(candidate.value, "applyCurveSelections")
+            ),
+            None,
+        )
+        if parameter is None:
+            strategy = op.strategy
+            op.deleteMe()
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
+                f"Strategy '{strategy}' exposed no geometry parameter on this Fusion "
+                "build; the operation was removed again",
+                hints=(
+                    "Use a strategy measured to carry one; cam_create_operation's "
+                    "schema lists them.",
+                ),
+            )
+
+        try:
+            selections = parameter.value.getCurveSelections()
+            selections.clear()
+            selection = selections.createNewFaceContourSelection()
+            selection.inputGeometry = list(faces)
+            parameter.value.applyCurveSelections(selections)
+        except AttributeError as exc:
+            # An invented method name is an add-in defect.  Left to propagate it would
+            # reach a caller as ``UNKNOWN`` with no hints - the shape #138 removed - and
+            # the generic branch below would blame the caller's faces.  The operation
+            # goes for the same reason as there: the parameter may already be emptied.
+            strategy = op.strategy
+            op.deleteMe()
+            raise _hints.Refusal(
+                "INTERNAL_ERROR",
+                f"Strategy '{strategy}' face selection called an API this Fusion "
+                f"build does not have: {exc}. The operation was removed.",
+                hints=(
+                    "This is an add-in defect, not an input problem.",
+                    # `check_fusion_api.py` walks `adsk.<dotted.path>` names only; this
+                    # failure is a method or property miss on an object Fusion returned,
+                    # so the hint names the binding rather than promising the audit sees
+                    # it.  The defect kind's own advice in ``hints.py`` is the same rule
+                    # for the module-shaped case.
+                    "Read the call against the shipped binding; "
+                    "`scripts/check_fusion_api.py` covers `adsk.<name>`, not methods.",
+                ),
+            ) from exc
+        except Exception as exc:
+            # The parameter is emptied before the selection is applied, so a refusal
+            # here would leave the operation with geometry it no longer has.  Nothing
+            # measured says these three calls refuse; the guard is what keeps the
+            # "no refusal leaves a half-built operation" promise true either way.
+            strategy = op.strategy
+            op.deleteMe()
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
+                f"Fusion refused the face selection for strategy '{strategy}': "
+                f"{exc}. The operation was removed.",
+                hints=("Check the faces belong to the setup's model, then retry.",),
+            ) from exc
+        return parameter.name
+
     def cam_create_operation(
         self,
         setup_name: str,
@@ -331,11 +410,45 @@ class CamCommands(_Contract):
         feed_rate: float | None = None,
         spindle_speed: float | None = None,
         coolant: str = "flood",
+        body_name: str | None = None,
+        face_indices: list[int] | None = None,
     ):
         # Judged before the operation is created, so a refusal's hint ("nothing
         # was written") stays true: a bad value is not an unavailable name.
         for _numeric in (tool_number, stepdown, stepover, feed_rate, spindle_speed):
             _param_units.require_finite(_numeric)
+
+        if strategy_refusal := _rules.cam_strategy_refusal({"strategy": strategy}):
+            raise strategy_refusal
+        if geometry_refusal := _rules.cam_geometry_refusal(
+            {
+                "strategy": strategy,
+                "body_name": body_name,
+                "face_indices": face_indices,
+            }
+        ):
+            raise geometry_refusal
+
+        # Everything a face selection needs is judged before the operation exists, so
+        # no refusal here can leave a half-built one behind: the body must resolve and
+        # every index must be in range against it.
+        selection_faces = None
+        if face_indices:
+            body = self._body_by_name(body_name)
+            out_of_range = [
+                index for index in face_indices if not (0 <= index < body.faces.count)
+            ]
+            if out_of_range:
+                raise _hints.Refusal(
+                    "INVALID_INPUT",
+                    f"Face index {out_of_range[0]} is out of range for body "
+                    f"'{body.name}' ({body.faces.count} faces)",
+                    hints=(
+                        "Enumerate with execute_code (`body.faces.item(i)`) - no "
+                        "tool lists faces yet.",
+                    ),
+                )
+            selection_faces = [body.faces.item(index) for index in face_indices]
 
         cam = self._get_cam()
         setup = self._find_setup(cam, setup_name)
@@ -381,6 +494,11 @@ class CamCommands(_Contract):
                 failed[param_name] = value
 
         result = {"name": op.name, "setup": setup_name, "strategy": strategy}
+        if selection_faces is not None:
+            result["geometry"] = {
+                "parameter": self._select_operation_geometry(op, selection_faces),
+                "face_indices": list(face_indices or []),
+            }
         if applied:
             result["parameters_applied"] = applied
         if failed:

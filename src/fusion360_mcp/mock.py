@@ -18,8 +18,11 @@ from typing import Any
 
 from ._mutation_commands import MUTATION_COMMANDS
 from ._rules import (
+    CAM_GEOMETRY_PARAMETERS,
     as_built_geometry_refusal,
     body_name_required_refusal,
+    cam_geometry_refusal,
+    cam_strategy_refusal,
     cam_target_refusal,
     components_differ_refusal,
     construction_method_refusal,
@@ -1509,17 +1512,31 @@ def _cam_create_operation(p: dict) -> dict:
         refusal = _non_finite_error(p.get(key))
         if refusal is not None:
             return refusal
+    selector_refusal = cam_strategy_refusal(p) or cam_geometry_refusal(p)
+    if selector_refusal is not None:
+        return _refusal_error(selector_refusal)
     if p.get("tool_diameter") is not None:
         return _mock_error(
             "tool_diameter cannot be set on an operation — tool geometry comes "
             "from a tool in the CAM tool library. Select the tool via "
             "tool_number instead."
         )
-    return {
+    result = {
         "setup_name": p.get("setup_name", "Setup1"),
         "operation_name": p.get("name", "Operation1"),
-        "strategy": p.get("strategy", "2d_contour"),
+        "strategy": p.get("strategy", "contour2d"),
     }
+    if p.get("face_indices"):
+        strategy = p.get("strategy")
+        result["geometry"] = {
+            "parameter": (
+                CAM_GEOMETRY_PARAMETERS.get(strategy)
+                if isinstance(strategy, str)
+                else None
+            ),
+            "face_indices": list(p["face_indices"]),
+        }
+    return result
 
 
 def _cam_generate_toolpath(p: dict) -> dict:
@@ -1569,7 +1586,7 @@ def _cam_list_operations(p: dict) -> dict:
             },
             {
                 "name": "2D Contour1",
-                "strategy": "2d_contour",
+                "strategy": "contour2d",
                 "has_toolpath": False,
             },
         ],

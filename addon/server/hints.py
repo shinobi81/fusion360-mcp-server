@@ -339,7 +339,7 @@ _RULES: list[tuple[str, str, list[str]]] = [
             # One literal per hint: two adjacent ones read as a missing comma to
             # CodeQL, and it cannot tell a wrapped sentence from a bug.
             "A thread needs a cylindrical face; nothing was written.",
-            "Use get_object_info to list the body's faces.",
+            "Use execute_code (body.faces.item(i)) to list the body's faces.",
             "Then pass a cylindrical face_index.",
         ],
     ),
@@ -496,7 +496,7 @@ _RULES: list[tuple[str, str, list[str]]] = [
         [
             "The face reports no usable axis, so no direction can be resolved.",
             "Build the joint from a different face: the geometry is the problem.",
-            "Use get_object_info on the body to find another cylindrical face.",
+            "Use execute_code (body.faces.item(i)) to find another cylindrical face.",
         ],
     ),
     (
@@ -638,7 +638,7 @@ _KIND_HINTS: dict[str, tuple[str, ...]] = {
     ),
     "GEOMETRY_UNSUPPORTED": (
         "The body does not have the geometry this call needs.",
-        "Inspect it with get_object_info and choose a face or edge it actually has.",
+        "Inspect it with execute_code (body.faces.item(i)) and choose a face it has.",
     ),
     "FUSION_REFUSED": (
         "Fusion did not complete the operation.",

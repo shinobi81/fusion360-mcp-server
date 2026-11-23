@@ -698,3 +698,259 @@ def test_the_post_input_fake_refuses_construction_like_fusion_does():
     """
     with pytest.raises(AttributeError, match="No constructor defined"):
         FakePostProcessInput("Setup1", "fanuc.cps", "/tmp", 2)
+
+
+def _contour_operation(strategy: str = "contour2d", parameter_name: str = "contours"):
+    """An operation whose parameter set carries one CAD-contour machining parameter.
+
+    ``stockContours`` is there too, because every strategy has it and the discovery
+    must skip it - that is the measured shape: ``contours`` for ``contour2d``,
+    ``pockets`` for ``pocket2d``, ``machiningBoundarySel`` for ``adaptive``.
+    """
+    applied = {}
+
+    class _Selections:
+        def __init__(self):
+            self.cleared = 0
+            self.selectors = []
+
+        def clear(self):
+            self.cleared += 1
+
+        def createNewFaceContourSelection(self):
+            selection = SimpleNamespace(inputGeometry=None)
+            self.selectors.append(selection)
+            return selection
+
+    class _Value:
+        def __init__(self):
+            self.selections = _Selections()
+
+        def getCurveSelections(self):
+            return self.selections
+
+        def applyCurveSelections(self, selections):
+            applied["selections"] = selections
+
+    value = _Value()
+    operation = SimpleNamespace(
+        name=None,
+        strategy=strategy,
+        parameters=[
+            # A *second* CAD-contour value, so the ``stockContours`` name check is the
+            # only thing that can skip it - a value without the method would let a
+            # deleted name check stay green.
+            SimpleNamespace(name="stockContours", value=_Value()),
+            SimpleNamespace(name=parameter_name, value=value),
+        ],
+        deleted=0,
+    )
+
+    def delete_me():
+        operation.deleted += 1
+        # Fusion may refuse property reads on a deleted object; modelling that is what
+        # makes "read the strategy *before* deleting" a testable order.
+        operation.strategy = None
+        operation.parameters = None
+
+    operation.deleteMe = delete_me
+    return operation, value, applied
+
+
+def test_a_refused_face_selection_removes_the_operation(handler_module):
+    """The parameter is emptied before the selection is applied.
+
+    So a failure there must not leave the operation behind with no geometry.
+    """
+    operation, value, applied = _contour_operation()
+
+    def refuse(_selections):
+        raise RuntimeError("3 : some input argument is invalid")
+
+    value.applyCurveSelections = refuse
+    handler = _creation_handler(handler_module, operation, faces=1)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            setup_name="Setup1",
+            strategy="contour2d",
+            body_name="Body1",
+            face_indices=[0],
+        )
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert "some input argument is invalid" in str(raised.value)
+    assert "strategy 'contour2d'" in str(raised.value), (
+        "the strategy is read before the operation is deleted"
+    )
+    assert operation.deleted == 1
+    assert applied == {}
+
+
+def test_an_add_in_defect_in_the_seam_is_an_internal_error(handler_module):
+    """An invented API is our bug: typed ``INTERNAL_ERROR``, not ``UNKNOWN``.
+
+    Re-raising left the caller with ``UNKNOWN`` and an empty hint list - the exact shape
+    #138 removed - and a half-cleared operation in the setup; the generic branch would
+    have blamed the caller's faces.  The operation is removed, as in the sibling branch.
+    """
+    operation, value, _applied = _contour_operation()
+
+    def invented(_selections):
+        raise AttributeError("'CadContours2dParameterValue' has no attribute 'apply'")
+
+    value.applyCurveSelections = invented
+    handler = _creation_handler(handler_module, operation, faces=1)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            setup_name="Setup1",
+            strategy="contour2d",
+            body_name="Body1",
+            face_indices=[0],
+        )
+
+    assert raised.value.error_kind == "INTERNAL_ERROR"
+    assert "does not have" in str(raised.value)
+    assert "The operation was removed" in str(raised.value)
+    assert raised.value.hints == (
+        "This is an add-in defect, not an input problem.",
+        "Read the call against the shipped binding; "
+        "`scripts/check_fusion_api.py` covers `adsk.<name>`, not methods.",
+    )
+    assert addon_hints.classify(raised.value)[0] == "INTERNAL_ERROR"
+    assert operation.deleted == 1, "the half-cleared operation is removed"
+
+
+def test_create_operation_refuses_an_unknown_body_before_creating_anything(
+    handler_module,
+):
+    """The body is resolved before `add`, so a wrong name writes nothing.
+
+    This is the path review found leaking: resolution ran inside the selection step,
+    so every body-name refusal left an operation the caller had to discover.
+    """
+    operation, _value, applied = _contour_operation()
+    created = []
+    handler = _creation_handler(handler_module, operation, faces=1, created=created)
+
+    def unknown(_name):
+        raise addon_hints.Refusal("NAME_NOT_FOUND", "Body 'Nope' not found")
+
+    handler._body_by_name = unknown
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            setup_name="Setup1",
+            strategy="contour2d",
+            body_name="Nope",
+            face_indices=[0],
+        )
+
+    assert raised.value.error_kind == "NAME_NOT_FOUND"
+    assert created == []
+    assert applied == {}
+
+
+def _creation_handler(handler_module, operation, faces, created=None):
+    added: list = [] if created is None else created
+
+    def add(op_input):
+        added.append(op_input)
+        return operation
+
+    setup = SimpleNamespace(
+        name="Setup1",
+        operations=SimpleNamespace(
+            count=0,
+            createInput=lambda _strategy: SimpleNamespace(name=None),
+            add=add,
+        ),
+    )
+    handler = _generating_handler(handler_module, _cam(setup))
+    handler._body_by_name = lambda name: SimpleNamespace(
+        name=name, faces=_items(*[SimpleNamespace() for _ in range(faces)])
+    )
+    return handler
+
+
+def test_create_operation_puts_a_face_selection_on_the_strategy_parameter(
+    handler_module,
+):
+    """The geometry seam: one face selection, applied to the parameter Fusion exposes.
+
+    The parameter cannot be named in advance - it differs per strategy and only Fusion
+    knows it - so the handler discovers the CAD-contour value that is not the stock
+    boundary.  This test pins that discovery, the clear-before-add, and the reply.
+    """
+    operation, value, applied = _contour_operation()
+    handler = _creation_handler(handler_module, operation, faces=3)
+
+    result = handler.cam_create_operation(
+        setup_name="Setup1",
+        strategy="contour2d",
+        body_name="Body1",
+        face_indices=[2, 0],
+    )
+
+    assert value.selections.cleared == 1
+    assert len(value.selections.selectors) == 1
+    selection = value.selections.selectors[0]
+    faces = handler._body_by_name("Body1").faces
+    assert selection.inputGeometry == [faces.item(2), faces.item(0)], (
+        "the reply names faces in the order the caller gave them"
+    )
+    assert applied["selections"] is value.selections
+    assert result["geometry"] == {"parameter": "contours", "face_indices": [2, 0]}
+
+
+def test_create_operation_refuses_a_face_index_the_body_does_not_have(handler_module):
+    """An index is judged against the body *before* the operation exists.
+
+    Resolving the body and checking the range inside the selection step left a created
+    operation behind on every body-name refusal - the caller retried and the setup held
+    two.  Both checks now run first, so nothing is written and nothing needs removing.
+    """
+    operation, _value, applied = _contour_operation()
+    created = []
+    handler = _creation_handler(handler_module, operation, faces=2, created=created)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            setup_name="Setup1",
+            strategy="contour2d",
+            body_name="Body1",
+            face_indices=[7],
+        )
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert str(raised.value) == (
+        "Face index 7 is out of range for body 'Body1' (2 faces)"
+    )
+    assert created == [], "the operation was never added"
+    assert operation.deleted == 0
+    assert applied == {}, "nothing was applied to the parameter"
+
+
+def test_create_operation_removes_the_operation_when_no_parameter_is_found(
+    handler_module,
+):
+    """The discovery step is a defence: if the measurement moves, nothing is left."""
+    operation, _value, _applied = _contour_operation()
+    operation.parameters = [SimpleNamespace(name="stockContours", value=object())]
+    handler = _creation_handler(handler_module, operation, faces=1)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            setup_name="Setup1",
+            strategy="contour2d",
+            body_name="Body1",
+            face_indices=[0],
+        )
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert "Strategy 'contour2d'" in str(raised.value), (
+        "the strategy has to be read before the operation is deleted"
+    )
+    assert "the operation was removed again" in str(raised.value)
+    assert operation.deleted == 1
