@@ -117,10 +117,10 @@ def cam_strategy_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
 def cam_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal a face selection earns when it cannot be applied, or None.
 
-    Judged on the parameters alone, in the order a caller gets wrong first: the list's
-    shape (a socket caller can send anything), then the pairing, then the strategy.
-    ``body_name`` without ``face_indices`` is refused too - silently ignoring a name
-    the caller supplied is the shape this repo keeps out of the wire.
+    Judged on the parameters alone, in the order a caller gets wrong first: a
+    ``body_name`` with no ``face_indices`` (silently ignoring a supplied name is the
+    shape this repo keeps out of the wire), then the list's shape (a socket caller can
+    send anything), then the strategy, and last that a name was given at all.
     """
     faces = params.get("face_indices")
     body_name = params.get("body_name")

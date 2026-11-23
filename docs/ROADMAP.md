@@ -255,12 +255,19 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    and a face equivalent does not. #143's `face_indices` therefore has to be discovered
    through `execute_code` (`body.faces.item(i)`), which is what its hints now say. A
    `list_faces` tool is a schema decision, not a repair, and the wrong-but-in-range index
-   it would prevent is accepted silently today.
-8. **Mock's `cam_create_operation` reply keys differ from the handler's.** The handler
-   answers `{name, setup, strategy}`; mock answers `{setup_name, operation_name,
-   strategy}` (`cam_create_setup` has the same split). An agent that rehearses
-   `result["name"]` in mock mode then reads `name` against Fusion and gets a `KeyError`.
-   Pre-existing, pinned by `tests/test_mock.py`, and left as a decision rather than a
+   it would prevent is accepted silently today. `Operation.deleteMe()` - the recovery
+   path's one call the name audit cannot see (`op` is a local) - was verified by hand on
+   2706.1.17: a scratch `face` operation was created, `deleteMe()` answered `True`, and
+   `setup.operations.count` returned to its previous value.
+8. **Mock's `cam_create_operation` and `cam_create_setup` replies differ from the
+   handlers'.** `cam_create_operation`: handler `{name, setup, strategy}` plus
+   `parameters_applied`/`parameters_failed`/`warning` (a live success always carries
+   `parameters_applied`, because `coolant` defaults to `flood`), mock
+   `{setup_name, operation_name, strategy}` plus its own `geometry` echo.
+   `cam_create_setup`: handler `{name, body, operation_type, stock_applied|stock_failed,
+   warning}`, mock `{setup_name, body_name, operation_type, stock_mode}`. An agent that
+   rehearses a key in mock mode then reads it against Fusion and gets a `KeyError`.
+   Pre-existing and pinned by `tests/test_mock.py`; left as a decision rather than a
    ride-along on #143.
 
 Settled, so a later session does not re-open them: the four call sites that pass a raw

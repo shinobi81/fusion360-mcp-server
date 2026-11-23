@@ -782,7 +782,7 @@ TOOLS: list[dict] = [
             "joint geometry. face_one/face_two are mandatory: a joint cannot be "
             "built from component origins, because a bare point carries no "
             "component association. Pass a cylindrical face on each side "
-            "(see get_object_info for the face indices) - for a hinge that is "
+            "(enumerate with execute_code body.faces.item(i)) - for a hinge that is "
             "the knuckle bore on each leaf. NOTE: creating a joint MOVES the "
             "components so the joint geometry becomes coincident - use "
             "create_as_built_joint when the parts are already positioned."

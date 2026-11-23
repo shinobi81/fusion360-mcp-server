@@ -326,10 +326,11 @@ class AssemblyCommands(_Contract):
             raise _hints.Refusal(
                 "INVALID_INPUT",
                 f"Face index {face_index} is out of range for body '{body.name}' "
-                f"({body.faces.count} faces). Enumerate them with get_object_info "
+                f"({body.faces.count} faces). Enumerate them with execute_code "
                 f"and pick a cylindrical face.",
                 hints=(
-                    "Face indices run from 0; enumerate with get_object_info.",
+                    "Face indices run from 0; enumerate with execute_code "
+                    "(body.faces.item(i)).",
                 ),
             )
         return body.faces.item(face_index)

@@ -361,6 +361,11 @@ class CamCommands(_Contract):
             selection = selections.createNewFaceContourSelection()
             selection.inputGeometry = list(faces)
             parameter.value.applyCurveSelections(selections)
+        except AttributeError:
+            # An invented method name is an add-in defect: ``hints`` classifies it as
+            # INTERNAL_ERROR and points at the name audit, which the FUSION_REFUSED
+            # sentence below would bury behind caller advice.
+            raise
         except Exception as exc:
             # The parameter is emptied before the selection is applied, so a refusal
             # here would leave the operation with geometry it no longer has.  Nothing
@@ -421,9 +426,9 @@ class CamCommands(_Contract):
                     f"Face index {out_of_range[0]} is out of range for body "
                     f"'{body.name}' ({body.faces.count} faces)",
                     hints=(
-                    "Enumerate with execute_code (`body.faces.item(i)`) - no "
-                    "tool lists faces yet.",
-                ),
+                        "Enumerate with execute_code (`body.faces.item(i)`) - no "
+                        "tool lists faces yet.",
+                    ),
                 )
             selection_faces = [body.faces.item(index) for index in face_indices]
 

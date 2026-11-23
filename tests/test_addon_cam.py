@@ -757,6 +757,54 @@ def _contour_operation(strategy: str = "contour2d", parameter_name: str = "conto
     return operation, value, applied
 
 
+def test_a_refused_face_selection_removes_the_operation(handler_module):
+    """The parameter is emptied before the selection is applied.
+
+    So a failure there must not leave the operation behind with no geometry.
+    """
+    operation, value, applied = _contour_operation()
+
+    def refuse(_selections):
+        raise RuntimeError("3 : some input argument is invalid")
+
+    value.applyCurveSelections = refuse
+    handler = _creation_handler(handler_module, operation, faces=1)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            setup_name="Setup1",
+            strategy="contour2d",
+            body_name="Body1",
+            face_indices=[0],
+        )
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert "some input argument is invalid" in str(raised.value)
+    assert operation.deleted == 1
+    assert applied == {}
+
+
+def test_an_add_in_defect_in_the_seam_keeps_its_own_kind(handler_module):
+    """An ``AttributeError`` is our bug, not Fusion refusing: it keeps its kind."""
+    operation, value, _applied = _contour_operation()
+
+    def invented(_selections):
+        raise AttributeError("'CadContours2dParameterValue' has no attribute 'apply'")
+
+    value.applyCurveSelections = invented
+    handler = _creation_handler(handler_module, operation, faces=1)
+
+    with pytest.raises(AttributeError):
+        handler.cam_create_operation(
+            setup_name="Setup1",
+            strategy="contour2d",
+            body_name="Body1",
+            face_indices=[0],
+        )
+
+    assert operation.deleted == 0, "an add-in defect is not recovered from by deleting"
+
+
 def test_create_operation_refuses_an_unknown_body_before_creating_anything(
     handler_module,
 ):

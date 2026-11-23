@@ -339,37 +339,37 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_assembly.py",
-            361,
+            362,
             "raise selector_refusal: kind comes from _rules.joint_selector_refusal",
         ),
         (
             "handler_assembly.py",
-            377,
+            378,
             "raise component_refusal: kind comes from _rules.components_differ_refusal",
         ),
         (
             "handler_assembly.py",
-            382,
+            383,
             "raise geometry_refusal: kind comes from _rules.joint_geometry_refusal",
         ),
         (
             "handler_assembly.py",
-            648,
+            649,
             "raise selector_refusal: kind comes from _rules.joint_selector_refusal",
         ),
         (
             "handler_assembly.py",
-            663,
+            664,
             "raise component_refusal: kind comes from _rules.components_differ_refusal",
         ),
         (
             "handler_assembly.py",
-            674,
+            675,
             "raise geometry_refusal: kind comes from _rules.as_built_geometry_refusal",
         ),
         (
             "handler_assembly.py",
-            850,
+            851,
             "raise refusal: kind comes from _rules.rigid_group_size_refusal",
         ),
         (
@@ -389,22 +389,22 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_cam.py",
-            399,
+            404,
             "raise strategy_refusal: kind comes from _rules.cam_strategy_refusal",
         ),
         (
             "handler_cam.py",
-            407,
+            412,
             "raise geometry_refusal: kind comes from _rules.cam_geometry_refusal",
         ),
         (
             "handler_cam.py",
-            504,
+            509,
             "raise refusal: kind comes from _rules.cam_target_refusal",
         ),
         (
             "handler_cam.py",
-            583,
+            588,
             "message is not a literal",
         ),
         (
