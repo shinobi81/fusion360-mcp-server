@@ -17,6 +17,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from addon.server import fusion_api as adsk
 from addon.server import hints as addon_hints
 from tests.fakes.cam import (
     FakeCAMProduct,
@@ -145,6 +146,16 @@ def test_a_post_that_exists_is_returned_as_given_or_resolved(handler_module, tmp
 
 def _operation(name: str) -> SimpleNamespace:
     return SimpleNamespace(name=name)
+
+
+def _readable_operation(name: str) -> SimpleNamespace:
+    """The shape ``cam_get_operation_info`` reads, so a regression fails legibly.
+
+    With only ``name`` the old first-match scan would die on ``op.isValid`` - an
+    ``AttributeError`` that names a missing attribute instead of the ambiguity the
+    test is about.
+    """
+    return SimpleNamespace(name=name, isValid=True, hasToolpath=False)
 
 
 def _setup_with_operations(name: str, *operations) -> SimpleNamespace:
@@ -549,7 +560,9 @@ def test_operation_info_refuses_a_name_held_twice_instead_of_describing_the_firs
 ):
     """The read has the same ambiguity as the write: describe neither, refuse both."""
     cam = _cam(
-        _setup_with_operations("Setup1", _operation("Rough1"), _operation("Rough1"))
+        _setup_with_operations(
+            "Setup1", _readable_operation("Rough1"), _readable_operation("Rough1")
+        )
     )
     handler = _generating_handler(handler_module, cam)
 
@@ -558,3 +571,40 @@ def test_operation_info_refuses_a_name_held_twice_instead_of_describing_the_firs
 
     assert raised.value.error_kind == "INVALID_INPUT"
     assert str(raised.value) == "Setup 'Setup1' holds 2 operations named 'Rough1'"
+    assert raised.value.hints == (
+        "There is no CAM rename tool; rename all but one with execute_code "
+        "(operation.name = ...) so the name selects it.",
+    )
+
+
+def test_post_process_hands_the_post_input_the_four_arguments_it_recorded(
+    handler_module, tmp_path
+):
+    """The fake stores the fields so a reordered call is caught, not waved through.
+
+    ``PostProcessInput.create`` takes ``programName``, ``postConfiguration``,
+    ``outputFolder`` and ``outputUnits`` in that order; a fake that accepts four
+    values of any kind proves the arity and nothing about the order.
+    """
+    operation = _operation("Rough1")
+    cam = _cam(_setup_with_operations("Setup1", operation), generic_post=str(tmp_path))
+    posted = []
+    cam.postProcess = lambda *args: posted.append(args)
+    handler = _generating_handler(handler_module, cam)
+    handler._resolve_post = lambda _name: str(tmp_path / "fanuc.cps")
+
+    handler.cam_post_process(
+        "Setup1", operation_name="Rough1", output_folder=str(tmp_path)
+    )
+
+    assert len(posted) == 1
+    posted_operation, post_input = posted[0]
+    assert posted_operation is operation
+    assert post_input.programName == "Setup1"
+    assert post_input.postConfiguration == str(tmp_path / "fanuc.cps")
+    assert post_input.outputFolder == str(tmp_path)
+    assert post_input.isOpenInEditor is False
+    # The member the handler picked, and the value the fake declares for it - the
+    # second is what 2706.1.17 answered, so a wrong fake number shows up here.
+    assert post_input.outputUnits == adsk.cam.PostOutputUnitOptions.MillimetersOutput
+    assert post_input.outputUnits == 2
