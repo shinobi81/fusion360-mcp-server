@@ -355,11 +355,24 @@ class CamCommands(_Contract):
                 ),
             )
 
-        selections = parameter.value.getCurveSelections()
-        selections.clear()
-        selection = selections.createNewFaceContourSelection()
-        selection.inputGeometry = list(faces)
-        parameter.value.applyCurveSelections(selections)
+        try:
+            selections = parameter.value.getCurveSelections()
+            selections.clear()
+            selection = selections.createNewFaceContourSelection()
+            selection.inputGeometry = list(faces)
+            parameter.value.applyCurveSelections(selections)
+        except Exception as exc:
+            # The parameter is emptied before the selection is applied, so a refusal
+            # here would leave the operation with geometry it no longer has.  Nothing
+            # measured says these three calls refuse; the guard is what keeps the
+            # "no refusal leaves a half-built operation" promise true either way.
+            strategy = op.strategy
+            op.deleteMe()
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
+                f"Fusion refused the face selection for strategy '{strategy}': {exc}",
+                hints=("Check the faces belong to the setup's model, then retry.",),
+            ) from exc
         return parameter.name
 
     def cam_create_operation(
@@ -407,7 +420,10 @@ class CamCommands(_Contract):
                     "INVALID_INPUT",
                     f"Face index {out_of_range[0]} is out of range for body "
                     f"'{body.name}' ({body.faces.count} faces)",
-                    hints=("Face indices run from 0; enumerate with get_object_info.",),
+                    hints=(
+                    "Enumerate with execute_code (`body.faces.item(i)`) - no "
+                    "tool lists faces yet.",
+                ),
                 )
             selection_faces = [body.faces.item(index) for index in face_indices]
 

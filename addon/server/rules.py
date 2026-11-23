@@ -154,8 +154,8 @@ def cam_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
         if isinstance(index, bool) or not isinstance(index, int):
             return _hints.Refusal(
                 "INVALID_INPUT",
-                f"Face index {index!r} is not a whole number - indices come from "
-                "get_object_info (0-based, in order)",
+                f"Face index {index!r} is not a whole number - faces are indexed "
+                "0-based in the body's own order",
             )
     if strategy not in CAM_GEOMETRY_PARAMETERS:
         return _hints.Refusal(
@@ -163,12 +163,10 @@ def cam_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
             f"Strategy {strategy!r} takes no geometry selection - use face_indices "
             f"with one of: {', '.join(CAM_GEOMETRY_STRATEGIES)}",
         )
-    if body_name is None:
-        return _hints.Refusal(
-            "INVALID_INPUT",
-            f"face_indices needs body_name: face indices are per body, and "
-            f"'{strategy}' has none of its own",
-        )
+    if not body_name:
+        # The same sentence ``_body_by_name`` would raise, from the parameters alone -
+        # an empty name is not a name, and mock mode must answer what the add-in does.
+        return body_name_required_refusal({"body_name": body_name})
     return None
 
 

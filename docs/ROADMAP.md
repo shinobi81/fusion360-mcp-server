@@ -250,6 +250,19 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    measurement, not a fake, and it is the last step between `cam_create_operation` and a
    `has_toolpath: true` envelope.
 
+7. **No tool enumerates a body's faces.** `get_object_info` answers
+   `faces_count`/`edges_count`/`vertices_count` and a bounding box; `list_edges` exists
+   and a face equivalent does not. #143's `face_indices` therefore has to be discovered
+   through `execute_code` (`body.faces.item(i)`), which is what its hints now say. A
+   `list_faces` tool is a schema decision, not a repair, and the wrong-but-in-range index
+   it would prevent is accepted silently today.
+8. **Mock's `cam_create_operation` reply keys differ from the handler's.** The handler
+   answers `{name, setup, strategy}`; mock answers `{setup_name, operation_name,
+   strategy}` (`cam_create_setup` has the same split). An agent that rehearses
+   `result["name"]` in mock mode then reads `name` against Fusion and gets a `KeyError`.
+   Pre-existing, pinned by `tests/test_mock.py`, and left as a decision rather than a
+   ride-along on #143.
+
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.
 `setByThreePoints`, `setByTwoPoints` and `ScaleFeatures.createInput` all accept a

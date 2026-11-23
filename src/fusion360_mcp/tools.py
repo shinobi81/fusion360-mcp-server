@@ -2333,8 +2333,8 @@ TOOLS: list[dict] = [
             "type": "string",
             "description": (
                 "Body whose faces carry the operation's geometry; required with "
-                "face_indices. Not every strategy has a geometry parameter: face "
-                "does not."
+                "face_indices. Only the five strategies with a measured geometry "
+                "parameter take a selection, and face is not one of them."
             ),
         },
         face_indices={
@@ -2342,9 +2342,10 @@ TOOLS: list[dict] = [
             "items": {"type": "integer", "minimum": 0},
             "minItems": 1,
             "description": (
-                "Faces to machine, by index from get_object_info. Applied to the "
-                "strategy's own geometry parameter (contours/pockets/"
-                "machiningBoundarySel). Refused for face, which has none."
+                "Faces to machine, by 0-based index in the body's own order "
+                "(enumerate with execute_code body.faces.item(i)). Applied to the "
+                "strategy's geometry parameter (contours/pockets/"
+                "machiningBoundarySel). Refused for any strategy without one."
             ),
         },
     ),

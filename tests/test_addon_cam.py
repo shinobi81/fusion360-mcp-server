@@ -748,9 +748,43 @@ def _contour_operation(strategy: str = "contour2d", parameter_name: str = "conto
 
     def delete_me():
         operation.deleted += 1
+        # Fusion may refuse property reads on a deleted object; modelling that is what
+        # makes "read the strategy *before* deleting" a testable order.
+        operation.strategy = None
+        operation.parameters = None
 
     operation.deleteMe = delete_me
     return operation, value, applied
+
+
+def test_create_operation_refuses_an_unknown_body_before_creating_anything(
+    handler_module,
+):
+    """The body is resolved before `add`, so a wrong name writes nothing.
+
+    This is the path review found leaking: resolution ran inside the selection step,
+    so every body-name refusal left an operation the caller had to discover.
+    """
+    operation, _value, applied = _contour_operation()
+    created = []
+    handler = _creation_handler(handler_module, operation, faces=1, created=created)
+
+    def unknown(_name):
+        raise addon_hints.Refusal("NAME_NOT_FOUND", "Body 'Nope' not found")
+
+    handler._body_by_name = unknown
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            setup_name="Setup1",
+            strategy="contour2d",
+            body_name="Nope",
+            face_indices=[0],
+        )
+
+    assert raised.value.error_kind == "NAME_NOT_FOUND"
+    assert created == []
+    assert applied == {}
 
 
 def _creation_handler(handler_module, operation, faces, created=None):
@@ -797,7 +831,10 @@ def test_create_operation_puts_a_face_selection_on_the_strategy_parameter(
     assert value.selections.cleared == 1
     assert len(value.selections.selectors) == 1
     selection = value.selections.selectors[0]
-    assert [face is not None for face in selection.inputGeometry] == [True, True]
+    faces = handler._body_by_name("Body1").faces
+    assert selection.inputGeometry == [faces.item(2), faces.item(0)], (
+        "the reply names faces in the order the caller gave them"
+    )
     assert applied["selections"] is value.selections
     assert result["geometry"] == {"parameter": "contours", "face_indices": [2, 0]}
 
@@ -847,5 +884,8 @@ def test_create_operation_removes_the_operation_when_no_parameter_is_found(
         )
 
     assert raised.value.error_kind == "FUSION_REFUSED"
+    assert "Strategy 'contour2d'" in str(raised.value), (
+        "the strategy has to be read before the operation is deleted"
+    )
     assert "the operation was removed again" in str(raised.value)
     assert operation.deleted == 1
