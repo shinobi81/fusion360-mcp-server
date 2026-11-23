@@ -389,8 +389,10 @@ class FakeConstructionPlane(FakeDeletable):
 class FakePlanes:
     """The three base construction planes, as ``_construction_plane`` expects.
 
-    The normals are this fixture's claim, not a measurement: Fusion's XY plane
-    runs +Z, and the other two follow the axis their name names.
+    Name and delete only: a sketch placed on one takes the world frame
+    (``tests/fakes/sketch.py``), which is what the three handlers that read them
+    need.  They carried normals until the trim side test was removed, and nothing
+    supplied or read one after that.
     """
 
     def __init__(self):
