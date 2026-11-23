@@ -91,7 +91,7 @@ renamed API call sits unnoticed.
 | --- | --- | --- | --- |
 | `handler_cam` | 17% | 17% | setups, operations, toolpaths, post-processing |
 | `handler_surface` | 22% | 69% | patch, stitch, thicken, ruled, trim, sheet metal |
-| `handler_export` | 23% | 23% | STL/STEP/F3D, view sheets, the generic `export` |
+| `handler_export` | 23% | 23% | view sheets, `render_view` past its refusals, `import_mesh`'s success path, `export`'s `stl` branch |
 | `handler_scene` | 41% | 92% | scene description, measurement, bounding box, object info |
 | `socket_server` | 48% | 100% | framing, malformed input, timeouts, disconnects |
 | `handler_assembly` | 62% | 90% | joints, components, rigid groups |
@@ -206,9 +206,12 @@ and asks the running Fusion whether it exists - 193 references, none missing on
    reached the post-process lines no test could enter. What is left is three things,
    not one: the view sheet, `render_view`'s successful capture (both its tests are
    refusals - no viewport, and `saveAsImageFile` answering false), and `import_mesh`'s
-   success path (its tests are the missing file and the empty mesh). The capture needs
-   a viewport that renders, so that one belongs in a Fusion session; the other two are
-   fake-settleable and are the cheapest coverage left. `handler_cam`'s remainder is no
+   success path (its tests are the missing file and the empty mesh). Which of the three
+   needs Fusion is the reverse of what it looks like: `render_view`'s capture needs only
+   a `saveAsImageFile` that writes bytes - the lines after it are `tempfile`, a read and
+   a base64 encode - while `export_view_sheet` needs `adsk.core.CameraTypes`, which the
+   fake runtime does not declare, plus a camera carrying `eye`/`target`/`upVector`.
+   Only the render itself has to be confirmed in Fusion. `handler_cam`'s remainder is no
    longer that kind at all: an operation is a `SimpleNamespace` with the fields the
    command reads, which is what #141's read-path tests use.
 4. **`create_construction_axis("perpendicular_at_point")`** refuses by design: it

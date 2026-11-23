@@ -123,12 +123,10 @@ def test_a_short_post_name_with_no_local_folder_is_fusion_refused(handler_module
 
 def test_a_missing_post_processor_names_the_path(handler_module):
     """D6: a filesystem path is INVALID_INPUT, and the hints name the path."""
-    handler = handler_module.CommandHandler.__new__(handler_module.CommandHandler)
+    handler = _handler(handler_module)
     with pytest.raises(addon_hints.Refusal) as caught:
         handler._resolve_post("/nope.cps")
     assert caught.value.error_kind == "INVALID_INPUT"
-    assert any(".cps" in hint or "/nope.cps" in hint for hint in caught.value.hints)
-    assert not any("get_scene_info" in hint for hint in caught.value.hints)
     assert str(caught.value) == "Post processor not found: /nope.cps"
     assert caught.value.hints == ("Pass a .cps path that exists on this machine.",)
 
@@ -663,18 +661,31 @@ def test_operation_info_omits_the_fields_the_operation_does_not_carry(handler_mo
         "has_toolpath": False,
     }
 
-    # A tool that is not an object still names itself, and an empty parameter list is
-    # an empty map rather than a missing key.
-    plain = SimpleNamespace(
-        name="Rough1", isValid=False, hasToolpath=False, tool="mm-6-flat", parameters=[]
+    # ``Operation.tool`` is null for an operation with no tool, which the guard must
+    # drop rather than answer ``{"description": "None"}``.
+    tool_less = SimpleNamespace(
+        name="Rough1", isValid=False, hasToolpath=False, tool=None, parameters=[]
     )
     handler = _generating_handler(
-        handler_module, _cam(_setup_with_operations("Setup1", plain))
+        handler_module, _cam(_setup_with_operations("Setup1", tool_less))
     )
 
     info = handler.cam_get_operation_info("Setup1", "Rough1")
-    assert info["tool"] == {"description": "mm-6-flat"}
-    assert info["parameters"] == {}
+    assert "tool" not in info
+    assert info["parameters"] == {}, "an empty list is a map, not a missing key"
+
+    # A tool that is not an object still names itself: ``str()`` is what makes it
+    # serialisable, and a ``str`` tool would pass with or without the conversion.
+    counted = SimpleNamespace(
+        name="Rough1", isValid=False, hasToolpath=False, tool=6, parameters=[]
+    )
+    handler = _generating_handler(
+        handler_module, _cam(_setup_with_operations("Setup1", counted))
+    )
+
+    assert handler.cam_get_operation_info("Setup1", "Rough1")["tool"] == {
+        "description": "6"
+    }
 
 
 def test_the_post_input_fake_refuses_construction_like_fusion_does():
