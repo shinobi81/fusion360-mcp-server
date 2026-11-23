@@ -644,11 +644,12 @@ def test_operation_info_describes_the_one_operation_named(handler_module):
 
 
 def test_operation_info_omits_the_fields_the_operation_does_not_carry(handler_module):
-    """The guards are what let a bare operation be described at all.
+    """The guards' *false* branches are what this test exists for.
 
-    Both ``hasattr`` checks and the ``str(tool)`` fallback were unexecuted: the refusal
-    tests raise before the dict is built, and the positive test's operation carries a
-    tool and parameters.  Deleting either guard would have stayed green.
+    Their true branches run in the positive test; the false ones had no test at all,
+    because the refusal tests raise before the dict is built and the positive test's
+    operation carries a tool and parameters.  Deleting either guard - or the ``str()``
+    conversion - stayed green until these three arms existed.
     """
     bare = _readable_operation("Rough1")
     handler = _generating_handler(
