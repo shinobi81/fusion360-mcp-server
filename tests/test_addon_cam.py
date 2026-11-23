@@ -787,8 +787,13 @@ def test_a_refused_face_selection_removes_the_operation(handler_module):
     assert applied == {}
 
 
-def test_an_add_in_defect_in_the_seam_keeps_its_own_kind(handler_module):
-    """An ``AttributeError`` is our bug, not Fusion refusing: it keeps its kind."""
+def test_an_add_in_defect_in_the_seam_is_an_internal_error(handler_module):
+    """An invented API is our bug: typed ``INTERNAL_ERROR``, not ``UNKNOWN``.
+
+    Re-raising left the caller with ``UNKNOWN`` and an empty hint list - the exact shape
+    #138 removed - and a half-cleared operation in the setup; the generic branch would
+    have blamed the caller's faces.  The operation is removed, as in the sibling branch.
+    """
     operation, value, _applied = _contour_operation()
 
     def invented(_selections):
@@ -797,7 +802,7 @@ def test_an_add_in_defect_in_the_seam_keeps_its_own_kind(handler_module):
     value.applyCurveSelections = invented
     handler = _creation_handler(handler_module, operation, faces=1)
 
-    with pytest.raises(AttributeError) as raised:
+    with pytest.raises(addon_hints.Refusal) as raised:
         handler.cam_create_operation(
             setup_name="Setup1",
             strategy="contour2d",
@@ -805,12 +810,10 @@ def test_an_add_in_defect_in_the_seam_keeps_its_own_kind(handler_module):
             face_indices=[0],
         )
 
-    assert operation.deleted == 0, "an add-in defect is not recovered from by deleting"
-    # What the handler's comment claims, pinned: the defect is *not* turned into a
-    # refusal, so it keeps whatever ``hints`` makes of it - ``UNKNOWN`` today, because
-    # the INTERNAL_ERROR rule is anchored on the adapter's "module ... has no
-    # attribute" wording.
-    assert addon_hints.classify(raised.value) == ("UNKNOWN", [])
+    assert raised.value.error_kind == "INTERNAL_ERROR"
+    assert "does not have" in str(raised.value)
+    assert addon_hints.classify(raised.value)[0] == "INTERNAL_ERROR"
+    assert operation.deleted == 1, "the half-cleared operation is removed"
 
 
 def test_create_operation_refuses_an_unknown_body_before_creating_anything(

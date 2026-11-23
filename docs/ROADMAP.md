@@ -146,7 +146,7 @@ table was the wrong answer, since a table can only read a string:
   properties and 78 minimum/maximum bounds, enforced in `_send` so real and mock mode
   refuse alike before Fusion is touched. Roughly 20 of the 88 needed no new code - the
   constraint was written down and unenforced.
-- **`rules.py`** for what the parameters alone decide: 17 validators, 18 site rows in
+- **`rules.py`** for what the parameters alone decide: 20 validators, 18 site rows in
   `tests/test_rules.py` that compare the handler's refusal with mock mode's envelope
   sentence for sentence and hint for hint.
 - **`Refusal` at the site** for what needs live state - an index against a real face count,
@@ -163,7 +163,7 @@ because a client may already branch on them.
 
 `tests/test_addon_refusals.py` makes it a ratchet rather than a one-off audit. It
 fails on a raise that would reach a caller `UNKNOWN`, on a baseline row that no longer
-matches a site, and on any change to the 26 unjudgeable rows - a computed message, a
+matches a site, and on any change to the 28 unjudgeable rows - a computed message, a
 `Protocol` body, or a kind that comes from a `rules.py` validator call, each with its
 reason written down. That count rose from 7 by design: the validators are what let mock
 mode answer the same sentence, and a kind returned from a function is not readable in the
@@ -264,8 +264,8 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    `setup.operations.count` returned to its previous value.
 8. **Mock's `cam_create_operation` and `cam_create_setup` replies differ from the
    handlers'.** `cam_create_operation`: handler `{name, setup, strategy}` plus
-   `parameters_applied`/`parameters_failed`/`warning` (a live success always carries
-   `parameters_applied`, because `coolant` defaults to `flood`), mock
+   `parameters_applied`/`parameters_failed`/`warning` (a live success carries
+   `parameters_applied` whenever the strategy exposes `tool_coolant`), mock
    `{setup_name, operation_name, strategy}` plus the same `geometry` echo the handler
    returns (`{parameter, face_indices}`).
    `cam_create_setup`: handler `{name, body, operation_type, stock_applied|stock_failed,

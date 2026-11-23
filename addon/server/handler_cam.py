@@ -361,13 +361,23 @@ class CamCommands(_Contract):
             selection = selections.createNewFaceContourSelection()
             selection.inputGeometry = list(faces)
             parameter.value.applyCurveSelections(selections)
-        except AttributeError:
-            # An invented method name is an add-in defect, and the caller must not be
-            # told to check their faces for it.  Left to propagate, it keeps whatever
-            # ``hints`` makes of it (``UNKNOWN`` today: the rule that answers
-            # INTERNAL_ERROR is anchored on the adapter's "module ... has no
-            # attribute" wording) instead of being re-tagged as a Fusion refusal.
-            raise
+        except AttributeError as exc:
+            # An invented method name is an add-in defect.  Left to propagate it would
+            # reach a caller as ``UNKNOWN`` with no hints - the shape #138 removed - and
+            # the generic branch below would blame the caller's faces.  The operation
+            # goes for the same reason as there: the parameter may already be emptied.
+            strategy = op.strategy
+            op.deleteMe()
+            raise _hints.Refusal(
+                "INTERNAL_ERROR",
+                f"Strategy '{strategy}' face selection called an API this Fusion "
+                f"build does not have: {exc}",
+                hints=(
+                    "This is an add-in defect, not an input problem.",
+                    "Run `scripts/check_fusion_api.py` to see which adsk name is "
+                    "missing.",
+                ),
+            ) from exc
         except Exception as exc:
             # The parameter is emptied before the selection is applied, so a refusal
             # here would leave the operation with geometry it no longer has.  Nothing
