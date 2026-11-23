@@ -137,3 +137,33 @@ class FakeCAMProduct:
     def generateToolpath(self, target):
         self.generated.append(target)
         return self.future
+
+
+class FakePostProcessInput:
+    """``adsk.cam.PostProcessInput`` as the 2706 stub declares it.
+
+    The class is marked *retired* in that stub and still shipped, which is why the
+    handler can call it.  ``create`` takes the four positional arguments the stub
+    names - ``programName``, ``postConfiguration``, ``outputFolder``,
+    ``outputUnits`` - and ``isOpenInEditor`` is the writable property the handler
+    sets afterwards.
+    """
+
+    def __init__(
+        self, program_name: str, post_configuration: str, output_folder: str, units
+    ) -> None:
+        self.programName = program_name
+        self.postConfiguration = post_configuration
+        self.outputFolder = output_folder
+        self.outputUnits = units
+        self.isOpenInEditor = True
+
+    @classmethod
+    def create(
+        cls,
+        programName: str,
+        postConfiguration: str,
+        outputFolder: str,
+        outputUnits: object,
+    ) -> FakePostProcessInput:
+        return cls(programName, postConfiguration, outputFolder, outputUnits)

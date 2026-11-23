@@ -510,3 +510,51 @@ def test_operation_only_generation_reaches_generate_toolpath(handler_module):
         "operation": "Rough1",
     }
     assert cam.generated == [operation]
+
+
+def test_post_process_refuses_a_name_held_twice_instead_of_posting_the_first(
+    handler_module, tmp_path
+):
+    """G-code for the wrong operation is worse than a refusal.
+
+    ``_find_operation`` took the first match, so a setup holding two operations of
+    one name posted the first of them and reported success for a call that named
+    neither in particular.
+    """
+    cam = _cam(
+        _setup_with_operations("Setup1", _operation("Rough1"), _operation("Rough1")),
+        generic_post=str(tmp_path),
+    )
+    posted = []
+    cam.postProcess = lambda *args: posted.append(args)
+    handler = _generating_handler(handler_module, cam)
+    handler._resolve_post = lambda _name: str(tmp_path / "fanuc.cps")
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_post_process(
+            "Setup1", operation_name="Rough1", output_folder=str(tmp_path)
+        )
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert str(raised.value) == "Setup 'Setup1' holds 2 operations named 'Rough1'"
+    assert raised.value.hints == (
+        "There is no CAM rename tool; rename all but one with execute_code "
+        "(operation.name = ...) so the name selects it.",
+    )
+    assert posted == []
+
+
+def test_operation_info_refuses_a_name_held_twice_instead_of_describing_the_first(
+    handler_module,
+):
+    """The read has the same ambiguity as the write: describe neither, refuse both."""
+    cam = _cam(
+        _setup_with_operations("Setup1", _operation("Rough1"), _operation("Rough1"))
+    )
+    handler = _generating_handler(handler_module, cam)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_get_operation_info("Setup1", "Rough1")
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert str(raised.value) == "Setup 'Setup1' holds 2 operations named 'Rough1'"
