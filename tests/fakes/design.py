@@ -54,7 +54,6 @@ from .runtime import (
     DIRECT,
     PARAMETRIC,
     FakeMatrix3D,
-    FakePlane,
     FakePoint3D,
     FakeUserCoordinateSystemGeometry,
     FakeValueInput,
@@ -376,29 +375,31 @@ class FakeAxes:
 
 
 class FakeConstructionPlane(FakeDeletable):
-    """A base construction plane: named, deletable, and carrying its geometry.
+    """A base construction plane: named and deletable, with no geometry.
 
-    ``trim_surface`` reads ``geometry`` to decide which side of a plane tool a
-    cell is on, so the plane needs one.  Only a construction plane has geometry -
-    every other deletable in the fakes must not grow one.
+    It carried a ``geometry`` for ``trim_surface``'s side test, which the
+    ``keep_cells`` rewrite removed; nothing reads it now, and a fake that grows a
+    member no handler asks for is a seam nobody checks.
     """
 
-    def __init__(self, name: str, normal: tuple[float, float, float]):
+    def __init__(self, name: str):
         super().__init__(name)
-        self.geometry = FakePlane((0.0, 0.0, 0.0), normal)
 
 
 class FakePlanes:
     """The three base construction planes, as ``_construction_plane`` expects.
 
-    The normals are this fixture's claim, not a measurement: Fusion's XY plane
-    runs +Z, and the other two follow the axis their name names.
+    Name and delete only: a sketch placed on one takes the world frame, which is
+    enough for a handler that only records the supporting plane - a test that needs
+    a real frame builds ``FakeSketch(transform=yz_sketch())``, as
+    ``tests/fakes/sketch.py`` says.  They carried normals until the trim side test
+    was removed, and nothing supplied or read one after that.
     """
 
     def __init__(self):
-        self.xYConstructionPlane = FakeConstructionPlane("XY", (0, 0, 1))
-        self.yZConstructionPlane = FakeConstructionPlane("YZ", (1, 0, 0))
-        self.xZConstructionPlane = FakeConstructionPlane("XZ", (0, 1, 0))
+        self.xYConstructionPlane = FakeConstructionPlane("XY")
+        self.yZConstructionPlane = FakeConstructionPlane("YZ")
+        self.xZConstructionPlane = FakeConstructionPlane("XZ")
 
 
 class FakeRevolveInput:

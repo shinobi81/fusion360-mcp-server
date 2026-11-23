@@ -133,7 +133,7 @@ message, and pushing each message through the real `classify()` gave the before 
 | --- | --- | --- |
 | raises reaching a caller as `UNKNOWN` with no hints | **88** | **0** |
 | typed `Refusal` sites | 11, all in `rules.py` | 74, in 11 modules |
-| raises the walk cannot judge from source | 7 | 22, each pinned with its reason |
+| raises the walk cannot judge from source | 7 | 26, each pinned with its reason |
 
 The suite was green over all 88, and that is the part worth keeping: `classify()` ran
 **11 times** across 1393 tests, and every handler test asserted on the refusal it raised,
@@ -163,7 +163,7 @@ because a client may already branch on them.
 
 `tests/test_addon_refusals.py` makes it a ratchet rather than a one-off audit. It
 fails on a raise that would reach a caller `UNKNOWN`, on a baseline row that no longer
-matches a site, and on any change to the 22 unjudgeable rows - a computed message, a
+matches a site, and on any change to the 26 unjudgeable rows - a computed message, a
 `Protocol` body, or a kind that comes from a `rules.py` validator call, each with its
 reason written down. That count rose from 7 by design: the validators are what let mock
 mode answer the same sentence, and a kind returned from a function is not readable in the
@@ -173,8 +173,8 @@ file that raises it.
 
 Zero invented names remain, and that is now checked rather than hoped for:
 `scripts/check_fusion_api.py` walks every `adsk.<dotted.path>` under `addon/server`
-and asks the running Fusion whether it exists - 193 references, none missing on
-2706.1.17 (#135).
+and asks the running Fusion whether it exists - 190 references, none missing on
+2706.1.17 (#135 and #142, which deleted three).
 
 1. **The 0.9.0 release note is unwritten, and `CHANGELOG.md` cannot tell you.** The file
    opens at `[0.8.5]` because the packaging guard fails an entry written ahead of the

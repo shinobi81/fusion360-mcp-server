@@ -4,7 +4,8 @@
 A fake proves the *shape* of a call.  It cannot prove the name exists: the surface
 family shipped green tests over ``FlangeFeatures.createInput`` and
 ``features.bendFeatures``, neither of which any Fusion build has, and a trim test
-asserted ``PointContainment.InsidePointContainment`` when the member is
+(since deleted with the helpers it covered) asserted
+``PointContainment.InsidePointContainment`` when the member is
 ``PointInsidePointContainment``.  Each of those was a name this repo invented, and each
 was found by reading Fusion rather than by reading the tests.
 
