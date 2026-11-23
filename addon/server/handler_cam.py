@@ -371,11 +371,16 @@ class CamCommands(_Contract):
             raise _hints.Refusal(
                 "INTERNAL_ERROR",
                 f"Strategy '{strategy}' face selection called an API this Fusion "
-                f"build does not have: {exc}",
+                f"build does not have: {exc}. The operation was removed.",
                 hints=(
                     "This is an add-in defect, not an input problem.",
-                    "Run `scripts/check_fusion_api.py` to see which adsk name is "
-                    "missing.",
+                    # `check_fusion_api.py` walks `adsk.<dotted.path>` names only; this
+                    # failure is a method or property miss on an object Fusion returned,
+                    # so the hint names the binding rather than promising the audit sees
+                    # it.  The defect kind's own advice in ``hints.py`` is the same rule
+                    # for the module-shaped case.
+                    "Read the call against the shipped binding; "
+                    "`scripts/check_fusion_api.py` covers `adsk.<name>`, not methods.",
                 ),
             ) from exc
         except Exception as exc:
@@ -387,7 +392,8 @@ class CamCommands(_Contract):
             op.deleteMe()
             raise _hints.Refusal(
                 "FUSION_REFUSED",
-                f"Fusion refused the face selection for strategy '{strategy}': {exc}",
+                f"Fusion refused the face selection for strategy '{strategy}': "
+                f"{exc}. The operation was removed.",
                 hints=("Check the faces belong to the setup's model, then retry.",),
             ) from exc
         return parameter.name

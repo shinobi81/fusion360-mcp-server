@@ -812,6 +812,12 @@ def test_an_add_in_defect_in_the_seam_is_an_internal_error(handler_module):
 
     assert raised.value.error_kind == "INTERNAL_ERROR"
     assert "does not have" in str(raised.value)
+    assert "The operation was removed" in str(raised.value)
+    assert raised.value.hints == (
+        "This is an add-in defect, not an input problem.",
+        "Read the call against the shipped binding; "
+        "`scripts/check_fusion_api.py` covers `adsk.<name>`, not methods.",
+    )
     assert addon_hints.classify(raised.value)[0] == "INTERNAL_ERROR"
     assert operation.deleted == 1, "the half-cleared operation is removed"
 
