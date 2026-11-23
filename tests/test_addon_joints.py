@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import pytest
 
+from addon.server import rules
 from fusion360_mcp.tools import TOOLS
 from tests.fakes.bodies import FakeBody, FakeFace
 from tests.fakes.collection import FakeCollection
@@ -111,7 +112,13 @@ def test_the_world_axis_table_covers_the_joint_axes(handler_class):
 
 
 def test_direction_and_quadrant_enums_match_the_schema(handler_class):
-    """Schema enums must mirror the add-in's lookup tables."""
+    """One vocabulary per selector, in three places: schema, validator, lookup table.
+
+    ``rules.joint_selector_refusal`` refuses a value outside its sets *before* the
+    handler indexes a table with it, so sets that drifted from their tables would turn
+    a typed refusal back into a ``KeyError`` - and ``joint_type`` reaches
+    ``_JOINT_MOTION_SETTERS`` by the same path.
+    """
     props = _schema()["properties"]
 
     axes = set(handler_class._JOINT_AXES)
@@ -119,10 +126,13 @@ def test_direction_and_quadrant_enums_match_the_schema(handler_class):
     assert set(props["second_axis"]["enum"]) == axes
 
     quadrants = set(handler_class._JOINT_QUADRANTS)
-    assert set(props["quadrant"]["enum"]) == quadrants
+    assert set(props["quadrant"]["enum"]) == quadrants == set(rules.JOINT_QUADRANTS)
 
     key_points = set(handler_class._JOINT_KEY_POINTS)
-    assert set(props["key_point"]["enum"]) == key_points
+    assert set(props["key_point"]["enum"]) == key_points == set(rules.JOINT_KEY_POINTS)
+
+    assert set(props["joint_type"]["enum"]) == set(rules.JOINT_TYPES)
+    assert set(handler_class._JOINT_MOTION_SETTERS) == set(rules.JOINT_TYPES)
 
 
 def test_the_reversed_direction_arguments_are_the_two_measured_types(handler_class):

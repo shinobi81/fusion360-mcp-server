@@ -7,9 +7,16 @@ JSON Schema that the MCP SDK validates before forwarding arguments.
 
 import mcp.types as types
 
-# The add-in's validator owns the accepted edge selectors, so the schema advertises its
-# set instead of restating it: a fifth value cannot land in one place only.
-from ._rules import EDGE_SELECTIONS
+# The add-in's validator owns the accepted vocabularies, so the schema advertises its
+# sets instead of restating them: a new value cannot land in one place only.  The
+# joint selectors are read by ``tools.py`` twice each (both joint tools), so a local
+# copy would be a fourth place to drift.
+from ._rules import (
+    EDGE_SELECTIONS,
+    JOINT_KEY_POINTS,
+    JOINT_QUADRANTS,
+    JOINT_TYPES,
+)
 
 # Sketch curves are planar: Fusion interprets their points in the sketch's own
 # frame, so a z here adds to the plane's offset instead of replacing it.
@@ -88,15 +95,7 @@ _EDGE_SELECTOR = {
 # the annotations pass below writes only on the tool dict itself.
 _JOINT_TYPE = {
     "type": "string",
-    "enum": [
-        "rigid",
-        "revolute",
-        "slider",
-        "cylindrical",
-        "pin_slot",
-        "planar",
-        "ball",
-    ],
+    "enum": list(JOINT_TYPES),
     "default": "rigid",
 }
 
@@ -109,7 +108,7 @@ _JOINT_TYPE_REQUIRED = {
 
 _JOINT_KEY_POINT = {
     "type": "string",
-    "enum": ["start", "middle", "center", "end"],
+    "enum": list(JOINT_KEY_POINTS),
     "default": "end",
     "description": (
         "Axial position of the joint origin on a cylindrical face. "
@@ -121,7 +120,7 @@ _JOINT_KEY_POINT = {
 
 _AS_BUILT_KEY_POINT = {
     "type": "string",
-    "enum": ["start", "middle", "center", "end"],
+    "enum": list(JOINT_KEY_POINTS),
     "default": "end",
     "description": ("Axial position of the joint origin on a cylindrical face."),
 }
@@ -184,7 +183,7 @@ def _joint_properties(key_point: dict, joint_type: dict = _JOINT_TYPE) -> dict:
         },
         "quadrant": {
             "type": "string",
-            "enum": ["start", "quarter", "middle", "third_quarter"],
+            "enum": list(JOINT_QUADRANTS),
             "default": "middle",
             "description": (
                 "Angular position of the joint origin on a cylindrical face."

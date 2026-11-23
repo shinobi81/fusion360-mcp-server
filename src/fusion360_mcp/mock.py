@@ -27,6 +27,7 @@ from ._rules import (
     export_body_refusal,
     export_target_refusal,
     joint_geometry_refusal,
+    joint_selector_refusal,
     keep_cells_refusal,
     perpendicular_axis_refusal,
     point3d_refusal,
@@ -617,7 +618,13 @@ def _create_component(p: dict) -> dict:
 
 
 def _add_joint(p: dict) -> dict:
-    refusal = components_differ_refusal(p) or joint_geometry_refusal(p)
+    # The order is the handler's: the selector refusal is raised before anything reads
+    # the design, so a call with two faults earns the same sentence on both sides.
+    refusal = (
+        joint_selector_refusal(p)
+        or components_differ_refusal(p)
+        or joint_geometry_refusal(p)
+    )
     if refusal is not None:
         return _refusal_error(refusal)
     return {
@@ -1181,7 +1188,12 @@ def _create_torus(p: dict) -> dict:
 
 
 def _create_as_built_joint(p: dict) -> dict:
-    refusal = components_differ_refusal(p) or as_built_geometry_refusal(p)
+    # Order matches the handler's, as above.
+    refusal = (
+        joint_selector_refusal(p)
+        or components_differ_refusal(p)
+        or as_built_geometry_refusal(p)
+    )
     if refusal is not None:
         return _refusal_error(refusal)
     return {

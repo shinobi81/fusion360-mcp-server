@@ -33,6 +33,50 @@ EDGE_SELECTIONS = ("all", "top", "bottom", "vertical")
 #: tuple, so the gate and the validator refuse one set, not two.
 EXPORT_FORMATS = ("stl", "step", "stp", "f3d")
 
+#: The joint types both joint tools accept: ``add_joint`` defaults an omitted one to
+#: ``rigid``, ``create_as_built_joint`` requires it.  ``tools.py`` advertises this tuple
+#: as the schema enum, and ``tests/test_addon_joints.py`` pins this tuple, that enum and
+#: the handler's own ``_JOINT_MOTION_SETTERS`` to each other - so the gate and this
+#: validator refuse one set, not one each.
+JOINT_TYPES = (
+    "rigid",
+    "revolute",
+    "slider",
+    "cylindrical",
+    "pin_slot",
+    "planar",
+    "ball",
+)
+
+#: The angular positions a joint origin takes on a cylindrical face.
+JOINT_QUADRANTS = ("start", "quarter", "middle", "third_quarter")
+
+#: The axial positions a joint origin takes on a cylindrical face.
+JOINT_KEY_POINTS = ("start", "middle", "center", "end")
+
+
+def joint_selector_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal an unknown joint type, quadrant or key point earns, or None.
+
+    The schema's enum is advisory: a socket caller is not the schema, so an unknown
+    value reaches the handler - and both joint commands index a table with it, which
+    used to raise a bare ``KeyError`` classified as ``UNKNOWN``.  ``joint_type`` reached
+    ``_JOINT_MOTION_SETTERS`` the same way.  Judged from the parameters alone, so mock
+    mode refuses it too, and so a caller learns the accepted set without a design.
+    """
+    for name, accepted, default in (
+        ("joint_type", JOINT_TYPES, "rigid"),
+        ("quadrant", JOINT_QUADRANTS, "middle"),
+        ("key_point", JOINT_KEY_POINTS, "end"),
+    ):
+        value = params.get(name, default)
+        if value not in accepted:
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"Unknown {name} {value!r} - use one of: {', '.join(accepted)}",
+            )
+    return None
+
 
 def edge_selector_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal an edge selector's parameters earn, or None when they are usable.
