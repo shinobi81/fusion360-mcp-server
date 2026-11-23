@@ -17,6 +17,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from addon.server import fusion_api as adsk
 from addon.server import hints as addon_hints
 from tests.fakes.cam import (
     FakeCAMProduct,
@@ -28,6 +29,7 @@ from tests.fakes.cam import (
     FakeNoFlagFuture,
     FakeNotStartedCounterFuture,
     FakeNotStartedFuture,
+    FakePostProcessInput,
 )
 
 
@@ -121,12 +123,10 @@ def test_a_short_post_name_with_no_local_folder_is_fusion_refused(handler_module
 
 def test_a_missing_post_processor_names_the_path(handler_module):
     """D6: a filesystem path is INVALID_INPUT, and the hints name the path."""
-    handler = handler_module.CommandHandler.__new__(handler_module.CommandHandler)
+    handler = _handler(handler_module)
     with pytest.raises(addon_hints.Refusal) as caught:
         handler._resolve_post("/nope.cps")
     assert caught.value.error_kind == "INVALID_INPUT"
-    assert any(".cps" in hint or "/nope.cps" in hint for hint in caught.value.hints)
-    assert not any("get_scene_info" in hint for hint in caught.value.hints)
     assert str(caught.value) == "Post processor not found: /nope.cps"
     assert caught.value.hints == ("Pass a .cps path that exists on this machine.",)
 
@@ -145,6 +145,16 @@ def test_a_post_that_exists_is_returned_as_given_or_resolved(handler_module, tmp
 
 def _operation(name: str) -> SimpleNamespace:
     return SimpleNamespace(name=name)
+
+
+def _readable_operation(name: str) -> SimpleNamespace:
+    """The shape ``cam_get_operation_info`` reads, so a regression fails legibly.
+
+    With only ``name`` the old first-match scan would die on ``op.isValid`` - an
+    ``AttributeError`` that names a missing attribute instead of the ambiguity the
+    test is about.
+    """
+    return SimpleNamespace(name=name, isValid=True, hasToolpath=False)
 
 
 def _setup_with_operations(name: str, *operations) -> SimpleNamespace:
@@ -510,3 +520,181 @@ def test_operation_only_generation_reaches_generate_toolpath(handler_module):
         "operation": "Rough1",
     }
     assert cam.generated == [operation]
+
+
+def test_post_process_refuses_a_name_held_twice_instead_of_posting_the_first(
+    handler_module, tmp_path
+):
+    """G-code for the wrong operation is worse than a refusal.
+
+    ``_find_operation`` took the first match, so a setup holding two operations of
+    one name posted the first of them and reported success for a call that named
+    neither in particular.
+    """
+    cam = _cam(
+        _setup_with_operations("Setup1", _operation("Rough1"), _operation("Rough1")),
+        generic_post=str(tmp_path),
+    )
+    posted = []
+    cam.postProcess = lambda *args: posted.append(args)
+    handler = _generating_handler(handler_module, cam)
+    handler._resolve_post = lambda _name: str(tmp_path / "fanuc.cps")
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_post_process(
+            "Setup1", operation_name="Rough1", output_folder=str(tmp_path)
+        )
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert str(raised.value) == "Setup 'Setup1' holds 2 operations named 'Rough1'"
+    assert raised.value.hints == (
+        "There is no CAM rename tool; rename all but one with execute_code "
+        "(operation.name = ...) so the name selects it.",
+    )
+    assert posted == []
+
+
+def test_operation_info_refuses_a_name_held_twice_instead_of_describing_the_first(
+    handler_module,
+):
+    """The read has the same ambiguity as the write: describe neither, refuse both."""
+    cam = _cam(
+        _setup_with_operations(
+            "Setup1", _readable_operation("Rough1"), _readable_operation("Rough1")
+        )
+    )
+    handler = _generating_handler(handler_module, cam)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_get_operation_info("Setup1", "Rough1")
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert str(raised.value) == "Setup 'Setup1' holds 2 operations named 'Rough1'"
+    assert raised.value.hints == (
+        "There is no CAM rename tool; rename all but one with execute_code "
+        "(operation.name = ...) so the name selects it.",
+    )
+
+
+def test_post_process_hands_the_post_input_the_four_arguments_it_recorded(
+    handler_module, tmp_path
+):
+    """The fake stores the fields so a reordered call is caught, not waved through.
+
+    ``PostProcessInput.create`` takes ``programName``, ``postConfiguration``,
+    ``outputFolder`` and ``outputUnits`` in that order; a fake that accepts four
+    values of any kind proves the arity and nothing about the order.
+    """
+    operation = _operation("Rough1")
+    cam = _cam(_setup_with_operations("Setup1", operation), generic_post=str(tmp_path))
+    posted = []
+    cam.postProcess = lambda *args: posted.append(args)
+    handler = _generating_handler(handler_module, cam)
+    handler._resolve_post = lambda _name: str(tmp_path / "fanuc.cps")
+
+    handler.cam_post_process(
+        "Setup1", operation_name="Rough1", output_folder=str(tmp_path)
+    )
+
+    assert len(posted) == 1
+    posted_operation, post_input = posted[0]
+    assert posted_operation is operation
+    assert post_input.programName == "Setup1"
+    assert post_input.postConfiguration == str(tmp_path / "fanuc.cps")
+    assert post_input.outputFolder == str(tmp_path)
+    assert post_input.isOpenInEditor is False
+    # ``2`` is what Fusion 2706.1.17 answers for ``MillimetersOutput``.  The fake's
+    # members are plain ints, so these two assertions pass for a bare ``2`` as well as
+    # for the member - they pin the value, not the identity.
+    assert post_input.outputUnits == adsk.cam.PostOutputUnitOptions.MillimetersOutput
+    assert post_input.outputUnits == 2
+
+
+def test_operation_info_describes_the_one_operation_named(handler_module):
+    """The read path has only ever been exercised on its refusal.
+
+    ``_readable_operation`` exists so a regression fails legibly; this is the test that
+    makes it describe something, and the cheapest coverage ``handler_cam`` has left.
+    """
+    operation = SimpleNamespace(
+        name="Rough1",
+        isValid=True,
+        hasToolpath=True,
+        tool=SimpleNamespace(description="6mm flat end mill"),
+        parameters=[
+            SimpleNamespace(name="stepdown", expression="2 mm"),
+            SimpleNamespace(name="tool_feedCutting", expression="600 mm/min"),
+        ],
+    )
+    cam = _cam(_setup_with_operations("Setup1", operation))
+    handler = _generating_handler(handler_module, cam)
+
+    info = handler.cam_get_operation_info("Setup1", "Rough1")
+
+    assert info == {
+        "name": "Rough1",
+        "is_valid": True,
+        "has_toolpath": True,
+        "tool": {"description": "6mm flat end mill"},
+        "parameters": {
+            "stepdown": "2 mm",
+            "tool_feedCutting": "600 mm/min",
+        },
+    }
+
+
+def test_operation_info_omits_the_fields_the_operation_does_not_carry(handler_module):
+    """The guards' *false* branches are what this test exists for.
+
+    Their true branches run in the positive test; the false ones had no test at all,
+    because the refusal tests raise before the dict is built and the positive test's
+    operation carries a tool and parameters.  Deleting either guard - or the ``str()``
+    conversion - stayed green until these three arms existed.
+    """
+    bare = _readable_operation("Rough1")
+    handler = _generating_handler(
+        handler_module, _cam(_setup_with_operations("Setup1", bare))
+    )
+
+    assert handler.cam_get_operation_info("Setup1", "Rough1") == {
+        "name": "Rough1",
+        "is_valid": True,
+        "has_toolpath": False,
+    }
+
+    # ``Operation.tool`` is null for an operation with no tool, which the guard must
+    # drop rather than answer ``{"description": "None"}``.
+    tool_less = SimpleNamespace(
+        name="Rough1", isValid=False, hasToolpath=False, tool=None, parameters=[]
+    )
+    handler = _generating_handler(
+        handler_module, _cam(_setup_with_operations("Setup1", tool_less))
+    )
+
+    info = handler.cam_get_operation_info("Setup1", "Rough1")
+    assert "tool" not in info
+    assert info["parameters"] == {}, "an empty list is a map, not a missing key"
+
+    # A tool that is not an object still names itself: ``str()`` is what makes it
+    # serialisable, and a ``str`` tool would pass with or without the conversion.
+    counted = SimpleNamespace(
+        name="Rough1", isValid=False, hasToolpath=False, tool=6, parameters=[]
+    )
+    handler = _generating_handler(
+        handler_module, _cam(_setup_with_operations("Setup1", counted))
+    )
+
+    assert handler.cam_get_operation_info("Setup1", "Rough1")["tool"] == {
+        "description": "6"
+    }
+
+
+def test_the_post_input_fake_refuses_construction_like_fusion_does():
+    """The fake's guard is the only thing standing between a handler edit and Fusion.
+
+    Fusion's ``PostProcessInput`` has no constructor - ``create`` is the sole way
+    in - so the fake must refuse the same call.  Without this test, deleting the raise
+    would let a ``PostProcessInput(a, b, c, d)`` regression pass and die live.
+    """
+    with pytest.raises(AttributeError, match="No constructor defined"):
+        FakePostProcessInput("Setup1", "fanuc.cps", "/tmp", 2)

@@ -581,7 +581,19 @@ def install() -> None:
         MeshUnits=_mesh_units(),
         TemporaryBRepManager=_primitives().FakeTemporaryBRepManager,
     )
-    cam = module("adsk.cam")
+    cam_fakes = importlib.import_module("tests.fakes.cam")
+    cam = module(
+        "adsk.cam",
+        PostProcessInput=cam_fakes.FakePostProcessInput,
+        # ``PostOutputUnitOptions``: the three members are 0/1/2, read from Fusion
+        # 2706.1.17 rather than guessed - the handler picks one by identity, so a
+        # wrong number would pass and say nothing.
+        PostOutputUnitOptions=types.SimpleNamespace(
+            DocumentUnitsOutput=0,
+            InchesOutput=1,
+            MillimetersOutput=2,
+        ),
+    )
 
     from addon.server import fusion_api
 

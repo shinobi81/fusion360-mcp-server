@@ -30,6 +30,27 @@ _OPERATION_LIST_HINT = (
     "real names."
 )
 
+#: The advice a name the design holds twice earns.  Three commands resolve an operation
+#: by name now, and one sentence for all three is what keeps their answers identical.
+_AMBIGUOUS_OPERATION_HINT = (
+    "There is no CAM rename tool; rename all but one with execute_code "
+    "(operation.name = ...) so the name selects it."
+)
+
+
+def _ambiguous_operation_refusal(setup, name: str, count: int) -> "_hints.Refusal":
+    """The refusal a name held *count* times in *setup* earns.
+
+    A function rather than a literal at each site: ``cam_generate_toolpath``
+    refuses this shape before it generates, and ``_find_operation`` refuses it for
+    the commands that only read or post - one sentence, so the three agree.
+    """
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        f"Setup '{setup.name}' holds {count} operations named '{name}'",
+        hints=(_AMBIGUOUS_OPERATION_HINT,),
+    )
+
 
 def _and_list(names: list[str]) -> str:
     """``'A'``, ``'A' and 'B'``, ``'A', 'B' and 'C'`` for a hint's prose.
@@ -97,11 +118,19 @@ class CamCommands(_Contract):
         raise RuntimeError(f"Setup '{name}' not found")
 
     def _find_operation(self, setup, name: str):
-        for i in range(setup.operations.count):
-            op = setup.operations.item(i)
-            if op.name == name:
-                return op
-        raise RuntimeError(f"Operation '{name}' not found in setup '{setup.name}'")
+        """The one operation in *setup* named *name*.
+
+        A name the setup holds twice is refused rather than resolved: the first-match
+        scan this replaces posted the first of two from ``cam_post_process`` - writing
+        G-code for an operation the caller had not named - and described the first of
+        two from ``cam_get_operation_info``.
+        """
+        named = self._setup_operations_named(setup, name)
+        if not named:
+            raise RuntimeError(f"Operation '{name}' not found in setup '{setup.name}'")
+        if len(named) > 1:
+            raise _ambiguous_operation_refusal(setup, name, len(named))
+        return named[0]
 
     def _setup_operations_named(self, setup, name: str):
         """Every operation in *setup* named *name*, in the tree's order."""
@@ -456,14 +485,8 @@ class CamCommands(_Contract):
                     hints=(_OPERATION_LIST_HINT,),
                 )
             if len(named) > 1:
-                raise _hints.Refusal(
-                    "INVALID_INPUT",
-                    f"Setup '{setup.name}' holds {len(named)} operations named "
-                    f"'{operation_name}'",
-                    hints=(
-                        "There is no CAM rename tool; rename all but one with "
-                        "execute_code (operation.name = ...) so the name selects it.",
-                    ),
+                raise _ambiguous_operation_refusal(
+                    setup, operation_name, len(named)
                 )
             future = cam.generateToolpath(named[0])
             self._wait_future(future)

@@ -137,3 +137,37 @@ class FakeCAMProduct:
     def generateToolpath(self, target):
         self.generated.append(target)
         return self.future
+
+
+class FakePostProcessInput:
+    """``adsk.cam.PostProcessInput`` as the 2706 stub declares it.
+
+    The class is marked *retired* in that stub and still shipped, which is why the
+    handler can call it.  ``create`` takes the four positional arguments the stub
+    names - ``programName``, ``postConfiguration``, ``outputFolder``,
+    ``outputUnits`` - and ``isOpenInEditor`` is the writable property the handler
+    sets afterwards.
+    """
+
+    def __init__(self, *args, **kwargs):
+        # The shipped class refuses direct construction the same way
+        # (``AttributeError("No constructor defined")``): only ``create`` builds one, so
+        # a handler that swapped ``create(a, b, c, d)`` for ``PostProcessInput(a, b, c,
+        # d)`` must fail here rather than pass a fake Fusion would not.
+        raise AttributeError("No constructor defined")
+
+    @classmethod
+    def create(
+        cls,
+        programName: str,
+        postConfiguration: str,
+        outputFolder: str,
+        outputUnits: object,
+    ) -> FakePostProcessInput:
+        instance = cls.__new__(cls)
+        instance.programName = programName
+        instance.postConfiguration = postConfiguration
+        instance.outputFolder = outputFolder
+        instance.outputUnits = outputUnits
+        instance.isOpenInEditor = True
+        return instance

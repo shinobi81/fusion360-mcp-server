@@ -32,8 +32,11 @@ recorded there. The floor is **two gates**, because one number cannot hold two v
 different populations:
 
 - **59** for the whole suite, which now measures `src/fusion360_mcp` **and**
-  `addon/server`. The add-in's CAM, view-sheet export and viewport-render paths only
-  run inside Fusion, and they account for almost all of the uncovered statements.
+  `addon/server`. The add-in's CAM paths, and the render a view sheet or a viewport
+  capture performs, only run inside Fusion; the decode around a capture (tempfile, read,
+  base64) is fake-settleable, and the view sheet additionally needs `adsk.core.CameraTypes`,
+  which the fake runtime does not declare. Together they account for almost all of the
+  uncovered statements.
   (Body STL/STEP and f3d export *are* covered offline, by
   `tests/test_addon_export.py`, against a fake export manager.)
 - **95** for the server alone, enforced separately in CI:
