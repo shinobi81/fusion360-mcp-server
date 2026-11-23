@@ -133,7 +133,7 @@ message, and pushing each message through the real `classify()` gave the before 
 | --- | --- | --- |
 | raises reaching a caller as `UNKNOWN` with no hints | **88** | **0** |
 | typed `Refusal` sites | 11, all in `rules.py` | 74, in 11 modules |
-| raises the walk cannot judge from source | 7 | 22, each pinned with its reason |
+| raises the walk cannot judge from source | 7 | 26, each pinned with its reason |
 
 The suite was green over all 88, and that is the part worth keeping: `classify()` ran
 **11 times** across 1393 tests, and every handler test asserted on the refusal it raised,

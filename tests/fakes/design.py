@@ -389,10 +389,11 @@ class FakeConstructionPlane(FakeDeletable):
 class FakePlanes:
     """The three base construction planes, as ``_construction_plane`` expects.
 
-    Name and delete only: a sketch placed on one takes the world frame
-    (``tests/fakes/sketch.py``), which is what the three handlers that read them
-    need.  They carried normals until the trim side test was removed, and nothing
-    supplied or read one after that.
+    Name and delete only: a sketch placed on one takes the world frame, which is
+    enough for a handler that only records the supporting plane - a test that needs
+    a real frame builds ``FakeSketch(transform=yz_sketch())``, as
+    ``tests/fakes/sketch.py`` says.  They carried normals until the trim side test
+    was removed, and nothing supplied or read one after that.
     """
 
     def __init__(self):
