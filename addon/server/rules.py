@@ -62,12 +62,20 @@ JOINT_KEY_POINTS = ("start", "middle", "center", "end")
 
 
 #: The CAM strategies ``cam_create_operation`` advertises, in Fusion's own spelling.
-#: Measured on 2706.1.17 against ``setup.operations.compatibleStrategies``: the six
-#: names this tool used to carry (``2d_contour``, ``2d_pocket``, ``2d_adaptive``,
-#: ``3d_adaptive``, ``3d_pocket`` among them) were refused by Fusion itself with
-#: ``3 : Unknown strategy``.  ``tools.py`` advertises this tuple as the schema enum.
+#: Measured on 2706.1.17 against ``setup.operations.compatibleStrategies`` (56 names).
+#: Of the **fifteen** names this schema used to carry, **five** were Fusion's own -
+#: ``face``, ``bore``, ``slot``, ``trace``, ``engrave`` - and ten were invented
+#: (``2d_contour``, ``2d_pocket``, ``2d_adaptive``, ``3d_adaptive``, ``3d_pocket``,
+#: ``3d_contour``, ``3d_scallop``, ``3d_parallel``, ``drilling``, ``thread_milling``),
+#: which Fusion refused with ``3 : Unknown strategy``.  The five 2D/3D names here are
+#: the ones this tool now drives geometry for; a caller that needs one of the other 46
+#: can name it through ``execute_code``, and the refusal says so.
 CAM_STRATEGIES = (
     "face",
+    "bore",
+    "slot",
+    "trace",
+    "engrave",
     "contour2d",
     "pocket2d",
     "adaptive2d",
@@ -75,18 +83,20 @@ CAM_STRATEGIES = (
     "pocket_clearing",
 )
 
-#: The strategies that expose a machining-geometry parameter, measured one operation at
-#: a time on 2706.1.17: ``contour2d`` carries ``contours``, ``pocket2d`` and
-#: ``adaptive2d`` carry ``pockets``, ``adaptive`` and ``pocket_clearing`` carry
-#: ``machiningBoundarySel``.  ``face`` carries none - only the stock boundary - so a
-#: face selection cannot be given to it.
-CAM_GEOMETRY_STRATEGIES = (
-    "contour2d",
-    "pocket2d",
-    "adaptive2d",
-    "adaptive",
-    "pocket_clearing",
-)
+#: The geometry parameter each strategy exposes, measured one operation at a time on
+#: 2706.1.17.  ``face`` has none - only the stock boundary - so a face selection cannot
+#: be given to it.  The handler discovers the same parameter at run time (only Fusion
+#: knows its name); this map is what mock mode answers from.
+CAM_GEOMETRY_PARAMETERS = {
+    "contour2d": "contours",
+    "pocket2d": "pockets",
+    "adaptive2d": "pockets",
+    "adaptive": "machiningBoundarySel",
+    "pocket_clearing": "machiningBoundarySel",
+}
+
+#: The strategies ``face_indices`` can be given to: the map's keys, in one place.
+CAM_GEOMETRY_STRATEGIES = tuple(CAM_GEOMETRY_PARAMETERS)
 
 
 def cam_strategy_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
@@ -103,27 +113,63 @@ def cam_strategy_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     return _hints.Refusal(
         "INVALID_INPUT",
         f"Unknown strategy {strategy!r} - use one of: {', '.join(CAM_STRATEGIES)}",
+        hints=(
+            "Fusion names 56 strategies; for one outside this set, create the "
+            "operation through execute_code.",
+        ),
     )
 
 
 def cam_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
-    """The refusal a face selection on a strategy without one earns, or None.
+    """The refusal a face selection earns when it cannot be applied, or None.
 
-    ``face_indices`` names faces to machine.  A strategy's geometry parameter is the
-    one thing measured per strategy, and ``face`` has none, so a selection there would
-    create an operation that cannot be given geometry at all.
+    Judged on the parameters alone, in the order a caller gets wrong first: the list's
+    shape (a socket caller can send anything), then the pairing, then the strategy.
+    ``body_name`` without ``face_indices`` is refused too - silently ignoring a name
+    the caller supplied is the shape this repo keeps out of the wire.
     """
     faces = params.get("face_indices")
-    if faces is None:
-        return None
+    body_name = params.get("body_name")
     strategy = params.get("strategy")
-    if strategy in CAM_GEOMETRY_STRATEGIES:
+
+    if faces is None:
+        if body_name is not None:
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                "body_name names the body face_indices select from - pass face_indices "
+                "too, or omit body_name",
+            )
         return None
-    return _hints.Refusal(
-        "INVALID_INPUT",
-        f"Strategy {strategy!r} takes no geometry selection - use face_indices with "
-        f"one of: {', '.join(CAM_GEOMETRY_STRATEGIES)}",
-    )
+    if not isinstance(faces, list):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"face_indices must be a list of face indices, not {type(faces).__name__}",
+        )
+    if not faces:
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            "face_indices is empty - name at least one face, or omit it",
+        )
+    for index in faces:
+        if isinstance(index, bool) or not isinstance(index, int):
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"Face index {index!r} is not a whole number - indices come from "
+                "get_object_info (0-based, in order)",
+            )
+    if strategy not in CAM_GEOMETRY_PARAMETERS:
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"Strategy {strategy!r} takes no geometry selection - use face_indices "
+            f"with one of: {', '.join(CAM_GEOMETRY_STRATEGIES)}",
+        )
+    if body_name is None:
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"face_indices needs body_name: face indices are per body, and "
+            f"'{strategy}' has none of its own",
+        )
+    return None
 
 
 def joint_selector_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:

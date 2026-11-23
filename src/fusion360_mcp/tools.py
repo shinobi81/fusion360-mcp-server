@@ -2276,10 +2276,11 @@ TOOLS: list[dict] = [
             "type": "string",
             "enum": list(CAM_STRATEGIES),
             "description": (
-                "Machining strategy, in Fusion's own spelling (measured against "
-                "Operations.compatibleStrategies on 2706.1.17). The fifteen names "
-                "this schema used to carry were refused by Fusion as "
-                "'Unknown strategy'."
+                "Machining strategy, in Fusion's own spelling. Measured against "
+                "Operations.compatibleStrategies on 2706.1.17: of the fifteen names "
+                "this schema carried, five were Fusion's (kept here) and ten were "
+                "invented and refused as 'Unknown strategy'; the five 2D/3D names "
+                "added here are the ones measured to expose a geometry parameter."
             ),
         },
         name={

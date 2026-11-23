@@ -737,7 +737,10 @@ def _contour_operation(strategy: str = "contour2d", parameter_name: str = "conto
         name=None,
         strategy=strategy,
         parameters=[
-            SimpleNamespace(name="stockContours", value=object()),
+            # A *second* CAD-contour value, so the ``stockContours`` name check is the
+            # only thing that can skip it - a value without the method would let a
+            # deleted name check stay green.
+            SimpleNamespace(name="stockContours", value=_Value()),
             SimpleNamespace(name=parameter_name, value=value),
         ],
         deleted=0,
@@ -750,13 +753,19 @@ def _contour_operation(strategy: str = "contour2d", parameter_name: str = "conto
     return operation, value, applied
 
 
-def _creation_handler(handler_module, operation, faces):
+def _creation_handler(handler_module, operation, faces, created=None):
+    added: list = [] if created is None else created
+
+    def add(op_input):
+        added.append(op_input)
+        return operation
+
     setup = SimpleNamespace(
         name="Setup1",
         operations=SimpleNamespace(
             count=0,
             createInput=lambda _strategy: SimpleNamespace(name=None),
-            add=lambda _input: operation,
+            add=add,
         ),
     )
     handler = _generating_handler(handler_module, _cam(setup))
@@ -794,9 +803,15 @@ def test_create_operation_puts_a_face_selection_on_the_strategy_parameter(
 
 
 def test_create_operation_refuses_a_face_index_the_body_does_not_have(handler_module):
-    """An index is judged against the body, and the half-built operation is removed."""
+    """An index is judged against the body *before* the operation exists.
+
+    Resolving the body and checking the range inside the selection step left a created
+    operation behind on every body-name refusal - the caller retried and the setup held
+    two.  Both checks now run first, so nothing is written and nothing needs removing.
+    """
     operation, _value, applied = _contour_operation()
-    handler = _creation_handler(handler_module, operation, faces=2)
+    created = []
+    handler = _creation_handler(handler_module, operation, faces=2, created=created)
 
     with pytest.raises(addon_hints.Refusal) as raised:
         handler.cam_create_operation(
@@ -808,8 +823,29 @@ def test_create_operation_refuses_a_face_index_the_body_does_not_have(handler_mo
 
     assert raised.value.error_kind == "INVALID_INPUT"
     assert str(raised.value) == (
-        "Face index 7 is out of range for body 'Body1' (2 faces). "
-        "The operation was removed."
+        "Face index 7 is out of range for body 'Body1' (2 faces)"
     )
-    assert operation.deleted == 1
+    assert created == [], "the operation was never added"
+    assert operation.deleted == 0
     assert applied == {}, "nothing was applied to the parameter"
+
+
+def test_create_operation_removes_the_operation_when_no_parameter_is_found(
+    handler_module,
+):
+    """The discovery step is a defence: if the measurement moves, nothing is left."""
+    operation, _value, _applied = _contour_operation()
+    operation.parameters = [SimpleNamespace(name="stockContours", value=object())]
+    handler = _creation_handler(handler_module, operation, faces=1)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            setup_name="Setup1",
+            strategy="contour2d",
+            body_name="Body1",
+            face_indices=[0],
+        )
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert "the operation was removed again" in str(raised.value)
+    assert operation.deleted == 1

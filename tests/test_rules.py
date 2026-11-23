@@ -686,6 +686,40 @@ def test_face_indices_on_a_strategy_without_a_geometry_parameter_is_refused(
     assert refused["error_message"] == str(raised.value)
 
 
+#: Shapes a socket caller can send that must earn a sentence, not a ``TypeError``.
+BAD_FACE_SELECTIONS = [
+    {"strategy": "face", "body_name": "Body1", "face_indices": [0]},
+    {"strategy": "contour2d", "face_indices": [0]},
+    {"strategy": "contour2d", "body_name": "Body1"},
+    {"strategy": "contour2d", "body_name": "Body1", "face_indices": []},
+    {"strategy": "contour2d", "body_name": "Body1", "face_indices": "0"},
+    {"strategy": "contour2d", "body_name": "Body1", "face_indices": [0.5]},
+    {"strategy": "contour2d", "body_name": "Body1", "face_indices": [True]},
+    {"strategy": "contour2d", "body_name": "Body1", "face_indices": ["0"]},
+]
+
+
+@pytest.mark.parametrize("params", BAD_FACE_SELECTIONS)
+def test_every_bad_face_selection_is_refused_on_both_sides(bare_handler, params):
+    """A socket caller is not the schema, and an index is compared with ``<``.
+
+    Without this, a ``"0"`` or a ``True`` reached the range check as a ``TypeError`` -
+    which classifies as ``UNKNOWN`` with no hints - and a lone ``body_name`` was
+    ignored rather than refused.
+    """
+    call = {"setup_name": "Setup1", **params}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_create_operation(**call)
+
+    refused = mock._cam_create_operation(call)
+
+    assert refused is not None
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+
+
 def test_a_usable_strategy_and_selection_is_refused_by_neither_side():
     """Every advertised strategy passes; a selection passes where one exists."""
     assert (
@@ -694,8 +728,6 @@ def test_a_usable_strategy_and_selection_is_refused_by_neither_side():
     for strategy in rules.CAM_STRATEGIES:
         assert rules.cam_strategy_refusal({"strategy": strategy}) is None
     for strategy in rules.CAM_GEOMETRY_STRATEGIES:
-        assert (
-            rules.cam_geometry_refusal({"strategy": strategy, "face_indices": [0]})
-            is None
-        )
+        params = {"strategy": strategy, "body_name": "Body1", "face_indices": [0]}
+        assert rules.cam_geometry_refusal(params) is None
     assert rules.cam_geometry_refusal({"strategy": "contour2d"}) is None

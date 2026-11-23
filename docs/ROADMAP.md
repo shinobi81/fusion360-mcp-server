@@ -233,6 +233,23 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    `cam_get_operation_info`, plus the generate path's own, are the proof that all three
    treat it one way; nothing proves Fusion can produce it.
 
+6. **A CAM operation still cannot generate, because it has no tool.** #143 fixed the
+   two causes in front of it - ten of the fifteen advertised strategy names were
+   invented, and five of them were Fusion's own (the other five here come from
+   `compatibleStrategies`, which answers 56, so the schema advertises the ten measured
+   rather than all 56) - and every
+   strategy's geometry parameter was left empty (`contours` / `pockets` /
+   `machiningBoundarySel`, discovered at run time and accepted with the same
+   `FaceContourSelection` for all five) - so `cam_create_operation` now
+   creates an operation with its faces selected. Generation then answers, measured on
+   2706.1.17: `hasError == True, error == "Toolpath requires tool to be selected."`
+   The operation has no tool, `cam.documentToolLibrary.count == 0`, and `Operation.tool`
+   accepts only a `Tool` - which Fusion builds from `Tool.createFromJson`,
+   `Tool.createFromP21File`, or a library entry (`DocumentToolLibrary.add`). The open
+   question is which tool JSON a document library starting empty will accept; it needs a
+   measurement, not a fake, and it is the last step between `cam_create_operation` and a
+   `has_toolpath: true` envelope.
+
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.
 `setByThreePoints`, `setByTwoPoints` and `ScaleFeatures.createInput` all accept a
