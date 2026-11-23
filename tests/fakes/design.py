@@ -54,7 +54,6 @@ from .runtime import (
     DIRECT,
     PARAMETRIC,
     FakeMatrix3D,
-    FakePlane,
     FakePoint3D,
     FakeUserCoordinateSystemGeometry,
     FakeValueInput,
@@ -376,16 +375,15 @@ class FakeAxes:
 
 
 class FakeConstructionPlane(FakeDeletable):
-    """A base construction plane: named, deletable, and carrying its geometry.
+    """A base construction plane: named and deletable, with no geometry.
 
-    ``trim_surface`` reads ``geometry`` to decide which side of a plane tool a
-    cell is on, so the plane needs one.  Only a construction plane has geometry -
-    every other deletable in the fakes must not grow one.
+    It carried a ``geometry`` for ``trim_surface``'s side test, which the
+    ``keep_cells`` rewrite removed; nothing reads it now, and a fake that grows a
+    member no handler asks for is a seam nobody checks.
     """
 
-    def __init__(self, name: str, normal: tuple[float, float, float]):
+    def __init__(self, name: str):
         super().__init__(name)
-        self.geometry = FakePlane((0.0, 0.0, 0.0), normal)
 
 
 class FakePlanes:
@@ -396,9 +394,9 @@ class FakePlanes:
     """
 
     def __init__(self):
-        self.xYConstructionPlane = FakeConstructionPlane("XY", (0, 0, 1))
-        self.yZConstructionPlane = FakeConstructionPlane("YZ", (1, 0, 0))
-        self.xZConstructionPlane = FakeConstructionPlane("XZ", (0, 1, 0))
+        self.xYConstructionPlane = FakeConstructionPlane("XY")
+        self.yZConstructionPlane = FakeConstructionPlane("YZ")
+        self.xZConstructionPlane = FakeConstructionPlane("XZ")
 
 
 class FakeRevolveInput:
