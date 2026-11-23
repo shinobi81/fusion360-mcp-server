@@ -303,6 +303,7 @@ def test_a_partial_duplicate_advises_only_the_setup_that_can_resolve_it(
     pointing = [hint for hint in raised.value.hints if "setup_name" in hint]
     assert pointing, "Setup1 holds exactly one, so narrowing to it resolves the name"
     assert "'Setup1'" in pointing[0]
+    assert "it holds one match" in pointing[0]
     assert "'Setup2'" in pointing[0] and "more than one" in pointing[0]
     assert generated == []
 
@@ -331,6 +332,23 @@ def test_the_hint_stays_readable_when_several_setups_can_resolve_it(
     assert "'Setup2' and 'Setup3'" in pointing[0]
     assert "they hold one match each" in pointing[0]
     assert "'Setup1' holds more than one" in pointing[0]
+
+
+def test_the_hint_joins_three_names_with_a_comma_and_an_and(handler_module):
+    """Three resolvable setups: ``'A', 'B' and 'C'``, not a bare comma list."""
+    cam = _cam(
+        _setup_with_operations("Setup1", _operation("Rough1"), _operation("Rough1")),
+        _setup_with_operations("Setup2", _operation("Rough1")),
+        _setup_with_operations("Setup3", _operation("Rough1")),
+        _setup_with_operations("Setup4", _operation("Rough1")),
+    )
+    handler = _generating_handler(handler_module, cam)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_generate_toolpath(operation_name="Rough1")
+
+    pointing = [hint for hint in raised.value.hints if "setup_name" in hint]
+    assert "'Setup2', 'Setup3' and 'Setup4'" in pointing[0]
 
 
 def test_an_operation_name_in_two_setups_names_both(handler_module):
