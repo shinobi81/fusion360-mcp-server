@@ -178,9 +178,9 @@ and asks the running Fusion whether it exists - 190 references, none missing on
 
 1. ~~The 0.9.0 release note is unwritten~~ - **written with the 0.9.0 tag**; the entry
    covers every PR below. For the next release, `CHANGELOG.md` cannot tell you: the file
-   opens at `[0.8.5]` because the packaging guard fails an entry written ahead of the
-   version being cut, so entries are written once, at release. The note owes the PRs
-   merged since `v0.8.5` (`#125`-`#143`): the six new kinds, the schema gate, the
+   opens at the release being cut (`[0.9.0]` now) because the packaging guard fails an
+   entry written ahead of the version, so entries are written once, at release. This
+   entry covers the PRs merged since `v0.8.5` (`#125`-`#143`): the six new kinds, the schema gate, the
    refusals that moved from `UNKNOWN` to a kind, the `InternalValidationError` retag
    from `INVALID_INPUT` to `FUSION_REFUSED`, the gate's own sentences for the rows it
    answers, the three sheet-metal/surface repairs whose arguments were renamed
