@@ -12,8 +12,8 @@ and published; they are the fork history.
 This release is mostly about what a caller is told when something goes wrong. Every
 add-in refusal now reaches a caller with an `error_kind` and advice, the tool schemas are
 enforced before Fusion is touched, and two CAM commands stopped inventing what Fusion
-accepts. Three repaired sheet-metal/surface commands changed arguments, which is the only
-place a working script could notice.
+accepts. Three repaired sheet-metal/surface commands changed arguments, which is where a
+script written against 0.8.5's schema will see the difference.
 
 ### Added
 
@@ -33,8 +33,9 @@ place a working script could notice.
   check that would have caught the three invented names this repo shipped.
 - **`cam_create_operation` takes `body_name` and `face_indices`** and applies a
   `FaceContourSelection` to the strategy's own geometry parameter (`contours`, `pockets`,
-  `machiningBoundarySel`), discovered at run time so a new strategy needs no new map
-  entry.
+  `machiningBoundarySel`), discovered at run time - the handler needs no map entry
+  to find it, while the schema gate and mock mode still read
+  `CAM_GEOMETRY_PARAMETERS` in `rules.py`.
 
 ### Changed
 
@@ -63,10 +64,13 @@ place a working script could notice.
 - CAM generation: `GenerateToolpathFuture.wait()` does not exist on 2706, and the
   completion flag raises until generation begins - both made every generation call fail
   with `UNKNOWN` instead of a typed refusal.
-- Seven commands that could never have worked: `unfold`, `flat_pattern`,
-  `thicken_surface`, `scale_body`, a perpendicular construction axis,
-  `patch_surface`'s continuity, and the `create_flange`/`create_bend`/`trim_surface`
-  trio - each proven in Fusion after the repair, not only against a fake.
+- Nine repairs in the surface and sheet-metal families, each proven in Fusion after
+  the change: `unfold`, `flat_pattern`, `thicken_surface`, `scale_body`, the
+  `create_flange`/`create_bend`/`trim_surface` trio, `patch_surface`'s continuity
+  (now `groupContinuity`; still inert for sketch boundaries until the tool takes
+  edges), and `create_construction_axis(perpendicular_at_point)`, which now refuses
+  and names the face argument the tool does not have instead of failing inside
+  Fusion.
 
 ### Removed
 
@@ -74,7 +78,7 @@ place a working script could notice.
   for them.
 
 The suite went from 1245 to 1624 tests, combined coverage from 69.97% to 92.33%, and
-`handler_cam` from 17% to 65%.
+`handler_cam` from 17% to 75%.
 
 ## [0.8.5] - 2026-11-15
 
