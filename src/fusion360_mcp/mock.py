@@ -27,6 +27,7 @@ from ._rules import (
     export_body_refusal,
     export_target_refusal,
     joint_geometry_refusal,
+    joint_selector_refusal,
     keep_cells_refusal,
     perpendicular_axis_refusal,
     point3d_refusal,
@@ -617,7 +618,11 @@ def _create_component(p: dict) -> dict:
 
 
 def _add_joint(p: dict) -> dict:
-    refusal = components_differ_refusal(p) or joint_geometry_refusal(p)
+    refusal = (
+        components_differ_refusal(p)
+        or joint_selector_refusal(p)
+        or joint_geometry_refusal(p)
+    )
     if refusal is not None:
         return _refusal_error(refusal)
     return {
@@ -1181,7 +1186,11 @@ def _create_torus(p: dict) -> dict:
 
 
 def _create_as_built_joint(p: dict) -> dict:
-    refusal = components_differ_refusal(p) or as_built_geometry_refusal(p)
+    refusal = (
+        components_differ_refusal(p)
+        or joint_selector_refusal(p)
+        or as_built_geometry_refusal(p)
+    )
     if refusal is not None:
         return _refusal_error(refusal)
     return {

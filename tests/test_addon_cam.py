@@ -307,6 +307,32 @@ def test_a_partial_duplicate_advises_only_the_setup_that_can_resolve_it(
     assert generated == []
 
 
+def test_the_hint_stays_readable_when_several_setups_can_resolve_it(
+    handler_module,
+):
+    """Two resolvable setups and one ambiguous: the sentence has to stay grammatical.
+
+    ``'S1', 'S2' holds one of them`` is what a comma-join with a fixed verb produces;
+    a hint is advice, and advice a caller has to parse twice is worse than the round
+    trip it was meant to save.
+    """
+    cam = _cam(
+        _setup_with_operations("Setup1", _operation("Rough1"), _operation("Rough1")),
+        _setup_with_operations("Setup2", _operation("Rough1")),
+        _setup_with_operations("Setup3", _operation("Rough1")),
+    )
+    handler = _generating_handler(handler_module, cam)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_generate_toolpath(operation_name="Rough1")
+
+    pointing = [hint for hint in raised.value.hints if "setup_name" in hint]
+    assert pointing
+    assert "'Setup2' and 'Setup3'" in pointing[0]
+    assert "they hold one match each" in pointing[0]
+    assert "'Setup1' holds more than one" in pointing[0]
+
+
 def test_an_operation_name_in_two_setups_names_both(handler_module):
     """A shared name is ambiguous, so the refusal says which setups hold it."""
     cam = _cam(

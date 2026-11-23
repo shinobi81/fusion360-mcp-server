@@ -31,6 +31,18 @@ _OPERATION_LIST_HINT = (
 )
 
 
+def _and_list(names: list[str]) -> str:
+    """``'A'``, ``'A' and 'B'``, ``'A', 'B' and 'C'`` for a hint's prose.
+
+    A comma-join reads as a list, and a fixed verb after it produced "'A', 'B' holds
+    one of them" - advice a caller has to parse twice.
+    """
+    quoted = [f"'{name}'" for name in names]
+    if len(quoted) == 1:
+        return quoted[0]
+    return ", ".join(quoted[:-1]) + f" and {quoted[-1]}"
+
+
 if TYPE_CHECKING:  # pragma: no cover - the mixin's contract, for type checkers only
     # Not inherited at runtime: ``CommandHandler`` supplies the base.  The reason this
     # exists at all is stated once, above ``class HandlerBase``.
@@ -406,13 +418,17 @@ class CamCommands(_Contract):
                             0, "Pass setup_name to choose which setup to generate."
                         )
                     elif resolvable:
+                        one_each = (
+                            "it holds one match"
+                            if len(resolvable) == 1
+                            else "they hold one match each"
+                        )
+                        verb = "holds" if len(ambiguous) == 1 else "hold"
                         hints.insert(
                             0,
-                            "Pass setup_name to narrow it: "
-                            + ", ".join(f"'{name}'" for name in resolvable)
-                            + " holds one of them, while "
-                            + ", ".join(f"'{name}'" for name in ambiguous)
-                            + " holds more than one, so narrowing there cannot help.",
+                            f"Pass setup_name with {_and_list(resolvable)}: "
+                            f"{one_each}, while {_and_list(ambiguous)} {verb} more "
+                            "than one, so narrowing there cannot help.",
                         )
                 raise _hints.Refusal(
                     "INVALID_INPUT",

@@ -355,6 +355,11 @@ class AssemblyCommands(_Contract):
         ``Invalid parameter point`` because a bare point carries no component
         association, so ``joints.add`` has nothing to bind.
         """
+        if selector_refusal := _rules.joint_selector_refusal(
+            {"joint_type": joint_type, "quadrant": quadrant, "key_point": key_point}
+        ):
+            raise selector_refusal
+
         root = self._root()
         joints = root.joints
 
@@ -381,8 +386,9 @@ class AssemblyCommands(_Contract):
             self._joint_face(occ2, body_two, face_two, "body_two"),
         )
 
-        # Indexed, not ``.get()``: the schema's enum is these keys, and the gate in
-        # ``_send`` refuses anything else before either mode reads the call.
+        # Indexed, not ``.get()``: ``joint_selector_refusal`` refused an unknown value
+        # above, so the key is present for every caller - socket callers included, which
+        # the schema gate never sees.
         quadrant_attr = self._JOINT_QUADRANTS[quadrant]
         key_point_attr = self._JOINT_KEY_POINTS[key_point]
         quadrant_value = getattr(adsk.fusion.JointQuadrantAngleTypes, quadrant_attr)
@@ -636,6 +642,11 @@ class AssemblyCommands(_Contract):
         (``Geometry should not be null if joint motion is not rigid``), so a
         face pair is required for every joint_type except ``rigid``.
         """
+        if selector_refusal := _rules.joint_selector_refusal(
+            {"joint_type": joint_type, "quadrant": quadrant, "key_point": key_point}
+        ):
+            raise selector_refusal
+
         root = self._root()
 
         occ1 = self._occurrence_by_component(component_one)
@@ -667,8 +678,8 @@ class AssemblyCommands(_Contract):
             # cannot be used to build the joint. It is still resolved, so an
             # unresolvable body_two/face_two is reported rather than ignored.
             self._joint_face(occ2, body_two, face_two, "body_two")
-            # Indexed, not ``.get()``: same reason as in ``add_joint`` - the enum gate
-            # is what keeps these keys present.
+            # Indexed, not ``.get()``: same reason as in ``add_joint`` - the selector
+            # refusal above is what keeps these keys present.
             quadrant_attr = self._JOINT_QUADRANTS[quadrant]
             key_point_attr = self._JOINT_KEY_POINTS[key_point]
             geometry = adsk.fusion.JointGeometry.createByCylinderOrConeFace(

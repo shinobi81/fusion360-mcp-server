@@ -505,3 +505,82 @@ def test_the_mirror_carries_the_same_validation():
     assert _rules.target_body_refusal({"target_body": "B"}, "new_body") is not None
     assert _rules.sketch_plane_z_note() == rules.sketch_plane_z_note()
     assert _rules.EDGE_SELECTIONS == rules.EDGE_SELECTIONS
+
+
+# ── the joint selectors ──────────────────────────────────────────────
+
+
+#: One unknown value per selector, each judged from the parameters alone.
+BAD_JOINT_SELECTORS = [
+    {"joint_type": "weld"},
+    {"quadrant": "corner"},
+    {"key_point": "tip"},
+]
+
+
+@pytest.mark.parametrize("params", BAD_JOINT_SELECTORS)
+def test_the_handler_and_the_mock_refuse_an_unknown_joint_selector_alike(
+    bare_handler, params
+):
+    """The socket is not the schema, so an unknown selector reaches the handler.
+
+    ``add_joint`` indexes two lookup tables with ``quadrant`` and ``key_point``, and
+    ``joint_type`` through ``_JOINT_MOTION_SETTERS``; a value outside the enum used to
+    raise a bare ``KeyError`` that classified as ``UNKNOWN`` with no advice.
+    """
+    call = {"component_one": "Comp1", "component_two": "Comp2", **params}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.add_joint(**call)
+
+    refused = mock._add_joint(call)
+
+    assert refused is not None
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+
+
+@pytest.mark.parametrize("params", BAD_JOINT_SELECTORS)
+def test_the_as_built_joint_refuses_the_same_selectors_on_both_sides(
+    bare_handler, params
+):
+    """``create_as_built_joint`` shares the three arguments, so it shares the check."""
+    call = {
+        "component_one": "Comp1",
+        "component_two": "Comp2",
+        "joint_type": "rigid",
+        **params,
+    }
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.create_as_built_joint(**call)
+
+    refused = mock._create_as_built_joint(call)
+
+    assert refused is not None
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+
+
+def test_a_usable_joint_selector_is_refused_by_neither_side():
+    """The defaults the schema advertises, and every value in it, stay usable."""
+    assert rules.joint_selector_refusal({}) is None
+    assert (
+        rules.joint_selector_refusal(
+            {"joint_type": "ball", "quadrant": "third_quarter", "key_point": "center"}
+        )
+        is None
+    )
+    # ``face_one``/``face_two`` are present so the *next* rule in the chain stays quiet:
+    # this asserts the selector rule, not the geometry one.
+    for name, accepted in (
+        ("joint_type", rules.JOINT_TYPES),
+        ("quadrant", rules.JOINT_QUADRANTS),
+        ("key_point", rules.JOINT_KEY_POINTS),
+    ):
+        for value in accepted:
+            params = {name: value, "face_one": 0, "face_two": 0}
+            assert rules.joint_selector_refusal(params) is None, params
+            assert mock._add_joint(params).get("error_kind") is None, params
