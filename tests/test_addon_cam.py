@@ -29,6 +29,7 @@ from tests.fakes.cam import (
     FakeNoFlagFuture,
     FakeNotStartedCounterFuture,
     FakeNotStartedFuture,
+    FakePostProcessInput,
 )
 
 
@@ -642,3 +643,46 @@ def test_operation_info_describes_the_one_operation_named(handler_module):
             "tool_feedCutting": "600 mm/min",
         },
     }
+
+
+def test_operation_info_omits_the_fields_the_operation_does_not_carry(handler_module):
+    """The guards are what let a bare operation be described at all.
+
+    Both ``hasattr`` checks and the ``str(tool)`` fallback were unexecuted: the refusal
+    tests raise before the dict is built, and the positive test's operation carries a
+    tool and parameters.  Deleting either guard would have stayed green.
+    """
+    bare = _readable_operation("Rough1")
+    handler = _generating_handler(
+        handler_module, _cam(_setup_with_operations("Setup1", bare))
+    )
+
+    assert handler.cam_get_operation_info("Setup1", "Rough1") == {
+        "name": "Rough1",
+        "is_valid": True,
+        "has_toolpath": False,
+    }
+
+    # A tool that is not an object still names itself, and an empty parameter list is
+    # an empty map rather than a missing key.
+    plain = SimpleNamespace(
+        name="Rough1", isValid=False, hasToolpath=False, tool="mm-6-flat", parameters=[]
+    )
+    handler = _generating_handler(
+        handler_module, _cam(_setup_with_operations("Setup1", plain))
+    )
+
+    info = handler.cam_get_operation_info("Setup1", "Rough1")
+    assert info["tool"] == {"description": "mm-6-flat"}
+    assert info["parameters"] == {}
+
+
+def test_the_post_input_fake_refuses_construction_like_fusion_does():
+    """The fake's guard is the only thing standing between a handler edit and Fusion.
+
+    Fusion's ``PostProcessInput`` has no constructor - ``create`` is the sole way
+    in - so the fake must refuse the same call.  Without this test, deleting the raise
+    would let a ``PostProcessInput(a, b, c, d)`` regression pass and die live.
+    """
+    with pytest.raises(AttributeError, match="No constructor defined"):
+        FakePostProcessInput("Setup1", "fanuc.cps", "/tmp", 2)
