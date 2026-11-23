@@ -651,7 +651,7 @@ def test_two_faults_at_once_earn_the_same_refusal_on_both_sides(
 def test_the_handler_and_the_mock_refuse_an_unknown_strategy_alike(bare_handler):
     """The socket is not the schema: an unknown strategy reaches ``createInput``.
 
-    Measured on 2706.1.17: five of the six names this tool used to advertise were
+    Measured on 2706.1.17: ten of the fifteen names this tool used to advertise were
     refused by Fusion itself (``3 : Unknown strategy: 2d_contour``), so the vocabulary
     is now Fusion's own - and a caller outside the schema must get a sentence, not a
     ``FUSION_REFUSED`` from deep inside the CAM product.
