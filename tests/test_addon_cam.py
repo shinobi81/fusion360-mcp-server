@@ -698,3 +698,118 @@ def test_the_post_input_fake_refuses_construction_like_fusion_does():
     """
     with pytest.raises(AttributeError, match="No constructor defined"):
         FakePostProcessInput("Setup1", "fanuc.cps", "/tmp", 2)
+
+
+def _contour_operation(strategy: str = "contour2d", parameter_name: str = "contours"):
+    """An operation whose parameter set carries one CAD-contour machining parameter.
+
+    ``stockContours`` is there too, because every strategy has it and the discovery
+    must skip it - that is the measured shape: ``contours`` for ``contour2d``,
+    ``pockets`` for ``pocket2d``, ``machiningBoundarySel`` for ``adaptive``.
+    """
+    applied = {}
+
+    class _Selections:
+        def __init__(self):
+            self.cleared = 0
+            self.selectors = []
+
+        def clear(self):
+            self.cleared += 1
+
+        def createNewFaceContourSelection(self):
+            selection = SimpleNamespace(inputGeometry=None)
+            self.selectors.append(selection)
+            return selection
+
+    class _Value:
+        def __init__(self):
+            self.selections = _Selections()
+
+        def getCurveSelections(self):
+            return self.selections
+
+        def applyCurveSelections(self, selections):
+            applied["selections"] = selections
+
+    value = _Value()
+    operation = SimpleNamespace(
+        name=None,
+        strategy=strategy,
+        parameters=[
+            SimpleNamespace(name="stockContours", value=object()),
+            SimpleNamespace(name=parameter_name, value=value),
+        ],
+        deleted=0,
+    )
+
+    def delete_me():
+        operation.deleted += 1
+
+    operation.deleteMe = delete_me
+    return operation, value, applied
+
+
+def _creation_handler(handler_module, operation, faces):
+    setup = SimpleNamespace(
+        name="Setup1",
+        operations=SimpleNamespace(
+            count=0,
+            createInput=lambda _strategy: SimpleNamespace(name=None),
+            add=lambda _input: operation,
+        ),
+    )
+    handler = _generating_handler(handler_module, _cam(setup))
+    handler._body_by_name = lambda name: SimpleNamespace(
+        name=name, faces=_items(*[SimpleNamespace() for _ in range(faces)])
+    )
+    return handler
+
+
+def test_create_operation_puts_a_face_selection_on_the_strategy_parameter(
+    handler_module,
+):
+    """The geometry seam: one face selection, applied to the parameter Fusion exposes.
+
+    The parameter cannot be named in advance - it differs per strategy and only Fusion
+    knows it - so the handler discovers the CAD-contour value that is not the stock
+    boundary.  This test pins that discovery, the clear-before-add, and the reply.
+    """
+    operation, value, applied = _contour_operation()
+    handler = _creation_handler(handler_module, operation, faces=3)
+
+    result = handler.cam_create_operation(
+        setup_name="Setup1",
+        strategy="contour2d",
+        body_name="Body1",
+        face_indices=[2, 0],
+    )
+
+    assert value.selections.cleared == 1
+    assert len(value.selections.selectors) == 1
+    selection = value.selections.selectors[0]
+    assert [face is not None for face in selection.inputGeometry] == [True, True]
+    assert applied["selections"] is value.selections
+    assert result["geometry"] == {"parameter": "contours", "face_indices": [2, 0]}
+
+
+def test_create_operation_refuses_a_face_index_the_body_does_not_have(handler_module):
+    """An index is judged against the body, and the half-built operation is removed."""
+    operation, _value, applied = _contour_operation()
+    handler = _creation_handler(handler_module, operation, faces=2)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            setup_name="Setup1",
+            strategy="contour2d",
+            body_name="Body1",
+            face_indices=[7],
+        )
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert str(raised.value) == (
+        "Face index 7 is out of range for body 'Body1' (2 faces). "
+        "The operation was removed."
+    )
+    assert operation.deleted == 1
+    assert applied == {}, "nothing was applied to the parameter"

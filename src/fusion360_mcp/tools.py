@@ -12,6 +12,7 @@ import mcp.types as types
 # joint selectors are read by ``tools.py`` twice each (both joint tools), so a local
 # copy would be a fourth place to drift.
 from ._rules import (
+    CAM_STRATEGIES,
     EDGE_SELECTIONS,
     JOINT_KEY_POINTS,
     JOINT_QUADRANTS,
@@ -2273,24 +2274,13 @@ TOOLS: list[dict] = [
         },
         strategy={
             "type": "string",
-            "enum": [
-                "face",
-                "2d_contour",
-                "2d_pocket",
-                "2d_adaptive",
-                "3d_adaptive",
-                "3d_pocket",
-                "3d_contour",
-                "3d_scallop",
-                "3d_parallel",
-                "drilling",
-                "bore",
-                "thread_milling",
-                "slot",
-                "trace",
-                "engrave",
-            ],
-            "description": "Machining strategy",
+            "enum": list(CAM_STRATEGIES),
+            "description": (
+                "Machining strategy, in Fusion's own spelling (measured against "
+                "Operations.compatibleStrategies on 2706.1.17). The fifteen names "
+                "this schema used to carry were refused by Fusion as "
+                "'Unknown strategy'."
+            ),
         },
         name={
             "type": "string",
@@ -2337,6 +2327,24 @@ TOOLS: list[dict] = [
                 "through_tool",
             ],
             "default": "flood",
+        },
+        body_name={
+            "type": "string",
+            "description": (
+                "Body whose faces carry the operation's geometry; required with "
+                "face_indices. Not every strategy has a geometry parameter: face "
+                "does not."
+            ),
+        },
+        face_indices={
+            "type": "array",
+            "items": {"type": "integer", "minimum": 0},
+            "minItems": 1,
+            "description": (
+                "Faces to machine, by index from get_object_info. Applied to the "
+                "strategy's own geometry parameter (contours/pockets/"
+                "machiningBoundarySel). Refused for face, which has none."
+            ),
         },
     ),
     _tool(

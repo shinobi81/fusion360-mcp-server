@@ -319,6 +319,62 @@ class CamCommands(_Contract):
             log.debug("CAM parameter %s=%r failed: %s", param_name, value, exc)
             return False
 
+    def _select_operation_faces(
+        self, op, body_name: str | None, face_indices: list[int]
+    ) -> str:
+        """Apply a face selection to the operation's own geometry parameter.
+
+        The parameter name is strategy-dependent and only Fusion knows it - measured on
+        2706.1.17: ``contours`` for ``contour2d``, ``pockets`` for ``pocket2d`` and
+        ``adaptive2d``, ``machiningBoundarySel`` for ``adaptive`` and
+        ``pocket_clearing``.  So it is discovered rather than assumed: the one
+        CAD-contour value that is not the stock boundary.  A strategy with none is
+        refused before the operation exists (``rules.cam_geometry_refusal``); reaching
+        the refusal here means the measurement moved, so the operation is removed again
+        rather than left as a half-configured one.
+        """
+        parameter = next(
+            (
+                candidate
+                for candidate in op.parameters
+                if candidate.name != "stockContours"
+                and hasattr(candidate.value, "applyCurveSelections")
+            ),
+            None,
+        )
+        if parameter is None:
+            op.deleteMe()
+            raise _hints.Refusal(
+                "GEOMETRY_UNSUPPORTED",
+                f"Strategy '{op.strategy}' exposed no geometry parameter on this "
+                "Fusion build; the operation was removed again",
+                hints=(
+                    "Use a strategy measured to carry one: cam_create_operation's "
+                    "schema lists them.",
+                ),
+            )
+
+        body = self._body_by_name(body_name)
+        faces = body.faces
+        out_of_range = [
+            index for index in face_indices if not (0 <= index < faces.count)
+        ]
+        if out_of_range:
+            op.deleteMe()
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"Face index {out_of_range[0]} is out of range for body "
+                f"'{body.name}' ({faces.count} faces). The operation was removed.",
+                hints=("Face indices run from 0; enumerate with get_object_info.",),
+            )
+
+        selections = parameter.value.getCurveSelections()
+        selections.clear()
+        selection = selections.createNewFaceContourSelection()
+        selection.inputGeometry = [faces.item(index) for index in face_indices]
+        parameter.value.applyCurveSelections(selections)
+        return parameter.name
+
     def cam_create_operation(
         self,
         setup_name: str,
@@ -331,11 +387,20 @@ class CamCommands(_Contract):
         feed_rate: float | None = None,
         spindle_speed: float | None = None,
         coolant: str = "flood",
+        body_name: str | None = None,
+        face_indices: list[int] | None = None,
     ):
         # Judged before the operation is created, so a refusal's hint ("nothing
         # was written") stays true: a bad value is not an unavailable name.
         for _numeric in (tool_number, stepdown, stepover, feed_rate, spindle_speed):
             _param_units.require_finite(_numeric)
+
+        if strategy_refusal := _rules.cam_strategy_refusal({"strategy": strategy}):
+            raise strategy_refusal
+        if geometry_refusal := _rules.cam_geometry_refusal(
+            {"strategy": strategy, "face_indices": face_indices}
+        ):
+            raise geometry_refusal
 
         cam = self._get_cam()
         setup = self._find_setup(cam, setup_name)
@@ -381,6 +446,13 @@ class CamCommands(_Contract):
                 failed[param_name] = value
 
         result = {"name": op.name, "setup": setup_name, "strategy": strategy}
+        if face_indices:
+            result["geometry"] = {
+                "parameter": self._select_operation_faces(
+                    op, body_name, face_indices
+                ),
+                "face_indices": list(face_indices),
+            }
         if applied:
             result["parameters_applied"] = applied
         if failed:

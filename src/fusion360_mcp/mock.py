@@ -20,6 +20,8 @@ from ._mutation_commands import MUTATION_COMMANDS
 from ._rules import (
     as_built_geometry_refusal,
     body_name_required_refusal,
+    cam_geometry_refusal,
+    cam_strategy_refusal,
     cam_target_refusal,
     components_differ_refusal,
     construction_method_refusal,
@@ -1515,11 +1517,17 @@ def _cam_create_operation(p: dict) -> dict:
             "from a tool in the CAM tool library. Select the tool via "
             "tool_number instead."
         )
-    return {
+    selector_refusal = cam_strategy_refusal(p) or cam_geometry_refusal(p)
+    if selector_refusal is not None:
+        return _refusal_error(selector_refusal)
+    result = {
         "setup_name": p.get("setup_name", "Setup1"),
         "operation_name": p.get("name", "Operation1"),
-        "strategy": p.get("strategy", "2d_contour"),
+        "strategy": p.get("strategy", "contour2d"),
     }
+    if p.get("face_indices"):
+        result["geometry"] = {"face_indices": list(p["face_indices"])}
+    return result
 
 
 def _cam_generate_toolpath(p: dict) -> dict:

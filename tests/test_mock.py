@@ -972,11 +972,11 @@ class TestMockCAM:
             "cam_create_operation",
             {
                 "setup_name": "Setup1",
-                "strategy": "2d_adaptive",
+                "strategy": "adaptive2d",
                 "name": "Rough1",
             },
         )
-        assert result["strategy"] == "2d_adaptive"
+        assert result["strategy"] == "adaptive2d"
         assert result["operation_name"] == "Rough1"
 
     def test_cam_generate_toolpath(self):

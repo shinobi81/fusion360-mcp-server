@@ -55,6 +55,71 @@ JOINT_QUADRANTS = ("start", "quarter", "middle", "third_quarter")
 JOINT_KEY_POINTS = ("start", "middle", "center", "end")
 
 
+#: The CAM strategies ``cam_create_operation`` advertises, in Fusion's own spelling.
+#: Measured on 2706.1.17 against ``setup.operations.compatibleStrategies``: the six
+#: names this tool used to carry (``2d_contour``, ``2d_pocket``, ``2d_adaptive``,
+#: ``3d_adaptive``, ``3d_pocket`` among them) were refused by Fusion itself with
+#: ``3 : Unknown strategy``.  ``tools.py`` advertises this tuple as the schema enum.
+CAM_STRATEGIES = (
+    "face",
+    "contour2d",
+    "pocket2d",
+    "adaptive2d",
+    "adaptive",
+    "pocket_clearing",
+)
+
+#: The strategies that expose a machining-geometry parameter, measured one operation at
+#: a time on 2706.1.17: ``contour2d`` carries ``contours``, ``pocket2d`` and
+#: ``adaptive2d`` carry ``pockets``, ``adaptive`` and ``pocket_clearing`` carry
+#: ``machiningBoundarySel``.  ``face`` carries none - only the stock boundary - so a
+#: face selection cannot be given to it.
+CAM_GEOMETRY_STRATEGIES = (
+    "contour2d",
+    "pocket2d",
+    "adaptive2d",
+    "adaptive",
+    "pocket_clearing",
+)
+
+
+def cam_strategy_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal an unknown CAM strategy earns, or None when it is usable.
+
+    The schema's enum is advisory: a socket caller is not the schema, and the name goes
+    straight into ``Operations.createInput``, where Fusion answers ``Unknown strategy``
+    from inside the CAM product - a ``FUSION_REFUSED`` that names no fix.  Judged from
+    the parameter alone, so mock mode refuses it too.
+    """
+    strategy = params.get("strategy")
+    if strategy in CAM_STRATEGIES:
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        f"Unknown strategy {strategy!r} - use one of: {', '.join(CAM_STRATEGIES)}",
+    )
+
+
+def cam_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal a face selection on a strategy without one earns, or None.
+
+    ``face_indices`` names faces to machine.  A strategy's geometry parameter is the
+    one thing measured per strategy, and ``face`` has none, so a selection there would
+    create an operation that cannot be given geometry at all.
+    """
+    faces = params.get("face_indices")
+    if faces is None:
+        return None
+    strategy = params.get("strategy")
+    if strategy in CAM_GEOMETRY_STRATEGIES:
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        f"Strategy {strategy!r} takes no geometry selection - use face_indices with "
+        f"one of: {', '.join(CAM_GEOMETRY_STRATEGIES)}",
+    )
+
+
 def joint_selector_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal an unknown joint type, quadrant or key point earns, or None.
 
