@@ -33,9 +33,9 @@ script written against 0.8.5's schema will see the difference.
   check that would have caught the three invented names this repo shipped.
 - **`cam_create_operation` takes `body_name` and `face_indices`** and applies a
   `FaceContourSelection` to the strategy's own geometry parameter (`contours`, `pockets`,
-  `machiningBoundarySel`), discovered at run time - the handler needs no map entry
-  to find it, while the schema gate and mock mode still read
-  `CAM_GEOMETRY_PARAMETERS` in `rules.py`.
+  `machiningBoundarySel`), discovered at run time, so the handler needs no map
+  entry to find it. `CAM_GEOMETRY_PARAMETERS` in `rules.py` is still what mock
+  mode answers from and what the refusal names the five strategies from.
 
 ### Changed
 
@@ -64,8 +64,9 @@ script written against 0.8.5's schema will see the difference.
 - CAM generation: `GenerateToolpathFuture.wait()` does not exist on 2706, and the
   completion flag raises until generation begins - both made every generation call fail
   with `UNKNOWN` instead of a typed refusal.
-- Nine repairs in the surface and sheet-metal families, each proven in Fusion after
-  the change: `unfold`, `flat_pattern`, `thicken_surface`, `scale_body`, the
+- Nine repairs, each covered by a test written against Fusion's shipped API, and
+  the sheet-metal trio additionally proven live: `unfold`, `flat_pattern`,
+  `thicken_surface`, `scale_body`, the
   `create_flange`/`create_bend`/`trim_surface` trio, `patch_surface`'s continuity
   (now `groupContinuity`; still inert for sketch boundaries until the tool takes
   edges), and `create_construction_axis(perpendicular_at_point)`, which now refuses

@@ -105,8 +105,8 @@ not move, which was the point.
 ### What the audit found
 
 The tests were the cheap part. Reading each handler against the shipped binding - because
-a fake must declare Fusion's arity, not the handler's - turned up seven commands that
-could never have worked:
+a fake must declare Fusion's arity, not the handler's - turned up nine commands that never
+worked, across the seven rows below:
 
 | Command | What was wrong | State |
 | --- | --- | --- |
