@@ -149,14 +149,12 @@ class FakePostProcessInput:
     sets afterwards.
     """
 
-    def __init__(
-        self, program_name: str, post_configuration: str, output_folder: str, units
-    ) -> None:
-        self.programName = program_name
-        self.postConfiguration = post_configuration
-        self.outputFolder = output_folder
-        self.outputUnits = units
-        self.isOpenInEditor = True
+    def __init__(self, *args, **kwargs):
+        # The shipped class refuses direct construction the same way
+        # (``AttributeError("No constructor defined")``): only ``create`` builds one, so
+        # a handler that swapped ``create(a, b, c, d)`` for ``PostProcessInput(a, b, c,
+        # d)`` must fail here rather than pass a fake Fusion would not.
+        raise AttributeError("No constructor defined")
 
     @classmethod
     def create(
@@ -166,4 +164,10 @@ class FakePostProcessInput:
         outputFolder: str,
         outputUnits: object,
     ) -> FakePostProcessInput:
-        return cls(programName, postConfiguration, outputFolder, outputUnits)
+        instance = cls.__new__(cls)
+        instance.programName = programName
+        instance.postConfiguration = postConfiguration
+        instance.outputFolder = outputFolder
+        instance.outputUnits = outputUnits
+        instance.isOpenInEditor = True
+        return instance

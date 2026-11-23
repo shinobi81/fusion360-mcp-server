@@ -604,7 +604,41 @@ def test_post_process_hands_the_post_input_the_four_arguments_it_recorded(
     assert post_input.postConfiguration == str(tmp_path / "fanuc.cps")
     assert post_input.outputFolder == str(tmp_path)
     assert post_input.isOpenInEditor is False
-    # The member the handler picked, and the value the fake declares for it - the
-    # second is what 2706.1.17 answered, so a wrong fake number shows up here.
+    # ``2`` is what Fusion 2706.1.17 answers for ``MillimetersOutput``.  The fake's
+    # members are plain ints, so these two assertions pass for a bare ``2`` as well as
+    # for the member - they pin the value, not the identity.
     assert post_input.outputUnits == adsk.cam.PostOutputUnitOptions.MillimetersOutput
     assert post_input.outputUnits == 2
+
+
+def test_operation_info_describes_the_one_operation_named(handler_module):
+    """The read path has only ever been exercised on its refusal.
+
+    ``_readable_operation`` exists so a regression fails legibly; this is the test that
+    makes it describe something, and the cheapest coverage ``handler_cam`` has left.
+    """
+    operation = SimpleNamespace(
+        name="Rough1",
+        isValid=True,
+        hasToolpath=True,
+        tool=SimpleNamespace(description="6mm flat end mill"),
+        parameters=[
+            SimpleNamespace(name="stepdown", expression="2 mm"),
+            SimpleNamespace(name="tool_feedCutting", expression="600 mm/min"),
+        ],
+    )
+    cam = _cam(_setup_with_operations("Setup1", operation))
+    handler = _generating_handler(handler_module, cam)
+
+    info = handler.cam_get_operation_info("Setup1", "Rough1")
+
+    assert info == {
+        "name": "Rough1",
+        "is_valid": True,
+        "has_toolpath": True,
+        "tool": {"description": "6mm flat end mill"},
+        "parameters": {
+            "stepdown": "2 mm",
+            "tool_feedCutting": "600 mm/min",
+        },
+    }

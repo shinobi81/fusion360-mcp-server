@@ -87,7 +87,7 @@ renamed API call sits unnoticed.
 
 **Measured on 0.8.5, before the work:**
 
-| Module | Then | Now | What the missing lines reached |
+| Module | Then | After the coverage parcels | What the missing lines reached |
 | --- | --- | --- | --- |
 | `handler_cam` | 17% | 17% | setups, operations, toolpaths, post-processing |
 | `handler_surface` | 22% | 69% | patch, stitch, thicken, ruled, trim, sheet metal |
@@ -199,13 +199,14 @@ and asks the running Fusion whether it exists - 193 references, none missing on
    `FUSION_REFUSED` (measured on Fusion 2706.1.17: `2 : InternalValidationError …`),
    pinned by `test_an_internal_validation_error_is_a_fusion_refusal` in
    `tests/test_feedback.py`.
-3. **`handler_cam` (60%) and `handler_export` (44%)** - up from 17% and 23%, because the
-   refusal work had to drive their refusal paths, and #141's fake `PostProcessInput`
-   reached the post-process lines no test could enter - are the two modules the
-   coverage work left where they were. A CAM `Product` and an
-   `exportManager`/`viewport` are the largest fakes in the tree, and the lines left
-   are the ones a fake cannot settle: a view sheet either renders or it does not.
-   Those belong in a Fusion session, not in a fake.
+3. **`handler_cam` (65%) and `handler_export` (44%)** - measured after #141 - are the two
+   modules the coverage parcels above left where they were. The refusal work drove
+   their refusal paths, and #141's fake `PostProcessInput` reached the post-process
+   lines no test could enter; what is left in `handler_export` is a view sheet, which
+   either renders or does not, so those lines belong in a Fusion session and not in a
+   fake. `handler_cam`'s remainder is no longer that kind: an operation is a
+   `SimpleNamespace` with the fields the command reads, which is what #141's read-path
+   test uses.
 4. **`create_construction_axis("perpendicular_at_point")`** refuses by design: it
    needs a `BRepFace`, which the tool has no argument for. Making it work means adding a
    face parameter, a schema decision rather than a repair.
@@ -218,8 +219,9 @@ and asks the running Fusion whether it exists - 193 references, none missing on
    answer alike. The evidence is the same as the generate path's, and as thin: Fusion
    *suffixes* a rename that would duplicate a name inside a setup (`Face11` renamed to
    `Face10` produced `Face101`, measured on 2706.1.17), so the shape needs the create
-   path and has no live envelope. The two caller-level tests are the proof that all
-   three treat it one way; nothing proves Fusion can produce it.
+   path and has no live envelope. The tests for `cam_post_process` and
+   `cam_get_operation_info`, plus the generate path's own, are the proof that all three
+   treat it one way; nothing proves Fusion can produce it.
 
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.
