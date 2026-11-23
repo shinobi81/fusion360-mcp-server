@@ -22,6 +22,13 @@ from .mutation_commands import MUTATION_COMMANDS
 log = get_logger("handler")
 
 
+# Every ``*Commands`` class is a mixin: ``CommandHandler`` composes it with this one,
+# so a mixin's body uses ``self._root()``, ``self.app`` and the shared helpers without
+# inheriting them.  A mixin declares that contract to a type checker instead - it
+# imports ``HandlerBase`` under ``TYPE_CHECKING`` as ``_Contract`` and binds
+# ``_Contract = object`` at runtime - so a checker sees the members while the
+# hierarchy ``CommandHandler`` builds is unchanged.  ``tests/test_addon_sources.py``
+# enforces both halves: the declaration, and that the runtime base stays ``object``.
 class HandlerBase:
     def __init__(self):
         self.app = adsk.core.Application.get()

@@ -79,6 +79,10 @@ The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
 - A parameter the add-in can refuse from the parameters alone belongs in
   `addon/server/rules.py`, which the handler raises from and mock mode answers with: one
   message, one `error_kind`, both sides. `tests/test_rules.py` compares the two answers.
+- A `handler_*.py` module is a mixin: it inherits `HandlerBase` only under `TYPE_CHECKING`
+  (`_Contract`, bound to `object` at runtime), so a checker sees `self._root` and the
+  shared helpers while the hierarchy `CommandHandler` composes stays unchanged.
+  `tests/test_addon_sources.py` enforces both halves, and `handler_base.py` says why.
 - Every tool has a mock handler, so `--mode mock` works without Fusion.
 
 ## Boundaries

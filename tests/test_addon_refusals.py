@@ -374,12 +374,12 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_base.py",
-            301,
+            308,
             "raise refusal: kind comes from _rules.point3d_refusal",
         ),
         (
             "handler_base.py",
-            306,
+            313,
             "raise refusal: kind comes from _rules.body_name_required_refusal",
         ),
         (
