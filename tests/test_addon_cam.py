@@ -780,6 +780,9 @@ def test_a_refused_face_selection_removes_the_operation(handler_module):
 
     assert raised.value.error_kind == "FUSION_REFUSED"
     assert "some input argument is invalid" in str(raised.value)
+    assert "strategy 'contour2d'" in str(raised.value), (
+        "the strategy is read before the operation is deleted"
+    )
     assert operation.deleted == 1
     assert applied == {}
 

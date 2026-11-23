@@ -179,10 +179,13 @@ and asks the running Fusion whether it exists - 190 references, none missing on
 1. **The 0.9.0 release note is unwritten, and `CHANGELOG.md` cannot tell you.** The file
    opens at `[0.8.5]` because the packaging guard fails an entry written ahead of the
    version being cut, so entries are written once, at release. The note owes the PRs
-   merged since `v0.8.5` (`#125`-`#137`) and this work's entry: the six new kinds, the
-   schema gate, the refusals that moved from `UNKNOWN` to a kind, the
-   `InternalValidationError` retag from `INVALID_INPUT` to `FUSION_REFUSED`, and the
-   gate's own sentences for the rows it answers.
+   merged since `v0.8.5` (`#125`-`#143`): the six new kinds, the schema gate, the
+   refusals that moved from `UNKNOWN` to a kind, the `InternalValidationError` retag
+   from `INVALID_INPUT` to `FUSION_REFUSED`, the gate's own sentences for the rows it
+   answers, the three sheet-metal/surface repairs whose arguments were renamed
+   (`#134`), and `#143`'s caller-visible schema change - `cam_create_operation`'s
+   strategy enum replaced with ten measured names and two new arguments (`body_name`,
+   `face_indices`).
 2. **Retag the rules that already carry a kind** - deferred, and named here so the
    inconsistency reads as a decision rather than an oversight. The work above changed the
    tag of the 88 with none; a rule that already answered with a kind kept it, even where
@@ -265,10 +268,20 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    `parameters_applied`, because `coolant` defaults to `flood`), mock
    `{setup_name, operation_name, strategy}` plus its own `geometry` echo.
    `cam_create_setup`: handler `{name, body, operation_type, stock_applied|stock_failed,
-   warning}`, mock `{setup_name, body_name, operation_type, stock_mode}`. An agent that
+   warning}`, mock `{setup_name, body_name, operation_type, stock_mode}`. Ordering also
+   differs: the handler answers `WORKSPACE_UNAVAILABLE` or "Setup not found" before its
+   `tool_diameter` sentence, while mock answers `tool_diameter` third - so a call with
+   both faults earns two different sentences. An agent that
    rehearses a key in mock mode then reads it against Fusion and gets a `KeyError`.
    Pre-existing and pinned by `tests/test_mock.py`; left as a decision rather than a
    ride-along on #143.
+
+9. **`cam_create_setup`'s `stock_mode` vocabulary does not match the handler's map.**
+   The schema advertises `relative_box`/`fixed_box`/`from_body`; `handler_cam.py` maps
+   `relative_box`/`fixed_box`/`relative_cylinder`/`fixed_cylinder`/`from_solid` and
+   passes an unmapped value through verbatim, so a schema-legal `from_body` reaches
+   Fusion as `from_body` and is reported as `stock_failed`. Read from the two files on
+   2026-11-23, not measured against Fusion; no test names `stock_mode` at all.
 
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.

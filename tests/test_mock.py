@@ -1072,7 +1072,7 @@ class TestMockCAM:
         ["tool_number", "stepdown", "stepover", "feed_rate", "spindle_speed"],
     )
     def test_cam_create_operation_refuses_a_non_finite_number(self, field):
-        params = {"strategy": "2d_contour", field: float("inf")}
+        params = {"strategy": "contour2d", field: float("inf")}
         result = mock_command("cam_create_operation", params)
         assert result["ok"] is False
         assert result["error_kind"] == "INVALID_INPUT"

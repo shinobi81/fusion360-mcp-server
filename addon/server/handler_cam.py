@@ -362,9 +362,11 @@ class CamCommands(_Contract):
             selection.inputGeometry = list(faces)
             parameter.value.applyCurveSelections(selections)
         except AttributeError:
-            # An invented method name is an add-in defect: ``hints`` classifies it as
-            # INTERNAL_ERROR and points at the name audit, which the FUSION_REFUSED
-            # sentence below would bury behind caller advice.
+            # An invented method name is an add-in defect, and the caller must not be
+            # told to check their faces for it.  Left to propagate, it keeps whatever
+            # ``hints`` makes of it (``UNKNOWN`` today: the rule that answers
+            # INTERNAL_ERROR is anchored on the adapter's "module ... has no
+            # attribute" wording) instead of being re-tagged as a Fusion refusal.
             raise
         except Exception as exc:
             # The parameter is emptied before the selection is applied, so a refusal
