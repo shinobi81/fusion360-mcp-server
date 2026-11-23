@@ -510,11 +510,17 @@ def test_the_mirror_carries_the_same_validation():
 # ── the joint selectors ──────────────────────────────────────────────
 
 
-#: One unknown value per selector, each judged from the parameters alone.
+#: One unknown value per selector, each judged from the parameters alone.  The last
+#: three are the shapes a socket caller can send and the schema never will: they must be
+#: refused, not raised on.  ``value not in accepted`` is safe for them only because
+#: ``accepted`` is a tuple - a set would raise ``TypeError: unhashable`` for the list.
 BAD_JOINT_SELECTORS = [
     {"joint_type": "weld"},
     {"quadrant": "corner"},
     {"key_point": "tip"},
+    {"quadrant": ["start"]},
+    {"joint_type": None},
+    {"key_point": 3},
 ]
 
 
@@ -584,3 +590,56 @@ def test_a_usable_joint_selector_is_refused_by_neither_side():
             params = {name: value, "face_one": 0, "face_two": 0}
             assert rules.joint_selector_refusal(params) is None, params
             assert mock._add_joint(params).get("error_kind") is None, params
+
+
+@pytest.mark.parametrize(
+    ("method", "params"),
+    [
+        # Two faults at once: the answers must agree on which one wins, not only on
+        # the kind - a caller that sees "components differ" from mock and "unknown
+        # quadrant" from Fusion cannot tell which call it actually made.
+        (
+            "add_joint",
+            {
+                "component_one": "A",
+                "component_two": "A",
+                "quadrant": "corner",
+                "face_one": 0,
+                "face_two": 0,
+            },
+        ),
+        (
+            "add_joint",
+            {"component_one": "A", "component_two": "A", "joint_type": "weld"},
+        ),
+        (
+            "create_as_built_joint",
+            {
+                "component_one": "A",
+                "component_two": "A",
+                "joint_type": "rigid",
+                "key_point": "tip",
+            },
+        ),
+    ],
+)
+def test_two_faults_at_once_earn_the_same_refusal_on_both_sides(
+    bare_handler, method, params
+):
+    """Precedence is part of the contract, so it is pinned where the two orders live.
+
+    The handler raises the selector refusal first, before it reads a design; mock
+    mode's chain has to list the rules in that same order.
+    """
+    with pytest.raises(addon_hints.Refusal) as raised:
+        getattr(bare_handler, method)(**params)
+
+    refused = (
+        mock._add_joint(params)
+        if method == "add_joint"
+        else mock._create_as_built_joint(params)
+    )
+
+    assert refused is not None
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)

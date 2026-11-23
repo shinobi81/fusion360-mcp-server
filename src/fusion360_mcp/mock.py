@@ -618,9 +618,11 @@ def _create_component(p: dict) -> dict:
 
 
 def _add_joint(p: dict) -> dict:
+    # The order is the handler's: the selector refusal is raised before anything reads
+    # the design, so a call with two faults earns the same sentence on both sides.
     refusal = (
-        components_differ_refusal(p)
-        or joint_selector_refusal(p)
+        joint_selector_refusal(p)
+        or components_differ_refusal(p)
         or joint_geometry_refusal(p)
     )
     if refusal is not None:
@@ -1186,9 +1188,10 @@ def _create_torus(p: dict) -> dict:
 
 
 def _create_as_built_joint(p: dict) -> dict:
+    # Order matches the handler's, as above.
     refusal = (
-        components_differ_refusal(p)
-        or joint_selector_refusal(p)
+        joint_selector_refusal(p)
+        or components_differ_refusal(p)
         or as_built_geometry_refusal(p)
     )
     if refusal is not None:
