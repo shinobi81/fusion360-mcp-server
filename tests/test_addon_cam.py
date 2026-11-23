@@ -797,7 +797,7 @@ def test_an_add_in_defect_in_the_seam_keeps_its_own_kind(handler_module):
     value.applyCurveSelections = invented
     handler = _creation_handler(handler_module, operation, faces=1)
 
-    with pytest.raises(AttributeError):
+    with pytest.raises(AttributeError) as raised:
         handler.cam_create_operation(
             setup_name="Setup1",
             strategy="contour2d",
@@ -806,6 +806,11 @@ def test_an_add_in_defect_in_the_seam_keeps_its_own_kind(handler_module):
         )
 
     assert operation.deleted == 0, "an add-in defect is not recovered from by deleting"
+    # What the handler's comment claims, pinned: the defect is *not* turned into a
+    # refusal, so it keeps whatever ``hints`` makes of it - ``UNKNOWN`` today, because
+    # the INTERNAL_ERROR rule is anchored on the adapter's "module ... has no
+    # attribute" wording.
+    assert addon_hints.classify(raised.value) == ("UNKNOWN", [])
 
 
 def test_create_operation_refuses_an_unknown_body_before_creating_anything(

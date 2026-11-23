@@ -133,7 +133,7 @@ message, and pushing each message through the real `classify()` gave the before 
 | --- | --- | --- |
 | raises reaching a caller as `UNKNOWN` with no hints | **88** | **0** |
 | typed `Refusal` sites | 11, all in `rules.py` | 74, in 11 modules |
-| raises the walk cannot judge from source | 7 | 26, each pinned with its reason |
+| raises the walk cannot judge from source | 7 | 28, each pinned with its reason |
 
 The suite was green over all 88, and that is the part worth keeping: `classify()` ran
 **11 times** across 1393 tests, and every handler test asserted on the refusal it raised,
@@ -266,7 +266,8 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    handlers'.** `cam_create_operation`: handler `{name, setup, strategy}` plus
    `parameters_applied`/`parameters_failed`/`warning` (a live success always carries
    `parameters_applied`, because `coolant` defaults to `flood`), mock
-   `{setup_name, operation_name, strategy}` plus its own `geometry` echo.
+   `{setup_name, operation_name, strategy}` plus the same `geometry` echo the handler
+   returns (`{parameter, face_indices}`).
    `cam_create_setup`: handler `{name, body, operation_type, stock_applied|stock_failed,
    warning}`, mock `{setup_name, body_name, operation_type, stock_mode}`. Ordering also
    differs: the handler answers `WORKSPACE_UNAVAILABLE` or "Setup not found" before its
