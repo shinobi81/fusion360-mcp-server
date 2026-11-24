@@ -300,37 +300,36 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    now; the two that remain are for tools with no face-index argument at all, where
    `list_faces` has nowhere to send the indices.
 
-8. **Mock's `cam_create_operation` and `cam_create_setup` replies still differ from the
-   handlers' key names.** `cam_create_operation`: handler `{name, setup, strategy}` plus
-   `parameters_applied`/`parameters_failed`/`warning` (a live success carries
-   `parameters_applied` whenever the strategy exposes `tool_coolant`), mock
-   `{setup_name, operation_name, strategy}` plus the same `geometry` echo the handler
-   returns (`{parameter, face_indices}`).
-   `cam_create_setup`: handler `{name, body, operation_type, stock_applied|stock_failed,
-   warning}`, mock `{setup_name, body_name, operation_type, stock_mode}`. An agent that
-   rehearses a key in mock mode then reads it against Fusion and gets a `KeyError`.
-   For this command the success *values* differ too, which this section did not record:
-   mock echoes the `stock_mode` name the caller sent, while the handler answers
-   `stock_applied.stock_mode` with Fusion's id (`from_solid` -> `solid`). The name is in
-   the schema and the id is not, so a rehearsal that memorises the schema's spelling
-   meets a different one live.
-   Pre-existing and pinned by `tests/test_mock.py`; left as a decision rather than a
-   ride-along on #143.
+8. ~~Mock's CAM replies differ from the handlers' key names~~ - **closed (#148).** The
+   divergence was real and caller-facing: mock answered `{setup_name, operation_name,
+   strategy}` where the handler answers `{name, setup, strategy}`, `{setup_name,
+   body_name, operation_type, stock_mode}` where the handler answers `{name, body,
+   operation_type, stock_applied}`, and `{setup_name, operation_name, generated,
+   toolpath_count}` where the handler answers `{generated, scope, setup, operation}`.
+   `toolpath_count` was never a handler key at all. The same defect ran through four more
+   commands the item had not named: `cam_post_process` (`output_file`/`output_units` vs
+   `output_folder`/`units`), `cam_get_operation_info` (`operation_name`/`strategy`/
+   `tool_diameter` vs `name`/`is_valid`/`tool`/`parameters`), `cam_list_operations`
+   (`setup_name`, a `strategy` per operation) and `cam_list_setups` (no `count`, no
+   `is_valid`). An agent that rehearsed any of those keys got a `KeyError` against Fusion
+   - after the expensive half of a sequence had already run.
 
-   Two things this section used to record are no longer true, both because the tool work
-   closed them: the **fault ordering** now agrees (the tool sentence is judged from the
-   parameters, so the handler answers it third - before `WORKSPACE_UNAVAILABLE` and the
-   setup lookup - exactly as mock does), and the **`tool`/`tool_warning` keys exist on
-   both sides**. The `tool` object promises only what the handler always answers -
-   `diameter_cm` for a built tool, `{}` for a supplied one - because the handler's
-   `description` is a read-back from Fusion that may be absent, and the string it returns
-   is Fusion's own (`#1 - Ø6mm flat (...)`), not something mock can predict.
+   Mock now answers the handlers' keys and values across all seven commands:
+   `parameters_applied` under Fusion's own parameter names (`maximumStepdown`,
+   `tool_feedCutting`, `tool_coolant`, ...), `stock_applied.stock_mode` with Fusion's
+   *id* rather than the caller's name, `stock_applied`'s three offsets under
+   `job_stockOffset*`, `generated` plus `scope`, and the handler's shapes for the four
+   list/info commands.
 
-   `cam_generate_toolpath` diverges the same way and is listed here for the same reason:
-   handler `{generated, scope, setup, operation}`, mock `{setup_name, operation_name,
-   generated, toolpath_count}`. An agent rehearsing `toolpath_count` gets a `KeyError`
-   live and never sees `scope`.
+   The guard is a comparison of the two modes to each other - `test_mock_and_the_handler_
+   answer_the_same_*` in `tests/test_addon_cam.py`, one per command - rather than each to
+   a literal, so a **top-level** key added to one side alone fails the suite. Nested keys
+   are covered where they are compared as well: `parameters_applied` against the
+   parameter names the handler actually wrote, and `stock_applied` value-for-value.
 
+   Deliberately still divergent, and recorded as a decision rather than left to be
+   rediscovered: mock cannot model a parameter Fusion *refuses* (`parameters_failed`), and
+   it cannot model the tool description Fusion normalises, so those stay placeholders.
 9. ~~`cam_create_setup`'s `stock_mode` vocabulary does not match the handler's map~~
    - **closed, and measured.** The mismatch was real: the schema advertised
    `relative_box`/`fixed_box`/`from_body`, the handler mapped five names - three of

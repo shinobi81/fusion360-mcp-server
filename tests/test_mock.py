@@ -964,9 +964,11 @@ class TestMockCAM:
                 "name": "MySetup",
             },
         )
-        assert result["setup_name"] == "MySetup"
-        assert result["body_name"] == "Part1"
+        # The handler's keys: `name`, `body`, and the stock under `stock_applied`.
+        assert result["name"] == "MySetup"
+        assert result["body"] == "Part1"
         assert result["operation_type"] == "milling"
+        assert result["stock_applied"] == {"stock_mode": "default"}
 
     def test_cam_create_operation(self):
         result = mock_command(
@@ -978,7 +980,8 @@ class TestMockCAM:
             },
         )
         assert result["strategy"] == "adaptive2d"
-        assert result["operation_name"] == "Rough1"
+        assert result["name"] == "Rough1"
+        assert result["setup"] == "Setup1"
 
     def test_cam_create_operation_echoes_the_geometry_parameter(self):
         """Mock answers the parameter name from the measured map, not from Fusion.
@@ -1002,14 +1005,31 @@ class TestMockCAM:
         }
 
     def test_cam_generate_toolpath(self):
+        """The handler's shape: `generated` plus the scope it resolved.
+
+        `toolpath_count` was never a handler key - an agent that read it here got a
+        KeyError against Fusion.
+        """
+        result = mock_command("cam_generate_toolpath", {"setup_name": "Setup1"})
+
+        assert result["generated"] is True
+        assert result["scope"] == "setup"
+        assert result["setup"] == "Setup1"
+        assert "toolpath_count" not in result
+
+    def test_cam_generate_toolpath_names_the_operation_it_was_given(self):
         result = mock_command(
             "cam_generate_toolpath",
-            {
-                "setup_name": "Setup1",
-            },
+            {"setup_name": "Setup1", "operation_name": "Rough1"},
         )
-        assert result["generated"] is True
-        assert result["toolpath_count"] >= 1
+
+        assert result["scope"] == "operation"
+        assert result["operation"] == "Rough1"
+
+    def test_cam_generate_all_reports_the_all_scope(self):
+        result = mock_command("cam_generate_toolpath", {"generate_all": True})
+
+        assert result["scope"] == "all"
 
     def test_cam_post_process(self):
         result = mock_command(
@@ -1019,14 +1039,17 @@ class TestMockCAM:
                 "post_processor": "grbl",
             },
         )
+        # The handler's keys: the folder and the unit word, not a made-up file path.
         assert result["post_processor"] == "grbl"
-        assert "output_file" in result
+        assert result["setup"] == "Setup1"
+        assert "output_folder" in result
+        assert result["units"] == "mm"
 
     def test_cam_list_setups(self):
         result = mock_command("cam_list_setups")
-        assert "setups" in result
-        assert len(result["setups"]) > 0
-        assert "name" in result["setups"][0]
+        assert result["count"] == len(result["setups"]) == 1
+        # `{name, operations, is_valid}` per setup, as the handler answers.
+        assert set(result["setups"][0]) == {"name", "operations", "is_valid"}
 
     def test_cam_list_operations(self):
         result = mock_command(
@@ -1035,9 +1058,9 @@ class TestMockCAM:
                 "setup_name": "Setup1",
             },
         )
-        assert result["setup_name"] == "Setup1"
-        assert "operations" in result
-        assert len(result["operations"]) > 0
+        assert result["setup"] == "Setup1"
+        assert result["count"] == len(result["operations"]) == 2
+        assert set(result["operations"][0]) == {"name", "has_toolpath", "is_valid"}
 
     def test_cam_get_operation_info(self):
         result = mock_command(
@@ -1047,23 +1070,32 @@ class TestMockCAM:
                 "operation_name": "Face1",
             },
         )
-        assert result["operation_name"] == "Face1"
-        assert "strategy" in result
-        assert "tool_diameter" in result
-        assert "has_toolpath" in result
+        # The handler's keys: `name`, the flags, the tool, and the operation's own
+        # parameters - `strategy`/`tool_diameter` live inside `parameters` live.
+        assert result["name"] == "Face1"
+        assert set(result) == {
+            "name",
+            "is_valid",
+            "has_toolpath",
+            "tool",
+            "parameters",
+            "ok",
+            "mode",
+        }
+        assert "tool_diameter" in result["parameters"]
 
-    def test_cam_create_setup_echoes_the_stock_mode_name_it_was_given(self):
-        """Mock echoes the *name*; the handler answers Fusion's *id*.
+    def test_cam_create_setup_answers_fusions_id_like_the_handler(self):
+        """The name is the caller's, the id is Fusion's - and both modes answer the id.
 
-        That divergence is recorded in ROADMAP item 8 as pre-existing - and it says it
-        is pinned here, so this is the assertion that makes that sentence true.
+        Mock used to echo the name the caller sent, which was the one *value* in the
+        rehearsal that met a different one live (`from_solid` -> `solid`).
         """
         result = mock_command(
             "cam_create_setup", {"body_name": "Part1", "stock_mode": "from_solid"}
         )
 
         assert result["ok"] is True
-        assert result["stock_mode"] == "from_solid"
+        assert result["stock_applied"] == {"stock_mode": "solid"}
 
     @pytest.mark.parametrize(
         "field", ["stock_offset_sides", "stock_offset_top", "stock_offset_bottom"]

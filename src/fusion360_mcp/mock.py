@@ -14,12 +14,14 @@ must not read as work done.
 """
 
 import math
+import os
 from typing import Any
 
 from ._mutation_commands import MUTATION_COMMANDS
 from ._rules import (
     CAM_GEOMETRY_PARAMETERS,
     CAM_NO_TOOL_WARNING,
+    CAM_STOCK_MODES,
     as_built_geometry_refusal,
     body_name_required_refusal,
     cam_geometry_refusal,
@@ -1540,11 +1542,22 @@ def _cam_create_setup(p: dict) -> dict:
         return _mock_error(
             f"Unknown operation_type '{operation_type}' — use milling/turning/cutting"
         )
+    # The handler's keys, and the handler's *values*: Fusion's id for the mode
+    # (`from_solid` -> `solid`), and the three offsets under Fusion's own parameter
+    # names - but only when they are non-zero, which is the handler's own guard.
+    stock: dict = {"stock_mode": CAM_STOCK_MODES[p.get("stock_mode", "relative_box")]}
+    for argument, parameter in (
+        ("stock_offset_sides", "job_stockOffset"),
+        ("stock_offset_top", "job_stockOffsetTop"),
+        ("stock_offset_bottom", "job_stockOffsetBottom"),
+    ):
+        if p.get(argument):
+            stock[parameter] = p[argument]
     return {
-        "setup_name": p.get("name", "Setup1"),
-        "body_name": p.get("body_name", "Body1"),
+        "name": p.get("name", "Setup1"),
+        "body": p.get("body_name", "Body1"),
         "operation_type": operation_type,
-        "stock_mode": p.get("stock_mode", "relative_box"),
+        "stock_applied": stock,
     }
 
 
@@ -1572,8 +1585,8 @@ def _cam_create_operation(p: dict) -> dict:
     if selector_refusal is not None:
         return _refusal_error(selector_refusal)
     result = {
-        "setup_name": p.get("setup_name", "Setup1"),
-        "operation_name": p.get("name", "Operation1"),
+        "name": p.get("name", "Operation1"),
+        "setup": p.get("setup_name", "Setup1"),
         "strategy": p.get("strategy", "contour2d"),
     }
     if p.get("face_indices"):
@@ -1602,6 +1615,24 @@ def _cam_create_operation(p: dict) -> dict:
     else:
         result["tool"] = None
         result["tool_warning"] = CAM_NO_TOOL_WARNING
+    # The handler answers these under Fusion's own parameter names, and only for the
+    # values it was given - so an agent that rehearses ``parameters_applied`` reads the
+    # same keys live. ``coolant`` defaults to flood in both, so a live success carries
+    # ``tool_coolant`` too.
+    applied: dict = {}
+    for argument, parameter in (
+        ("stepdown", "maximumStepdown"),
+        ("stepover", "maximumStepover"),
+        ("feed_rate", "tool_feedCutting"),
+        ("spindle_speed", "tool_spindleSpeed"),
+    ):
+        if p.get(argument) is not None:
+            applied[parameter] = p[argument]
+    coolant = p.get("coolant", "flood")
+    if coolant is not None:
+        applied["tool_coolant"] = coolant
+    if applied:
+        result["parameters_applied"] = applied
     return result
 
 
@@ -1610,66 +1641,87 @@ def _cam_generate_toolpath(p: dict) -> dict:
     # mock mode must not report a toolpath a call never asked for.
     if refusal := cam_target_refusal(p):
         return _refusal_error(refusal)
-    return {
-        "setup_name": p.get("setup_name", "Setup1"),
-        "operation_name": p.get("operation_name"),
-        "generated": True,
-        "toolpath_count": 1,
-    }
+    # The handler answers `generated` and `scope`, naming the setup (and the operation
+    # when one was named). `toolpath_count` was never a handler key: an agent reading it
+    # here got a KeyError live.
+    if p.get("generate_all"):
+        return {"generated": True, "scope": "all"}
+    # When the caller named no setup but did name an operation, the handler resolves the
+    # owning setup from the design. Mock has no design, so it answers the caller's name
+    # or this placeholder - the *keys* are what a rehearsal reads.
+    setup = p.get("setup_name", "Setup1")
+    if p.get("operation_name"):
+        return {
+            "generated": True,
+            "scope": "operation",
+            "setup": setup,
+            "operation": p["operation_name"],
+        }
+    return {"generated": True, "scope": "setup", "setup": setup}
 
 
 def _cam_post_process(p: dict) -> dict:
     setup = p.get("setup_name", "Setup1")
     post = p.get("post_processor", "fanuc")
+    # The handler answers the folder (`output_folder`) and the unit word (`units`);
+    # `output_file`/`output_units` were keys no call ever returned. The default folder
+    # is resolved the way the handler resolves it, so a rehearsal prints a real path.
     return {
-        "setup_name": setup,
+        "setup": setup,
         "post_processor": post,
-        "output_file": f"~/Desktop/{setup}.nc",
-        "output_units": p.get("output_units", "mm"),
+        "output_folder": p.get("output_folder")
+        or os.path.join(os.path.expanduser("~"), "Desktop"),
+        "units": p.get("output_units", "mm"),
     }
 
 
 def _cam_list_setups(_p: dict) -> dict:
+    # `{name, operations, is_valid}` per setup and a top-level `count`, as the handler.
     return {
         "setups": [
             {
                 "name": "Setup1",
-                "operation_type": "milling",
-                "operation_count": 2,
+                "operations": ["Face1", "2D Contour1"],
+                "is_valid": True,
             },
         ],
+        "count": 1,
     }
 
 
 def _cam_list_operations(p: dict) -> dict:
+    # `setup` (not `setup_name`), and each operation with the three keys the handler
+    # reports - `strategy` was never one of them.
+    operations = [
+        {"name": "Face1", "has_toolpath": True, "is_valid": True},
+        {"name": "2D Contour1", "has_toolpath": False, "is_valid": True},
+    ]
     return {
-        "setup_name": p.get("setup_name", "Setup1"),
-        "operations": [
-            {
-                "name": "Face1",
-                "strategy": "face",
-                "has_toolpath": True,
-            },
-            {
-                "name": "2D Contour1",
-                "strategy": "contour2d",
-                "has_toolpath": False,
-            },
-        ],
+        "setup": p.get("setup_name", "Setup1"),
+        "operations": operations,
+        "count": len(operations),
     }
 
 
 def _cam_get_operation_info(p: dict) -> dict:
+    # The handler's keys: `name`, the two validity flags, the tool (a read-back, so a
+    # description) and the operation's own parameter map. The last two are *conditional*
+    # live - an operation with no tool, or a shape without `parameters`, reports neither
+    # - and mock cannot model that absence, so it always answers both.
     return {
-        "setup_name": p.get("setup_name", "Setup1"),
-        "operation_name": p.get("operation_name", "Face1"),
-        "strategy": "face",
-        "tool_diameter": 0.6,
-        "stepdown": 0.1,
-        "feed_rate": 100.0,
-        "spindle_speed": 10000,
+        "name": p.get("operation_name", "Face1"),
+        "is_valid": True,
         "has_toolpath": True,
-        "toolpath_valid": True,
+        "tool": {"description": "Ø6mm flat (mock)"},
+        # The parameter names measured on 2706 (roadmap item 6) and the feed ones the
+        # handler writes. `strategy` is an Operation *property* live, not a parameter,
+        # so it is not in here.
+        "parameters": {
+            "tool_diameter": "6.",
+            "maximumStepdown": "0.1",
+            "tool_feedCutting": "100.",
+            "tool_spindleSpeed": "10000.",
+        },
     }
 
 
