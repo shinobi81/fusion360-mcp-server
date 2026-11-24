@@ -365,6 +365,8 @@ class FakeFace:
         point_on_face: tuple[float, float, float] | None = None,
         planar: bool = True,
         radius: float | None = None,
+        centroid: tuple[float, float, float] | None = None,
+        is_param_reversed: bool = False,
     ):
         # ``radius`` makes a non-planar face a *measured* cylinder rather than a
         # shape-less one: ``create_thread`` reads its diameter to decide whether the
@@ -381,6 +383,15 @@ class FakeFace:
         )
         self.evaluator = FakeEvaluator(normal)
         self.area = area
+        #: ``BRepFace.isParamReversed``: measured on 2706, a box reports True for its
+        #: bottom and all four sides, so ``geometry.normal`` is the *surface* normal and
+        #: the face's outward one is its negation. ``list_faces`` applies that.
+        self.isParamReversed = is_param_reversed
+        #: ``BRepFace.centroid`` - the *area* centroid the stub lists, which is what
+        #: ``list_faces`` reports.  Defaults to the bounding-box centre, which is the
+        #: same point for the box-shaped fixtures here; a test that needs them apart
+        #: passes its own.
+        self.centroid = FakePoint3D(*(centroid if centroid is not None else centre))
         #: Fusion lets an appearance be assigned to one face; ``None`` is "none
         #: assigned", and nothing here inherits the body's.
         self.appearance = None

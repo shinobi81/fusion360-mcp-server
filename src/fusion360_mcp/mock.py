@@ -206,6 +206,39 @@ def _list_edges(p: dict) -> dict:
     }
 
 
+def _list_faces(p: dict) -> dict:
+    """Two faces of a plate, in the shape the handler returns.
+
+    One planar and one not, because the shape differs: only a planar face carries a
+    ``normal``, and a mock that always emitted one would rehearse a key Fusion does not
+    send. ``limit`` is honoured for the reason ``_list_edges`` honours it - a mock that
+    reported a clipped list as complete would hide the one thing ``count``/``truncated``
+    exist to say.
+    """
+    faces = [
+        {
+            "index": 0,
+            "is_planar": True,
+            "area": 20.0,
+            "centroid": [0.0, 0.0, 0.5],
+            "normal": [0.0, 0.0, 1.0],
+        },
+        {
+            "index": 1,
+            "is_planar": False,
+            "area": 5.0,
+            "centroid": [0.0, -2.5, 0.0],
+        },
+    ]
+    limit = max(1, int(p.get("limit") or 200))
+    return {
+        "body_name": p.get("body_name") or "Body1",
+        "count": len(faces),
+        "truncated": len(faces) > limit,
+        "faces": faces[:limit],
+    }
+
+
 def _get_bounding_box(p: dict) -> dict:
     name = p.get("name", "Unknown")
     return {
@@ -1681,6 +1714,7 @@ _DISPATCH: dict[str, Any] = {
     "get_scene_info": _get_scene_info,
     "get_object_info": _get_object_info,
     "list_edges": _list_edges,
+    "list_faces": _list_faces,
     "get_bounding_box": _get_bounding_box,
     "create_sketch": _create_sketch,
     "draw_rectangle": _draw_rectangle,

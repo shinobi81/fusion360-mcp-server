@@ -873,6 +873,27 @@ TOOLS: list[dict] = [
         },
     ),
     _tool(
+        "list_faces",
+        "List Faces",
+        (
+            "List a body's faces with index, planarity, area and centroid, plus the "
+            "normal on a planar face; these are the indices face_indices takes, and "
+            "until this tool existed they could only be learned through execute_code"
+        ),
+        body_name={
+            "type": "string",
+            "description": "Body name (default: the body at body_index)",
+        },
+        body_index={"type": "integer", "default": 0},
+        limit={
+            "type": "integer",
+            "default": 200,
+            "minimum": 1,
+            "maximum": 5000,
+            "description": "Maximum faces returned; count is the real total",
+        },
+    ),
+    _tool(
         "list_components",
         "List Components",
         "List all components in the design",
@@ -2544,6 +2565,7 @@ _READ_ONLY = {
     "get_scene_info",
     "get_object_info",
     "list_edges",
+    "list_faces",
     "get_bounding_box",
     "list_components",
     "get_parameters",

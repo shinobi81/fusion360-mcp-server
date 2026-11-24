@@ -173,6 +173,7 @@ class TestToolAnnotations:
             "cam_get_operation_info",
             "get_design_type",
             "render_view",
+            "list_faces",
         }
         for t in TOOLS:
             ann = t["annotations"]

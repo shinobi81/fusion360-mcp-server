@@ -188,6 +188,61 @@ class SceneCommands(_Contract):
             "edges": edges,
         }
 
+    def list_faces(
+        self,
+        body_name: str | None = None,
+        body_index: int = 0,
+        limit: int = 200,
+    ):
+        """Every face of a body, with the geometry needed to choose one.
+
+        ``face_indices`` arguments take these indices in the body's own order, and until
+        now the only way to learn them was ``execute_code`` - a wrong-but-in-range index
+        was accepted silently. ``count`` is the body's real face count and ``truncated``
+        says whether ``limit`` clipped the list, the same contract ``list_edges`` keeps.
+
+        A face is reported with its index, whether it is planar, its area and its
+        centroid; a planar face also carries its **outward** normal, which is what tells
+        a caller which way it faces without a second call. The planar test is Fusion's
+        own enum member, not a constant copied from it.
+
+        The outward normal is not ``geometry.normal``. Measured on 2706.1.17 with a
+        centred box: the bottom face and all four side faces report the *surface*
+        normal with ``isParamReversed`` true, so the raw property says +Z for a face
+        that points down - and two faces of one box then claim the same direction.
+        Negating the surface normal where the flag is set is what makes it outward.
+        """
+        body = self._body_or_index(body_name, body_index)
+        count = body.faces.count
+        limit = max(1, int(limit))
+        plane_type = adsk.core.SurfaceTypes.PlaneSurfaceType
+
+        def coords(point):
+            return [point.x, point.y, point.z]
+
+        faces = []
+        for index in range(min(count, limit)):
+            face = body.faces.item(index)
+            geometry = face.geometry
+            is_planar = geometry.surfaceType == plane_type
+            entry = {
+                "index": index,
+                "is_planar": is_planar,
+                "area": face.area,
+                "centroid": coords(face.centroid),
+            }
+            if is_planar:
+                normal = geometry.normal
+                sign = -1.0 if face.isParamReversed else 1.0
+                entry["normal"] = [sign * normal.x, sign * normal.y, sign * normal.z]
+            faces.append(entry)
+        return {
+            "body_name": body.name,
+            "count": count,
+            "truncated": len(faces) < count,
+            "faces": faces,
+        }
+
     def list_components(self):
         root = self._root()
         components = [{"name": root.name, "is_root": True}]
