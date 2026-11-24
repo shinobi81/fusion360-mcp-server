@@ -197,7 +197,8 @@ def _list_edges(p: dict) -> dict:
             "curve_type": "Line3D",
         },
     ]
-    limit = max(1, int(p.get("limit") or 200))
+    requested = p.get("limit")
+    limit = 200 if requested is None else max(1, int(requested))
     return {
         "body_name": p.get("body_name") or "Body1",
         "count": len(edges),
@@ -218,6 +219,7 @@ def _list_faces(p: dict) -> dict:
     faces = [
         {
             "index": 0,
+            "surface_type": "Plane",
             "is_planar": True,
             "area": 20.0,
             "centroid": [0.0, 0.0, 0.5],
@@ -225,12 +227,14 @@ def _list_faces(p: dict) -> dict:
         },
         {
             "index": 1,
+            "surface_type": "Cylinder",
             "is_planar": False,
             "area": 5.0,
             "centroid": [0.0, -2.5, 0.0],
         },
     ]
-    limit = max(1, int(p.get("limit") or 200))
+    requested = p.get("limit")
+    limit = 200 if requested is None else max(1, int(requested))
     return {
         "body_name": p.get("body_name") or "Body1",
         "count": len(faces),

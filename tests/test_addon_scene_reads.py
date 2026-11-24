@@ -28,10 +28,12 @@ the root is named in the reply, not what Fusion calls it.
 
 from __future__ import annotations
 
+import inspect
 import math
 
 import pytest
 
+from addon.server import handler_scene
 from addon.server import hints as addon_hints
 from addon.server.hints import classify
 from tests.fakes.bodies import FakeBody, FakeBoundingBox, FakeFace
@@ -393,12 +395,17 @@ def test_list_faces_reports_a_planar_face_with_its_normal(bound_handler):
 
     result = handler.list_faces(body_name="Plate")
 
+    assert result["body_name"] == "Plate"
     face = result["faces"][0]
     assert face["index"] == 0
     assert face["is_planar"] is True
     assert face["normal"] == [0.0, 0.0, 1.0]
     assert face["centroid"] == [1.0, 2.0, 3.0]
+    # The area is what tells two coplanar faces apart; FakeFace's default is 1.0.
+    assert face["area"] == 1.0
     assert result["count"] == 1
+    # The other half of the pair: a list that was not clipped says so.
+    assert result["truncated"] is False
 
 
 def test_list_faces_omits_the_normal_of_a_curved_face(bound_handler):
@@ -444,3 +451,33 @@ def test_list_faces_reports_the_outward_normal_not_the_surface_one(bound_handler
     normal = handler.list_faces(body_name="Plate")["faces"][0]["normal"]
 
     assert normal == [0.0, 0.0, -1.0]
+
+
+def test_list_faces_names_the_surface_the_way_fusion_does(bound_handler):
+    """A caller picks a cylinder by name; the names come from the enum's members.
+
+    The mapping is keyed by ``SurfaceTypes.<member>``, so a build that renumbers the
+    enum cannot leave the names wrong - and an unknown surface falls through as its raw
+    value rather than being guessed at.
+    """
+    planar = FakeFace()
+    curved = FakeFace(planar=False, radius=1.0)
+    handler = bound_handler(
+        FakeDesign(features=0, bodies=[_plate_with(planar, curved)])
+    )
+
+    faces = handler.list_faces(body_name="Plate")["faces"]
+
+    assert faces[0]["surface_type"] == "Plane"
+    assert faces[1]["surface_type"] == "Cylinder"
+
+
+def test_list_faces_compares_against_the_enum_member_not_an_integer():
+    """The planar test reads Fusion's member; ``0`` happens to equal it today.
+
+    A literal would pass every behavioural test in this file and break the day the stub
+    renumbers the enum, so the claim is pinned where it lives - in the source.
+    """
+    source = inspect.getsource(handler_scene)
+
+    assert "SurfaceTypes.PlaneSurfaceType" in source

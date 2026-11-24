@@ -235,7 +235,7 @@ def _target_body(reaches: str) -> dict:
 def _tool(
     _name: str, _title: str, _description: str, *, required=(), **properties
 ) -> dict:
-    """One tool entry: the wrapper all 97 of them share.
+    """One tool entry: the wrapper all 98 of them share.
 
     ``required`` and every property are keyword arguments, so a schema reads as
     the arguments it describes rather than as five levels of dict literal.  The
@@ -2594,7 +2594,7 @@ _IDEMPOTENT = _READ_ONLY | {
 
 for _t in TOOLS:
     _name = _t["name"]
-    # One loop rather than 97 schema edits: the gate validates every tool against
+    # One loop rather than 98 schema edits: the gate validates every tool against
     # this dict, and a client that skips the gate to reach :9876 directly must not
     # be the only caller an undeclared argument slips past.  A tool's inputSchema
     # lists every argument it accepts, so anything else is refused by name.
