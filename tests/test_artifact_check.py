@@ -322,13 +322,14 @@ def test_a_finding_naming_an_awkward_file_stays_one_line(
     ]
 
 
-def test_the_repository_tracks_twenty_one_add_on_files():
+def test_the_repository_tracks_twenty_two_add_on_files():
     tracked = CHECK.tracked_add_on(REPO_ROOT)
 
     assert set(tracked) == {
         "Fusion360MCP.manifest",
         "Fusion360MCP.py",
         "server/__init__.py",
+        "server/cam_tool.py",
         "server/command_handler.py",
         "server/event_bridge.py",
         "server/fusion_api.py",
