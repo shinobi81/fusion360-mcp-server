@@ -258,8 +258,7 @@ _RULES: list[tuple[str, str, list[str]]] = [
         [
             "No face of that body lies in the selected plane; nothing was written.",
             "top and bottom take the faces in the highest or lowest flat plane.",
-            "Where the tool takes face_indices, list_faces reports the indices to "
-            "pass.",
+            "Where the tool takes face_indices, list_faces reports the indices.",
         ],
     ),
     (

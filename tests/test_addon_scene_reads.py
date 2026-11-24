@@ -491,7 +491,7 @@ def test_list_faces_compares_against_the_enum_member_not_an_integer():
     # line, indent included: a comment written as the assignment would satisfy a bare
     # substring test.
     assert "\n        plane_type = adsk.core.SurfaceTypes.PlaneSurfaceType\n" in source
-    assert "geometry.surfaceType == plane_type" in source
+    assert "\n            is_planar = geometry.surfaceType == plane_type\n" in source
 
 
 @pytest.mark.parametrize(("limit", "expected"), [(None, 2), (0, 1), (1, 1)])

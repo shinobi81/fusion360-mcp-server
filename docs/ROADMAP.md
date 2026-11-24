@@ -295,7 +295,7 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    property gives `+Z` for a face that points down and a box's top and bottom claim one
    direction - the tool negates where the flag is set, and the six faces then report six
    distinct outward normals. The hints that sent a caller to `execute_code` for a face
-   selection it could supply (`hints.py` x3, `handler_assembly`, `handler_cam`, plus the
+   selection it could supply (`hints.py` x4, `handler_assembly`, `handler_cam`, plus the
    descriptions of `add_joint` and `cam_create_operation.face_indices`) name the tool
    now; the two that remain are for tools with no face-index argument at all, where
    `list_faces` has nowhere to send the indices.
