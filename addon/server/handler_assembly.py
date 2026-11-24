@@ -197,13 +197,20 @@ class AssemblyCommands(_Contract):
         plane_two: str | None = None,
         body_name: str | None = None,
         edge_index: int | None = None,
+        face_index: int | None = None,
     ):
         root = self._root()
         axes = root.constructionAxes
-        # Shipped: setByPerpendicularAtPoint(face: BRepFace, pointEntity).  The tool
-        # has no face parameter to give it, so the call cannot be built; the enum
-        # value stays in the schema for wire compatibility.
-        if refusal := _rules.perpendicular_axis_refusal({"method": method}):
+        # Judged before anything is created, and from the parameters alone: the three
+        # arguments this method needs are named in the refusal when one is missing.
+        if refusal := _rules.perpendicular_axis_refusal(
+            {
+                "method": method,
+                "body_name": body_name,
+                "face_index": face_index,
+                "point_one": point_one,
+            }
+        ):
             raise refusal
         inp = axes.createInput()
 
@@ -219,6 +226,28 @@ class AssemblyCommands(_Contract):
             body = self._body_by_name(body_name)
             edge = body.edges.item(edge_index)
             inp.setByEdge(edge)
+        elif method == "perpendicular_at_point":
+            body = self._body_by_name(body_name)
+            # The rule refused an absent face_index before anything was created; this is
+            # the defensive half, so the comparison below has an int to work with.
+            if face_index is None:
+                raise _hints.Refusal(
+                    "INVALID_INPUT",
+                    "perpendicular_at_point needs face_index",
+                    hints=("list_faces reports a body's face indices.",),
+                )
+            # A face index is judged against the body before the call, so a wrong one
+            # names the range instead of raising out of the API with no advice.
+            if not 0 <= face_index < body.faces.count:
+                raise _hints.Refusal(
+                    "INVALID_INPUT",
+                    f"Face index {face_index} is out of range for body "
+                    f"'{body.name}' ({body.faces.count} faces)",
+                    hints=("list_faces reports the indices for this body.",),
+                )
+            inp.setByPerpendicularAtPoint(
+                body.faces.item(face_index), self._point3d(point_one, "point_one")
+            )
 
         axis_obj = axes.add(inp)
         return {"created": True, "name": axis_obj.name, "method": method}

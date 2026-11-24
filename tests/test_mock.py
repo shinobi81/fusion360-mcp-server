@@ -531,7 +531,9 @@ class TestMockConstructionGeometry:
             },
         )
         assert result["method"] == "two_points"
-        assert "axis_name" in result
+        # The handler's keys: `created`, the axis `name`, and the method.
+        assert result["created"] is True
+        assert "name" in result
 
 
 class TestMockSplines:

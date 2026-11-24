@@ -25,7 +25,8 @@ import math
 import pytest
 
 from addon.server import hints as addon_hints
-from tests.fakes.bodies import body_with_edges
+from tests.fakes.bodies import FakeBody, FakeFace, body_with_edges
+from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
 from tests.fakes.runtime import FakePoint3D
 from tests.fakes.sketch import FakeAutoConstrainResult, FakeSketch
@@ -278,19 +279,45 @@ def test_create_construction_axis_where_two_planes_meet(bound_handler):
     assert created.args == (root.xYConstructionPlane, root.yZConstructionPlane)
 
 
-def test_create_construction_axis_perpendicular_at_a_point_is_refused(bound_handler):
-    """The shipped setter takes a B-Rep face, which the method cannot name.
+def test_create_construction_axis_perpendicular_at_a_point(bound_handler):
+    """The axis is normal to a face at a point, named by body and face index.
 
-    ``setByPerpendicularAtPoint(face: BRepFace, pointEntity)`` was handed a
-    construction plane, so SWIG refused every call; the tool has no face
-    parameter, so the method is refused up front and no axis is created.  The
-    schema keeps the enum value for wire compatibility.
+    Until `face_index` existed the shipped setter had no face to take, so the method
+    was advertised and refused outright. The setter's two arguments are the stub's.
     """
+    body = FakeBody(name="Plate", faces=FakeCollection([FakeFace(), FakeFace()]))
+    design = FakeDesign(features=2, bodies=[body])
+    handler = bound_handler(design)
+
+    result = handler.create_construction_axis(
+        "perpendicular_at_point",
+        body_name="Plate",
+        face_index=1,
+        point_one=[0.0, 0.0, 1.0],
+    )
+
+    assert result == {
+        "created": True,
+        # The fake's own default name (Fusion's is not measured here).
+        "name": "Construction Axis1",
+        "method": "perpendicular_at_point",
+    }
+    built = design.rootComponent.constructionAxes.last_input
+    assert built.setter == "setByPerpendicularAtPoint"
+    face, point = built.args
+    assert face is body.faces.item(1), "the face the index named, not the first one"
+    assert (point.x, point.y, point.z) == (0.0, 0.0, 1.0)
+
+
+def test_create_construction_axis_perpendicular_names_the_missing_argument(
+    bound_handler,
+):
+    """No face index: refused before anything is created, naming the argument."""
     design = FakeDesign(features=2)
 
-    with pytest.raises(RuntimeError, match="B-Rep face"):
+    with pytest.raises(RuntimeError, match="face_index"):
         bound_handler(design).create_construction_axis(
-            "perpendicular_at_point", plane_one="xz", point_one=[1, 2, 3]
+            "perpendicular_at_point", body_name="Plate", point_one=[1, 2, 3]
         )
 
     assert design.rootComponent.constructionAxes.count == 0

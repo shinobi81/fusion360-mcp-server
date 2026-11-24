@@ -1054,12 +1054,15 @@ def _create_construction_axis(p: dict) -> dict:
     if refusal is not None:
         return _refusal_error(refusal)
     if p.get("method") == "edge":
-        # The only branch that names a body: the other two build from points or planes.
+        # The branches that name a body: the other two build from points or planes.
         refused = _body_name_required_error(p)
         if refused is not None:
             return refused
+    # The handler's keys: `created`, the axis `name`, and the `method` it built from.
+    # `axis_name` was a key no call ever returned.
     return {
-        "axis_name": "ConstructionAxis_mock",
+        "created": True,
+        "name": "ConstructionAxis_mock",
         "method": p.get("method", "two_points"),
     }
 

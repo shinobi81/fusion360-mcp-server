@@ -236,9 +236,8 @@ def test_every_declared_enum_matches_the_set_the_add_in_refuses():
 
     Each entry is a (tool, property, the tuple the handler refuses). Where the two
     disagree the row is NOT answered by the schema: a handler that refuses a strict
-    subset - ``value_kind`` per joint type, ``method`` whose
-    ``perpendicular_at_point`` is advertised and refused - moves to its domain task
-    as a site ``Refusal`` instead.
+    subset - ``value_kind`` per joint type - moves to its domain task as a site
+    ``Refusal`` instead.
     """
     from addon.server.rules import EDGE_SELECTIONS, EXPORT_FORMATS
 
