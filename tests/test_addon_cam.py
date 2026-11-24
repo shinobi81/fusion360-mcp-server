@@ -1449,6 +1449,9 @@ def test_a_stock_mode_reaches_fusion_as_its_own_id(handler_module, mode, expecte
 
     assert result["stock_applied"]["stock_mode"] == expected
     assert created[0].written["job_stockMode"].expression == f"'{expected}'"
+    # One-sided assertions let a handler that always adds the warning stay green.
+    assert "stock_failed" not in result
+    assert "warning" not in result
 
 
 def test_an_unknown_stock_mode_is_refused_before_a_setup_exists(handler_module):

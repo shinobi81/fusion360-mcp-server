@@ -27,6 +27,16 @@ CASES = [
     # ``set_design_type`` has a handler guard for a direct-wire caller; the enum is
     # what refuses this MCP caller.
     ("set_design_type", {"design_type": "hybrid"}, "design_type"),
+    # Same shape: ``cam_stock_mode_refusal`` is the direct-wire and ``mock_command``
+    # refusal, so what an MCP caller gets for the value this change migrates away from
+    # is the gate's sentence - which is worth pinning, because the migration advice
+    # ("from_solid replaces from_body") reaches that caller through the schema
+    # description instead, and the two must not drift apart.
+    (
+        "cam_create_setup",
+        {"body_name": "Body1", "stock_mode": "from_body"},
+        "from_body",
+    ),
     # The enums whose handler raises this task deleted: the gate is the only
     # refusal for a value the schema already forbids.
     ("export", {"format": "obj"}, "Unknown format"),

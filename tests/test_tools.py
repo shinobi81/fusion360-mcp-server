@@ -1,5 +1,7 @@
 """Tests for the tool registry."""
 
+import inspect
+
 from fusion360_mcp import tools
 from fusion360_mcp.tools import TOOLS, get_tool_by_name, get_tool_list
 
@@ -324,3 +326,7 @@ def test_the_stock_mode_enum_is_the_rules_table():
 
     assert schema["enum"] == list(CAM_STOCK_MODES)
     assert schema["default"] in CAM_STOCK_MODES
+    # Equality of values cannot see *where* they came from: a literal list of these five
+    # names would satisfy the assertion above and pass the whole suite. Reading the
+    # source is how this test keeps its docstring honest.
+    assert "list(CAM_STOCK_MODES)" in inspect.getsource(tools)

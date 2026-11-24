@@ -1052,6 +1052,19 @@ class TestMockCAM:
         assert "tool_diameter" in result
         assert "has_toolpath" in result
 
+    def test_cam_create_setup_echoes_the_stock_mode_name_it_was_given(self):
+        """Mock echoes the *name*; the handler answers Fusion's *id*.
+
+        That divergence is recorded in ROADMAP item 8 as pre-existing - and it says it
+        is pinned here, so this is the assertion that makes that sentence true.
+        """
+        result = mock_command(
+            "cam_create_setup", {"body_name": "Part1", "stock_mode": "from_solid"}
+        )
+
+        assert result["ok"] is True
+        assert result["stock_mode"] == "from_solid"
+
     @pytest.mark.parametrize(
         "field", ["stock_offset_sides", "stock_offset_top", "stock_offset_bottom"]
     )

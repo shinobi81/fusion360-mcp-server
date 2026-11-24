@@ -361,6 +361,22 @@ PARAMETER_REFUSALS = [
         "keep_cells takes cell indices, not 'left'",
         ("Pass whole-number cell indices, counted from 0.",),
     ),
+    # The hint half is the migration advice: `from_body` was advertised for two
+    # releases and never worked, so losing the sentence that says so would ship green
+    # without this row (the parity test compares one `_rules` function to itself).
+    (
+        "cam_create_setup",
+        {"body_name": "Body1", "stock_mode": "from_body"},
+        "INVALID_INPUT",
+        "Unknown stock_mode 'from_body' - use one of: relative_box, fixed_box, "
+        "relative_cylinder, fixed_cylinder, from_solid",
+        (
+            "Fusion's own ids, measured: default, fixedbox, relativecylinder, "
+            "fixedcylinder, solid.",
+            "`from_body` was advertised before this was measured and never worked; the "
+            "working name for that mode is `from_solid`.",
+        ),
+    ),
 ]
 
 
@@ -385,6 +401,7 @@ PARAMETER_REFUSALS = [
         "symmetry_line",
         "cam_target",
         "trim_tool",
+        "cam_stock_mode",
         "trim_keep_cells",
     ],
 )
@@ -981,10 +998,47 @@ def test_every_measured_stock_mode_is_accepted_by_both_sides(mode):
     )
 
 
+def test_a_blank_body_does_not_outrank_an_unknown_stock_mode(bare_handler):
+    """Both faults at once, and the vocabulary wins on both sides.
+
+    Without this pair, moving mock's stock check below ``_body_name_required_error``
+    ships green while the two modes answer different sentences for the same call.
+    """
+    call = {"body_name": "", "stock_mode": "from_body"}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_create_setup(**call)
+
+    refused = mock._cam_create_setup(call)
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert "stock_mode" in str(raised.value)
+    assert refused["error_message"] == str(raised.value)
+
+
 @pytest.mark.parametrize(
     "mode",
-    ["from_body", "bogus", "", ["relative_box"], {"relative_box": 1}],
-    ids=["old name", "typo", "empty", "a list", "an object"],
+    [
+        "from_body",
+        "bogus",
+        "",
+        ["relative_box"],
+        {"relative_box": 1},
+        # Fusion's own ids are refused deliberately: the old code passed an unmapped
+        # value through, so a direct-wire caller could send `solid` and have it work.
+        # One vocabulary means the name, and the name is what the schema advertises.
+        "solid",
+        "default",
+    ],
+    ids=[
+        "old name",
+        "typo",
+        "empty",
+        "a list",
+        "an object",
+        "fusion id solid",
+        "fusion id default",
+    ],
 )
 def test_the_handler_and_the_mock_refuse_an_unknown_stock_mode(bare_handler, mode):
     """Refused before anything is created, so a typo cannot leave a stockless setup."""

@@ -326,19 +326,36 @@ and asks the running Fusion whether it exists - 190 references, none missing on
 
    Measured on 2706.1.17 by writing `job_stockMode` on a live setup, one candidate at a
    time: `default`, `fixedbox`, `relativecylinder`, `fixedcylinder` and `solid` are
-   accepted (and read back as themselves), while `from_body` - the value the schema
-   advertised - and any other string are refused with `3 : Invalid enumeration value.`
-   So `from_body` never worked, three working ids were unreachable, and the failure
-   surfaced as `stock_failed` rather than as a refusal.
+   accepted and read back as themselves, while `from_body` - the value the schema
+   advertised - and a nonsense string (`bogus`) are both refused with
+   `3 : Invalid enumeration value.` Two refusals do not prove *every* other string is
+   refused, and this says only what was probed. So `from_body` never worked, three
+   working ids were unreachable, and the failure surfaced as `stock_failed` rather than
+   as a refusal.
+
+   One pairing rests on fused evidence rather than on this probe: `relative_box` ->
+   `default`. The write proves Fusion accepts `default` and returns it; that `default`
+   *is* the relative-size box comes from the handler's older note about Fusion 2705, and
+   the parameter exposes only `title: 'Mode'` - no human label - so 2706 could not
+   confirm it without comparing stock geometry. The other four pairings are
+   self-describing.
 
    What shipped: one table, `rules.CAM_STOCK_MODES`, is now the only source - the schema
-   enum is `list(CAM_STOCK_MODES)`, the handler indexes it (no pass-through, no `.get`
-   fallback), and `rules.cam_stock_mode_refusal` refuses an unknown name from the
-   parameters alone, so mock mode answers the same sentence and nothing is created for a
-   value Fusion would reject. `from_body` is named in the refusal's hint as the old
-   spelling of `from_solid`, and the schema's description says so too. The first tests to
-   name `stock_mode` at all cover the five ids, the refusal, and that the setup does not
-   exist when the vocabulary is refused.
+   enum is `list(CAM_STOCK_MODES)` (pinned by reading the source, since equal values
+   cannot show where they came from), the handler indexes the table its own refusal just
+   validated, and `rules.cam_stock_mode_refusal` refuses an unknown name from the
+   parameters alone, so `mock_command` and a direct-wire caller answer the same
+   sentence, and nothing is created for a value Fusion would reject. That the two modes
+   order their refusals alike is pinned by a call carrying both faults at once.
+
+   An **MCP** caller never reaches that rule: the schema gate refuses the value first,
+   with its own sentence, exactly as it does for `set_design_type` - so the migration
+   advice for
+   `from_body` reaches MCP clients through the schema description instead, and
+   `test_schema_gate.py` pins the sentence such a caller actually gets. `from_body`
+   is named in the refusal's hint as the old spelling of `from_solid`, and the schema's
+   description says so too. The first tests to name `stock_mode` at all cover the five
+   ids, the refusal, and that the setup does not exist when the vocabulary is refused.
 
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.
