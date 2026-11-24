@@ -116,6 +116,17 @@ def build_tool_json(
     # flute count is. A fixed feed beside a varying NOF describes a tool that cuts at
     # half the intended rate at 4 flutes.
     feed_rate = FEED_PER_TOOTH_MM * SPINDLE_RPM * flute_count
+    # Defence in depth, for a caller that reaches this function without the rules in
+    # front of it: ``inf`` serialises as ``Infinity``, which is not JSON and is handed
+    # to the one Fusion call in this path with a measured exit. The rules refuse these
+    # magnitudes first; this is the last line, not the first.
+    derived = (diameter_mm, flute_mm, body_mm, overall_mm, surface_speed, feed_rate)
+    if not all(math.isfinite(number) for number in derived):
+        raise _hints.Refusal(
+            "INVALID_INPUT",
+            "the tool dimensions are too large to describe as JSON numbers",
+            hints=("A tool a few centimetres across is the intended range.",),
+        )
 
     tool = {
         "BMC": "unspecified",

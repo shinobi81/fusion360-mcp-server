@@ -196,3 +196,22 @@ def test_the_per_revolution_feed_matches_the_shipped_library_convention():
     preset = tool["start-values"]["presets"][0]
 
     assert preset["f_n"] == preset["f_z"]
+
+
+def test_the_largest_tool_the_rules_allow_serialises_as_valid_json():
+    """A ceiling exists because ``Infinity`` is not JSON and ``json.dumps`` writes it.
+
+    Checked at both ends of the range the rule allows, with ``parse_constant`` raising:
+    the builder must never emit a non-finite literal. Enumerating the builder's scaling
+    factors was tried instead and was one constant short - a diameter is multiplied by
+    10, by 3 for the flute length, and by ``pi * n / 1000`` for the surface speed.
+    """
+
+    def refuse_constant(name):
+        raise AssertionError(f"emitted the non-JSON literal {name}")
+
+    for diameter in (1000, 0.001):
+        payload = build_tool_json(
+            tool_diameter=diameter, tool_flutes=1000, tool_number=100000
+        )
+        json.loads(payload, parse_constant=refuse_constant)

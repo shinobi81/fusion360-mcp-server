@@ -13,7 +13,6 @@ package, so its copy is canonical.  Edit that file and run
 from __future__ import annotations
 
 import json
-import math
 import os
 from collections.abc import Mapping
 from typing import Any
@@ -221,16 +220,21 @@ def _tool_json_shape_refusal(value: Any) -> _hints.Refusal | None:
     return None
 
 
-#: What the builder multiplies each argument by, so a value that is finite on its own
-#: but overflows once scaled is refused here rather than serialised as ``Infinity`` -
-#: which ``json.dumps`` writes happily and ``Tool.createFromJson`` then has to swallow.
-#: Lengths go to the library's millimetres (x10); a flute count multiplies the feed
-#: (``FEED_PER_TOOTH_MM * SPINDLE_RPM`` = 500 in ``cam_tool``).
-_TOOL_SCALE = {
-    "tool_diameter": 10.0,
-    "tool_length": 10.0,
-    "tool_flutes": 500.0,
-    "tool_number": 1.0,
+#: Ceilings for the tool arguments, and they exist for one reason: the emitted tool is
+#: JSON, ``Infinity`` is not JSON, and ``json.dumps`` writes it without complaint - so
+#: a value large enough to overflow the numbers the builder derives from it would reach
+#: ``Tool.createFromJson`` as invalid input, on the one call here with a measured
+#: Fusion-exit history. Enumerating the builder's scaling factors was tried and was a
+#: constant short (a diameter is multiplied by 10, by 3 for the flute length, and by
+#: ``pi * n / 1000`` for the surface speed); a ceiling cannot be short. Every maximum
+#: below leaves the derived numbers finite with room to spare - a 10 m cutter, a
+#: 1000-flute tool and a tool number of 100000 are far past anything this contract
+#: describes.
+_TOOL_MAXIMUM = {
+    "tool_diameter": 1000,  # cm
+    "tool_length": 1000,  # cm
+    "tool_flutes": 1000,
+    "tool_number": 100000,
 }
 
 
@@ -306,14 +310,14 @@ def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
                 f"{name} is outside the numeric range Fusion can store, got {value!r}",
                 hints=("Send a value in Fusion's numeric range.",),
             )
-        if not math.isfinite(magnitude * _TOOL_SCALE[name]):
-            # Finite on its own, infinite once the builder scales it: ``1e308``
-            # centimetres is ``inf`` millimetres, and ``json.dumps`` writes that as the
-            # non-standard ``Infinity`` for the call with the measured crash history.
+        if magnitude > _TOOL_MAXIMUM[name]:
             return _hints.Refusal(
                 "INVALID_INPUT",
-                f"{name} is too large for the tool it would build, got {value!r}",
-                hints=("A tool a few centimetres across is the intended range.",),
+                f"{name} must be at most {_TOOL_MAXIMUM[name]}, got {value!r}",
+                hints=(
+                    "Lengths are centimetres: a real cutter is a few of them, not "
+                    "hundreds.",
+                ),
             )
         if magnitude <= 0:
             return _hints.Refusal(
