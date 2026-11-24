@@ -2242,10 +2242,11 @@ TOOLS: list[dict] = [
             "default": "relative_box",
             "description": (
                 "How the setup's stock is defined, measured against Fusion "
-                "2706.1.17: relative_box, fixed_box, relative_cylinder, "
-                "fixed_cylinder, from_solid. The names this schema used to advertise "
-                "included from_body, which Fusion refuses as an invalid enumeration "
-                "value and never worked - from_solid is the working name for it."
+                "2706.1.17: "
+                + ", ".join(CAM_STOCK_MODES)
+                + ". The names this schema used to advertise included from_body, "
+                "which Fusion refuses as an invalid enumeration value and never "
+                "worked - from_solid is the working name for it."
             ),
         },
         stock_offset_sides={

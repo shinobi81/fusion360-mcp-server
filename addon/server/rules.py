@@ -247,8 +247,9 @@ _TOOL_MAXIMUM = {
 #: The ``stock_mode`` vocabulary, and the Fusion id each name maps to - measured on
 #: 2706.1.17 by writing ``job_stockMode`` on a live setup. ``default``, ``fixedbox``,
 #: ``relativecylinder``, ``fixedcylinder`` and ``solid`` are accepted; ``from_body`` -
-#: what this schema used to advertise - and any unknown string are refused by Fusion
-#: with ``3 : Invalid enumeration value.``, which the handler could only report as
+#: what this schema used to advertise - and a nonsense string were both refused by
+#: Fusion with ``3 : Invalid enumeration value.`` (two probes, not "every other
+#: string"), which the handler could only report as
 #: ``stock_failed``. One table, so the schema, the handler and mock mode cannot drift.
 CAM_STOCK_MODES = {
     "relative_box": "default",

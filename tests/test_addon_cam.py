@@ -1378,8 +1378,8 @@ def test_operation_errors_skips_what_it_cannot_read_and_names_a_blank_message(
 # ── the setup's stock vocabulary ─────────────────────────────────────────────
 # Measured on Fusion 2706.1.17 by writing ``job_stockMode`` on a live setup: the ids
 # ``default``, ``fixedbox``, ``relativecylinder``, ``fixedcylinder`` and ``solid`` are
-# accepted, and anything else - including ``from_body``, which this schema used to
-# advertise - is refused with "3 : Invalid enumeration value.".
+# accepted; ``from_body`` (which this schema used to advertise) and a nonsense string
+# were both refused with "3 : Invalid enumeration value." - two probes, not a universal.
 
 
 class _StockParam:

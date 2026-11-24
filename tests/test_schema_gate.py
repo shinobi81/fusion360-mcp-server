@@ -35,7 +35,8 @@ CASES = [
     (
         "cam_create_setup",
         {"body_name": "Body1", "stock_mode": "from_body"},
-        "from_body",
+        "Unknown stock_mode: 'from_body'. Expected one of: relative_box, "
+        "fixed_box, relative_cylinder, fixed_cylinder, from_solid",
     ),
     # The enums whose handler raises this task deleted: the gate is the only
     # refusal for a value the schema already forbids.
