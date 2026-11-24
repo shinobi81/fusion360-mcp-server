@@ -1371,3 +1371,16 @@ class TestMockListFaces:
         assert len(result["faces"]) == 1
         assert result["count"] == 2
         assert result["truncated"] is True
+
+
+@pytest.mark.parametrize(("limit", "expected"), [(None, 2), (0, 1), (1, 1)])
+def test_the_mock_list_tools_floor_the_limit_like_the_handler(limit, expected):
+    """``None`` -> the default, ``0`` -> one, in both mock list tools.
+
+    ``0`` used to mean 200 here (`or 200` swallowed it) while the handler floored it to
+    one, so the same call rehearsed a different list than Fusion would return.
+    """
+    params = {} if limit is None else {"limit": limit}
+
+    assert len(mock_command("list_faces", params)["faces"]) == expected
+    assert len(mock_command("list_edges", params)["edges"]) == expected

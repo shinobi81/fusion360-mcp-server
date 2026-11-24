@@ -480,4 +480,23 @@ def test_list_faces_compares_against_the_enum_member_not_an_integer():
     """
     source = inspect.getsource(handler_scene)
 
-    assert "SurfaceTypes.PlaneSurfaceType" in source
+    # The *assignment*, not the name: a comment mentioning the member would satisfy a
+    # substring test while the code compared against a literal.
+    assert "plane_type = adsk.core.SurfaceTypes.PlaneSurfaceType" in source
+    assert "geometry.surfaceType == plane_type" in source
+
+
+@pytest.mark.parametrize(("limit", "expected"), [(None, 2), (0, 1), (1, 1)])
+def test_the_limit_contract_is_one_rule_on_both_sides(bound_handler, limit, expected):
+    """``None`` means "no limit given", ``0`` is floored to one - in both tools.
+
+    The two modes disagreed before this was written: ``0`` meant 1 to the handler and
+    200 to mock, so the same call returned different lists. These are the three cases
+    that differ, and they are asserted for both list tools.
+    """
+    two_faces = [_plate_with(FakeFace(), FakeFace())]
+    handler = bound_handler(FakeDesign(features=0, bodies=two_faces))
+
+    faces = handler.list_faces(body_name="Plate", limit=limit)
+
+    assert len(faces["faces"]) == expected

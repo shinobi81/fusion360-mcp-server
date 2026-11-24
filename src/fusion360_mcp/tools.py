@@ -783,7 +783,8 @@ TOOLS: list[dict] = [
             "joint geometry. face_one/face_two are mandatory: a joint cannot be "
             "built from component origins, because a bare point carries no "
             "component association. Pass a cylindrical face on each side "
-            "(enumerate with execute_code body.faces.item(i)) - for a hinge that is "
+            "(list_faces reports them, with each face's surface_type) - for a hinge "
+            "that is "
             "the knuckle bore on each leaf. NOTE: creating a joint MOVES the "
             "components so the joint geometry becomes coincident - use "
             "create_as_built_joint when the parts are already positioned."
@@ -876,9 +877,10 @@ TOOLS: list[dict] = [
         "list_faces",
         "List Faces",
         (
-            "List a body's faces with index, planarity, area and centroid, plus the "
-            "normal on a planar face; these are the indices face_indices takes, and "
-            "until this tool existed they could only be learned through execute_code"
+            "List a body's faces with index, surface_type (Plane, Cylinder, Cone, "
+            "...), planarity, area and centroid, plus the outward normal on a planar "
+            "face; these are the indices face_indices takes, and until this tool "
+            "existed they could only be learned through execute_code"
         ),
         body_name={
             "type": "string",
@@ -2404,8 +2406,8 @@ TOOLS: list[dict] = [
             "minItems": 1,
             "description": (
                 "Faces to machine, by 0-based index in the body's own order "
-                "(enumerate with execute_code body.faces.item(i)). Applied to the "
-                "strategy's geometry parameter (contours/pockets/"
+                "(list_faces reports them, with each face's surface_type). Applied "
+                "to the strategy's geometry parameter (contours/pockets/"
                 "machiningBoundarySel). Refused for any strategy without one."
             ),
         },
