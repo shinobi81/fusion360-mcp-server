@@ -1413,9 +1413,7 @@ def _setup_cam(default_name: str = "Setup1"):
         created.append(setup)
         return setup
 
-    cam = SimpleNamespace(
-        setups=SimpleNamespace(createInput=create_input, add=add)
-    )
+    cam = SimpleNamespace(setups=SimpleNamespace(createInput=create_input, add=add))
     return cam, created
 
 

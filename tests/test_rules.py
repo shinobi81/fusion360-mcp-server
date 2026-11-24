@@ -955,9 +955,12 @@ def test_every_measured_stock_mode_is_accepted_by_both_sides(mode):
     ``fixed_cylinder`` and ``from_solid`` were unreachable meanwhile.
     """
     assert rules.cam_stock_mode_refusal({"stock_mode": mode}) is None
-    assert mock._cam_create_setup({"body_name": "Body1", "stock_mode": mode}).get(
-        "error_kind"
-    ) is None
+    assert (
+        mock._cam_create_setup({"body_name": "Body1", "stock_mode": mode}).get(
+            "error_kind"
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize(
