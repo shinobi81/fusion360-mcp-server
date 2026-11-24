@@ -217,31 +217,12 @@ def _tool_json_shape_refusal(value: Any) -> _hints.Refusal | None:
                 "A partial tool object crashed Fusion 2706.1.17; send the whole one.",
             ),
         )
-    # The measured crash was a *non-empty* partial object: an entry with no ``holder``
-    # and an empty ``start-values``. Presence of those blocks is shape, not validity -
-    # every shipped library entry carries all three - so it is judged here rather than
-    # left to a call that can take Fusion down with it.
-    missing = [
-        block for block in ("geometry", "holder", "start-values") if block not in parsed
-    ]
-    if missing:
-        return _hints.Refusal(
-            "INVALID_INPUT",
-            "tool_json is missing " + ", ".join(missing) + " - Fusion's own entries "
-            "carry geometry, holder and start-values",
-            hints=(
-                "A partial tool object crashed Fusion 2706.1.17; copy one complete "
-                "entry from a Fusion tool library.",
-            ),
-        )
-    presets = parsed["start-values"]
-    if not isinstance(presets, dict) or not presets.get("presets"):
-        return _hints.Refusal(
-            "INVALID_INPUT",
-            "tool_json carries no start-values.presets entry - Fusion's own entries "
-            "carry one",
-            hints=("Measured: an empty start-values crashed Fusion 2706.1.17.",),
-        )
+    # Key *presence* is deliberately not enforced. Measured across Fusion's own 15
+    # sample libraries (807 tools): 257 carry no ``holder``, 75 no ``geometry`` and 72
+    # no ``start-values`` with a preset - so requiring the three blocks would refuse
+    # tools Fusion ships itself. The crashed probe was a partial object, but it omitted
+    # several things at once and this guard cannot tell which omission was fatal, so it
+    # stays structural and the advice points at the builder measured to work.
     return None
 
 

@@ -909,30 +909,18 @@ def test_the_handler_and_the_mock_refuse_a_count_that_is_not_usable(
     assert refused["error_message"] == str(raised.value)
 
 
-@pytest.mark.parametrize(
-    "value",
-    [
-        '{"geometry": {}, "start-values": {"presets": [{"name": "p"}]}}',
-        '{"geometry": {}, "holder": {}}',
-        '{"geometry": {}, "holder": {}, "start-values": {"presets": []}}',
-    ],
-    ids=["no holder", "no start-values", "empty presets"],
-)
-def test_the_handler_and_the_mock_refuse_a_partial_tool_object(bare_handler, value):
-    """The measured crash was a *non-empty* partial object, so presence is checked.
+def test_a_tool_object_without_a_holder_is_accepted(bare_handler):
+    """Measured: 257 of Fusion's own 807 sample tools carry no ``holder`` at all.
 
-    Fusion's own entries all carry ``geometry``, ``holder`` and a ``start-values`` with
-    one preset; an entry without them is the shape that exited Fusion 2706.1.17, and it
-    passes an emptiness check.
+    Key *presence* therefore cannot be a refusal here, even though the object that
+    crashed Fusion 2706.1.17 was partial: 75 shipped tools carry no ``geometry`` and 72
+    no ``start-values.presets``, so requiring the blocks would refuse tools Fusion
+    ships. The guard stays structural (string, JSON, one non-empty object), and the
+    advice points at ``tool_diameter`` - the builder measured to produce a shape Fusion
+    accepts.
     """
+    value = '{"geometry": {}, "start-values": {"presets": [{"name": "p"}]}}'
     call = {"setup_name": "Setup1", "strategy": "pocket2d", "tool_json": value}
 
-    with pytest.raises(addon_hints.Refusal) as raised:
-        bare_handler.cam_create_operation(**call)
-
-    refused = mock._cam_create_operation(call)
-
-    assert refused is not None
-    assert raised.value.error_kind == "INVALID_INPUT"
-    assert refused["error_message"] == str(raised.value)
-    assert "tool_json" in refused["error_message"]
+    assert rules.cam_tool_refusal(call) is None
+    assert mock._cam_create_operation(call).get("error_kind") is None

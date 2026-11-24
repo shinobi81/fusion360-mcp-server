@@ -187,7 +187,9 @@ Five measured behaviours, worth reading instead of guessing:
   `cam_list_operations`) — `cam_generate_toolpath` itself answers only `generated`.
   **A partial object is not refused — it crashed Fusion 360**
   (no `holder`, empty `start-values`), taking the document's unsaved state with it, which
-  is why `addon/server/cam_tool.py` emits the whole shape and the tool passes
+  is why `addon/server/cam_tool.py` emits the whole shape — and why a caller-supplied
+  `tool_json` is only shape-checked: 257 of Fusion's own 807 sample tools carry no
+  `holder`, so requiring the blocks would refuse tools Fusion ships. The tool passes
   centimetres in and converts to the library's millimetres at that one boundary. Only the
   flat end mill is measured end to end; anything else wants `tool_json`.
 

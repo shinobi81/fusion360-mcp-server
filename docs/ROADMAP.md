@@ -259,6 +259,13 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    `addon/server/cam_tool.py` emits the whole shape from one function instead of patching
    the keys a caller passed, and why its test pins the key sets by name.
 
+   Key *presence* is the wrong thing to police on the way in, and this was measured
+   rather than assumed: across Fusion's own 15 sample libraries (807 tools), 257 carry no
+   `holder`, 75 no `geometry` and 72 no `start-values` preset. Requiring those blocks
+   would refuse tools Fusion ships, so `_tool_json_shape_refusal` stays structural (a
+   string, valid JSON, one non-empty object) and the advice points at `tool_diameter`,
+   whose builder is the shape measured to work.
+
    What shipped: `cam_create_operation` takes `tool_diameter` (cm, converted to the
    library's millimetres), `tool_length`, `tool_flutes` and `tool_number`, or `tool_json`
    for a complete object it uses verbatim; a reply without a tool says generation will
