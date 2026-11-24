@@ -14,6 +14,7 @@ must not read as work done.
 """
 
 import math
+import os
 from typing import Any
 
 from ._mutation_commands import MUTATION_COMMANDS
@@ -1663,11 +1664,13 @@ def _cam_post_process(p: dict) -> dict:
     setup = p.get("setup_name", "Setup1")
     post = p.get("post_processor", "fanuc")
     # The handler answers the folder (`output_folder`) and the unit word (`units`);
-    # `output_file`/`output_units` were keys no call ever returned.
+    # `output_file`/`output_units` were keys no call ever returned. The default folder
+    # is resolved the way the handler resolves it, so a rehearsal prints a real path.
     return {
         "setup": setup,
         "post_processor": post,
-        "output_folder": p.get("output_folder") or "~/Desktop",
+        "output_folder": p.get("output_folder")
+        or os.path.join(os.path.expanduser("~"), "Desktop"),
         "units": p.get("output_units", "mm"),
     }
 
