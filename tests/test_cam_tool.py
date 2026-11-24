@@ -23,6 +23,7 @@ import pytest
 
 from addon.server import hints as addon_hints
 from addon.server.cam_tool import build_tool_json
+from addon.server.rules import _TOOL_MAXIMUM
 
 # The key sets a shipped Fusion tool library carries, read from
 # Applications/CAM360/Data/libraries/Samples/Milling Tools (Metric).json.
@@ -210,8 +211,14 @@ def test_the_largest_tool_the_rules_allow_serialises_as_valid_json():
     def refuse_constant(name):
         raise AssertionError(f"emitted the non-JSON literal {name}")
 
-    for diameter in (1000, 0.001):
+    # Driven by the constant, not by literals: a ceiling raised past what the builder
+    # can scale would otherwise leave this test green (it only proved finiteness at four
+    # numbers someone typed).
+    for diameter in (_TOOL_MAXIMUM["tool_diameter"], 0.001):
         payload = build_tool_json(
-            tool_diameter=diameter, tool_flutes=1000, tool_number=100000
+            tool_diameter=diameter,
+            tool_length=_TOOL_MAXIMUM["tool_length"],
+            tool_flutes=_TOOL_MAXIMUM["tool_flutes"],
+            tool_number=_TOOL_MAXIMUM["tool_number"],
         )
         json.loads(payload, parse_constant=refuse_constant)

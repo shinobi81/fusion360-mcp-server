@@ -2290,6 +2290,7 @@ TOOLS: list[dict] = [
         tool_number={
             "type": "integer",
             "minimum": 1,
+            "maximum": 100000,
             "description": (
                 "Number the post writes, embedded in the tool tool_diameter "
                 "creates. A tool supplied as tool_json carries its own number in "
@@ -2301,6 +2302,7 @@ TOOLS: list[dict] = [
         tool_diameter={
             "type": "number",
             "minimum": 0.001,
+            "maximum": 1000,
             "description": (
                 "Diameter (cm) of the flat end mill this operation gets. The add-in "
                 "builds a complete tool object, hands it to Fusion, and the operation "
@@ -2311,6 +2313,7 @@ TOOLS: list[dict] = [
         tool_length={
             "type": "number",
             "minimum": 0.001,
+            "maximum": 1000,
             "description": (
                 "Flute length (cm) of the tool tool_diameter creates; defaults to "
                 "three diameters."
@@ -2319,6 +2322,7 @@ TOOLS: list[dict] = [
         tool_flutes={
             "type": "integer",
             "minimum": 1,
+            "maximum": 1000,
             "description": (
                 "Flute count of the tool tool_diameter creates; defaults to 2."
             ),
