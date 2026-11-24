@@ -51,6 +51,9 @@ RELOAD_ORDER = (
     "hole_geometry",
     "parameter_units",
     "mutation_commands",
+    # ``handler_cam`` imports this at module scope, so a reload has to re-execute it
+    # too - otherwise an edit to the tool JSON keeps serving the loaded copy.
+    "cam_tool",
     *COMMAND_MODULES,
 )
 

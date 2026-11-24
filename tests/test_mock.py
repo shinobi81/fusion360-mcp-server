@@ -2,6 +2,7 @@
 
 import pytest
 
+from addon.server.cam_tool import build_tool_json
 from fusion360_mcp.mock import _DISPATCH, mock_command
 from fusion360_mcp.tools import TOOLS
 
@@ -1069,7 +1070,16 @@ class TestMockCAM:
 
     @pytest.mark.parametrize(
         "field",
-        ["tool_number", "stepdown", "stepover", "feed_rate", "spindle_speed"],
+        [
+            "tool_number",
+            "tool_diameter",
+            "tool_length",
+            "tool_flutes",
+            "stepdown",
+            "stepover",
+            "feed_rate",
+            "spindle_speed",
+        ],
     )
     def test_cam_create_operation_refuses_a_non_finite_number(self, field):
         params = {"strategy": "contour2d", field: float("inf")}
@@ -1077,17 +1087,47 @@ class TestMockCAM:
         assert result["ok"] is False
         assert result["error_kind"] == "INVALID_INPUT"
 
-    def test_cam_create_operation_refuses_tool_diameter(self):
-        """The add-in refuses ``tool_diameter`` outright: tool geometry is library-side.
+    def test_cam_create_operation_attaches_a_tool_for_a_diameter(self):
+        """``tool_diameter`` builds the tool now, so mock mode must not refuse it.
 
-        That refusal used to classify as ``UNKNOWN`` with no hints — a new failure
-        mode without a rule, which is what ``hints.py`` exists to prevent.
+        It used to be refused outright - tool geometry is library-side - and the reply
+        now carries the same ``tool`` key the handler answers, because that is the key
+        an agent rehearses here and then reads against Fusion.  Rehearsing a refusal
+        for a call that works is the drift this test exists to catch.
         """
         params = {"strategy": "contour2d", "tool_diameter": 0.6}
         result = mock_command("cam_create_operation", params)
+
+        assert result["ok"] is True
+        assert result["tool"]["diameter_cm"] == 0.6
+        assert "tool_warning" not in result
+        # No description: the handler's is a read-back from Fusion, so mock promises
+        # only the key the handler always answers.
+        assert "description" not in result["tool"]
+
+    def test_cam_create_operation_without_a_tool_says_generation_will_fail(self):
+        """No tool source is a reply, not a refusal: Fusion's own sentence warns."""
+        result = mock_command("cam_create_operation", {"strategy": "contour2d"})
+
+        assert result["ok"] is True
+        assert result["tool"] is None
+        assert "requires tool to be selected" in result["tool_warning"]
+
+    def test_cam_create_operation_refuses_a_tool_json_and_a_diameter_together(self):
+        """One tool, one source: judged from the parameters, so mock refuses too."""
+        params = {
+            "strategy": "contour2d",
+            # Complete, so the *conflict* is what answers: the shape check accepts any
+            # non-empty object (Fusion ships tools without a holder), so a partial one
+            # would not be refused there.
+            "tool_json": build_tool_json(tool_diameter=0.6, description="mine"),
+            "tool_diameter": 0.6,
+        }
+        result = mock_command("cam_create_operation", params)
+
         assert result["ok"] is False
         assert result["error_kind"] == "INVALID_INPUT"
-        assert any("tool_number" in hint for hint in result["hints"])
+        assert any("tool_json" in hint for hint in result["hints"])
 
     def test_cam_create_setup_refuses_an_unknown_operation_type(self):
         """The handler refuses any type outside milling/turning/cutting.
@@ -1276,3 +1316,20 @@ def test_an_empty_body_name_is_refused(command, params):
 def test_an_empty_name_the_handler_does_not_look_up_is_not_refused(command, params):
     """The check is the lookup's: an empty name a caller may use is not refused."""
     assert mock_command(command, params)["ok"] is True
+
+
+def test_cam_create_operation_promises_no_description_for_a_supplied_tool():
+    """The handler reads the tool back and may answer ``{}``: promise no more.
+
+    It used to answer ``{"description": "flat end mill"}`` for any ``tool_json`` -
+    invented for a ball-nose, and absent live when Fusion declines to describe the
+    tool - so a rehearsal indexing that key broke against Fusion.
+    """
+    params = {
+        "strategy": "pocket2d",
+        "tool_json": build_tool_json(tool_diameter=0.8, description="8mm ball"),
+    }
+    result = mock_command("cam_create_operation", params)
+
+    assert result["ok"] is True
+    assert result["tool"] == {}

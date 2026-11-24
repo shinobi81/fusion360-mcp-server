@@ -29,6 +29,14 @@ log = get_logger("handler")
 # ``_Contract = object`` at runtime - so a checker sees the members while the
 # hierarchy ``CommandHandler`` builds is unchanged.  ``tests/test_addon_sources.py``
 # enforces both halves: the declaration, and that the runtime base stays ``object``.
+#: The advice an error Fusion recorded on an operation earns, wherever it is reported
+#: from: the early raise and the one at the wait's bound answer the same two lines.
+_GENERATION_HINTS = (
+    "cam_get_operation_info shows the operation's parameters and tool.",
+    "An operation with no tool cannot generate; give it one with "
+    "cam_create_operation(tool_diameter=...) or tool_json.",
+)
+
 class HandlerBase:
     def __init__(self):
         self.app = adsk.core.Application.get()
@@ -509,7 +517,45 @@ class HandlerBase:
         )
 
     @staticmethod
-    def _wait_future(future, timeout: float = 25.0):
+    def _operation_errors(operations) -> dict[int, str]:
+        """Map each operation's position to the error Fusion recorded on it, if any.
+
+        Keyed by position, not by name: a name is not unique - three CAM commands
+        here refuse a duplicate rather than pick one, so duplicates exist - and a
+        collision would let a stale sentence mask a fresh one of the same name. The
+        snapshot and the wait are handed the same list in the same order, which is
+        what makes the position stable across the comparison.
+
+        The name goes in the *message* rather than the key, because ``generate_all`` has
+        no target: without it a caller with several operations learns that something
+        failed and not which. A deleted operation may refuse reads and a shape without
+        ``hasError`` is not an error; both are skipped rather than reported.
+        """
+        errors: dict[int, str] = {}
+        for index, operation in enumerate(operations):
+            try:
+                if not operation.hasError:
+                    continue
+                message = str(operation.error or "").strip()
+                name = getattr(operation, "name", None)
+            # Bracketed on purpose: `ruff format` rewrites this to the PEP 758
+            # spelling, and `addon/` runs on Fusion's interpreter, which is not the
+            # one `requires-python` describes. `tests/test_addon_sources.py` guards it.
+            except (AttributeError, RuntimeError):
+                continue
+            if not message:
+                message = (
+                    f"Fusion reported an error on operation '{name}'"
+                    if name
+                    else "Fusion reported an error on an operation"
+                )
+            elif name:
+                message = f"Operation '{name}': {message}"
+            errors[index] = message
+        return errors
+
+    @staticmethod
+    def _wait_future(future, timeout: float = 25.0, operations=(), prior_errors=None):
         """Wait for a CAM generation future, bounded so a runaway
         generation fails as a structured error instead of freezing the
         main thread past the bridge timeout.
@@ -557,8 +603,7 @@ class HandlerBase:
                 return present and bool(value)
 
         elif all(
-            read_field(name)[0]
-            for name in ("numberOfCompleted", "numberOfOperations")
+            read_field(name)[0] for name in ("numberOfCompleted", "numberOfOperations")
         ):
 
             def is_done() -> bool:
@@ -589,8 +634,53 @@ class HandlerBase:
             )
 
         deadline = time.monotonic() + timeout
+
+        #: The verdict Fusion already had *before* this call generated. Measured on
+        #: 2706.1.17: a refused generation sets ``hasError`` and its message while the
+        #: future never answers - "Generation not started" for ever - so a gate that
+        #: waits for progress never opens and the bound answers ``TIMEOUT`` for a cause
+        #: Fusion had already named. Waiting for a *change* instead keeps the retry
+        #: this add-in supports working: fail for want of a tool, attach one, generate -
+        #: the pre-existing sentence is not this call's failure.
+        prior = dict(prior_errors or {})
+
+        def new_error() -> str | None:
+            """The first recorded error this call did not inherit, or None."""
+            current = HandlerBase._operation_errors(operations)
+            for key, message in current.items():
+                if prior.get(key) != message:
+                    return message
+            return None
+
+        def recorded_error() -> str | None:
+            """The first error Fusion holds now, inherited or not."""
+            return next(iter(HandlerBase._operation_errors(operations).values()), None)
+
+        def operation_failure(message: str) -> _hints.Refusal:
+            return _hints.Refusal("FUSION_REFUSED", message, hints=_GENERATION_HINTS)
+
         while not is_done():
+            if error := new_error():
+                raise operation_failure(error)
             if time.monotonic() > deadline:
+                # A retried call that fails the same way produces the *same* sentence,
+                # which the difference test above ignores by design. Rather than discard
+                # a cause Fusion named, report it and say it predates this call.
+                if inherited := recorded_error():
+                    # Raised here rather than through ``operation_failure`` so the kind
+                    # is a literal: the audit that keeps every raise typed reads this
+                    # file, and a kind hidden inside a helper is not readable in it.
+                    raise _hints.Refusal(
+                        "FUSION_REFUSED",
+                        f"{inherited} (Fusion recorded this before the call and did "
+                        f"not change it; the {timeout}s wait for this generation also "
+                        "expired)",
+                        hints=(
+                            *_GENERATION_HINTS,
+                            "cam_list_operations reports whether the toolpath "
+                            "finished in the background.",
+                        ),
+                    )
                 raise _hints.Refusal(
                     "TIMEOUT",
                     f"Toolpath generation did not finish within {timeout}s. "
@@ -604,6 +694,15 @@ class HandlerBase:
                     ),
                 )
             time.sleep(0.1)
+
+        # A future can complete *with* an error. The measured case never completes,
+        # but nothing says that is the only one - and `is_done()` is evaluated before
+        # the error, so without this a generation that failed *and* completed would
+        # leave the loop and every call site would answer `generated: true`. Only a
+        # *new* error is caught here (`new_error`): one that predates the call is the
+        # previous attempt's verdict, and completion is this attempt's answer.
+        if error := new_error():
+            raise operation_failure(error)
 
     @staticmethod
     def _bbox_dict(bbox):

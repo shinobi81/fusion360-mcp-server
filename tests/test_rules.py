@@ -14,6 +14,7 @@ import pytest
 
 from addon.server import hints as addon_hints
 from addon.server import rules
+from addon.server.cam_tool import build_tool_json
 from fusion360_mcp import _rules, mock
 from tests.fakes.bodies import FakeBody, body_with_edges
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
@@ -687,6 +688,46 @@ def test_the_handler_and_the_mock_refuse_an_unknown_strategy_alike(bare_handler)
     assert refused["error_message"] == str(raised.value)
 
 
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"tool_diameter": 0},
+        {"tool_diameter": -0.6},
+        {"tool_diameter": 0.6, "tool_length": 0},
+        {"tool_diameter": 0.6, "tool_flutes": 0},
+        {"tool_diameter": 0.6, "tool_number": 0},
+    ],
+    ids=[
+        "zero diameter",
+        "negative diameter",
+        "zero length",
+        "zero flutes",
+        "zero number",
+    ],
+)
+def test_the_handler_and_the_mock_refuse_a_non_positive_tool_alike(
+    bare_handler, params
+):
+    """A tool dimension of zero is not in the schema, but the socket is not the schema.
+
+    It is refused from the parameters alone, so mock mode rehearses the same sentence -
+    and it is refused before a tool object is built, because a malformed one has a
+    measured crash history.
+    """
+    call = {"setup_name": "Setup1", "strategy": "pocket2d", **params}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_create_operation(**call)
+
+    refused = mock._cam_create_operation(call)
+
+    assert refused is not None
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+    assert "greater than 0" in refused["error_message"]
+
+
 def test_face_indices_on_a_strategy_without_a_geometry_parameter_is_refused(
     bare_handler,
 ):
@@ -754,3 +795,151 @@ def test_a_usable_strategy_and_selection_is_refused_by_neither_side():
         params = {"strategy": strategy, "body_name": "Body1", "face_indices": [0]}
         assert rules.cam_geometry_refusal(params) is None
     assert rules.cam_geometry_refusal({"strategy": "contour2d"}) is None
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"tool_diameter": 0.6},
+        {"tool_length": 2.0},
+        {"tool_flutes": 3},
+        {"tool_number": 2},
+    ],
+    ids=["diameter", "length", "flutes", "number"],
+)
+def test_the_handler_and_the_mock_refuse_two_tool_sources_alike(bare_handler, params):
+    """One tool, one source - and ``tool_number`` is a source *inside* the JSON.
+
+    It lives in the tool's ``post-process`` block, so a number passed beside
+    ``tool_json`` would be dropped silently: the builder is the only consumer of the
+    argument, and it does not run when the caller supplied the JSON.
+    """
+    call = {
+        "setup_name": "Setup1",
+        "strategy": "pocket2d",
+        "tool_json": build_tool_json(tool_diameter=0.6, description="mine"),
+        **params,
+    }
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_create_operation(**call)
+
+    refused = mock._cam_create_operation(call)
+
+    assert refused is not None
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+    assert "tool_json defines the whole tool" in refused["error_message"]
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["", "not json", "[]", "{}", 3],
+    ids=["empty string", "not json", "array", "empty object", "not a string"],
+)
+def test_the_handler_and_the_mock_refuse_a_tool_json_that_cannot_be_a_tool(
+    bare_handler, value
+):
+    """The one call with a measured crash history gets a shape check first.
+
+    ``Tool.createFromJson`` exited Fusion 2706.1.17 on a partial object, so a string it
+    cannot parse, or JSON that is not a tool, is refused from the parameters alone -
+    which is also what mock mode can answer.
+    """
+    call = {"setup_name": "Setup1", "strategy": "pocket2d", "tool_json": value}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_create_operation(**call)
+
+    refused = mock._cam_create_operation(call)
+
+    assert refused is not None
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert refused["error_message"] == str(raised.value)
+
+
+def test_the_handler_and_the_mock_refuse_a_non_number_tool_argument(bare_handler):
+    """``require_finite`` leaves a non-number alone on purpose, so this is the guard.
+
+    Both sides answer it now: mock used to echo ``diameter_cm: '6mm'`` back as success,
+    which is a rehearsal for a call the add-in refuses.
+    """
+    call = {"setup_name": "Setup1", "strategy": "pocket2d", "tool_diameter": "6mm"}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_create_operation(**call)
+
+    refused = mock._cam_create_operation(call)
+
+    assert refused is not None
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+    assert "must be a number" in refused["error_message"]
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"tool_diameter": 0.6, "tool_flutes": 2.5},
+        {"tool_diameter": 0.6, "tool_number": 1.5},
+        {"tool_diameter": 10**400},
+        {"tool_flutes": 10**400},
+        {"tool_diameter": 1e308},
+        {"tool_diameter": 1e303},
+        {"tool_diameter": 0.6, "tool_length": 1e308},
+        {"tool_diameter": 0.6, "tool_flutes": 10**308},
+        {"tool_diameter": 1001},
+        {"tool_diameter": 0.6, "tool_flutes": 1001},
+        {"tool_diameter": 0.6, "tool_number": 100001},
+    ],
+    ids=[
+        "fractional flutes",
+        "fractional number",
+        "huge diameter",
+        "huge flutes",
+        "above the ceiling (was a scale overflow)",
+        "above the ceiling (surface speed)",
+        "length above the ceiling",
+        "flutes above the ceiling",
+        "diameter above the ceiling",
+        "flutes above the ceiling",
+        "number above the ceiling",
+    ],
+)
+def test_the_handler_and_the_mock_refuse_a_count_that_is_not_usable(
+    bare_handler, params
+):
+    """A count is whole, and an int too large for a float is nobody's diameter.
+
+    ``require_finite`` skips an int on purpose, so a 401-digit value used to reach the
+    builder and raise ``OverflowError`` (``UNKNOWN``, no hints) on the handler while
+    mock answered success. Both sides refuse it here.
+    """
+    call = {"setup_name": "Setup1", "strategy": "pocket2d", **params}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_create_operation(**call)
+
+    refused = mock._cam_create_operation(call)
+
+    assert refused is not None
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert refused["error_message"] == str(raised.value)
+
+
+def test_a_tool_object_without_a_holder_is_accepted(bare_handler):
+    """Measured: 257 of Fusion's own 807 sample tools carry no ``holder`` at all.
+
+    Key *presence* therefore cannot be a refusal here, even though the object that
+    crashed Fusion 2706.1.17 was partial: 75 shipped tools carry no ``geometry`` and 72
+    no ``start-values.presets``, so requiring the blocks would refuse tools Fusion
+    ships. The guard stays structural (string, JSON, one non-empty object), and the
+    advice points at ``tool_diameter`` - the builder measured to produce a shape Fusion
+    accepts.
+    """
+    value = '{"geometry": {}, "start-values": {"presets": [{"name": "p"}]}}'
+    call = {"setup_name": "Setup1", "strategy": "pocket2d", "tool_json": value}
+
+    assert rules.cam_tool_refusal(call) is None
+    assert mock._cam_create_operation(call).get("error_kind") is None

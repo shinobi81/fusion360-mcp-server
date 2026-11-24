@@ -371,6 +371,7 @@ def test_the_sibling_modules_are_named_in_the_reload_order():
         "hole_geometry",
         "parameter_units",
         "mutation_commands",
+        "cam_tool",
         *module.COMMAND_MODULES,
     )
     assert expected == module.RELOAD_ORDER

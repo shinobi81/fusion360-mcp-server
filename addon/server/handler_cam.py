@@ -15,6 +15,7 @@ import os
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
+from . import cam_tool as _cam_tool
 from . import fusion_api as adsk
 from . import get_logger
 from . import hints as _hints
@@ -319,6 +320,96 @@ class CamCommands(_Contract):
             log.debug("CAM parameter %s=%r failed: %s", param_name, value, exc)
             return False
 
+    def _attach_tool(self, op, tool_payload: str) -> dict[str, Any]:
+        """Give *op* the tool *tool_payload* defines, and describe it.
+
+        Measured on Fusion 2706.1.17: ``Tool.createFromJson`` accepts a complete tool
+        object, ``Operation.tool`` takes the result, and Fusion registers it in
+        ``documentToolLibrary`` itself - the operation then generates its toolpath.
+        Only the flat end mill has been measured end to end, which is why the payload
+        comes from ``cam_tool`` rather than being assembled at this call site.
+
+        A refusal here removes the operation, the promise the geometry seam keeps too:
+        a retry must not leave a second half-built operation in the setup.
+
+        The two calls are guarded apart because they fail for different reasons: a
+        ``RuntimeError`` from ``createFromJson`` is Fusion judging the JSON, while an
+        ``AttributeError`` from the *assignment* is a build where ``Operation.tool`` is
+        not settable - a defect of ours that the caller cannot fix by resending the
+        same payload. One shared message would blame the wrong one.
+        """
+
+        def remove_operation() -> None:
+            """Take the operation out again, never masking the refusal being raised.
+
+            ``deleteMe`` is measured to work on 2706.1.17, but if it ever refuses, its
+            exception would replace a classified refusal with ``UNKNOWN`` and no hints -
+            the shape #138 removed.
+            """
+            with suppress(Exception):
+                op.deleteMe()
+
+        try:
+            tool = adsk.cam.Tool.createFromJson(tool_payload)
+        except AttributeError as exc:
+            # ``adsk.cam.Tool`` missing is this environment, not the caller's JSON.
+            remove_operation()
+            raise _hints.Refusal(
+                "INTERNAL_ERROR",
+                f"This Fusion build has no usable Tool.createFromJson: {exc}. "
+                "The operation was removed.",
+                hints=("This is an add-in defect, not an input problem.",),
+            ) from exc
+        except Exception as exc:
+            remove_operation()
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
+                f"Fusion refused the tool definition: {exc}. The operation was "
+                "removed.",
+                hints=(
+                    "Pass tool_diameter for the one measured tool shape, or a "
+                    "complete tool_json taken from a Fusion tool library.",
+                ),
+            ) from exc
+        try:
+            op.tool = tool
+        except AttributeError as exc:
+            remove_operation()
+            raise _hints.Refusal(
+                "INTERNAL_ERROR",
+                f"This Fusion build does not take a tool on an operation: {exc}. "
+                "The operation was removed.",
+                hints=("This is an add-in defect, not an input problem.",),
+            ) from exc
+        except Exception as exc:
+            remove_operation()
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
+                f"Fusion refused the tool on the operation: {exc}. The operation "
+                "was removed.",
+            ) from exc
+        # A read-back after a successful attach: nothing depends on it, so a build that
+        # will not answer costs the description and not the operation.
+        description = None
+        with suppress(Exception):
+            description = getattr(op.tool, "description", None)
+        return {"description": description} if description else {}
+
+    @staticmethod
+    def _all_operations(cam) -> list:
+        """Every operation the CAM product holds, in the tree's order.
+
+        ``generateAllToolpaths`` takes no target, so this is how a generation failure
+        gets attributed to the operation Fusion recorded it on: ``_wait_future`` names
+        that operation in the refusal rather than answering one sentence for N of them.
+        """
+        operations = []
+        for i in range(cam.setups.count):
+            setup = cam.setups.item(i)
+            for j in range(setup.operations.count):
+                operations.append(setup.operations.item(j))
+        return operations
+
     def _select_operation_geometry(self, op, faces: list) -> str:
         """Apply a face selection to the operation's own geometry parameter.
 
@@ -405,6 +496,9 @@ class CamCommands(_Contract):
         name: str | None = None,
         tool_number: int | None = None,
         tool_diameter: float | None = None,
+        tool_length: float | None = None,
+        tool_flutes: int | None = None,
+        tool_json: str | None = None,
         stepdown: float | None = None,
         stepover: float | None = None,
         feed_rate: float | None = None,
@@ -415,7 +509,16 @@ class CamCommands(_Contract):
     ):
         # Judged before the operation is created, so a refusal's hint ("nothing
         # was written") stays true: a bad value is not an unavailable name.
-        for _numeric in (tool_number, stepdown, stepover, feed_rate, spindle_speed):
+        for _numeric in (
+            tool_number,
+            tool_diameter,
+            tool_length,
+            tool_flutes,
+            stepdown,
+            stepover,
+            feed_rate,
+            spindle_speed,
+        ):
             _param_units.require_finite(_numeric)
 
         if strategy_refusal := _rules.cam_strategy_refusal({"strategy": strategy}):
@@ -428,6 +531,32 @@ class CamCommands(_Contract):
             }
         ):
             raise geometry_refusal
+        if tool_refusal := _rules.cam_tool_refusal(
+            {
+                "tool_json": tool_json,
+                "tool_diameter": tool_diameter,
+                "tool_length": tool_length,
+                "tool_flutes": tool_flutes,
+                "tool_number": tool_number,
+            }
+        ):
+            raise tool_refusal
+
+        # Built before the operation exists, so a value that cannot become a tool
+        # refuses without leaving one behind.  Its JSON is only ever the complete
+        # shape: a partial one crashed Fusion 2706.1.17 (see ``cam_tool``).
+        tool_payload = tool_json
+        if tool_payload is None and tool_diameter is not None:
+            # Raises a typed refusal for a value that cannot be a tool, and does it
+            # before the operation exists, so a bad argument leaves nothing behind.
+            tool_payload = _cam_tool.build_tool_json(
+                tool_diameter=tool_diameter,
+                tool_length=tool_length,
+                tool_flutes=(
+                    tool_flutes if tool_flutes is not None else _cam_tool.DEFAULT_FLUTES
+                ),
+                tool_number=tool_number if tool_number is not None else 1,
+            )
 
         # Everything a face selection needs is judged before the operation exists, so
         # no refusal here can leave a half-built one behind: the body must resolve and
@@ -453,13 +582,6 @@ class CamCommands(_Contract):
         cam = self._get_cam()
         setup = self._find_setup(cam, setup_name)
 
-        if tool_diameter is not None:
-            raise RuntimeError(
-                "tool_diameter cannot be set on an operation — tool geometry "
-                "comes from a tool in the CAM tool library. Select the tool "
-                "via tool_number instead."
-            )
-
         op_input = setup.operations.createInput(strategy)
         if name:
             op_input.name = name
@@ -479,7 +601,6 @@ class CamCommands(_Contract):
         applied = {}
         failed = {}
         for param_name, value, by_string in (
-            ("tool_number", tool_number, False),
             ("maximumStepdown", stepdown, False),
             ("maximumStepover", stepover, False),
             ("tool_feedCutting", feed_rate, False),
@@ -494,11 +615,27 @@ class CamCommands(_Contract):
                 failed[param_name] = value
 
         result = {"name": op.name, "setup": setup_name, "strategy": strategy}
+        # The geometry seam runs before the tool goes on, because it is the only step
+        # here that removes the operation after it exists - and attaching a tool
+        # registers it in ``documentToolLibrary`` (measured on 2706.1.17). The other
+        # order would leave a tool entry behind on every refused retry, while the
+        # refusal promises only that "the operation was removed".
         if selection_faces is not None:
             result["geometry"] = {
                 "parameter": self._select_operation_geometry(op, selection_faces),
                 "face_indices": list(face_indices or []),
             }
+        if tool_payload is not None:
+            result["tool"] = self._attach_tool(op, tool_payload)
+            if tool_diameter is not None:
+                result["tool"]["diameter_cm"] = tool_diameter
+        else:
+            # A reply rather than a refusal: the operation is usable and a tool can
+            # arrive later.  Generation, however, will not: Fusion answers this exact
+            # sentence (measured on 2706.1.17), so the reply says so now rather than
+            # leaving it to a 25 s wait after the caller's next call.
+            result["tool"] = None
+            result["tool_warning"] = _rules.CAM_NO_TOOL_WARNING
         if applied:
             result["parameters_applied"] = applied
         if failed:
@@ -529,8 +666,12 @@ class CamCommands(_Contract):
         cam = self._get_cam()
 
         if generate_all:
+            targets = self._all_operations(cam)
+            # The verdicts Fusion already holds, taken before generating: only a change
+            # from these is this call's failure.
+            prior = self._operation_errors(targets)
             future = cam.generateAllToolpaths(False)
-            self._wait_future(future)
+            self._wait_future(future, operations=targets, prior_errors=prior)
             return {"generated": True, "scope": "all"}
 
         if operation_name and not setup_name:
@@ -584,8 +725,9 @@ class CamCommands(_Contract):
                     hints=tuple(hints),
                 )
             setup, operation = matches[0]
+            prior = self._operation_errors((operation,))
             future = cam.generateToolpath(operation)
-            self._wait_future(future)
+            self._wait_future(future, operations=(operation,), prior_errors=prior)
             return {
                 "generated": True,
                 "scope": "operation",
@@ -606,8 +748,9 @@ class CamCommands(_Contract):
                 raise _ambiguous_operation_refusal(
                     setup, operation_name, len(named)
                 )
+            prior = self._operation_errors((named[0],))
             future = cam.generateToolpath(named[0])
-            self._wait_future(future)
+            self._wait_future(future, operations=(named[0],), prior_errors=prior)
             return {
                 "generated": True,
                 "scope": "operation",
@@ -617,11 +760,15 @@ class CamCommands(_Contract):
 
         if setup_name:
             setup = self._find_setup(cam, setup_name)
+            generated = [
+                setup.operations.item(i) for i in range(setup.operations.count)
+            ]
             ops = adsk.core.ObjectCollection.create()
-            for i in range(setup.operations.count):
-                ops.add(setup.operations.item(i))
+            for operation in generated:
+                ops.add(operation)
+            prior = self._operation_errors(generated)
             future = cam.generateToolpath(ops)
-            self._wait_future(future)
+            self._wait_future(future, operations=generated, prior_errors=prior)
             return {"generated": True, "scope": "setup", "setup": setup_name}
 
     def _resolve_post(self, path: str) -> str:

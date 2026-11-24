@@ -19,11 +19,13 @@ from typing import Any
 from ._mutation_commands import MUTATION_COMMANDS
 from ._rules import (
     CAM_GEOMETRY_PARAMETERS,
+    CAM_NO_TOOL_WARNING,
     as_built_geometry_refusal,
     body_name_required_refusal,
     cam_geometry_refusal,
     cam_strategy_refusal,
     cam_target_refusal,
+    cam_tool_refusal,
     components_differ_refusal,
     construction_method_refusal,
     edge_selector_refusal,
@@ -1504,23 +1506,28 @@ def _cam_create_setup(p: dict) -> dict:
 
 
 def _cam_create_operation(p: dict) -> dict:
-    # Same order as the handler: the numeric guards fire before the refusal, and
-    # the refusal fires before any operation exists.  tool_diameter is not a
-    # parameter at all -- tool geometry comes from the CAM tool library -- and
-    # echoing it back here would describe an operation Fusion never creates.
-    for key in ("tool_number", "stepdown", "stepover", "feed_rate", "spindle_speed"):
+    # Same order as the handler: the numeric guards fire before the refusals, and every
+    # refusal fires before an operation exists.  Tool arguments are judged from the
+    # parameters alone, so a mock rehearsal refuses what Fusion demands rather than
+    # describing an operation the add-in would never create.
+    for key in (
+        "tool_number",
+        "tool_diameter",
+        "tool_length",
+        "tool_flutes",
+        "stepdown",
+        "stepover",
+        "feed_rate",
+        "spindle_speed",
+    ):
         refusal = _non_finite_error(p.get(key))
         if refusal is not None:
             return refusal
-    selector_refusal = cam_strategy_refusal(p) or cam_geometry_refusal(p)
+    selector_refusal = (
+        cam_strategy_refusal(p) or cam_geometry_refusal(p) or cam_tool_refusal(p)
+    )
     if selector_refusal is not None:
         return _refusal_error(selector_refusal)
-    if p.get("tool_diameter") is not None:
-        return _mock_error(
-            "tool_diameter cannot be set on an operation — tool geometry comes "
-            "from a tool in the CAM tool library. Select the tool via "
-            "tool_number instead."
-        )
     result = {
         "setup_name": p.get("setup_name", "Setup1"),
         "operation_name": p.get("name", "Operation1"),
@@ -1536,6 +1543,22 @@ def _cam_create_operation(p: dict) -> dict:
             ),
             "face_indices": list(p["face_indices"]),
         }
+    # The tool keys use the handler's spelling, because that is what an agent rehearses
+    # here and then reads against Fusion.
+    if p.get("tool_diameter") is not None:
+        # Only the key the handler always answers: its description is a read-back
+        # from Fusion, so live it may be absent - and the string would not match this
+        # placeholder anyway (``#1 Ø6mm Flat Endmill``).
+        result["tool"] = {"diameter_cm": p["tool_diameter"]}
+    elif p.get("tool_json") is not None:
+        # The handler reads the created tool back for its description and may answer
+        # this same empty object, so mock mode promises nothing it cannot know: a
+        # rehearsal that indexed ``result["tool"]["description"]`` here would break
+        # live for a JSON Fusion declines to describe.
+        result["tool"] = {}
+    else:
+        result["tool"] = None
+        result["tool_warning"] = CAM_NO_TOOL_WARNING
     return result
 
 

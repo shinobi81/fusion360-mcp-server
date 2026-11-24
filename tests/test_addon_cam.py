@@ -13,12 +13,14 @@ The stubs are the smallest shape each method reads, not a model of the CAM tree:
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
 
 from addon.server import fusion_api as adsk
 from addon.server import hints as addon_hints
+from addon.server.cam_tool import build_tool_json
 from tests.fakes.cam import (
     FakeCAMProduct,
     FakeCompletedFlagFuture,
@@ -166,7 +168,9 @@ def _setup_with_operations(name: str, *operations) -> SimpleNamespace:
 def _generating_handler(handler_module, cam):
     handler = _handler(handler_module)
     handler._get_cam = lambda: cam
-    handler._wait_future = lambda _future: None
+    # The generation tests are about the target, not the wait; the wait takes the
+    # operations it attributes an error to, so the stand-in accepts them.
+    handler._wait_future = lambda _future, **_kwargs: None
     return handler
 
 
@@ -764,7 +768,7 @@ def test_a_refused_face_selection_removes_the_operation(handler_module):
     """
     operation, value, applied = _contour_operation()
 
-    def refuse(_selections):
+    def refuse(selections):
         raise RuntimeError("3 : some input argument is invalid")
 
     value.applyCurveSelections = refuse
@@ -796,7 +800,7 @@ def test_an_add_in_defect_in_the_seam_is_an_internal_error(handler_module):
     """
     operation, value, _applied = _contour_operation()
 
-    def invented(_selections):
+    def invented(selections):
         raise AttributeError("'CadContours2dParameterValue' has no attribute 'apply'")
 
     value.applyCurveSelections = invented
@@ -954,3 +958,417 @@ def test_create_operation_removes_the_operation_when_no_parameter_is_found(
     )
     assert "the operation was removed again" in str(raised.value)
     assert operation.deleted == 1
+
+
+# ── a CAM operation's tool ───────────────────────────────────────────────────
+# Measured on Fusion 2706.1.17: an operation with no tool cannot generate
+# (``"Toolpath requires tool to be selected."``), ``Tool.createFromJson`` accepts a
+# complete tool object, and assigning the result to ``Operation.tool`` registers it
+# in the document library. These tests cover the add-in's side of that seam.
+
+
+def _tool_op(name: str = "Op1"):
+    """The operation shape the create path writes into: a name and a tool slot.
+
+    ``deleteMe`` is there because a tool refusal removes the operation again - the
+    same promise the geometry seam keeps, so a retry cannot leave a second one behind.
+    """
+    operation = SimpleNamespace(
+        name=name,
+        parameters=SimpleNamespace(itemByName=lambda _name: None),
+        deleted=0,
+    )
+    operation.deleteMe = lambda: setattr(operation, "deleted", operation.deleted + 1)
+    return operation
+
+
+def _recording_setup(operation):
+    """A setup whose ``operations.add`` records that it created anything at all."""
+    created = []
+
+    def add(_input):
+        created.append(operation)
+        return operation
+
+    return (
+        SimpleNamespace(
+            name="Setup1",
+            operations=SimpleNamespace(
+                count=0,
+                createInput=lambda _strategy: SimpleNamespace(name=None),
+                add=add,
+            ),
+        ),
+        created,
+    )
+
+
+def test_a_diameter_attaches_a_tool_the_operation_can_generate_with(handler_module):
+    operation = _tool_op()
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(_setup("Setup1", operation))
+
+    result = handler.cam_create_operation(
+        "Setup1", "pocket2d", tool_diameter=0.6, coolant=None
+    )
+
+    payload = json.loads(operation.tool.json)
+    assert payload["unit"] == "millimeters"
+    assert payload["geometry"]["DC"] == 6.0
+    assert result["tool"] == {
+        "description": operation.tool.description,
+        "diameter_cm": 0.6,
+    }
+
+
+def test_tool_json_reaches_fusion_verbatim(handler_module):
+    """A caller who measured their own tool object is not second-guessed."""
+    operation = _tool_op()
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(_setup("Setup1", operation))
+    # A complete object, because a partial one crashed Fusion (see cam_tool.py). The
+    # shape rule cannot tell the difference - Fusion ships tools with no holder - which
+    # is why the builder emits the whole shape rather than the check enforcing it.
+    supplied = build_tool_json(tool_diameter=0.6, description="mine")
+
+    result = handler.cam_create_operation(
+        "Setup1", "pocket2d", tool_json=supplied, coolant=None
+    )
+
+    assert operation.tool.json == supplied
+    assert result["tool"] == {"description": operation.tool.description}
+
+
+def test_a_tool_json_and_a_diameter_together_are_refused_first(handler_module):
+    """Two sources for one tool is an ambiguity, and nothing may be created for it."""
+    operation = _tool_op()
+    setup, created = _recording_setup(operation)
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(setup)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            "Setup1",
+            "pocket2d",
+            tool_json='{"type": "flat end mill"}',
+            tool_diameter=0.6,
+        )
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert raised.value.hints
+    assert created == []
+
+
+def test_a_non_numeric_diameter_is_refused_by_name(handler_module):
+    """``require_finite`` passes a string through, so this is the last guard."""
+    setup, created = _recording_setup(_tool_op())
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(setup)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation("Setup1", "pocket2d", tool_diameter="6mm")
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert "tool_diameter" in str(raised.value)
+    assert created == []
+
+
+def test_a_tool_number_without_a_tool_is_refused(handler_module):
+    """There is no library lookup yet, so a bare number would describe nothing."""
+    setup, created = _recording_setup(_tool_op())
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(setup)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation("Setup1", "pocket2d", tool_number=3)
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert "tool_diameter" in str(raised.value)
+    assert created == []
+
+
+def test_fusion_refusing_the_tool_object_is_a_refusal(handler_module, monkeypatch):
+    """A JSON Fusion will not build is a refusal, never a half-configured operation."""
+    operation = _tool_op()
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(_setup("Setup1", operation))
+
+    class RefusingTool:
+        @staticmethod
+        def createFromJson(_json):
+            raise RuntimeError("3 : tool definition is invalid")
+
+    monkeypatch.setattr(adsk.cam, "Tool", RefusingTool)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            "Setup1", "pocket2d", tool_diameter=0.6, coolant=None
+        )
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert "tool definition is invalid" in str(raised.value)
+    assert operation.deleted == 1, "no refusal leaves a half-built operation"
+
+
+def test_an_operation_without_a_tool_says_generation_will_fail(handler_module):
+    """The operation is still useful: a reply with a warning, not a refusal."""
+    operation = _tool_op()
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(_setup("Setup1", operation))
+
+    result = handler.cam_create_operation("Setup1", "pocket2d", coolant=None)
+
+    assert result["tool"] is None
+    assert "requires tool to be selected" in result["tool_warning"]
+    assert "tool_diameter" in result["tool_warning"]
+
+
+def test_wait_future_reports_the_operations_error_instead_of_waiting_the_bound(
+    handler_module,
+):
+    """An operation Fusion refuses fails *at once*: the bound must not hide the cause.
+
+    Measured on 2706.1.17: a generation with no tool sets ``hasError`` and a message
+    ("Toolpath requires tool to be selected.") while the future never completes, so
+    the 25 s bound reported ``TIMEOUT`` for a failure Fusion had already named.
+    """
+    operation = SimpleNamespace(
+        hasError=True, error="Toolpath requires tool to be selected.\n"
+    )
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(
+            FakeNeverStartedFuture(), timeout=5.0, operations=[operation]
+        )
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert str(raised.value) == "Toolpath requires tool to be selected."
+
+
+def test_wait_future_reports_an_inherited_error_when_the_bound_expires(
+    handler_module,
+):
+    """The retry case: an operation that failed *last* time must generate this time.
+
+    ``hasError`` keeps the previous attempt's sentence until this attempt rewrites it,
+    and a refused future answers "Generation not started" for ever - so both cases look
+    identical from inside the wait. The baseline taken *before* generating separates
+    them: an inherited sentence is not reported as this call's failure, and it is not
+    discarded either - when the bound expires it is reported *as inherited*, because a
+    retry that fails the same way produces the same sentence.
+    """
+    stale = SimpleNamespace(
+        hasError=True, error="Toolpath requires tool to be selected.\n"
+    )
+    handler = handler_module.CommandHandler
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler._wait_future(
+            FakeNeverStartedFuture(),
+            timeout=0.01,
+            operations=[stale],
+            prior_errors=handler._operation_errors([stale]),
+        )
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert "Toolpath requires tool to be selected." in str(raised.value)
+    assert "recorded this before the call" in str(raised.value)
+
+
+def test_wait_future_still_times_out_for_a_clean_operation(handler_module):
+    """Only a reported error short-circuits; a healthy operation waits the bound."""
+    operation = SimpleNamespace(hasError=False, error="")
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(
+            FakeGenerationFlagFuture(completed_after=None),
+            timeout=0.01,
+            operations=[operation],
+        )
+
+    assert raised.value.error_kind == "TIMEOUT"
+
+
+def test_wait_future_names_the_operation_its_error_belongs_to(handler_module):
+    """``generate_all`` has no target: a nameless sentence names nothing."""
+    operation = SimpleNamespace(
+        name="Rough1", hasError=True, error="Toolpath requires tool to be selected.\n"
+    )
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(
+            FakeGenerationFlagFuture(completed_after=None),
+            timeout=5.0,
+            operations=[operation],
+        )
+
+    assert str(raised.value) == (
+        "Operation 'Rough1': Toolpath requires tool to be selected."
+    )
+
+
+def test_wait_future_reports_an_error_that_completes_the_future(handler_module):
+    """Completion is checked before the error, and nothing used to run after the loop.
+
+    The measured refusal leaves the future pending; nothing says every failure does. A
+    generation that errors *and* completes left the loop clean, and each call site then
+    answered ``generated: True`` for an operation Fusion had refused.
+    """
+    operation = SimpleNamespace(
+        name="Rough1", hasError=True, error="3 : toolpath calculation failed"
+    )
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(
+            FakeGenerationFlagFuture(completed_after=1),
+            timeout=5.0,
+            operations=[operation],
+        )
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert str(raised.value) == ("Operation 'Rough1': 3 : toolpath calculation failed")
+
+
+def test_wait_future_reports_a_nameless_error_without_a_prefix(handler_module):
+    """No name is no prefix: Fusion's own sentence beats a dangling quote."""
+    operation = SimpleNamespace(hasError=True, error="3 : generation failed")
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(
+            FakeGenerationFlagFuture(completed_after=None),
+            timeout=5.0,
+            operations=[operation],
+        )
+
+    assert str(raised.value) == "3 : generation failed"
+
+
+def test_a_geometry_refusal_never_attaches_the_tool_first(handler_module):
+    """Order matters: attaching registers the tool in ``documentToolLibrary``.
+
+    The geometry seam is the only step that removes the operation after it exists, so
+    it runs first. Reversing them would leave a tool behind on every refused retry while
+    the refusal promised only that the operation was removed - and nothing in the reply
+    says a library entry was gained.
+    """
+    operation, value, _applied = _contour_operation()
+
+    def refuse(selections):
+        raise RuntimeError("3 : some input argument is invalid")
+
+    value.applyCurveSelections = refuse
+    handler = _creation_handler(handler_module, operation, faces=1)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            setup_name="Setup1",
+            strategy="contour2d",
+            body_name="Body1",
+            face_indices=[0],
+            tool_diameter=0.6,
+        )
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert operation.deleted == 1
+    assert not hasattr(operation, "tool"), "the tool was attached before the seam"
+
+
+def test_wait_future_tells_two_same_named_operations_apart(handler_module):
+    """A name is not a key: this add-in refuses duplicates precisely because they exist.
+
+    Keyed by name, the second operation's verdict would overwrite the first's in the
+    snapshot - so a fresh failure could be masked by an older one with the same label.
+    """
+    handler = handler_module.CommandHandler
+    stale = SimpleNamespace(name="Rough1", hasError=True, error="old failure")
+    clean = SimpleNamespace(name="Rough1", hasError=False, error="")
+    fresh = SimpleNamespace(name="Rough1", hasError=True, error="new failure")
+    # The fresh failure comes FIRST on purpose: under name keys the later stale entry
+    # overwrites it in the snapshot, so the old implementation masked it and stalled to
+    # TIMEOUT. Only position keys raise here, which is what the fix claims.
+    prior = handler._operation_errors([clean, stale])
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler._wait_future(
+            FakeNeverStartedFuture(),
+            timeout=5.0,
+            operations=[fresh, stale],
+            prior_errors=prior,
+        )
+
+    assert str(raised.value) == "Operation 'Rough1': new failure"
+
+
+def test_generation_reports_an_error_the_call_itself_caused(handler_module):
+    """The snapshot is taken *before* generating, so a brand-new failure is reported.
+
+    Nothing else pins that ordering: with the snapshot moved after the generate call,
+    the failure would already be in it and the wait would report an inherited verdict
+    instead (or stall to the bound). The stand-in keeps the wait short but keeps the
+    snapshot and the comparison, which is what this test is about.
+    """
+    operation = SimpleNamespace(name="Rough1", hasError=False, error="")
+    cam = _cam(_setup_with_operations("Setup1", operation))
+
+    def generate(target):
+        target.hasError = True
+        target.error = "3 : toolpath calculation failed"
+        return FakeNeverStartedFuture()
+
+    cam.generateToolpath = generate
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: cam
+    bounded = handler_module.CommandHandler._wait_future
+    handler._wait_future = (
+        lambda future, timeout=25.0, operations=(), prior_errors=None: bounded(
+            future,
+            timeout=0.01,
+            operations=operations,
+            prior_errors=prior_errors,
+        )
+    )
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_generate_toolpath(setup_name="Setup1", operation_name="Rough1")
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    # The whole sentence, not a substring: with the snapshot taken *after* the generate
+    # call the failure is inherited, and the reply carries the inherited-branch suffix -
+    # so only an equality assertion fails on that mutation.
+    assert str(raised.value) == ("Operation 'Rough1': 3 : toolpath calculation failed")
+
+
+def test_operation_errors_skips_what_it_cannot_read_and_names_a_blank_message(
+    handler_module,
+):
+    """The skip branches and the fallback are the other half of the read-back.
+
+    ``hasError`` is absent on some shapes and may refuse reads on a deleted operation;
+    either way that operation is skipped rather than reported. A blank message from
+    Fusion is replaced by one that names the operation, so a refusal never carries an
+    empty sentence.
+    """
+
+    class Deleted:
+        """A shape whose reads raise, as a deleted Fusion object's do."""
+
+        name = "Rough3"
+
+        @property
+        def hasError(self):
+            raise RuntimeError("3 : object deleted")
+
+    handler = handler_module.CommandHandler
+    errors = handler._operation_errors(
+        [
+            SimpleNamespace(name="Rough1", hasError=True, error="   "),
+            SimpleNamespace(name="Rough2"),  # no hasError at all
+            Deleted(),
+            SimpleNamespace(name="Rough4", hasError=True, error="kept"),
+        ]
+    )
+
+    assert errors[0] == "Fusion reported an error on operation 'Rough1'"
+    assert 1 not in errors, "a shape without hasError is skipped"
+    assert 2 not in errors, "a read that raises is skipped"
+    assert errors[3] == "Operation 'Rough4': kept"

@@ -324,7 +324,7 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
     {
         (
             "event_bridge.py",
-            98,
+            101,
             "raise NotImplementedError: no Refusal bound to it",
         ),
         (
@@ -374,37 +374,52 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_base.py",
-            308,
+            316,
             "raise refusal: kind comes from _rules.point3d_refusal",
         ),
         (
             "handler_base.py",
-            313,
+            321,
             "raise refusal: kind comes from _rules.body_name_required_refusal",
         ),
         (
-            "handler_cam.py",
-            132,
+            "handler_base.py",
+            664,
+            "message is not a literal",
+        ),
+        (
+            "handler_base.py",
+            705,
             "message is not a literal",
         ),
         (
             "handler_cam.py",
-            422,
+            133,
+            "message is not a literal",
+        ),
+        (
+            "handler_cam.py",
+            525,
             "raise strategy_refusal: kind comes from _rules.cam_strategy_refusal",
         ),
         (
             "handler_cam.py",
-            430,
+            533,
             "raise geometry_refusal: kind comes from _rules.cam_geometry_refusal",
         ),
         (
             "handler_cam.py",
-            527,
+            543,
+            "raise tool_refusal: kind comes from _rules.cam_tool_refusal",
+        ),
+        (
+            "handler_cam.py",
+            664,
             "raise refusal: kind comes from _rules.cam_target_refusal",
         ),
         (
             "handler_cam.py",
-            606,
+            748,
             "message is not a literal",
         ),
         (

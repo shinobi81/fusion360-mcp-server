@@ -149,6 +149,14 @@ class FakePostProcessInput:
     sets afterwards.
     """
 
+    #: Declared, not defaulted: ``create`` is the only thing that fills them, and the
+    #: handler reads them off the instance it is handed.
+    programName: str
+    postConfiguration: str
+    outputFolder: str
+    outputUnits: object
+    isOpenInEditor: bool
+
     def __init__(self, *args, **kwargs):
         # The shipped class refuses direct construction the same way
         # (``AttributeError("No constructor defined")``): only ``create`` builds one, so
@@ -171,3 +179,30 @@ class FakePostProcessInput:
         instance.outputUnits = outputUnits
         instance.isOpenInEditor = True
         return instance
+
+
+class FakeTool:
+    """``adsk.cam.Tool`` as the 2706.1.17 stub declares it.
+
+    The stub's ``__init__`` is ``raise AttributeError("No constructor defined")``: a
+    tool is built only by ``createFromJson``/``createFromP21``/``createFromP21File``.
+    A fake that could be constructed would let a handler pass here that Fusion
+    refuses. ``createFromJson(json: str)`` is the shipped staticmethod's one
+    positional argument; the real class has no ``type`` property, so this one has
+    none either.
+    """
+
+    #: The JSON the handler handed over, kept so a test can prove it was passed
+    #: through verbatim rather than rebuilt.
+    json: str
+    description: str
+
+    def __init__(self, *args, **kwargs):
+        raise AttributeError("No constructor defined")
+
+    @staticmethod
+    def createFromJson(json: str) -> FakeTool:
+        tool = object.__new__(FakeTool)
+        tool.json = json
+        tool.description = "Ø6mm flat (FAKE)"
+        return tool

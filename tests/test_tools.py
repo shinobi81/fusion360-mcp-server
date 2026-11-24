@@ -252,7 +252,7 @@ _TOOL_ARGUMENT_COUNTS = {
     "flat_pattern": 1,
     "unfold": 2,
     "cam_create_setup": 7,
-    "cam_create_operation": 12,
+    "cam_create_operation": 15,
     "cam_generate_toolpath": 3,
     "cam_post_process": 5,
     "cam_list_setups": 0,

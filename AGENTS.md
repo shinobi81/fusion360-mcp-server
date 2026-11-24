@@ -173,7 +173,26 @@ Six of these say what the caller's next move is:
 - `SCRIPT_ERROR` — fix the script `execute_code` was handed.
 - `INTERNAL_ERROR` — a bug in the add-in; report it.
 
-Four measured behaviours, worth reading instead of guessing:
+Five measured behaviours, worth reading instead of guessing:
+
+- **A CAM operation needs a tool before it can generate, and a tool is a JSON object
+  whose shape must be complete.** Measured on Fusion 2706.1.17: an operation with no tool
+  fails at `generateToolpath` with `hasError` and `"Toolpath requires tool to be
+  selected."`, while the future never completes — so the wait's own bound reported
+  `TIMEOUT` for a cause Fusion had named. `Tool.createFromJson` accepts a complete tool
+  object (every key a shipped library entry carries, including `holder` and one
+  `start-values.presets` entry), `Operation.tool` takes the result, and Fusion registers
+  it in `documentToolLibrary` by itself (`count` 0 → 1); generation then completes, and
+  the operation reports `has_toolpath: true` through `cam_get_operation_info` (or
+  `cam_list_operations`) — `cam_generate_toolpath` itself answers `generated`, `scope`
+  and the name it resolved, and never whether the toolpath is valid.
+  **A partial object is not refused — it crashed Fusion 360**
+  (no `holder`, empty `start-values`), taking the document's unsaved state with it, which
+  is why `addon/server/cam_tool.py` emits the whole shape — and why a caller-supplied
+  `tool_json` is only shape-checked: 257 of Fusion's own 807 sample tools carry no
+  `holder`, so requiring the blocks would refuse tools Fusion ships. The tool passes
+  centimetres in and converts to the library's millimetres at that one boundary. Only the
+  flat end mill is measured end to end; anything else wants `tool_json`.
 
 - **Sketch draw tools report where the geometry landed, not where you asked.** Measured
   on Fusion 2706: curve points are read in the sketch's _own_ frame, so a `z` is projected

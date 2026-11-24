@@ -12,6 +12,7 @@ package, so its copy is canonical.  Edit that file and run
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Mapping
 from typing import Any
@@ -161,6 +162,196 @@ def cam_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
         # The same sentence ``_body_by_name`` would raise, from the parameters alone -
         # an empty name is not a name, and mock mode must answer what the add-in does.
         return body_name_required_refusal({"body_name": body_name})
+    return None
+
+
+#: What a reply says for an operation created without a tool.  Fusion's own sentence
+#: (measured on 2706.1.17) is quoted rather than paraphrased, because it is what the
+#: caller's *next* call answers - and one string, mirrored into ``src``, is what keeps
+#: mock mode and the handler from drifting apart on it.
+CAM_NO_TOOL_WARNING = (
+    "No tool attached — generation answers 'Toolpath requires tool to be selected.' "
+    "Pass tool_diameter (cm) or tool_json."
+)
+
+
+def _tool_json_shape_refusal(value: Any) -> _hints.Refusal | None:
+    """The refusal a ``tool_json`` that cannot be a tool object earns, or None.
+
+    Shape only: whether the object is a *valid* tool is Fusion's to say, and one
+    measured answer is that a partial object crashes rather than refusing - which is
+    why the add-in's own builder emits the whole shape and why a caller supplying JSON
+    is told to bring a complete one.  A string that is not JSON, or JSON that is not a
+    non-empty object, never reaches Fusion.
+    """
+    if not isinstance(value, str):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"tool_json must be a JSON string, not {type(value).__name__}",
+        )
+    try:
+        parsed = json.loads(value)
+    except ValueError as exc:
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"tool_json is not valid JSON: {exc}",
+            hints=("Copy one complete entry from a Fusion tool library's data array.",),
+        )
+    if not isinstance(parsed, dict):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"tool_json must be one tool object, not {type(parsed).__name__}",
+            hints=("One entry of a Fusion tool library's data array is the shape.",),
+        )
+    if not parsed:
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            "tool_json is an empty object - it must describe a complete tool",
+            hints=(
+                "A partial tool object crashed Fusion 2706.1.17; send the whole one.",
+            ),
+        )
+    # Key *presence* is deliberately not enforced. Measured across Fusion's own 15
+    # sample libraries (807 tools): 257 carry no ``holder``, 75 no ``geometry`` and 72
+    # no ``start-values`` with a preset - so requiring the three blocks would refuse
+    # tools Fusion ships itself. The crashed probe was a partial object, but it omitted
+    # several things at once and this guard cannot tell which omission was fatal, so it
+    # stays structural and the advice points at the builder measured to work.
+    return None
+
+
+#: Ceilings for the tool arguments, and they exist for one reason: the emitted tool is
+#: JSON, ``Infinity`` is not JSON, and ``json.dumps`` writes it without complaint - so
+#: a value large enough to overflow the numbers the builder derives from it would reach
+#: ``Tool.createFromJson`` as invalid input, on the one call here with a measured
+#: Fusion-exit history. Enumerating the builder's scaling factors was tried and was a
+#: constant short (a diameter is multiplied by 10, by 3 for the flute length, and by
+#: ``pi * n / 1000`` for the surface speed); a ceiling cannot be short. Every maximum
+#: below leaves the derived numbers finite with room to spare - a 10 m cutter, a
+#: 1000-flute tool and a tool number of 100000 are far past anything this contract
+#: describes.
+_TOOL_MAXIMUM = {
+    "tool_diameter": 1000,  # cm
+    "tool_length": 1000,  # cm
+    "tool_flutes": 1000,
+    "tool_number": 100000,
+}
+
+
+def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal a contradictory tool request earns, or None when it is usable.
+
+    ``cam_create_operation`` can get a tool three ways and only one at a time: a
+    ``tool_json`` the caller measured, a ``tool_diameter`` the add-in turns into one, or
+    neither (a bare operation, which cannot generate).  Judged from the parameters
+    alone, so mock mode refuses exactly what the handler refuses - and so a caller
+    learns the combination without a design, or an operation left behind.
+
+    ``tool_number`` numbers a tool the add-in creates; there is no library lookup yet,
+    so a number on its own names nothing.  It used to reach Fusion as a parameter name
+    that does not exist, which reported a silent ``parameters_failed``.
+
+    ``tool_json`` is checked for *shape* here as well, because it is forwarded verbatim
+    to ``Tool.createFromJson`` - the one call in this path with a measured crash history
+    (a partial object exited Fusion 2706.1.17).  A string Fusion will not parse is
+    answerable from the parameters alone, so mock mode answers it too.
+    """
+    tool_json = params.get("tool_json")
+    shape_given = [
+        name
+        for name in ("tool_diameter", "tool_length", "tool_flutes")
+        if params.get(name) is not None
+    ]
+    if tool_json is not None:
+        if refusal := _tool_json_shape_refusal(tool_json):
+            return refusal
+        # ``tool_number`` is in the conflict list because the number lives inside the
+        # JSON's ``post-process`` block: passing both would drop the argument the
+        # caller sent, and a supplied-but-ignored value is not something this wire
+        # does.
+        conflicts = list(shape_given)
+        if params.get("tool_number") is not None:
+            conflicts.append("tool_number")
+        if conflicts:
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                "tool_json defines the whole tool - drop "
+                f"{', '.join(conflicts)} or the tool_json",
+                hints=(
+                    "tool_json is for a complete tool object taken from a Fusion "
+                    "tool library; its post-process number is the tool number.",
+                ),
+            )
+        return None
+    # The schema's ``minimum`` and ``type`` are advice to a client, not a guard: a
+    # socket caller is not the schema, and a malformed value either serialises
+    # ``Infinity`` into the tool JSON or builds a zero-diameter tool - and a malformed
+    # tool object is the shape with a measured crash history.  Both sides answer from
+    # here, so mock mode cannot accept what Fusion would be asked to swallow.
+    for name in ("tool_diameter", "tool_length", "tool_flutes", "tool_number"):
+        value = params.get(name)
+        if value is None:
+            continue
+        whole = name in ("tool_flutes", "tool_number")
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"{name} must be a number, got {value!r}",
+                hints=("Lengths are centimetres; a count is a whole number.",),
+            )
+        try:
+            # ``require_finite`` skips an int on purpose, and an int too large for a
+            # float raises OverflowError - which in the builder would reach a caller as
+            # ``UNKNOWN`` and in mock mode as success. Judged here, both sides refuse.
+            magnitude = float(value)
+        except OverflowError:
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"{name} is outside the numeric range Fusion can store, got {value!r}",
+                hints=("Send a value in Fusion's numeric range.",),
+            )
+        if magnitude > _TOOL_MAXIMUM[name]:
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"{name} must be at most {_TOOL_MAXIMUM[name]}, got {value!r}",
+                hints=(
+                    "Lengths are centimetres: a real cutter is a few of them, not "
+                    "hundreds.",
+                ),
+            )
+        if magnitude <= 0:
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"{name} must be greater than 0, got {value!r}",
+                hints=(
+                    "tool_diameter and tool_length are centimetres; tool_number is "
+                    "the number the post writes.",
+                ),
+            )
+        if whole and not isinstance(value, int):
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"{name} must be passed as an integer, got {value!r}",
+                hints=("A flute count and a tool number are counts, not lengths.",),
+            )
+    if params.get("tool_diameter") is None:
+        if shape_given:
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"{', '.join(shape_given)} shapes the tool tool_diameter creates - "
+                "pass tool_diameter too",
+                hints=("tool_diameter is in centimetres, like every other length.",),
+            )
+        if params.get("tool_number") is not None:
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                "tool_number numbers a tool this command creates - pass tool_diameter "
+                "(cm) or tool_json too",
+                hints=(
+                    "Without a tool source the operation is created with no tool, "
+                    "and Fusion then refuses to generate its toolpath.",
+                ),
+            )
     return None
 
 
