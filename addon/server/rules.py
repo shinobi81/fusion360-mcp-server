@@ -217,6 +217,31 @@ def _tool_json_shape_refusal(value: Any) -> _hints.Refusal | None:
                 "A partial tool object crashed Fusion 2706.1.17; send the whole one.",
             ),
         )
+    # The measured crash was a *non-empty* partial object: an entry with no ``holder``
+    # and an empty ``start-values``. Presence of those blocks is shape, not validity -
+    # every shipped library entry carries all three - so it is judged here rather than
+    # left to a call that can take Fusion down with it.
+    missing = [
+        block for block in ("geometry", "holder", "start-values") if block not in parsed
+    ]
+    if missing:
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            "tool_json is missing " + ", ".join(missing) + " - Fusion's own entries "
+            "carry geometry, holder and start-values",
+            hints=(
+                "A partial tool object crashed Fusion 2706.1.17; copy one complete "
+                "entry from a Fusion tool library.",
+            ),
+        )
+    presets = parsed["start-values"]
+    if not isinstance(presets, dict) or not presets.get("presets"):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            "tool_json carries no start-values.presets entry - Fusion's own entries "
+            "carry one",
+            hints=("Measured: an empty start-values crashed Fusion 2706.1.17.",),
+        )
     return None
 
 
@@ -274,13 +299,25 @@ def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
         value = params.get(name)
         if value is None:
             continue
+        whole = name in ("tool_flutes", "tool_number")
         if isinstance(value, bool) or not isinstance(value, int | float):
             return _hints.Refusal(
                 "INVALID_INPUT",
                 f"{name} must be a number, got {value!r}",
                 hints=("Lengths are centimetres; a count is a whole number.",),
             )
-        if value <= 0:
+        try:
+            # ``require_finite`` skips an int on purpose, and an int too large for a
+            # float raises OverflowError - which in the builder would reach a caller as
+            # ``UNKNOWN`` and in mock mode as success. Judged here, both sides refuse.
+            magnitude = float(value)
+        except OverflowError:
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"{name} is too large for Fusion to store as a number, got {value!r}",
+                hints=("Send a value in Fusion's numeric range.",),
+            )
+        if magnitude <= 0:
             return _hints.Refusal(
                 "INVALID_INPUT",
                 f"{name} must be greater than 0, got {value!r}",
@@ -288,6 +325,12 @@ def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
                     "tool_diameter and tool_length are centimetres; tool_number is "
                     "the number the post writes.",
                 ),
+            )
+        if whole and not isinstance(value, int):
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"{name} must be a whole number, got {value!r}",
+                hints=("A flute count and a tool number are counts, not lengths.",),
             )
     if params.get("tool_diameter") is None:
         if shape_given:

@@ -182,8 +182,10 @@ Five measured behaviours, worth reading instead of guessing:
   `TIMEOUT` for a cause Fusion had named. `Tool.createFromJson` accepts a complete tool
   object (every key a shipped library entry carries, including `holder` and one
   `start-values.presets` entry), `Operation.tool` takes the result, and Fusion registers
-  it in `documentToolLibrary` by itself (`count` 0 → 1); generation then answers
-  `has_toolpath: true`. **A partial object is not refused — it crashed Fusion 360**
+  it in `documentToolLibrary` by itself (`count` 0 → 1); generation then completes, and
+  the operation reports `has_toolpath: true` through `cam_get_operation_info` (or
+  `cam_list_operations`) — `cam_generate_toolpath` itself answers only `generated`.
+  **A partial object is not refused — it crashed Fusion 360**
   (no `holder`, empty `start-values`), taking the document's unsaved state with it, which
   is why `addon/server/cam_tool.py` emits the whole shape and the tool passes
   centimetres in and converts to the library's millimetres at that one boundary. Only the

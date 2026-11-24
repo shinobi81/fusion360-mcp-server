@@ -20,6 +20,7 @@ import pytest
 
 from addon.server import fusion_api as adsk
 from addon.server import hints as addon_hints
+from addon.server.cam_tool import build_tool_json
 from tests.fakes.cam import (
     FakeCAMProduct,
     FakeCompletedFlagFuture,
@@ -1025,7 +1026,9 @@ def test_tool_json_reaches_fusion_verbatim(handler_module):
     operation = _tool_op()
     handler = _handler(handler_module)
     handler._get_cam = lambda: _cam(_setup("Setup1", operation))
-    supplied = '{"type": "flat end mill", "description": "mine"}'
+    # A complete object: the shape rule refuses a partial one, because a partial one
+    # crashed Fusion (see cam_tool.py).
+    supplied = build_tool_json(tool_diameter=0.6, description="mine")
 
     result = handler.cam_create_operation(
         "Setup1", "pocket2d", tool_json=supplied, coolant=None
@@ -1141,15 +1144,17 @@ def test_wait_future_reports_the_operations_error_instead_of_waiting_the_bound(
     assert str(raised.value) == "Toolpath requires tool to be selected."
 
 
-def test_wait_future_ignores_an_error_recorded_before_generation_starts(
+def test_wait_future_reports_an_inherited_error_when_the_bound_expires(
     handler_module,
 ):
     """The retry case: an operation that failed *last* time must generate this time.
 
     ``hasError`` keeps the previous attempt's sentence until this attempt rewrites it,
     and a refused future answers "Generation not started" for ever - so both cases look
-    identical from inside the wait. The baseline taken *before* generating is what
-    separates them: an inherited sentence is not this call's failure.
+    identical from inside the wait. The baseline taken *before* generating separates
+    them: an inherited sentence is not reported as this call's failure, and it is not
+    discarded either - when the bound expires it is reported *as inherited*, because a
+    retry that fails the same way produces the same sentence.
     """
     stale = SimpleNamespace(
         hasError=True, error="Toolpath requires tool to be selected.\n"
@@ -1164,7 +1169,9 @@ def test_wait_future_ignores_an_error_recorded_before_generation_starts(
             prior_errors=handler._operation_errors([stale]),
         )
 
-    assert raised.value.error_kind == "TIMEOUT", "not started is not this call's error"
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert "Toolpath requires tool to be selected." in str(raised.value)
+    assert "recorded this before the call" in str(raised.value)
 
 
 def test_wait_future_still_times_out_for_a_clean_operation(handler_module):
@@ -1275,14 +1282,53 @@ def test_wait_future_tells_two_same_named_operations_apart(handler_module):
     stale = SimpleNamespace(name="Rough1", hasError=True, error="old failure")
     clean = SimpleNamespace(name="Rough1", hasError=False, error="")
     fresh = SimpleNamespace(name="Rough1", hasError=True, error="new failure")
-    prior = handler._operation_errors([stale, clean])
+    # The fresh failure comes FIRST on purpose: under name keys the later stale entry
+    # overwrites it in the snapshot, so the old implementation masked it and stalled to
+    # TIMEOUT. Only position keys raise here, which is what the fix claims.
+    prior = handler._operation_errors([clean, stale])
 
     with pytest.raises(addon_hints.Refusal) as raised:
         handler._wait_future(
             FakeNeverStartedFuture(),
             timeout=5.0,
-            operations=[stale, fresh],
+            operations=[fresh, stale],
             prior_errors=prior,
         )
 
     assert str(raised.value) == "Operation 'Rough1': new failure"
+
+
+def test_generation_reports_an_error_the_call_itself_caused(handler_module):
+    """The snapshot is taken *before* generating, so a brand-new failure is reported.
+
+    Nothing else pins that ordering: with the snapshot moved after the generate call,
+    the failure would already be in it and the wait would report an inherited verdict
+    instead (or stall to the bound). The stand-in keeps the wait short but keeps the
+    snapshot and the comparison, which is what this test is about.
+    """
+    operation = SimpleNamespace(name="Rough1", hasError=False, error="")
+    cam = _cam(_setup_with_operations("Setup1", operation))
+
+    def generate(target):
+        target.hasError = True
+        target.error = "3 : toolpath calculation failed"
+        return FakeNeverStartedFuture()
+
+    cam.generateToolpath = generate
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: cam
+    bounded = handler_module.CommandHandler._wait_future
+    handler._wait_future = (
+        lambda future, timeout=25.0, operations=(), prior_errors=None: bounded(
+            future,
+            timeout=0.01,
+            operations=operations,
+            prior_errors=prior_errors,
+        )
+    )
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_generate_toolpath(setup_name="Setup1", operation_name="Rough1")
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert "toolpath calculation failed" in str(raised.value)

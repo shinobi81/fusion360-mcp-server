@@ -182,3 +182,17 @@ def test_the_preset_feed_follows_the_flute_count():
         preset = tool["start-values"]["presets"][0]
 
         assert preset["v_f"] == preset["f_z"] * preset["n"] * tool["geometry"]["NOF"]
+
+
+def test_the_per_revolution_feed_matches_the_shipped_library_convention():
+    """Measured from Fusion's library: ``f_n`` equals ``f_z``, it is not ``f_z*NOF``.
+
+    Every preset in ``Milling Tools (Metric).json`` carries ``f_n == f_z`` beside
+    ``v_f == f_z * n * NOF`` (a 3 mm, 3-flute entry: 0.0667 = 0.0667, v_f 1000 at
+    n 5000). So the emitted preset follows the library rather than reinterpreting the
+    field as a per-revolution feed.
+    """
+    tool = _built(tool_diameter=0.6, tool_flutes=3)
+    preset = tool["start-values"]["presets"][0]
+
+    assert preset["f_n"] == preset["f_z"]

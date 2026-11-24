@@ -45,6 +45,10 @@ HOLDER_GAUGE_LENGTH_MM = 20.0
 #: Feed per tooth, and the spindle speed every emitted preset uses. ``v_f`` below is
 #: derived from these and the flute count rather than fixed, because a preset whose
 #: per-tooth feed implies a different feed rate is a tool that cuts at the wrong speed.
+#: ``f_n`` is emitted equal to ``f_z`` because that is what Fusion's own library does:
+#: measured across ``Milling Tools (Metric).json``, every preset carries ``f_n == f_z``
+#: beside ``v_f == f_z * n * NOF`` (a 3 mm 3-flute entry: 0.0667, 0.0667, 1000 at
+#: n 5000). Whatever the name suggests, it is not a per-revolution figure here.
 FEED_PER_TOOTH_MM = 0.05
 SPINDLE_RPM = 10000.0
 

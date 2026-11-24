@@ -374,22 +374,22 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_base.py",
-            308,
+            316,
             "raise refusal: kind comes from _rules.point3d_refusal",
         ),
         (
             "handler_base.py",
-            313,
+            321,
             "raise refusal: kind comes from _rules.body_name_required_refusal",
         ),
         (
             "handler_base.py",
-            658,
+            664,
             "message is not a literal",
         ),
         (
             "handler_base.py",
-            680,
+            699,
             "message is not a literal",
         ),
         (

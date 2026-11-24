@@ -14,6 +14,7 @@ import pytest
 
 from addon.server import hints as addon_hints
 from addon.server import rules
+from addon.server.cam_tool import build_tool_json
 from fusion360_mcp import _rules, mock
 from tests.fakes.bodies import FakeBody, body_with_edges
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
@@ -816,7 +817,7 @@ def test_the_handler_and_the_mock_refuse_two_tool_sources_alike(bare_handler, pa
     call = {
         "setup_name": "Setup1",
         "strategy": "pocket2d",
-        "tool_json": '{"type": "flat end mill", "description": "mine"}',
+        "tool_json": build_tool_json(tool_diameter=0.6, description="mine"),
         **params,
     }
 
@@ -875,3 +876,63 @@ def test_the_handler_and_the_mock_refuse_a_non_number_tool_argument(bare_handler
     assert refused["error_kind"] == raised.value.error_kind
     assert refused["error_message"] == str(raised.value)
     assert "must be a number" in refused["error_message"]
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"tool_diameter": 0.6, "tool_flutes": 2.5},
+        {"tool_diameter": 0.6, "tool_number": 1.5},
+        {"tool_diameter": 10**400},
+        {"tool_flutes": 10**400},
+    ],
+    ids=["fractional flutes", "fractional number", "huge diameter", "huge flutes"],
+)
+def test_the_handler_and_the_mock_refuse_a_count_that_is_not_usable(
+    bare_handler, params
+):
+    """A count is whole, and an int too large for a float is nobody's diameter.
+
+    ``require_finite`` skips an int on purpose, so a 401-digit value used to reach the
+    builder and raise ``OverflowError`` (``UNKNOWN``, no hints) on the handler while
+    mock answered success. Both sides refuse it here.
+    """
+    call = {"setup_name": "Setup1", "strategy": "pocket2d", **params}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_create_operation(**call)
+
+    refused = mock._cam_create_operation(call)
+
+    assert refused is not None
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert refused["error_message"] == str(raised.value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        '{"geometry": {}, "start-values": {"presets": [{"name": "p"}]}}',
+        '{"geometry": {}, "holder": {}}',
+        '{"geometry": {}, "holder": {}, "start-values": {"presets": []}}',
+    ],
+    ids=["no holder", "no start-values", "empty presets"],
+)
+def test_the_handler_and_the_mock_refuse_a_partial_tool_object(bare_handler, value):
+    """The measured crash was a *non-empty* partial object, so presence is checked.
+
+    Fusion's own entries all carry ``geometry``, ``holder`` and a ``start-values`` with
+    one preset; an entry without them is the shape that exited Fusion 2706.1.17, and it
+    passes an emptiness check.
+    """
+    call = {"setup_name": "Setup1", "strategy": "pocket2d", "tool_json": value}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_create_operation(**call)
+
+    refused = mock._cam_create_operation(call)
+
+    assert refused is not None
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert refused["error_message"] == str(raised.value)
+    assert "tool_json" in refused["error_message"]

@@ -29,6 +29,14 @@ log = get_logger("handler")
 # ``_Contract = object`` at runtime - so a checker sees the members while the
 # hierarchy ``CommandHandler`` builds is unchanged.  ``tests/test_addon_sources.py``
 # enforces both halves: the declaration, and that the runtime base stays ``object``.
+#: The advice an error Fusion recorded on an operation earns, wherever it is reported
+#: from: the early raise and the one at the wait's bound answer the same two lines.
+_GENERATION_HINTS = (
+    "cam_get_operation_info shows the operation's parameters and tool.",
+    "An operation with no tool cannot generate; give it one with "
+    "cam_create_operation(tool_diameter=...) or tool_json.",
+)
+
 class HandlerBase:
     def __init__(self):
         self.app = adsk.core.Application.get()
@@ -530,6 +538,9 @@ class HandlerBase:
                     continue
                 message = str(operation.error or "").strip()
                 name = getattr(operation, "name", None)
+            # Bracketed on purpose: `ruff format` rewrites this to the PEP 758
+            # spelling, and `addon/` runs on Fusion's interpreter, which is not the
+            # one `requires-python` describes. `tests/test_addon_sources.py` guards it.
             except (AttributeError, RuntimeError):
                 continue
             if not message:
@@ -641,22 +652,30 @@ class HandlerBase:
                     return message
             return None
 
+        def recorded_error() -> str | None:
+            """The first error Fusion holds now, inherited or not."""
+            return next(iter(HandlerBase._operation_errors(operations).values()), None)
+
         def operation_failure(message: str) -> _hints.Refusal:
-            return _hints.Refusal(
-                "FUSION_REFUSED",
-                message,
-                hints=(
-                    "cam_get_operation_info shows the operation's parameters "
-                    "and tool.",
-                    "An operation with no tool cannot generate; give it one with "
-                    "cam_create_operation(tool_diameter=...) or tool_json.",
-                ),
-            )
+            return _hints.Refusal("FUSION_REFUSED", message, hints=_GENERATION_HINTS)
 
         while not is_done():
             if error := new_error():
                 raise operation_failure(error)
             if time.monotonic() > deadline:
+                # A retried call that fails the same way produces the *same* sentence,
+                # which the difference test above ignores by design. Rather than discard
+                # a cause Fusion named, report it and say it predates this call.
+                if inherited := recorded_error():
+                    # Raised here rather than through ``operation_failure`` so the kind
+                    # is a literal: the audit that keeps every raise typed reads this
+                    # file, and a kind hidden inside a helper is not readable in it.
+                    raise _hints.Refusal(
+                        "FUSION_REFUSED",
+                        f"{inherited} (Fusion recorded this before the call and did "
+                        "not change it)",
+                        hints=_GENERATION_HINTS,
+                    )
                 raise _hints.Refusal(
                     "TIMEOUT",
                     f"Toolpath generation did not finish within {timeout}s. "

@@ -2,6 +2,7 @@
 
 import pytest
 
+from addon.server.cam_tool import build_tool_json
 from fusion360_mcp.mock import _DISPATCH, mock_command
 from fusion360_mcp.tools import TOOLS
 
@@ -1113,7 +1114,9 @@ class TestMockCAM:
         """One tool, one source: judged from the parameters, so mock refuses too."""
         params = {
             "strategy": "contour2d",
-            "tool_json": '{"type": "flat end mill"}',
+            # Complete, so the *conflict* is what answers: a partial object is refused
+            # one rule earlier, by the shape check.
+            "tool_json": build_tool_json(tool_diameter=0.6, description="mine"),
             "tool_diameter": 0.6,
         }
         result = mock_command("cam_create_operation", params)
@@ -1310,18 +1313,19 @@ def test_an_empty_name_the_handler_does_not_look_up_is_not_refused(command, para
     """The check is the lookup's: an empty name a caller may use is not refused."""
     assert mock_command(command, params)["ok"] is True
 
-    def test_cam_create_operation_promises_no_description_for_a_supplied_tool(self):
-        """The handler reads the tool back and may answer ``{}``: promise no more.
 
-        It used to answer ``{"description": "flat end mill"}`` for any ``tool_json`` -
-        invented for a ball-nose, and absent live when Fusion declines to describe the
-        tool - so a rehearsal indexing that key broke against Fusion.
-        """
-        params = {
-            "strategy": "pocket2d",
-            "tool_json": '{"type": "ball end mill", "description": "8mm ball"}',
-        }
-        result = mock_command("cam_create_operation", params)
+def test_cam_create_operation_promises_no_description_for_a_supplied_tool():
+    """The handler reads the tool back and may answer ``{}``: promise no more.
 
-        assert result["ok"] is True
-        assert result["tool"] == {}
+    It used to answer ``{"description": "flat end mill"}`` for any ``tool_json`` -
+    invented for a ball-nose, and absent live when Fusion declines to describe the
+    tool - so a rehearsal indexing that key broke against Fusion.
+    """
+    params = {
+        "strategy": "pocket2d",
+        "tool_json": build_tool_json(tool_diameter=0.8, description="8mm ball"),
+    }
+    result = mock_command("cam_create_operation", params)
+
+    assert result["ok"] is True
+    assert result["tool"] == {}
