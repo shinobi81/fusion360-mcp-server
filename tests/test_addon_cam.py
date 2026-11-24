@@ -20,6 +20,7 @@ import pytest
 
 from addon.server import fusion_api as adsk
 from addon.server import hints as addon_hints
+from addon.server import rules as addon_rules
 from addon.server.cam_tool import build_tool_json
 from tests.fakes.cam import (
     FakeCAMProduct,
@@ -1372,3 +1373,140 @@ def test_operation_errors_skips_what_it_cannot_read_and_names_a_blank_message(
     assert 1 not in errors, "a shape without hasError is skipped"
     assert 2 not in errors, "a read that raises is skipped"
     assert errors[3] == "Operation 'Rough4': kept"
+
+
+# ── the setup's stock vocabulary ─────────────────────────────────────────────
+# Measured on Fusion 2706.1.17 by writing ``job_stockMode`` on a live setup: the ids
+# ``default``, ``fixedbox``, ``relativecylinder``, ``fixedcylinder`` and ``solid`` are
+# accepted; ``from_body`` (which this schema used to advertise) and a nonsense string
+# were both refused with "3 : Invalid enumeration value." - two probes, not a universal.
+
+
+class _StockParam:
+    def __init__(self):
+        self.expression = None
+
+
+class _Setup:
+    """A setup that records the CAM parameters written to it.
+
+    *accepted* is the set of parameter names this build knows, or None for "every name".
+    A name outside it answers ``None``, which is what Fusion does for a parameter that
+    does not exist - a fake that accepts any name would report ``stock_applied`` for a
+    misspelled ``job_stockMode`` and keep the suite green.
+    """
+
+    def __init__(self, name, accepted=None):
+        self.name = name
+        self.accepted = accepted
+        self.written = {}
+
+    @property
+    def parameters(self):
+        def item_by_name(name):
+            if self.accepted is not None and name not in self.accepted:
+                return None
+            return self.written.setdefault(name, _StockParam())
+
+        return SimpleNamespace(itemByName=item_by_name)
+
+
+def _setup_cam(default_name: str = "Setup1", accepted=None):
+    """A CAM product whose ``setups.add`` answers a recording setup.
+
+    ``cam.seen`` holds the ``OperationTypes`` member each ``createInput`` was handed, so
+    a swapped branch in the handler's map is visible rather than harmless.
+    """
+    created = []
+    seen = []
+
+    def create_input(op_type):
+        seen.append(op_type)
+        return SimpleNamespace(name=None, models=None)
+
+    def add(setup_input):
+        setup = _Setup(setup_input.name or default_name, accepted=accepted)
+        created.append(setup)
+        return setup
+
+    cam = SimpleNamespace(
+        setups=SimpleNamespace(createInput=create_input, add=add), seen=seen
+    )
+    return cam, created
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"), sorted(addon_rules.CAM_STOCK_MODES.items())
+)
+def test_a_stock_mode_reaches_fusion_as_its_own_id(handler_module, mode, expected):
+    """The name is ours, the id is Fusion's - and they differ for all five."""
+    handler = _handler(handler_module)
+    cam, created = _setup_cam()
+    handler._get_cam = lambda: cam
+    handler._body_by_name = lambda name: SimpleNamespace(name=name)
+
+    result = handler.cam_create_setup("Body1", name="Setup1", stock_mode=mode)
+
+    assert result["stock_applied"]["stock_mode"] == expected
+    assert created[0].written["job_stockMode"].expression == f"'{expected}'"
+    # One-sided assertions let a handler that always adds the warning stay green.
+    assert "stock_failed" not in result
+    assert "warning" not in result
+
+
+def test_an_unknown_stock_mode_is_refused_before_a_setup_exists(handler_module):
+    """Nothing is created for a value Fusion would refuse: no stockless setup behind."""
+    handler = _handler(handler_module)
+    cam, created = _setup_cam()
+    handler._get_cam = lambda: cam
+    handler._body_by_name = lambda name: SimpleNamespace(name=name)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_setup("Body1", name="Setup1", stock_mode="from_body")
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert created == [], "the setup must not exist when the vocabulary is refused"
+
+
+def test_a_stock_mode_fusion_will_not_take_is_reported_not_claimed(handler_module):
+    """``stock_failed`` is the honest answer when the setup lacks the parameter.
+
+    The fake accepts any name by default, so without a build that refuses one this line
+    of the reply - and the warning beside it - had no test at all.
+    """
+    handler = _handler(handler_module)
+    cam, _created = _setup_cam(accepted={"job_stockOffset"})
+    handler._get_cam = lambda: cam
+    handler._body_by_name = lambda name: SimpleNamespace(name=name)
+
+    result = handler.cam_create_setup("Body1", name="Setup1", stock_mode="from_solid")
+
+    assert result["stock_failed"] == {"stock_mode": "solid"}
+    assert "stock_applied" not in result
+    assert result["warning"]
+
+
+@pytest.mark.parametrize(
+    ("operation_type", "member"),
+    [
+        ("milling", "MillingOperation"),
+        ("turning", "TurningOperation"),
+        ("cutting", "JetOperation"),
+    ],
+)
+def test_an_operation_type_reaches_its_own_enum_member(
+    handler_module, operation_type, member
+):
+    """The three names map to three different members, by identity like the handler.
+
+    ``cutting -> JetOperation`` is not a guess a reader would make, and the fake now
+    records what it was handed, so swapping a branch fails here.
+    """
+    handler = _handler(handler_module)
+    cam, _created = _setup_cam()
+    handler._get_cam = lambda: cam
+    handler._body_by_name = lambda name: SimpleNamespace(name=name)
+
+    handler.cam_create_setup("Body1", name="Setup1", operation_type=operation_type)
+
+    assert cam.seen[0] is getattr(adsk.cam.OperationTypes, member)

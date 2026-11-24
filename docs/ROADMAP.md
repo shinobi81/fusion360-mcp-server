@@ -297,6 +297,11 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    `cam_create_setup`: handler `{name, body, operation_type, stock_applied|stock_failed,
    warning}`, mock `{setup_name, body_name, operation_type, stock_mode}`. An agent that
    rehearses a key in mock mode then reads it against Fusion and gets a `KeyError`.
+   For this command the success *values* differ too, which this section did not record:
+   mock echoes the `stock_mode` name the caller sent, while the handler answers
+   `stock_applied.stock_mode` with Fusion's id (`from_solid` -> `solid`). The name is in
+   the schema and the id is not, so a rehearsal that memorises the schema's spelling
+   meets a different one live.
    Pre-existing and pinned by `tests/test_mock.py`; left as a decision rather than a
    ride-along on #143.
 
@@ -314,12 +319,44 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    generated, toolpath_count}`. An agent rehearsing `toolpath_count` gets a `KeyError`
    live and never sees `scope`.
 
-9. **`cam_create_setup`'s `stock_mode` vocabulary does not match the handler's map.**
-   The schema advertises `relative_box`/`fixed_box`/`from_body`; `handler_cam.py` maps
-   `relative_box`/`fixed_box`/`relative_cylinder`/`fixed_cylinder`/`from_solid` and
-   passes an unmapped value through verbatim, so a schema-legal `from_body` reaches
-   Fusion as `from_body` and is reported as `stock_failed`. Read from the two files on
-   2026-11-23, not measured against Fusion; no test names `stock_mode` at all.
+9. ~~`cam_create_setup`'s `stock_mode` vocabulary does not match the handler's map~~
+   - **closed, and measured.** The mismatch was real: the schema advertised
+   `relative_box`/`fixed_box`/`from_body`, the handler mapped five names - three of
+   them never offered by the schema - and an unmapped value was passed through
+   verbatim.
+
+   Measured on 2706.1.17 by writing `job_stockMode` on a live setup, one candidate at a
+   time: `default`, `fixedbox`, `relativecylinder`, `fixedcylinder` and `solid` are
+   accepted and read back as themselves, while `from_body` - the value the schema
+   advertised - and a nonsense string (`bogus`) are both refused with
+   `3 : Invalid enumeration value.` Two refusals do not prove *every* other string is
+   refused, and this says only what was probed. So `from_body` never worked, three
+   working ids were unreachable, and the failure surfaced as `stock_failed` rather than
+   as a refusal.
+
+   One pairing rests on fused evidence rather than on this probe: `relative_box` ->
+   `default`. The write proves Fusion accepts `default` and returns it; that `default`
+   *is* the relative-size box comes from the handler's older note about Fusion 2705, and
+   the parameter exposes only `title: 'Mode'` - no human label - so 2706 could not
+   confirm it without comparing stock geometry. The other four pairings are
+   self-describing.
+
+   What shipped: one table, `rules.CAM_STOCK_MODES`, is now the only source - the schema
+   enum is `list(CAM_STOCK_MODES)` (pinned by reading the source, since equal values
+   cannot show where they came from), the handler indexes the table its own refusal just
+   validated, and `rules.cam_stock_mode_refusal` refuses an unknown name from the
+   parameters alone, so `mock_command` and a direct-wire caller answer the same
+   sentence, and nothing is created for a value Fusion would reject. That the two modes
+   order their refusals alike is pinned by a call carrying both faults at once.
+
+   An **MCP** caller never reaches that rule: the schema gate refuses the value first,
+   with its own sentence, exactly as it does for `set_design_type` - so the migration
+   advice for
+   `from_body` reaches MCP clients through the schema description instead, and
+   `test_schema_gate.py` pins the sentence such a caller actually gets. `from_body`
+   is named in the refusal's hint as the old spelling of `from_solid`, and the schema's
+   description says so too. The first tests to name `stock_mode` at all cover the five
+   ids, the refusal, and that the setup does not exist when the vocabulary is refused.
 
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.

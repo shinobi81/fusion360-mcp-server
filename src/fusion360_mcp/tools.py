@@ -12,6 +12,7 @@ import mcp.types as types
 # joint selectors are read by ``tools.py`` twice each (both joint tools), so a local
 # copy would be a fourth place to drift.
 from ._rules import (
+    CAM_STOCK_MODES,
     CAM_STRATEGIES,
     EDGE_SELECTIONS,
     JOINT_KEY_POINTS,
@@ -2237,12 +2238,16 @@ TOOLS: list[dict] = [
         },
         stock_mode={
             "type": "string",
-            "enum": [
-                "relative_box",
-                "fixed_box",
-                "from_body",
-            ],
+            "enum": list(CAM_STOCK_MODES),
             "default": "relative_box",
+            "description": (
+                "How the setup's stock is defined, measured against Fusion "
+                "2706.1.17: "
+                + ", ".join(CAM_STOCK_MODES)
+                + ". The names this schema used to advertise included from_body, "
+                "which Fusion refuses as an invalid enumeration value and never "
+                "worked - from_solid is the working name for it."
+            ),
         },
         stock_offset_sides={
             "type": "number",

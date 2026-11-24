@@ -1,5 +1,7 @@
 """Tests for the tool registry."""
 
+import inspect
+
 from fusion360_mcp import tools
 from fusion360_mcp.tools import TOOLS, get_tool_by_name, get_tool_list
 
@@ -306,3 +308,25 @@ def test_every_edge_selector_schema_advertises_one_tuple():
     }
 
     assert enums == {tools.EDGE_SELECTIONS}
+
+
+def test_the_stock_mode_enum_is_the_rules_table():
+    """One author for the vocabulary: the schema must not grow its own list.
+
+    ``tools.py`` writes ``list(CAM_STOCK_MODES)``, and this is what keeps that true:
+    a literal list typed back in would satisfy every other test in the suite - the
+    schema gate only checks that an enum is *enforced*, not where it came from - while
+    the two vocabularies drifted apart again, which is the defect this change closes.
+    """
+    from fusion360_mcp._rules import CAM_STOCK_MODES
+
+    tool = get_tool_by_name("cam_create_setup")
+    assert tool is not None
+    schema = tool["inputSchema"]["properties"]["stock_mode"]
+
+    assert schema["enum"] == list(CAM_STOCK_MODES)
+    assert schema["default"] in CAM_STOCK_MODES
+    # Equality of values cannot see *where* they came from: a literal list of these five
+    # names would satisfy the assertion above and pass the whole suite. Reading the
+    # source is how this test keeps its docstring honest.
+    assert '"enum": list(CAM_STOCK_MODES)' in inspect.getsource(tools)
