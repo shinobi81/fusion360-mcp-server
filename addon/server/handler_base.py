@@ -79,6 +79,7 @@ class HandlerBase:
             "get_scene_info",
             "get_object_info",
             "list_edges",
+            "list_faces",
             "get_bounding_box",
             "list_components",
             # sketch

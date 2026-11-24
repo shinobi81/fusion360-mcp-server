@@ -28,13 +28,22 @@ the root is named in the reply, not what Fusion calls it.
 
 from __future__ import annotations
 
+import inspect
 import math
 
 import pytest
 
+from addon.server import handler_scene
 from addon.server import hints as addon_hints
 from addon.server.hints import classify
-from tests.fakes.bodies import FakeBody, FakeBoundingBox
+from tests.fakes.bodies import (
+    FakeBody,
+    FakeBoundingBox,
+    FakeEdge,
+    FakeEdges,
+    FakeFace,
+)
+from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
 from tests.fakes.features import FakeMeasureManager
 from tests.fakes.runtime import DIRECT, PARAMETRIC, FakePoint3D, FakeValueInput
@@ -370,3 +379,143 @@ def test_rename_body_of_a_name_that_is_not_there_is_BODY_NOT_FOUND(bound_handler
         handler.rename_body("Ghost", "Base")
 
     assert classify(raised.value)[0] == "BODY_NOT_FOUND"
+
+
+def _plate_with(*faces):
+    """A body whose faces are the ones the test passed."""
+    return FakeBody(name="Plate", faces=FakeCollection(list(faces)))
+
+
+def test_list_faces_reports_a_planar_face_with_its_normal(bound_handler):
+    """The face behind ``face_indices``, and the normal that says which way it faces.
+
+    Until this tool existed the indices could only be learned through ``execute_code``,
+    so a wrong-but-in-range index was accepted silently by every command taking one.
+    """
+    # A centroid the fake's bounding box would not produce: the assertion is then about
+    # the handler reading ``face.centroid``, not about the box centre it defaults to.
+    face_with_centroid = FakeFace(centroid=(1.0, 2.0, 3.0))
+    handler = bound_handler(
+        FakeDesign(features=0, bodies=[_plate_with(face_with_centroid)])
+    )
+
+    result = handler.list_faces(body_name="Plate")
+
+    assert result["body_name"] == "Plate"
+    face = result["faces"][0]
+    assert face["index"] == 0
+    assert face["is_planar"] is True
+    assert face["normal"] == [0.0, 0.0, 1.0]
+    assert face["centroid"] == [1.0, 2.0, 3.0]
+    # The area is what tells two coplanar faces apart; FakeFace's default is 1.0.
+    assert face["area"] == 1.0
+    assert result["count"] == 1
+    # The other half of the pair: a list that was not clipped says so.
+    assert result["truncated"] is False
+
+
+def test_list_faces_omits_the_normal_of_a_curved_face(bound_handler):
+    """A cylinder has no ``normal``; inventing one describes a direction it lacks."""
+    handler = bound_handler(
+        FakeDesign(features=0, bodies=[_plate_with(FakeFace(planar=False, radius=1.0))])
+    )
+
+    face = handler.list_faces(body_name="Plate")["faces"][0]
+
+    assert face["is_planar"] is False
+    assert "normal" not in face
+
+
+def test_list_faces_counts_every_face_and_says_when_the_list_was_clipped(
+    bound_handler,
+):
+    """``count`` is the body's total, ``truncated`` the clip - as ``list_edges`` does.
+
+    A caller reading ``faces`` as "how many there are" would plan against a shorter
+    list than the body holds, which is the one thing the pair exists to prevent.
+    """
+    three = [_plate_with(FakeFace(), FakeFace(), FakeFace())]
+    handler = bound_handler(FakeDesign(features=0, bodies=three))
+
+    result = handler.list_faces(body_name="Plate", limit=2)
+
+    assert len(result["faces"]) == 2
+    assert result["count"] == 3
+    assert result["truncated"] is True
+
+
+def test_list_faces_reports_the_outward_normal_not_the_surface_one(bound_handler):
+    """Measured on 2706: a box's bottom face has ``isParamReversed`` true.
+
+    Its *surface* normal is +Z, so reporting ``geometry.normal`` would put the bottom of
+    the box and its top in the same direction - two faces claiming one normal. Negating
+    where the flag is set is what makes the report outward.
+    """
+    flipped = FakeFace(normal=(0.0, 0.0, 1.0), is_param_reversed=True)
+    handler = bound_handler(FakeDesign(features=0, bodies=[_plate_with(flipped)]))
+
+    normal = handler.list_faces(body_name="Plate")["faces"][0]["normal"]
+
+    assert normal == [0.0, 0.0, -1.0]
+
+
+def test_list_faces_names_the_surface_the_way_fusion_does(bound_handler):
+    """A caller picks a cylinder by name; the names come from the enum's members.
+
+    The mapping is keyed by ``SurfaceTypes.<member>``, so a build that renumbers the
+    enum cannot leave the names wrong - and an unknown surface falls through as its raw
+    value rather than being guessed at.
+    """
+    planar = FakeFace()
+    curved = FakeFace(planar=False, radius=1.0)
+    handler = bound_handler(
+        FakeDesign(features=0, bodies=[_plate_with(planar, curved)])
+    )
+
+    faces = handler.list_faces(body_name="Plate")["faces"]
+
+    assert faces[0]["surface_type"] == "Plane"
+    assert faces[1]["surface_type"] == "Cylinder"
+
+
+def test_list_faces_compares_against_the_enum_member_not_an_integer():
+    """The planar test reads Fusion's member; ``0`` happens to equal it today.
+
+    A literal would pass every behavioural test in this file and break the day the stub
+    renumbers the enum, so the claim is pinned where it lives - in the source.
+    """
+    source = inspect.getsource(handler_scene)
+
+    # The *assignment*, not the name: a comment mentioning the member would satisfy a
+    # substring test while the code compared against a literal. The whole comment-free
+    # line, indent included: a comment written as the assignment would satisfy a bare
+    # substring test.
+    assert "\n        plane_type = adsk.core.SurfaceTypes.PlaneSurfaceType\n" in source
+    assert "\n            is_planar = geometry.surfaceType == plane_type\n" in source
+
+
+@pytest.mark.parametrize(("limit", "expected"), [(None, 2), (0, 1), (1, 1)])
+def test_the_limit_contract_is_one_rule_on_both_sides(bound_handler, limit, expected):
+    """``None`` means "no limit given", ``0`` is floored to one - in both tools.
+
+    The two modes disagreed before this was written: ``0`` meant 1 to the handler and
+    200 to mock, so the same call returned different lists. These are the three cases
+    that differ, and they are asserted for both list tools.
+    """
+    two_edges = FakeEdges(
+        [
+            FakeEdge((0.0, 0.0, 0.0), (1.0, 0.0, 0.0)),
+            FakeEdge((1.0, 0.0, 0.0), (1.0, 1.0, 0.0)),
+        ]
+    )
+    body = FakeBody(
+        name="Plate",
+        faces=FakeCollection([FakeFace(), FakeFace()]),
+        edges=two_edges,
+    )
+    handler = bound_handler(FakeDesign(features=0, bodies=[body]))
+
+    # Both tools, because the same line was changed in both - and reverting either one
+    # used to leave the suite green.
+    assert len(handler.list_faces(body_name="Plate", limit=limit)["faces"]) == expected
+    assert len(handler.list_edges(body_name="Plate", limit=limit)["edges"]) == expected

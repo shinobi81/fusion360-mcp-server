@@ -235,7 +235,7 @@ def _target_body(reaches: str) -> dict:
 def _tool(
     _name: str, _title: str, _description: str, *, required=(), **properties
 ) -> dict:
-    """One tool entry: the wrapper all 97 of them share.
+    """One tool entry: the wrapper all 98 of them share.
 
     ``required`` and every property are keyword arguments, so a schema reads as
     the arguments it describes rather than as five levels of dict literal.  The
@@ -783,7 +783,8 @@ TOOLS: list[dict] = [
             "joint geometry. face_one/face_two are mandatory: a joint cannot be "
             "built from component origins, because a bare point carries no "
             "component association. Pass a cylindrical face on each side "
-            "(enumerate with execute_code body.faces.item(i)) - for a hinge that is "
+            "(list_faces reports them, with each face's surface_type) - for a hinge "
+            "that is "
             "the knuckle bore on each leaf. NOTE: creating a joint MOVES the "
             "components so the joint geometry becomes coincident - use "
             "create_as_built_joint when the parts are already positioned."
@@ -870,6 +871,27 @@ TOOLS: list[dict] = [
             "minimum": 1,
             "maximum": 5000,
             "description": "Maximum edges returned; count is the real total",
+        },
+    ),
+    _tool(
+        "list_faces",
+        "List Faces",
+        (
+            "List a body's faces with index, surface_type (Plane, Cylinder, Cone, "
+            "...), planarity, area and centroid, plus the outward normal on a planar "
+            "face; these are the indices face_indices takes"
+        ),
+        body_name={
+            "type": "string",
+            "description": "Body name (default: the body at body_index)",
+        },
+        body_index={"type": "integer", "default": 0},
+        limit={
+            "type": "integer",
+            "default": 200,
+            "minimum": 1,
+            "maximum": 5000,
+            "description": "Maximum faces returned; count is the real total",
         },
     ),
     _tool(
@@ -2383,8 +2405,8 @@ TOOLS: list[dict] = [
             "minItems": 1,
             "description": (
                 "Faces to machine, by 0-based index in the body's own order "
-                "(enumerate with execute_code body.faces.item(i)). Applied to the "
-                "strategy's geometry parameter (contours/pockets/"
+                "(list_faces reports them, with each face's surface_type). Applied "
+                "to the strategy's geometry parameter (contours/pockets/"
                 "machiningBoundarySel). Refused for any strategy without one."
             ),
         },
@@ -2544,6 +2566,7 @@ _READ_ONLY = {
     "get_scene_info",
     "get_object_info",
     "list_edges",
+    "list_faces",
     "get_bounding_box",
     "list_components",
     "get_parameters",
@@ -2572,7 +2595,7 @@ _IDEMPOTENT = _READ_ONLY | {
 
 for _t in TOOLS:
     _name = _t["name"]
-    # One loop rather than 97 schema edits: the gate validates every tool against
+    # One loop rather than 98 schema edits: the gate validates every tool against
     # this dict, and a client that skips the gate to reach :9876 directly must not
     # be the only caller an undeclared argument slips past.  A tool's inputSchema
     # lists every argument it accepts, so anything else is refused by name.

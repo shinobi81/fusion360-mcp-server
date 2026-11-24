@@ -572,8 +572,8 @@ class CamCommands(_Contract):
                     f"Face index {out_of_range[0]} is out of range for body "
                     f"'{body.name}' ({body.faces.count} faces)",
                     hints=(
-                        "Enumerate with execute_code (`body.faces.item(i)`) - no "
-                        "tool lists faces yet.",
+                        "Enumerate with list_faces (body_name=...) - it reports every "
+                        "face's index and surface_type.",
                     ),
                 )
             selection_faces = [body.faces.item(index) for index in face_indices]

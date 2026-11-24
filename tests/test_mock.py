@@ -1346,3 +1346,41 @@ def test_cam_create_operation_promises_no_description_for_a_supplied_tool():
 
     assert result["ok"] is True
     assert result["tool"] == {}
+
+
+class TestMockListFaces:
+    """The face list a caller rehearses, in the shape the handler returns."""
+
+    def test_a_planar_face_carries_a_normal_and_a_curved_one_does_not(self):
+        """Only a planar face has a ``normal``; mock must not invent one for the others.
+
+        A rehearsal that reads ``faces[i]["normal"]`` on every entry would break live,
+        which is the drift mock mode exists to prevent.
+        """
+        faces = mock_command("list_faces", {"body_name": "Body1"})["faces"]
+
+        assert faces[0]["is_planar"] is True
+        assert faces[0]["normal"] == [0.0, 0.0, 1.0]
+        assert faces[1]["is_planar"] is False
+        assert "normal" not in faces[1]
+
+    def test_the_limit_is_honoured_and_count_stays_the_real_total(self):
+        """``count`` is the body's total and ``truncated`` says the list was clipped."""
+        result = mock_command("list_faces", {"body_name": "Body1", "limit": 1})
+
+        assert len(result["faces"]) == 1
+        assert result["count"] == 2
+        assert result["truncated"] is True
+
+
+@pytest.mark.parametrize(("limit", "expected"), [(None, 2), (0, 1), (1, 1)])
+def test_the_mock_list_tools_floor_the_limit_like_the_handler(limit, expected):
+    """``None`` -> the default, ``0`` -> one, in both mock list tools.
+
+    ``0`` used to mean 200 here (`or 200` swallowed it) while the handler floored it to
+    one, so the same call rehearsed a different list than Fusion would return.
+    """
+    params = {} if limit is None else {"limit": limit}
+
+    assert len(mock_command("list_faces", params)["faces"]) == expected
+    assert len(mock_command("list_edges", params)["edges"]) == expected

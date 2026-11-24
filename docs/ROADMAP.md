@@ -279,15 +279,27 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    by-number lookup has been measured, so a number on its own is refused rather than
    silently ignored.
 
-7. **No tool enumerates a body's faces.** `get_object_info` answers
-   `faces_count`/`edges_count`/`vertices_count` and a bounding box; `list_edges` exists
-   and a face equivalent does not. #143's `face_indices` therefore has to be discovered
-   through `execute_code` (`body.faces.item(i)`), which is what its hints now say. A
-   `list_faces` tool is a schema decision, not a repair, and the wrong-but-in-range index
-   it would prevent is accepted silently today. `Operation.deleteMe()` - the recovery
-   path's one call the name audit cannot see (`op` is a local) - was verified by hand on
-   2706.1.17: a scratch `face` operation was created, `deleteMe()` answered `True`, and
-   `setup.operations.count` returned to its previous value.
+7. ~~No tool enumerates a body's faces~~ - **closed (#147).** `get_object_info` answered
+   `faces_count`/`edges_count`/`vertices_count` and a bounding box; `list_edges` had
+   existed all along and the face equivalent did not, so the indices `face_indices`
+   takes could only be learned through `execute_code` (`body.faces.item(i)`) - and a
+   wrong-but-in-range index was accepted silently. `list_faces` now reports, per face,
+   its index, `surface_type`, planarity, area and centroid, plus the outward normal on a
+   planar face; it keeps `list_edges`' contract (`count` is the real total, `truncated`
+   says whether `limit` clipped the list).
+
+   Two measurements from 2706.1.17 shaped the reply. The planar test is Fusion's own
+   `SurfaceTypes.PlaneSurfaceType` member, not an integer copied from it. And
+   **`geometry.normal` is not the outward normal**: with a centred box, the bottom face
+   and all four sides report the surface normal with `isParamReversed` true, so the raw
+   property gives `+Z` for a face that points down and a box's top and bottom claim one
+   direction - the tool negates where the flag is set, and the six faces then report six
+   distinct outward normals. The hints that sent a caller to `execute_code` for a face
+   selection it could supply (`hints.py` x4, `handler_assembly`, `handler_cam`, plus the
+   descriptions of `add_joint` and `cam_create_operation.face_indices`) name the tool
+   now; the two that remain are for tools with no face-index argument at all, where
+   `list_faces` has nowhere to send the indices.
+
 8. **Mock's `cam_create_operation` and `cam_create_setup` replies still differ from the
    handlers' key names.** `cam_create_operation`: handler `{name, setup, strategy}` plus
    `parameters_applied`/`parameters_failed`/`warning` (a live success carries
