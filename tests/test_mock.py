@@ -1039,14 +1039,17 @@ class TestMockCAM:
                 "post_processor": "grbl",
             },
         )
+        # The handler's keys: the folder and the unit word, not a made-up file path.
         assert result["post_processor"] == "grbl"
-        assert "output_file" in result
+        assert result["setup"] == "Setup1"
+        assert "output_folder" in result
+        assert result["units"] == "mm"
 
     def test_cam_list_setups(self):
         result = mock_command("cam_list_setups")
-        assert "setups" in result
-        assert len(result["setups"]) > 0
-        assert "name" in result["setups"][0]
+        assert result["count"] == len(result["setups"]) == 1
+        # `{name, operations, is_valid}` per setup, as the handler answers.
+        assert set(result["setups"][0]) == {"name", "operations", "is_valid"}
 
     def test_cam_list_operations(self):
         result = mock_command(
@@ -1055,9 +1058,9 @@ class TestMockCAM:
                 "setup_name": "Setup1",
             },
         )
-        assert result["setup_name"] == "Setup1"
-        assert "operations" in result
-        assert len(result["operations"]) > 0
+        assert result["setup"] == "Setup1"
+        assert result["count"] == len(result["operations"]) == 2
+        assert set(result["operations"][0]) == {"name", "has_toolpath", "is_valid"}
 
     def test_cam_get_operation_info(self):
         result = mock_command(
@@ -1067,10 +1070,19 @@ class TestMockCAM:
                 "operation_name": "Face1",
             },
         )
-        assert result["operation_name"] == "Face1"
-        assert "strategy" in result
-        assert "tool_diameter" in result
-        assert "has_toolpath" in result
+        # The handler's keys: `name`, the flags, the tool, and the operation's own
+        # parameters - `strategy`/`tool_diameter` live inside `parameters` live.
+        assert result["name"] == "Face1"
+        assert set(result) == {
+            "name",
+            "is_valid",
+            "has_toolpath",
+            "tool",
+            "parameters",
+            "ok",
+            "mode",
+        }
+        assert "strategy" in result["parameters"]
 
     def test_cam_create_setup_answers_fusions_id_like_the_handler(self):
         """The name is the caller's, the id is Fusion's - and both modes answer the id.

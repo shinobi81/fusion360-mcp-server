@@ -968,7 +968,7 @@ def test_create_operation_removes_the_operation_when_no_parameter_is_found(
 # in the document library. These tests cover the add-in's side of that seam.
 
 
-def _tool_op(name: str = "Op1"):
+def _tool_op(name: str = "Op1", accepted=None):
     """The operation shape the create path writes into: a name and a tool slot.
 
     ``deleteMe`` is there because a tool refusal removes the operation again - the
@@ -976,15 +976,20 @@ def _tool_op(name: str = "Op1"):
     """
     # A real operation takes parameters, so this one does too: a `None` for every name
     # made `_set_cam_parameter` fail for all of them, and the reply then looked nothing
-    # like Fusion's.
+    # like Fusion's. *accepted* is the set of names this strategy exposes - a name
+    # outside it answers `None`, which is what Fusion does and what sends the handler
+    # down its ``parameters_failed`` path.
     written: dict = {}
 
     def item_by_name(parameter_name):
+        if accepted is not None and parameter_name not in accepted:
+            return None
         return written.setdefault(parameter_name, SimpleNamespace(expression=None))
 
     operation = SimpleNamespace(
         name=name,
         parameters=SimpleNamespace(itemByName=item_by_name),
+        written=written,
         deleted=0,
     )
     operation.deleteMe = lambda: setattr(operation, "deleted", operation.deleted + 1)
@@ -1521,7 +1526,7 @@ def test_an_operation_type_reaches_its_own_enum_member(
 
 
 # ── mock mode's CAM replies ──────────────────────────────────────────────────
-# Readonly 8 is what an agent rehearses here and then reads against Fusion. A key
+# What an agent rehearses here is what it then reads against Fusion. A key
 # that exists in one mode and not the other is a KeyError at the worst moment, so the
 # two are compared to each other rather than each to a literal - the same shape
 # `tests/test_rules.py` uses for refusal sentences.
@@ -1532,7 +1537,7 @@ def _mock_cam(name: str, params: dict):
 
     result = mock_command(name, params)
     assert result["ok"] is True, result
-    return {key for key in result if key not in ("ok", "mode")}
+    return {key: value for key, value in result.items() if key not in ("ok", "mode")}
 
 
 def test_mock_and_the_handler_answer_the_same_cam_setup_keys(handler_module):
@@ -1543,10 +1548,16 @@ def test_mock_and_the_handler_answer_the_same_cam_setup_keys(handler_module):
 
     reply = handler.cam_create_setup("Body1", name="Setup1", stock_mode="from_solid")
 
-    assert set(reply) == _mock_cam(
-        "cam_create_setup", {"body_name": "Body1", "name": "Setup1"}
+    # The same stock mode on both sides, so the *value* mapping is compared and not just
+    # the key names.
+    mock_reply = _mock_cam(
+        "cam_create_setup",
+        {"body_name": "Body1", "name": "Setup1", "stock_mode": "from_solid"},
     )
-    assert reply["stock_applied"] == {"stock_mode": "solid"}
+
+    assert set(reply) == set(mock_reply)
+    assert reply["stock_applied"] == mock_reply["stock_applied"]
+    assert mock_reply["stock_applied"] == {"stock_mode": "solid"}
 
 
 def test_mock_and_the_handler_answer_the_same_cam_operation_keys(handler_module):
@@ -1563,7 +1574,7 @@ def test_mock_and_the_handler_answer_the_same_cam_operation_keys(handler_module)
         coolant="flood",
     )
 
-    assert set(reply) == _mock_cam(
+    mock_reply = _mock_cam(
         "cam_create_operation",
         {
             "setup_name": "Setup1",
@@ -1575,14 +1586,21 @@ def test_mock_and_the_handler_answer_the_same_cam_operation_keys(handler_module)
         },
     )
 
+    assert set(reply) == set(mock_reply)
+    # Nested keys too: the handler writes Fusion's parameter names into the operation,
+    # so the set it wrote is the set mock must answer.
+    assert set(operation.written) == set(mock_reply["parameters_applied"])
+    assert reply["parameters_applied"] == mock_reply["parameters_applied"]
+
 
 @pytest.mark.parametrize(
     ("params", "handler_target"),
     [
         ({"setup_name": "Setup1"}, "setup"),
         ({"operation_name": "Rough1"}, "operation"),
+        ({"generate_all": True}, "all"),
     ],
-    ids=["setup scope", "operation scope"],
+    ids=["setup scope", "operation scope", "all scope"],
 )
 def test_mock_and_the_handler_answer_the_same_toolpath_keys(
     handler_module, params, handler_target
@@ -1591,8 +1609,108 @@ def test_mock_and_the_handler_answer_the_same_toolpath_keys(
     cam = _cam(_setup_with_operations("Setup1", operation))
     generated = []
     cam.generateToolpath = generated.append
+    # The all-scope case goes through the other entry point; both are one call, and the
+    # wait is stubbed by `_generating_handler`.
+    cam.generateAllToolpaths = lambda _errors: None
     handler = _generating_handler(handler_module, cam)
 
     reply = handler.cam_generate_toolpath(**params)
 
-    assert set(reply) == _mock_cam("cam_generate_toolpath", params)
+    mock_reply = _mock_cam("cam_generate_toolpath", params)
+
+    assert set(reply) == set(mock_reply)
+    assert reply["scope"] == mock_reply["scope"] == handler_target
+
+
+def test_mock_and_the_handler_answer_the_same_list_setups_keys(handler_module):
+    setup = _setup_with_operations("Setup1", _readable_operation("Rough1"))
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(setup)
+
+    reply = handler.cam_list_setups()
+
+    mock_reply = _mock_cam("cam_list_setups", {})
+
+    assert set(reply) == set(mock_reply)
+    assert set(reply["setups"][0]) == set(mock_reply["setups"][0])
+
+
+def test_mock_and_the_handler_answer_the_same_list_operations_keys(handler_module):
+    setup = _setup_with_operations(
+        "Setup1", _readable_operation("Rough1"), _readable_operation("Face1")
+    )
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(setup)
+
+    reply = handler.cam_list_operations("Setup1")
+
+    mock_reply = _mock_cam("cam_list_operations", {"setup_name": "Setup1"})
+
+    assert set(reply) == set(mock_reply)
+    assert set(reply["operations"][0]) == set(mock_reply["operations"][0])
+
+
+def test_mock_and_the_handler_answer_the_same_operation_info_keys(handler_module):
+    operation = SimpleNamespace(
+        name="Rough1",
+        isValid=True,
+        hasToolpath=True,
+        tool=SimpleNamespace(description="6mm flat end mill"),
+        parameters=[SimpleNamespace(name="stepdown", expression="2 mm")],
+    )
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(_setup_with_operations("Setup1", operation))
+
+    reply = handler.cam_get_operation_info("Setup1", "Rough1")
+
+    mock_reply = _mock_cam(
+        "cam_get_operation_info", {"setup_name": "Setup1", "operation_name": "Rough1"}
+    )
+
+    assert set(reply) == set(mock_reply)
+
+
+def test_mock_and_the_handler_answer_the_same_post_process_keys(
+    handler_module, tmp_path
+):
+    operation = _operation("Rough1")
+    cam = _cam(_setup_with_operations("Setup1", operation), generic_post=str(tmp_path))
+    cam.postProcess = lambda *_args: None
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: cam
+    handler._resolve_post = lambda _name: str(tmp_path / "fanuc.cps")
+
+    reply = handler.cam_post_process(
+        "Setup1", operation_name="Rough1", output_folder=str(tmp_path)
+    )
+
+    mock_reply = _mock_cam(
+        "cam_post_process",
+        {
+            "setup_name": "Setup1",
+            "operation_name": "Rough1",
+            "output_folder": str(tmp_path),
+        },
+    )
+
+    assert set(reply) == set(mock_reply)
+
+
+def test_a_parameter_fusion_will_not_take_is_reported_not_claimed(handler_module):
+    """A strategy that exposes no `tool_coolant` sends it to ``parameters_failed``.
+
+    Real Fusion answers ``None`` from ``itemByName`` for a name the strategy does not
+    have, which is what the handler's warning describes. No test reached that path
+    before, because the fake answered a parameter for every name.
+    """
+    operation = _tool_op(accepted={"maximumStepdown"})
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(_setup("Setup1", operation))
+
+    result = handler.cam_create_operation(
+        "Setup1", "pocket2d", stepdown=0.1, coolant="flood"
+    )
+
+    assert result["parameters_applied"] == {"maximumStepdown": 0.1}
+    assert result["parameters_failed"] == {"tool_coolant": "flood"}
+    assert result["warning"]

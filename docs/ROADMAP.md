@@ -300,27 +300,36 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    now; the two that remain are for tools with no face-index argument at all, where
    `list_faces` has nowhere to send the indices.
 
-8. ~~Mock's `cam_create_operation` and `cam_create_setup` replies differ from the
-   handlers' key names~~ - **closed (#148).** The divergence was real and caller-facing:
-   mock answered `{setup_name, operation_name, strategy}` where the handler answers
-   `{name, setup, strategy}`, `{setup_name, body_name, operation_type, stock_mode}` where
-   the handler answers `{name, body, operation_type, stock_applied}`, and
-   `{setup_name, operation_name, generated, toolpath_count}` where the handler answers
-   `{generated, scope, setup, operation}`. `toolpath_count` was never a handler key at
-   all, so an agent that rehearsed it in mock mode got a `KeyError` against Fusion - at
-   the point where it had already run the expensive part of a sequence.
+8. ~~Mock's CAM replies differ from the handlers' key names~~ - **closed (#148).** The
+   divergence was real and caller-facing: mock answered `{setup_name, operation_name,
+   strategy}` where the handler answers `{name, setup, strategy}`, `{setup_name,
+   body_name, operation_type, stock_mode}` where the handler answers `{name, body,
+   operation_type, stock_applied}`, and `{setup_name, operation_name, generated,
+   toolpath_count}` where the handler answers `{generated, scope, setup, operation}`.
+   `toolpath_count` was never a handler key at all. The same defect ran through four more
+   commands the item had not named: `cam_post_process` (`output_file`/`output_units` vs
+   `output_folder`/`units`), `cam_get_operation_info` (`operation_name`/`strategy`/
+   `tool_diameter` vs `name`/`is_valid`/`tool`/`parameters`), `cam_list_operations`
+   (`setup_name`, a `strategy` per operation) and `cam_list_setups` (no `count`, no
+   `is_valid`). An agent that rehearsed any of those keys got a `KeyError` against Fusion
+   - after the expensive half of a sequence had already run.
 
-   Mock now answers the handler's keys and values: `parameters_applied` under Fusion's
-   own parameter names (`maximumStepdown`, `tool_feedCutting`, `tool_coolant`, ...),
-   `stock_applied.stock_mode` with Fusion's *id* rather than the caller's name, and
-   `generated` plus `scope` and the names it resolved. The guard is a comparison of the
-   two modes to each other - `test_mock_and_the_handler_answer_the_same_cam_*` in
-   `tests/test_addon_cam.py` - rather than each to a literal, so a key added to one side
-   and not the other fails the suite.
+   Mock now answers the handlers' keys and values across all seven commands:
+   `parameters_applied` under Fusion's own parameter names (`maximumStepdown`,
+   `tool_feedCutting`, `tool_coolant`, ...), `stock_applied.stock_mode` with Fusion's
+   *id* rather than the caller's name, `stock_applied`'s three offsets under
+   `job_stockOffset*`, `generated` plus `scope`, and the handler's shapes for the four
+   list/info commands.
 
-   Still divergent by design, and recorded here so it is a decision: mock cannot model a
-   parameter Fusion refuses (`parameters_failed`) or a tool description Fusion
-   normalises, so those stay placeholders.
+   The guard is a comparison of the two modes to each other - `test_mock_and_the_handler_
+   answer_the_same_*` in `tests/test_addon_cam.py`, one per command - rather than each to
+   a literal, so a **top-level** key added to one side alone fails the suite. Nested keys
+   are covered where they are compared as well: `parameters_applied` against the
+   parameter names the handler actually wrote, and `stock_applied` value-for-value.
+
+   Deliberately still divergent, and recorded as a decision rather than left to be
+   rediscovered: mock cannot model a parameter Fusion *refuses* (`parameters_failed`), and
+   it cannot model the tool description Fusion normalises, so those stay placeholders.
 9. ~~`cam_create_setup`'s `stock_mode` vocabulary does not match the handler's map~~
    - **closed, and measured.** The mismatch was real: the schema advertised
    `relative_box`/`fixed_box`/`from_body`, the handler mapped five names - three of

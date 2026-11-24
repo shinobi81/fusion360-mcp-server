@@ -1541,15 +1541,22 @@ def _cam_create_setup(p: dict) -> dict:
         return _mock_error(
             f"Unknown operation_type '{operation_type}' — use milling/turning/cutting"
         )
-    # The handler's keys, and the handler's *value* for the mode: it answers Fusion's id
-    # (`from_solid` -> `solid`), not the name the caller sent.
+    # The handler's keys, and the handler's *values*: Fusion's id for the mode
+    # (`from_solid` -> `solid`), and the three offsets under Fusion's own parameter
+    # names - but only when they are non-zero, which is the handler's own guard.
+    stock: dict = {"stock_mode": CAM_STOCK_MODES[p.get("stock_mode", "relative_box")]}
+    for argument, parameter in (
+        ("stock_offset_sides", "job_stockOffset"),
+        ("stock_offset_top", "job_stockOffsetTop"),
+        ("stock_offset_bottom", "job_stockOffsetBottom"),
+    ):
+        if p.get(argument):
+            stock[parameter] = p[argument]
     return {
         "name": p.get("name", "Setup1"),
         "body": p.get("body_name", "Body1"),
         "operation_type": operation_type,
-        "stock_applied": {
-            "stock_mode": CAM_STOCK_MODES[p.get("stock_mode", "relative_box")]
-        },
+        "stock_applied": stock,
     }
 
 
@@ -1638,6 +1645,9 @@ def _cam_generate_toolpath(p: dict) -> dict:
     # here got a KeyError live.
     if p.get("generate_all"):
         return {"generated": True, "scope": "all"}
+    # When the caller named no setup but did name an operation, the handler resolves the
+    # owning setup from the design. Mock has no design, so it answers the caller's name
+    # or this placeholder - the *keys* are what a rehearsal reads.
     setup = p.get("setup_name", "Setup1")
     if p.get("operation_name"):
         return {
@@ -1652,55 +1662,60 @@ def _cam_generate_toolpath(p: dict) -> dict:
 def _cam_post_process(p: dict) -> dict:
     setup = p.get("setup_name", "Setup1")
     post = p.get("post_processor", "fanuc")
+    # The handler answers the folder (`output_folder`) and the unit word (`units`);
+    # `output_file`/`output_units` were keys no call ever returned.
     return {
-        "setup_name": setup,
+        "setup": setup,
         "post_processor": post,
-        "output_file": f"~/Desktop/{setup}.nc",
-        "output_units": p.get("output_units", "mm"),
+        "output_folder": p.get("output_folder") or "~/Desktop",
+        "units": p.get("output_units", "mm"),
     }
 
 
 def _cam_list_setups(_p: dict) -> dict:
+    # `{name, operations, is_valid}` per setup and a top-level `count`, as the handler.
     return {
         "setups": [
             {
                 "name": "Setup1",
-                "operation_type": "milling",
-                "operation_count": 2,
+                "operations": ["Face1", "2D Contour1"],
+                "is_valid": True,
             },
         ],
+        "count": 1,
     }
 
 
 def _cam_list_operations(p: dict) -> dict:
+    # `setup` (not `setup_name`), and each operation with the three keys the handler
+    # reports - `strategy` was never one of them.
+    operations = [
+        {"name": "Face1", "has_toolpath": True, "is_valid": True},
+        {"name": "2D Contour1", "has_toolpath": False, "is_valid": True},
+    ]
     return {
-        "setup_name": p.get("setup_name", "Setup1"),
-        "operations": [
-            {
-                "name": "Face1",
-                "strategy": "face",
-                "has_toolpath": True,
-            },
-            {
-                "name": "2D Contour1",
-                "strategy": "contour2d",
-                "has_toolpath": False,
-            },
-        ],
+        "setup": p.get("setup_name", "Setup1"),
+        "operations": operations,
+        "count": len(operations),
     }
 
 
 def _cam_get_operation_info(p: dict) -> dict:
+    # The handler's keys: `name`, the two validity flags, the tool (a read-back, so a
+    # description) and the operation's own parameter map. `strategy`/`tool_diameter`/
+    # `stepdown`/... were mock-only inventions; live they are inside `parameters`.
     return {
-        "setup_name": p.get("setup_name", "Setup1"),
-        "operation_name": p.get("operation_name", "Face1"),
-        "strategy": "face",
-        "tool_diameter": 0.6,
-        "stepdown": 0.1,
-        "feed_rate": 100.0,
-        "spindle_speed": 10000,
+        "name": p.get("operation_name", "Face1"),
+        "is_valid": True,
         "has_toolpath": True,
-        "toolpath_valid": True,
+        "tool": {"description": "Ø6mm flat (mock)"},
+        "parameters": {
+            "strategy": "face",
+            "tool_diameter": "6.",
+            "maximumStepdown": "0.1",
+            "tool_feedCutting": "100.",
+            "tool_spindleSpeed": "10000.",
+        },
     }
 
 
