@@ -1317,11 +1317,19 @@ TOOLS: list[dict] = [
         },
         body_name={
             "type": "string",
-            "description": "Body name (for edge method)",
+            "description": "Body name (for edge and perpendicular_at_point)",
         },
         edge_index={
             "type": "integer",
             "description": "Edge index on the body",
+            "minimum": 0,
+        },
+        face_index={
+            "type": "integer",
+            "description": (
+                "Face on that body (for perpendicular_at_point): the axis is normal "
+                "to it at point_one. list_faces reports the indices"
+            ),
             "minimum": 0,
         },
     ),

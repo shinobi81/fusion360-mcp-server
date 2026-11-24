@@ -240,17 +240,27 @@ PARAMETER_REFUSALS = [
             "with execute_code.",
         ),
     ),
+    # The perpendicular branch takes a point too, and a short one is a refusal on both
+    # sides - the guard was `two_points`-only before this row existed.
+    (
+        "create_construction_axis",
+        {
+            "method": "perpendicular_at_point",
+            "body_name": "Plate",
+            "face_index": 0,
+            "point_one": [0, 0],
+        },
+        "INVALID_INPUT",
+        "point_one must be [x, y, z] in centimetres",
+        ("Pass three numbers, in centimetres: [x, y, z].",),
+    ),
     (
         "create_construction_axis",
         {"method": "perpendicular_at_point"},
         "INVALID_INPUT",
-        "Perpendicular axis needs a B-Rep face, which this tool has no "
-        "parameter for — use execute_code; the method stays in the schema for "
-        "wire compatibility",
-        (
-            "The schema advertises this method for wire compatibility; "
-            "use execute_code.",
-        ),
+        "perpendicular_at_point needs face_index, point_one - it builds an axis "
+        "normal to a face at a point",
+        ("list_faces reports a body's face indices; point_one is [x, y, z] in cm.",),
     ),
     # ``handler_base._body_by_name``: any tool that names a body reaches it, so the
     # rows ride on tools from two domains — a check wired per tool, not per domain.
@@ -390,6 +400,7 @@ PARAMETER_REFUSALS = [
         "rigid_group_size",
         "construction_method",
         "perpendicular_axis",
+        "perpendicular_point",
         "body_name_required",
         "body_name_required_move",
         "body_name_required_color",

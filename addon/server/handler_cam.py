@@ -563,20 +563,9 @@ class CamCommands(_Contract):
         selection_faces = None
         if face_indices:
             body = self._body_by_name(body_name)
-            out_of_range = [
-                index for index in face_indices if not (0 <= index < body.faces.count)
+            selection_faces = [
+                self._face_by_index(body, index) for index in face_indices
             ]
-            if out_of_range:
-                raise _hints.Refusal(
-                    "INVALID_INPUT",
-                    f"Face index {out_of_range[0]} is out of range for body "
-                    f"'{body.name}' ({body.faces.count} faces)",
-                    hints=(
-                        "Enumerate with list_faces (body_name=...) - it reports every "
-                        "face's index and surface_type.",
-                    ),
-                )
-            selection_faces = [body.faces.item(index) for index in face_indices]
 
         cam = self._get_cam()
         setup = self._find_setup(cam, setup_name)

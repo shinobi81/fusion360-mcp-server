@@ -114,7 +114,7 @@ worked, across the seven rows below:
 | `flat_pattern` | `root.features.flatPatternFeatures` does not exist; a component creates a flat pattern | fixed (#130) |
 | `thicken_surface` | `isSymmetric` and `isChainSelection` were swapped, so `direction` never made anything symmetric | fixed (#130) |
 | `scale_body` | per-axis branch passed five arguments to a three-argument `createInput`; non-uniform is `setToNonUniform` | fixed (#131) |
-| `create_construction_axis("perpendicular_at_point")` | handed a `ConstructionPlane` to a `BRepFace` parameter; now refuses and names the missing argument | fixed (#131) |
+| `create_construction_axis("perpendicular_at_point")` | handed a `ConstructionPlane` to a `BRepFace` parameter; refused and named the missing argument until #149 made it build | fixed (#131), built (#149) |
 | `patch_surface` | wrote a property Fusion does not ship, so `continuity` was a silent no-op | fixed to `groupContinuity`; the argument is inert for sketch curves until the tool takes edges (#131) |
 | `create_flange`, `create_bend`, `trim_surface` | `FlangeFeatures` has no `createInput`; there is no `bendFeatures` at all; `TrimFeatures.createInput` takes the tool alone | **fixed and proven live (#134)** |
 
@@ -222,9 +222,21 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    all: an operation is a `SimpleNamespace` with the fields the command reads, which
    is what #141's read-path tests use.
 
-4. **`create_construction_axis("perpendicular_at_point")`** refuses by design: it
-   needs a `BRepFace`, which the tool has no argument for. Making it work means adding a
-   face parameter, a schema decision rather than a repair.
+4. ~~`create_construction_axis("perpendicular_at_point")` refuses by design~~ -
+   **closed (#149).** It needed a `BRepFace`, and the tool had no argument that could
+   supply one: the method was advertised in the schema and refused by a rule, so it was
+   one of two enum values a caller could send and never satisfy (`create_construction_
+   plane`'s `tangent` still is). The tool takes
+   `face_index` (with `body_name`) now, and the axis is built through
+   `setByPerpendicularAtPoint(face, point)`, whose two arguments are the stub's.
+
+   The refusal moved with it: instead of a blanket refusal, the rule names the
+   arguments that are missing (`body_name`, `face_index`, `point_one`) from the
+   parameters alone, so mock mode refuses the same call with the same sentence. A face
+   index is judged against the body's face count before the call, so a wrong one names
+   the range rather than raising out of the API with no advice - and `list_faces` is
+   where a caller gets the indices.
+
 5. ~~`_find_operation` still picks the first same-named operation~~ - **closed (#141)**.
    The first-match scan resolved `operation_name` inside one setup for
    `cam_post_process` and `cam_get_operation_info`, so a name the setup held twice

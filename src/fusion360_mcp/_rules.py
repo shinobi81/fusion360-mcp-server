@@ -627,25 +627,32 @@ def construction_method_refusal(
     )
 
 
-def perpendicular_axis_refusal(
-    params: Mapping[str, Any],
-) -> _hints.Refusal | None:
-    """The refusal a perpendicular construction axis earns, or None.
+def perpendicular_axis_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal a ``perpendicular_at_point`` axis earns, or None when buildable.
 
-    ``setByPerpendicularAtPoint(face, pointEntity)`` needs a B-Rep face, which
-    this tool has no parameter for, so the call cannot be built; the method stays
-    in the schema for wire compatibility.
+    Fusion's ``setByPerpendicularAtPoint(face, pointEntity)`` takes a B-Rep face, and
+    until this tool had ``face_index`` the method was advertised and refused outright
+    - one of two enum values a caller could send and never satisfy (`tangent` on
+    `create_construction_plane` still is). The three arguments
+    it needs are judged from the parameters alone, so mock mode refuses the same call
+    and names the same missing ones.
     """
     if params.get("method") != "perpendicular_at_point":
         return None
+    # `body_name` is deliberately not here: an empty or absent one earns the shared
+    # "A body name is required" every other tool answers, so one fault has one sentence.
+    # An empty list is not a point, and `is None` for the index - face 0 is a face.
+    missing = ["point_one"] if not params.get("point_one") else []
+    if params.get("face_index") is None:
+        missing.insert(0, "face_index")
+    if not missing:
+        return None
     return _hints.Refusal(
         "INVALID_INPUT",
-        "Perpendicular axis needs a B-Rep face, which this tool has no "
-        "parameter for — use execute_code; the method stays in the "
-        "schema for wire compatibility",
+        f"perpendicular_at_point needs {', '.join(missing)} - it builds an axis normal "
+        "to a face at a point",
         hints=(
-            "The schema advertises this method for wire compatibility; "
-            "use execute_code.",
+            "list_faces reports a body's face indices; point_one is [x, y, z] in cm.",
         ),
     )
 

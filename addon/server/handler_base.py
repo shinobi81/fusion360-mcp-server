@@ -345,6 +345,26 @@ class HandlerBase:
             return self._body_by_name(body_name)
         return self._root().bRepBodies.item(body_index)
 
+    @staticmethod
+    def _face_by_index(body, face_index, hints=None):
+        """The face at *face_index*, or a refusal naming the body's range.
+
+        Three commands index a body's faces - a joint's face, the face an axis is
+        normal to, and a CAM face selection - and the sentence a caller read was
+        written three times with two hint sets. The message lives here; a caller may
+        pass its own *hints* where the domain has more to say (a joint needs a
+        cylindrical face), because that is advice about the *choice*, not the range.
+        """
+        if face_index is None or not 0 <= face_index < body.faces.count:
+            raise _hints.Refusal(
+                "INVALID_INPUT",
+                f"Face index {face_index} is out of range for body "
+                f"'{body.name}' ({body.faces.count} faces)",
+                hints=hints
+                or ("list_faces reports every face's index and surface_type.",),
+            )
+        return body.faces.item(face_index)
+
     def _component_by_name(self, name: str):
         root = self._root()
         if root.name == name:

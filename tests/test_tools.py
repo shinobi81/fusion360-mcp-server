@@ -214,7 +214,7 @@ _TOOL_ARGUMENT_COUNTS = {
     "auto_constrain": 2,
     "add_dimension": 5,
     "create_construction_plane": 10,
-    "create_construction_axis": 7,
+    "create_construction_axis": 8,
     "create_ucs": 7,
     "draw_spline": 4,
     "offset_curve": 5,

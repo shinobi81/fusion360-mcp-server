@@ -329,10 +329,9 @@ def test_a_face_index_outside_the_body_names_the_range(bound_handler):
     _assert_refused(
         result,
         "INVALID_INPUT",
-        "Face index 99 is out of range for body 'ABody' (1 faces). Enumerate "
-        "them with list_faces and pick a cylindrical face.",
-        "Face indices run from 0; list_faces reports them, with each "
-        "face's surface_type.",
+        "Face index 99 is out of range for body 'ABody' (1 faces)",
+        "Face indices run from 0; a joint needs a cylindrical one, and "
+        "list_faces reports each face's surface_type.",
     )
 
 
