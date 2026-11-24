@@ -238,6 +238,46 @@ _TOOL_MAXIMUM = {
 }
 
 
+#: The ``stock_mode`` vocabulary, and the Fusion id each name maps to - measured on
+#: 2706.1.17 by writing ``job_stockMode`` on a live setup. ``default``, ``fixedbox``,
+#: ``relativecylinder``, ``fixedcylinder`` and ``solid`` are accepted; ``from_body`` -
+#: what this schema used to advertise - and any unknown string are refused by Fusion
+#: with ``3 : Invalid enumeration value.``, which the handler could only report as
+#: ``stock_failed``. One table, so the schema, the handler and mock mode cannot drift.
+CAM_STOCK_MODES = {
+    "relative_box": "default",
+    "fixed_box": "fixedbox",
+    "relative_cylinder": "relativecylinder",
+    "fixed_cylinder": "fixedcylinder",
+    # Fusion's UI calls this "From solid". The old spelling ``from_body`` never worked:
+    # it is not an id Fusion knows, and it reached Fusion verbatim as that string.
+    "from_solid": "solid",
+}
+
+
+def cam_stock_mode_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal an unknown ``stock_mode`` earns, or None when it is one of the five.
+
+    Judged from the parameter alone, so mock mode refuses exactly what the handler
+    refuses - and before a setup exists, so a typo cannot leave one behind with no stock
+    applied. The alternative the code used to take was passing the string through to
+    Fusion, which answers ``Invalid enumeration value`` and leaves the caller reading
+    ``stock_failed`` with no idea which values work.
+    """
+    mode = params.get("stock_mode", "relative_box")
+    if mode in CAM_STOCK_MODES:
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        f"Unknown stock_mode {mode!r} - use one of: {', '.join(CAM_STOCK_MODES)}",
+        hints=(
+            "Fusion's own ids, measured: " + ", ".join(CAM_STOCK_MODES.values()) + ".",
+            "`from_body` was advertised before this was measured and never worked; "
+            "the working name for that mode is `from_solid`.",
+        ),
+    )
+
+
 def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal a contradictory tool request earns, or None when it is usable.
 

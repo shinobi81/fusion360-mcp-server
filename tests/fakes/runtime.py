@@ -569,6 +569,15 @@ def install() -> None:
         # ``Tool``: built from JSON only, so the handler's one seam into a tool is
         # the measured ``createFromJson`` and nothing else.
         Tool=cam_fakes.FakeTool,
+        # ``OperationTypes``: the four members the shipped stub declares, as distinct
+        # sentinels. The handler indexes a map by identity, so sharing one value would
+        # let a swapped branch pass.
+        OperationTypes=types.SimpleNamespace(
+            MillingOperation=object(),
+            TurningOperation=object(),
+            JetOperation=object(),
+            AdditiveOperation=object(),
+        ),
         # ``PostOutputUnitOptions``: the three members are 0/1/2, read from Fusion
         # 2706.1.17 rather than guessed - the handler picks one by identity, so a
         # wrong number would pass and say nothing.

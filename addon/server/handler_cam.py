@@ -223,6 +223,11 @@ class CamCommands(_Contract):
         stock_offset_sides = _param_units.require_finite(stock_offset_sides)
         stock_offset_top = _param_units.require_finite(stock_offset_top)
         stock_offset_bottom = _param_units.require_finite(stock_offset_bottom)
+        # Judged here, before the CAM product is touched: an unknown mode used to be
+        # passed through to Fusion, which refuses it and left a setup behind with no
+        # stock applied.
+        if stock_refusal := _rules.cam_stock_mode_refusal({"stock_mode": stock_mode}):
+            raise stock_refusal
 
         cam = self._get_cam()
         body = self._body_by_name(body_name)
@@ -247,24 +252,16 @@ class CamCommands(_Contract):
 
         setup = cam.setups.add(setup_input)
 
-        # Stock parameters live on the created setup, not the input.
-        # Names/enumeration values verified against Fusion 2705: the
-        # "Relative size box" UI choice has the id 'default'.
-        stock_mode_map = {
-            "relative_box": "default",
-            "fixed_box": "fixedbox",
-            "relative_cylinder": "relativecylinder",
-            "fixed_cylinder": "fixedcylinder",
-            "from_solid": "solid",
-        }
+        # Stock parameters live on the created setup, not the input. The vocabulary and
+        # the ids are `rules.CAM_STOCK_MODES` - one table, measured on 2706.1.17, shared
+        # with the schema and with mock mode.
         applied_stock: dict[str, Any] = {}
         failed_stock: dict[str, Any] = {}
-        if stock_mode:
-            mode_id = stock_mode_map.get(stock_mode, stock_mode)
-            if self._set_cam_parameter(setup, "job_stockMode", mode_id, by_string=True):
-                applied_stock["stock_mode"] = mode_id
-            else:
-                failed_stock["stock_mode"] = stock_mode
+        mode_id = _rules.CAM_STOCK_MODES[stock_mode]
+        if self._set_cam_parameter(setup, "job_stockMode", mode_id, by_string=True):
+            applied_stock["stock_mode"] = mode_id
+        else:
+            failed_stock["stock_mode"] = mode_id
         for param_name, value in (
             ("job_stockOffset", stock_offset_sides),
             ("job_stockOffsetTop", stock_offset_top),

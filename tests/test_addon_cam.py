@@ -20,6 +20,7 @@ import pytest
 
 from addon.server import fusion_api as adsk
 from addon.server import hints as addon_hints
+from addon.server import rules as addon_rules
 from addon.server.cam_tool import build_tool_json
 from tests.fakes.cam import (
     FakeCAMProduct,
@@ -1372,3 +1373,77 @@ def test_operation_errors_skips_what_it_cannot_read_and_names_a_blank_message(
     assert 1 not in errors, "a shape without hasError is skipped"
     assert 2 not in errors, "a read that raises is skipped"
     assert errors[3] == "Operation 'Rough4': kept"
+
+
+# ── the setup's stock vocabulary ─────────────────────────────────────────────
+# Measured on Fusion 2706.1.17 by writing ``job_stockMode`` on a live setup: the ids
+# ``default``, ``fixedbox``, ``relativecylinder``, ``fixedcylinder`` and ``solid`` are
+# accepted, and anything else - including ``from_body``, which this schema used to
+# advertise - is refused with "3 : Invalid enumeration value.".
+
+
+class _StockParam:
+    def __init__(self):
+        self.expression = None
+
+
+class _Setup:
+    """A setup that records the CAM parameters written to it."""
+
+    def __init__(self, name):
+        self.name = name
+        self.written = {}
+
+    @property
+    def parameters(self):
+        return SimpleNamespace(
+            itemByName=lambda name: self.written.setdefault(name, _StockParam())
+        )
+
+
+def _setup_cam(default_name: str = "Setup1"):
+    """A CAM product whose ``setups.add`` answers a recording setup."""
+    created = []
+
+    def create_input(_op_type):
+        return SimpleNamespace(name=None, models=None)
+
+    def add(setup_input):
+        setup = _Setup(setup_input.name or default_name)
+        created.append(setup)
+        return setup
+
+    cam = SimpleNamespace(
+        setups=SimpleNamespace(createInput=create_input, add=add)
+    )
+    return cam, created
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"), sorted(addon_rules.CAM_STOCK_MODES.items())
+)
+def test_a_stock_mode_reaches_fusion_as_its_own_id(handler_module, mode, expected):
+    """The name is ours, the id is Fusion's - and the two differ for four of five."""
+    handler = _handler(handler_module)
+    cam, created = _setup_cam()
+    handler._get_cam = lambda: cam
+    handler._body_by_name = lambda name: SimpleNamespace(name=name)
+
+    result = handler.cam_create_setup("Body1", name="Setup1", stock_mode=mode)
+
+    assert result["stock_applied"]["stock_mode"] == expected
+    assert created[0].written["job_stockMode"].expression == f"'{expected}'"
+
+
+def test_an_unknown_stock_mode_is_refused_before_a_setup_exists(handler_module):
+    """Nothing is created for a value Fusion would refuse: no stockless setup behind."""
+    handler = _handler(handler_module)
+    cam, created = _setup_cam()
+    handler._get_cam = lambda: cam
+    handler._body_by_name = lambda name: SimpleNamespace(name=name)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_setup("Body1", name="Setup1", stock_mode="from_body")
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert created == [], "the setup must not exist when the vocabulary is refused"

@@ -943,3 +943,36 @@ def test_a_tool_object_without_a_holder_is_accepted(bare_handler):
 
     assert rules.cam_tool_refusal(call) is None
     assert mock._cam_create_operation(call).get("error_kind") is None
+
+
+@pytest.mark.parametrize("mode", sorted(rules.CAM_STOCK_MODES))
+def test_every_measured_stock_mode_is_accepted_by_both_sides(mode):
+    """The five ids measured on Fusion 2706.1.17, and nothing else.
+
+    The schema used to advertise ``from_body``, which is not an id Fusion knows: the
+    handler passed it through verbatim and Fusion answered "Invalid enumeration value",
+    which the caller read as ``stock_failed``. ``relative_cylinder``,
+    ``fixed_cylinder`` and ``from_solid`` were unreachable meanwhile.
+    """
+    assert rules.cam_stock_mode_refusal({"stock_mode": mode}) is None
+    assert mock._cam_create_setup({"body_name": "Body1", "stock_mode": mode}).get(
+        "error_kind"
+    ) is None
+
+
+@pytest.mark.parametrize(
+    "mode", ["from_body", "bogus", ""], ids=["old name", "typo", "empty"]
+)
+def test_the_handler_and_the_mock_refuse_an_unknown_stock_mode(bare_handler, mode):
+    """Refused before anything is created, so a typo cannot leave a stockless setup."""
+    call = {"body_name": "Body1", "stock_mode": mode}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_create_setup(**call)
+
+    refused = mock._cam_create_setup(call)
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+    assert "from_solid" in " ".join(raised.value.hints)

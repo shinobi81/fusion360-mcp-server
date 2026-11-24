@@ -23,6 +23,7 @@ from ._rules import (
     as_built_geometry_refusal,
     body_name_required_refusal,
     cam_geometry_refusal,
+    cam_stock_mode_refusal,
     cam_strategy_refusal,
     cam_target_refusal,
     cam_tool_refusal,
@@ -1486,6 +1487,11 @@ def _cam_create_setup(p: dict) -> dict:
         refusal = _non_finite_error(p.get(key, 0))
         if refusal is not None:
             return refusal
+    # The stock vocabulary is judged before the body, as the handler does: it is a
+    # pure enum, and a typo must not describe a setup Fusion would never create. Its own
+    # name, because a ``Refusal`` and the envelope below are different types.
+    if stock_refusal := cam_stock_mode_refusal(p):
+        return _refusal_error(stock_refusal)
     # The body is looked up before the operation type is mapped, so that wins.
     if refused := _body_name_required_error(p):
         return refused

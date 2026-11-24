@@ -314,12 +314,26 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    generated, toolpath_count}`. An agent rehearsing `toolpath_count` gets a `KeyError`
    live and never sees `scope`.
 
-9. **`cam_create_setup`'s `stock_mode` vocabulary does not match the handler's map.**
-   The schema advertises `relative_box`/`fixed_box`/`from_body`; `handler_cam.py` maps
-   `relative_box`/`fixed_box`/`relative_cylinder`/`fixed_cylinder`/`from_solid` and
-   passes an unmapped value through verbatim, so a schema-legal `from_body` reaches
-   Fusion as `from_body` and is reported as `stock_failed`. Read from the two files on
-   2026-11-23, not measured against Fusion; no test names `stock_mode` at all.
+9. ~~`cam_create_setup`'s `stock_mode` vocabulary does not match the handler's map~~
+   - **closed, and measured.** The mismatch was real: the schema advertised
+   `relative_box`/`fixed_box`/`from_body`, the handler mapped five names the schema
+   never offered, and an unmapped value was passed through verbatim.
+
+   Measured on 2706.1.17 by writing `job_stockMode` on a live setup, one candidate at a
+   time: `default`, `fixedbox`, `relativecylinder`, `fixedcylinder` and `solid` are
+   accepted (and read back as themselves), while `from_body` - the value the schema
+   advertised - and any other string are refused with `3 : Invalid enumeration value.`
+   So `from_body` never worked, three working ids were unreachable, and the failure
+   surfaced as `stock_failed` rather than as a refusal.
+
+   What shipped: one table, `rules.CAM_STOCK_MODES`, is now the only source - the schema
+   enum is `list(CAM_STOCK_MODES)`, the handler indexes it (no pass-through, no `.get`
+   fallback), and `rules.cam_stock_mode_refusal` refuses an unknown name from the
+   parameters alone, so mock mode answers the same sentence and nothing is created for a
+   value Fusion would reject. `from_body` is named in the refusal's hint as the old
+   spelling of `from_solid`, and the schema's description says so too. The first tests to
+   name `stock_mode` at all cover the five ids, the refusal, and that the setup does not
+   exist when the vocabulary is refused.
 
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.
