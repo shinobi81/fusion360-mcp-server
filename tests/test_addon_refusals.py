@@ -384,12 +384,12 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_base.py",
-            657,
+            658,
             "message is not a literal",
         ),
         (
             "handler_base.py",
-            679,
+            680,
             "message is not a literal",
         ),
         (

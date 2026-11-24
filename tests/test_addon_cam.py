@@ -1263,3 +1263,26 @@ def test_a_geometry_refusal_never_attaches_the_tool_first(handler_module):
     assert raised.value.error_kind == "FUSION_REFUSED"
     assert operation.deleted == 1
     assert not hasattr(operation, "tool"), "the tool was attached before the seam"
+
+
+def test_wait_future_tells_two_same_named_operations_apart(handler_module):
+    """A name is not a key: this add-in refuses duplicates precisely because they exist.
+
+    Keyed by name, the second operation's verdict would overwrite the first's in the
+    snapshot - so a fresh failure could be masked by an older one with the same label.
+    """
+    handler = handler_module.CommandHandler
+    stale = SimpleNamespace(name="Rough1", hasError=True, error="old failure")
+    clean = SimpleNamespace(name="Rough1", hasError=False, error="")
+    fresh = SimpleNamespace(name="Rough1", hasError=True, error="new failure")
+    prior = handler._operation_errors([stale, clean])
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler._wait_future(
+            FakeNeverStartedFuture(),
+            timeout=5.0,
+            operations=[stale, fresh],
+            prior_errors=prior,
+        )
+
+    assert str(raised.value) == "Operation 'Rough1': new failure"

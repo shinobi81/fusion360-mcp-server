@@ -509,19 +509,21 @@ class HandlerBase:
         )
 
     @staticmethod
-    def _operation_errors(operations) -> dict[str, str]:
-        """Map each operation to the error message Fusion recorded on it, if any.
+    def _operation_errors(operations) -> dict[int, str]:
+        """Map each operation's position to the error Fusion recorded on it, if any.
 
-        Keyed by name - or by position for a nameless object - so a caller can snapshot
-        the verdicts *before* generating and compare afterwards. That comparison is what
-        tells this call's failure apart from the previous attempt's.
+        Keyed by position, not by name: a name is not unique - three CAM commands
+        here refuse a duplicate rather than pick one, so duplicates exist - and a
+        collision would let a stale sentence mask a fresh one of the same name. The
+        snapshot and the wait are handed the same list in the same order, which is
+        what makes the position stable across the comparison.
 
-        The operation is named in the message because ``generate_all`` has no target:
-        without it a caller with several operations learns that something failed and
-        not which. A deleted operation may refuse reads and a shape without
+        The name goes in the *message* rather than the key, because ``generate_all`` has
+        no target: without it a caller with several operations learns that something
+        failed and not which. A deleted operation may refuse reads and a shape without
         ``hasError`` is not an error; both are skipped rather than reported.
         """
-        errors: dict[str, str] = {}
+        errors: dict[int, str] = {}
         for index, operation in enumerate(operations):
             try:
                 if not operation.hasError:
@@ -530,16 +532,15 @@ class HandlerBase:
                 name = getattr(operation, "name", None)
             except (AttributeError, RuntimeError):
                 continue
-            key = name or f"#{index}"
             if not message:
                 message = (
-                    f"Fusion reported an error on operation '{key}'"
+                    f"Fusion reported an error on operation '{name}'"
                     if name
                     else "Fusion reported an error on an operation"
                 )
             elif name:
                 message = f"Operation '{name}': {message}"
-            errors[key] = message
+            errors[index] = message
         return errors
 
     @staticmethod
