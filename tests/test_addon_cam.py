@@ -974,9 +974,17 @@ def _tool_op(name: str = "Op1"):
     ``deleteMe`` is there because a tool refusal removes the operation again - the
     same promise the geometry seam keeps, so a retry cannot leave a second one behind.
     """
+    # A real operation takes parameters, so this one does too: a `None` for every name
+    # made `_set_cam_parameter` fail for all of them, and the reply then looked nothing
+    # like Fusion's.
+    written: dict = {}
+
+    def item_by_name(parameter_name):
+        return written.setdefault(parameter_name, SimpleNamespace(expression=None))
+
     operation = SimpleNamespace(
         name=name,
-        parameters=SimpleNamespace(itemByName=lambda _name: None),
+        parameters=SimpleNamespace(itemByName=item_by_name),
         deleted=0,
     )
     operation.deleteMe = lambda: setattr(operation, "deleted", operation.deleted + 1)
@@ -1510,3 +1518,81 @@ def test_an_operation_type_reaches_its_own_enum_member(
     handler.cam_create_setup("Body1", name="Setup1", operation_type=operation_type)
 
     assert cam.seen[0] is getattr(adsk.cam.OperationTypes, member)
+
+
+# ── mock mode's CAM replies ──────────────────────────────────────────────────
+# Readonly 8 is what an agent rehearses here and then reads against Fusion. A key
+# that exists in one mode and not the other is a KeyError at the worst moment, so the
+# two are compared to each other rather than each to a literal - the same shape
+# `tests/test_rules.py` uses for refusal sentences.
+
+
+def _mock_cam(name: str, params: dict):
+    from fusion360_mcp.mock import mock_command
+
+    result = mock_command(name, params)
+    assert result["ok"] is True, result
+    return {key for key in result if key not in ("ok", "mode")}
+
+
+def test_mock_and_the_handler_answer_the_same_cam_setup_keys(handler_module):
+    handler = _handler(handler_module)
+    cam, _created = _setup_cam()
+    handler._get_cam = lambda: cam
+    handler._body_by_name = lambda name: SimpleNamespace(name=name)
+
+    reply = handler.cam_create_setup("Body1", name="Setup1", stock_mode="from_solid")
+
+    assert set(reply) == _mock_cam(
+        "cam_create_setup", {"body_name": "Body1", "name": "Setup1"}
+    )
+    assert reply["stock_applied"] == {"stock_mode": "solid"}
+
+
+def test_mock_and_the_handler_answer_the_same_cam_operation_keys(handler_module):
+    operation = _tool_op()
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(_setup("Setup1", operation))
+
+    reply = handler.cam_create_operation(
+        "Setup1",
+        "adaptive2d",
+        name="Rough1",
+        tool_diameter=0.6,
+        stepdown=0.1,
+        coolant="flood",
+    )
+
+    assert set(reply) == _mock_cam(
+        "cam_create_operation",
+        {
+            "setup_name": "Setup1",
+            "strategy": "adaptive2d",
+            "name": "Rough1",
+            "tool_diameter": 0.6,
+            "stepdown": 0.1,
+            "coolant": "flood",
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("params", "handler_target"),
+    [
+        ({"setup_name": "Setup1"}, "setup"),
+        ({"operation_name": "Rough1"}, "operation"),
+    ],
+    ids=["setup scope", "operation scope"],
+)
+def test_mock_and_the_handler_answer_the_same_toolpath_keys(
+    handler_module, params, handler_target
+):
+    operation = _operation("Rough1")
+    cam = _cam(_setup_with_operations("Setup1", operation))
+    generated = []
+    cam.generateToolpath = generated.append
+    handler = _generating_handler(handler_module, cam)
+
+    reply = handler.cam_generate_toolpath(**params)
+
+    assert set(reply) == _mock_cam("cam_generate_toolpath", params)

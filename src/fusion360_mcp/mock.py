@@ -20,6 +20,7 @@ from ._mutation_commands import MUTATION_COMMANDS
 from ._rules import (
     CAM_GEOMETRY_PARAMETERS,
     CAM_NO_TOOL_WARNING,
+    CAM_STOCK_MODES,
     as_built_geometry_refusal,
     body_name_required_refusal,
     cam_geometry_refusal,
@@ -1540,11 +1541,15 @@ def _cam_create_setup(p: dict) -> dict:
         return _mock_error(
             f"Unknown operation_type '{operation_type}' — use milling/turning/cutting"
         )
+    # The handler's keys, and the handler's *value* for the mode: it answers Fusion's id
+    # (`from_solid` -> `solid`), not the name the caller sent.
     return {
-        "setup_name": p.get("name", "Setup1"),
-        "body_name": p.get("body_name", "Body1"),
+        "name": p.get("name", "Setup1"),
+        "body": p.get("body_name", "Body1"),
         "operation_type": operation_type,
-        "stock_mode": p.get("stock_mode", "relative_box"),
+        "stock_applied": {
+            "stock_mode": CAM_STOCK_MODES[p.get("stock_mode", "relative_box")]
+        },
     }
 
 
@@ -1572,8 +1577,8 @@ def _cam_create_operation(p: dict) -> dict:
     if selector_refusal is not None:
         return _refusal_error(selector_refusal)
     result = {
-        "setup_name": p.get("setup_name", "Setup1"),
-        "operation_name": p.get("name", "Operation1"),
+        "name": p.get("name", "Operation1"),
+        "setup": p.get("setup_name", "Setup1"),
         "strategy": p.get("strategy", "contour2d"),
     }
     if p.get("face_indices"):
@@ -1602,6 +1607,24 @@ def _cam_create_operation(p: dict) -> dict:
     else:
         result["tool"] = None
         result["tool_warning"] = CAM_NO_TOOL_WARNING
+    # The handler answers these under Fusion's own parameter names, and only for the
+    # values it was given - so an agent that rehearses ``parameters_applied`` reads the
+    # same keys live. ``coolant`` defaults to flood in both, so a live success carries
+    # ``tool_coolant`` too.
+    applied: dict = {}
+    for argument, parameter in (
+        ("stepdown", "maximumStepdown"),
+        ("stepover", "maximumStepover"),
+        ("feed_rate", "tool_feedCutting"),
+        ("spindle_speed", "tool_spindleSpeed"),
+    ):
+        if p.get(argument) is not None:
+            applied[parameter] = p[argument]
+    coolant = p.get("coolant", "flood")
+    if coolant is not None:
+        applied["tool_coolant"] = coolant
+    if applied:
+        result["parameters_applied"] = applied
     return result
 
 
@@ -1610,12 +1633,20 @@ def _cam_generate_toolpath(p: dict) -> dict:
     # mock mode must not report a toolpath a call never asked for.
     if refusal := cam_target_refusal(p):
         return _refusal_error(refusal)
-    return {
-        "setup_name": p.get("setup_name", "Setup1"),
-        "operation_name": p.get("operation_name"),
-        "generated": True,
-        "toolpath_count": 1,
-    }
+    # The handler answers `generated` and `scope`, naming the setup (and the operation
+    # when one was named). `toolpath_count` was never a handler key: an agent reading it
+    # here got a KeyError live.
+    if p.get("generate_all"):
+        return {"generated": True, "scope": "all"}
+    setup = p.get("setup_name", "Setup1")
+    if p.get("operation_name"):
+        return {
+            "generated": True,
+            "scope": "operation",
+            "setup": setup,
+            "operation": p["operation_name"],
+        }
+    return {"generated": True, "scope": "setup", "setup": setup}
 
 
 def _cam_post_process(p: dict) -> dict:
