@@ -1,26 +1,14 @@
-"""Sheet metal: ``flat_pattern`` and ``unfold``.
+"""Sheet metal: ``flat_pattern``, ``unfold``, ``create_flange`` and ``create_bend``.
 
 Each command resolves a name to an entity and then fills a feature input, so the
-tests assert exactly that: which body, which face, and which of the input's
-properties the call site writes.  Each test carries one claim, and each puts a
-decoy in every collection the handler searches — a second body in the root, a
-non-planar face before the flat ones — so a lookup that took the first item would
-hand over the wrong entity and fail.
+fakes here model the input surface the handler writes to, not the geometry Fusion
+builds from it.
 
-The unfold input's names are the shipped ones: ``stationaryFace``, ``bendFaces``
-and ``isUnfoldAllBends`` (``UnfoldFeatureInput.h:46-62``), which is why a call
-site that set a name Fusion does not ship would leave them at their defaults and
-fail here.  ``feature_name`` is the fake's own numbering; nothing here claims
-what Fusion names a feature, nor whether a flat pattern or an unfold is
-geometrically possible on the body it was given — that needs the geometry, which
-these fakes do not carry.
-
-``create_flange`` and ``create_bend`` have no fakes and no tests: the shipped
-``FlangeFeatures`` exposes no ``createInput``, and ``root.features.bendFeatures``
-does not exist, so both commands raise ``AttributeError`` on every call that
-reaches the feature collection (``create_bend`` refuses a missing
-``bend_line_sketch`` first, and that argument is optional).  Tests against a fake
-named after a missing API would be green fiction.
+``create_flange`` and ``create_bend`` reach Fusion through APIs that do not look
+like the ones the handlers first used - ``createEdgeFlangeInput(edges, distance)``,
+not `FlangeFeatures.createInput`, and ``foldFeatures`` rather than
+``features.bendFeatures`` - which is why the fakes beside them
+(`FakeEdgeFlangeInput`) declare those signatures and not the handlers'.
 """
 
 from __future__ import annotations

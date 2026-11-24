@@ -240,9 +240,8 @@ and asks the running Fusion whether it exists - 190 references, none missing on
 
 6. **A CAM operation still cannot generate, because it has no tool.** #143 fixed the
    two causes in front of it - ten of the fifteen advertised strategy names were
-   invented, and five of them were Fusion's own (the other five here come from
-   `compatibleStrategies`, which answers 56, so the schema advertises the ten measured
-   rather than all 56) - and every
+   invented, and the other five were Fusion's own (`compatibleStrategies` answers
+   56, so the schema advertises the ten measured rather than all 56) - and every
    strategy's geometry parameter was left empty (`contours` / `pockets` /
    `machiningBoundarySel`, discovered at run time and accepted with the same
    `FaceContourSelection` for all five) - so `cam_create_operation` now
