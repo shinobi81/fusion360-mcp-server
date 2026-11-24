@@ -526,6 +526,9 @@ class HandlerBase:
         ``AttributeError``.
         """
 
+        seen_progress = False
+        #: Set once the future answers a completion field: until then an operation's
+        #: recorded error belongs to the previous attempt, not to this call.
         def read_field(name: str) -> tuple[bool, Any]:
             """Return (field exists, value); "not started" is (True, None).
 
@@ -534,15 +537,23 @@ class HandlerBase:
             ``RuntimeError`` proves the field is there but cannot answer yet, so
             it is treated as present and not complete; a different RuntimeError
             is a real failure and must reach the caller.
+
+            A non-``None`` answer means generation has begun, which is what makes
+            an operation's recorded error this call's error rather than the last
+            one's - see ``operation_error`` below.
             """
+            nonlocal seen_progress
             try:
-                return True, getattr(future, name)
+                value = getattr(future, name)
             except AttributeError:
                 return False, None
             except RuntimeError as exc:
                 if "Generation not started" in str(exc):
                     return True, None
                 raise
+            if value is not None:
+                seen_progress = True
+            return True, value
 
         flag = None
         for name in ("isGenerationCompleted", "isCompleted"):
@@ -599,6 +610,12 @@ class HandlerBase:
             the bound therefore answered ``TIMEOUT`` for a cause Fusion had already
             named, 25 s after it was knowable.
 
+            Only consulted once the future has answered a completion field. Until then
+            ``hasError`` is the *previous* attempt's verdict - which is exactly the
+            retry this add-in supports, an operation that failed for want of a tool and
+            then got one - so quoting it first would refuse the call that would have
+            worked.
+
             A deleted operation may refuse reads; a field this shape does not carry is
             skipped rather than reported, because the bound is still the honest answer
             for a future that simply never finishes.
@@ -616,7 +633,7 @@ class HandlerBase:
             return None
 
         while not is_done():
-            if error := operation_error():
+            if seen_progress and (error := operation_error()):
                 raise _hints.Refusal(
                     "FUSION_REFUSED",
                     error,

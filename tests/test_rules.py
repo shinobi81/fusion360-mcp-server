@@ -687,6 +687,46 @@ def test_the_handler_and_the_mock_refuse_an_unknown_strategy_alike(bare_handler)
     assert refused["error_message"] == str(raised.value)
 
 
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"tool_diameter": 0},
+        {"tool_diameter": -0.6},
+        {"tool_diameter": 0.6, "tool_length": 0},
+        {"tool_diameter": 0.6, "tool_flutes": 0},
+        {"tool_diameter": 0.6, "tool_number": 0},
+    ],
+    ids=[
+        "zero diameter",
+        "negative diameter",
+        "zero length",
+        "zero flutes",
+        "zero number",
+    ],
+)
+def test_the_handler_and_the_mock_refuse_a_non_positive_tool_alike(
+    bare_handler, params
+):
+    """A tool dimension of zero is not in the schema, but the socket is not the schema.
+
+    It is refused from the parameters alone, so mock mode rehearses the same sentence -
+    and it is refused before a tool object is built, because a malformed one has a
+    measured crash history.
+    """
+    call = {"setup_name": "Setup1", "strategy": "pocket2d", **params}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_create_operation(**call)
+
+    refused = mock._cam_create_operation(call)
+
+    assert refused is not None
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+    assert "greater than 0" in refused["error_message"]
+
+
 def test_face_indices_on_a_strategy_without_a_geometry_parameter_is_refused(
     bare_handler,
 ):

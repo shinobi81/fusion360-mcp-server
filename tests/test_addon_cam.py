@@ -1134,11 +1134,35 @@ def test_wait_future_reports_the_operations_error_instead_of_waiting_the_bound(
 
     with pytest.raises(addon_hints.Refusal) as raised:
         handler_module.CommandHandler._wait_future(
-            FakeNeverStartedFuture(), timeout=5.0, operations=[operation]
+            FakeGenerationFlagFuture(completed_after=None),
+            timeout=5.0,
+            operations=[operation],
         )
 
     assert raised.value.error_kind == "FUSION_REFUSED"
     assert str(raised.value) == "Toolpath requires tool to be selected."
+
+
+def test_wait_future_ignores_an_error_recorded_before_generation_starts(
+    handler_module,
+):
+    """The retry case: an operation that failed *last* time must generate this time.
+
+    ``hasError`` is Fusion's record of the previous attempt until the new one begins,
+    and the future raises "Generation not started" until then - so reading the error
+    first would quote the stale sentence instantly and never generate. Only a future
+    that has answered a completion field can be held against an operation.
+    """
+    stale = SimpleNamespace(
+        hasError=True, error="Toolpath requires tool to be selected.\n"
+    )
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(
+            FakeNeverStartedFuture(), timeout=0.01, operations=[stale]
+        )
+
+    assert raised.value.error_kind == "TIMEOUT", "not started is not this call's error"
 
 
 def test_wait_future_still_times_out_for_a_clean_operation(handler_module):

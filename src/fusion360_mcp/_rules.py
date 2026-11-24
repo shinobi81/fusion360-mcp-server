@@ -205,6 +205,24 @@ def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
                 ),
             )
         return None
+    # The schema's ``minimum`` is advice to a client, not a guard: a socket caller is
+    # not the schema, and a zero-diameter tool is a shape with a measured crash history
+    # (a partial one exited Fusion), so it is refused before anything is built.  A
+    # non-number is skipped here and refused by the builder, which owns the message for
+    # that case.
+    for name in ("tool_diameter", "tool_length", "tool_flutes", "tool_number"):
+        value = params.get(name)
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            continue
+        if value <= 0:
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"{name} must be greater than 0, got {value!r}",
+                hints=(
+                    "tool_diameter and tool_length are centimetres; tool_number is "
+                    "the number the post writes.",
+                ),
+            )
     if params.get("tool_diameter") is None:
         if shape_given:
             return _hints.Refusal(
