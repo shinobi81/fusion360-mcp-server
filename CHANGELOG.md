@@ -7,6 +7,80 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.9.0] - 2026-11-23
+
+This release is mostly about what a caller is told when something goes wrong. Every
+add-in refusal now reaches a caller with an `error_kind` and advice, the tool schemas are
+enforced before Fusion is touched, and two CAM commands stopped inventing what Fusion
+accepts. Three repaired sheet-metal/surface commands changed arguments, which is where a
+script written against 0.8.5's schema will see the difference.
+
+### Added
+
+- **Six `error_kind` values**, chosen by the caller's next move rather than by which API
+  failed: `NAME_NOT_FOUND`, `GEOMETRY_UNSUPPORTED`, `FUSION_REFUSED`,
+  `WORKSPACE_UNAVAILABLE`, `SCRIPT_ERROR`, `INTERNAL_ERROR`. `INVALID_INPUT` keeps its
+  meaning (an unusable parameter) and `BODY_NOT_FOUND`/`SKETCH_NOT_FOUND` stay because a
+  client may already branch on them. 88 of 134 literal-message raises answered `UNKNOWN`
+  with no hints before this; none do now, pinned by a test that fails on a new untyped
+  one.
+- **The tool schema is enforced in one place.** `_send` refuses an undeclared argument,
+  a value outside a declared enum or bound, or a missing `required` field, so real and
+  mock mode answer alike before Fusion sees the call. The 63 enum properties, 78 bounds
+  and every `additionalProperties: false` were declared and unread before.
+- **`scripts/check_fusion_api.py`** asks the running Fusion whether every
+  `adsk.<dotted.path>` under `addon/server` exists - 190 references today. It is the
+  check that would have caught the three invented names this repo shipped.
+- **`cam_create_operation` takes `body_name` and `face_indices`** and applies a
+  `FaceContourSelection` to the strategy's own geometry parameter (`contours`, `pockets`,
+  `machiningBoundarySel`), discovered at run time, so the handler needs no map
+  entry to find it. `CAM_GEOMETRY_PARAMETERS` in `rules.py` is still what mock
+  mode answers from and what the refusal names the five strategies from.
+
+### Changed
+
+- **Breaking for the invented names: `cam_create_operation`'s strategy enum is Fusion's
+  own.** Ten of the fifteen it carried were fiction (`2d_contour`, `2d_pocket`,
+  `2d_adaptive`, `3d_adaptive`, `3d_pocket`, `3d_contour`, `3d_scallop`, `3d_parallel`,
+  `drilling`, `thread_milling`) and Fusion refused them with `3 : Unknown strategy`;
+  `face`, `bore`, `slot`, `trace` and `engrave` are kept, and five 2D/3D names are added.
+- **Breaking: three repaired commands renamed arguments.** `create_flange`'s `height` is
+  now `distance` and `bend_radius` is `bend_radius_override`; `create_bend` takes a
+  required `stationary_face_index`; `trim_surface` requires `keep_cells` and accepts
+  `tool_plane`. None of them worked before, so no working script breaks.
+- **`InternalValidationError` answers `FUSION_REFUSED`**, not `INVALID_INPUT` - Fusion
+  rejected the state, not the argument, and the rule's own hint always said so.
+- **An unknown `joint_type`, `quadrant` or `key_point`** answers `INVALID_INPUT` naming
+  the accepted set instead of `UNKNOWN`; so does an unknown CAM strategy, and a geometry
+  selection on a strategy that has no parameter for one.
+- **`cam_generate_toolpath(operation_name=…)` works without `setup_name`**, as its
+  schema and message have always advertised, and a name a setup holds twice is refused by
+  all three commands that resolve one.
+- Hints stop naming `get_object_info` as a way to enumerate faces - it answers counts and
+  no tool lists faces. The advice is `execute_code` with `body.faces.item(i)`.
+
+### Fixed
+
+- CAM generation: `GenerateToolpathFuture.wait()` does not exist on 2706, and the
+  completion flag raises until generation begins - both made every generation call fail
+  with `UNKNOWN` instead of a typed refusal.
+- Nine repairs, each covered by a test written against Fusion's shipped API, and the
+  `create_flange`/`create_bend`/`trim_surface` trio additionally proven live:
+  `unfold`, `flat_pattern`, `thicken_surface`, `scale_body`, that trio,
+  `patch_surface`'s continuity
+  (now `groupContinuity`; still inert for sketch boundaries until the tool takes
+  edges), and `create_construction_axis(perpendicular_at_point)`, which now refuses
+  and names the face argument the tool does not have instead of failing inside
+  Fusion.
+
+### Removed
+
+- Three unreachable helpers in `handler_surface.py` and the fake seams that existed only
+  for them.
+
+The suite went from 1245 to 1624 tests, combined coverage from 69.97% to 92.33%, and
+`handler_cam` from 17% to 75%.
+
 ## [0.8.5] - 2026-11-15
 
 Three merged PRs that remove duplication rather than add features, plus the
@@ -952,6 +1026,7 @@ reporting a result it had only echoed back.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.9.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.5...v0.9.0
 [0.8.5]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.4...v0.8.5
 [0.8.4]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.3...v0.8.4
 [0.8.3]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.2...v0.8.3

@@ -105,8 +105,8 @@ not move, which was the point.
 ### What the audit found
 
 The tests were the cheap part. Reading each handler against the shipped binding - because
-a fake must declare Fusion's arity, not the handler's - turned up seven commands that
-could never have worked:
+a fake must declare Fusion's arity, not the handler's - turned up nine commands that never
+worked, across the seven rows below:
 
 | Command | What was wrong | State |
 | --- | --- | --- |
@@ -176,11 +176,13 @@ Zero invented names remain, and that is now checked rather than hoped for:
 and asks the running Fusion whether it exists - 190 references, none missing on
 2706.1.17 (#135 and #142, which deleted three).
 
-1. **The 0.9.0 release note is unwritten, and `CHANGELOG.md` cannot tell you.** The file
-   opens at `[0.8.5]` because the packaging guard fails an entry written ahead of the
-   version being cut, so entries are written once, at release. The note owes the PRs
-   merged since `v0.8.5` (`#125`-`#143`): the six new kinds, the schema gate, the
-   refusals that moved from `UNKNOWN` to a kind, the `InternalValidationError` retag
+1. ~~The 0.9.0 release note is unwritten~~ - **written with the 0.9.0 tag**; the entry
+   covers every PR below. For the next release, `CHANGELOG.md` cannot tell you: the file
+   opens at the release being cut (`[0.9.0]` now) because the packaging guard fails an
+   entry written ahead of the version, so entries are written once, at release. This
+   entry covers the PRs merged since `v0.8.5` (`#125`-`#143`): the six new kinds, the
+   schema gate, the refusals that moved from `UNKNOWN` to a kind, the
+   `InternalValidationError` retag
    from `INVALID_INPUT` to `FUSION_REFUSED`, the gate's own sentences for the rows it
    answers, the three sheet-metal/surface repairs whose arguments were renamed
    (`#134`), and `#143`'s caller-visible schema change - `cam_create_operation`'s
@@ -238,9 +240,8 @@ and asks the running Fusion whether it exists - 190 references, none missing on
 
 6. **A CAM operation still cannot generate, because it has no tool.** #143 fixed the
    two causes in front of it - ten of the fifteen advertised strategy names were
-   invented, and five of them were Fusion's own (the other five here come from
-   `compatibleStrategies`, which answers 56, so the schema advertises the ten measured
-   rather than all 56) - and every
+   invented, and the other five were Fusion's own (`compatibleStrategies` answers
+   56, so the schema advertises the ten measured rather than all 56) - and every
    strategy's geometry parameter was left empty (`contours` / `pockets` /
    `machiningBoundarySel`, discovered at run time and accepted with the same
    `FaceContourSelection` for all five) - so `cam_create_operation` now
