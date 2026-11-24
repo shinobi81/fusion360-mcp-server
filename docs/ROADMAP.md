@@ -281,20 +281,24 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    path's one call the name audit cannot see (`op` is a local) - was verified by hand on
    2706.1.17: a scratch `face` operation was created, `deleteMe()` answered `True`, and
    `setup.operations.count` returned to its previous value.
-8. **Mock's `cam_create_operation` and `cam_create_setup` replies differ from the
-   handlers'.** `cam_create_operation`: handler `{name, setup, strategy}` plus
+8. **Mock's `cam_create_operation` and `cam_create_setup` replies still differ from the
+   handlers' key names.** `cam_create_operation`: handler `{name, setup, strategy}` plus
    `parameters_applied`/`parameters_failed`/`warning` (a live success carries
    `parameters_applied` whenever the strategy exposes `tool_coolant`), mock
    `{setup_name, operation_name, strategy}` plus the same `geometry` echo the handler
    returns (`{parameter, face_indices}`).
    `cam_create_setup`: handler `{name, body, operation_type, stock_applied|stock_failed,
-   warning}`, mock `{setup_name, body_name, operation_type, stock_mode}`. Ordering also
-   differs: the handler answers `WORKSPACE_UNAVAILABLE` or "Setup not found" before its
-   `tool_diameter` sentence, while mock answers `tool_diameter` third - so a call with
-   both faults earns two different sentences. An agent that
+   warning}`, mock `{setup_name, body_name, operation_type, stock_mode}`. An agent that
    rehearses a key in mock mode then reads it against Fusion and gets a `KeyError`.
    Pre-existing and pinned by `tests/test_mock.py`; left as a decision rather than a
    ride-along on #143.
+
+   Two things this section used to record are no longer true, both because the tool work
+   closed them: the **fault ordering** now agrees (the tool sentence is judged from the
+   parameters, so the handler answers it third - before `WORKSPACE_UNAVAILABLE` and the
+   setup lookup - exactly as mock does), and the **`tool`/`tool_warning` keys agree**,
+   including mock declining to invent a tool description it cannot read back. The
+   remaining divergence is the key *names* above.
 
 9. **`cam_create_setup`'s `stock_mode` vocabulary does not match the handler's map.**
    The schema advertises `relative_box`/`fixed_box`/`from_body`; `handler_cam.py` maps

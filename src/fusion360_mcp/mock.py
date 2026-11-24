@@ -1544,12 +1544,18 @@ def _cam_create_operation(p: dict) -> dict:
             "face_indices": list(p["face_indices"]),
         }
     # The tool keys use the handler's spelling, because that is what an agent rehearses
-    # here and then reads against Fusion.  The description is Fusion's to normalise, so
-    # mock mode answers a plain name rather than promising the live prefix.
-    if p.get("tool_json") is not None or p.get("tool_diameter") is not None:
-        result["tool"] = {"description": "flat end mill"}
-        if p.get("tool_diameter") is not None:
-            result["tool"]["diameter_cm"] = p["tool_diameter"]
+    # here and then reads against Fusion.
+    if p.get("tool_diameter") is not None:
+        result["tool"] = {
+            "description": "flat end mill",
+            "diameter_cm": p["tool_diameter"],
+        }
+    elif p.get("tool_json") is not None:
+        # The handler reads the created tool back for its description and may answer
+        # this same empty object, so mock mode promises nothing it cannot know: a
+        # rehearsal that indexed ``result["tool"]["description"]`` here would break
+        # live for a JSON Fusion declines to describe.
+        result["tool"] = {}
     else:
         result["tool"] = None
         result["tool_warning"] = CAM_NO_TOOL_WARNING

@@ -31,14 +31,22 @@ from . import hints as _hints
 
 MM_PER_CM = 10.0
 DEFAULT_FLUTES = 2
-# Three diameters of flute is what the sample library averages for an endmill,
-# and it keeps a 1 mm cutter usable without the caller naming a length.
+# Measured from Fusion's own shipped library (CAM360/Data/libraries/Samples,
+# "Milling Tools (Metric).json", 12 flat end mills): flute length over diameter runs
+# 1.52 to 4.0, mean 2.64, median 2.39. Three is the round default above the median, so
+# an unnamed length still leaves a 1 mm cutter usable.
 FLUTE_LENGTHS_PER_DIAMETER = 3.0
-# A plain cylinder of shank behind the flutes, and the length the assembly hangs
-# it out of a holder by. Nothing reads either value for a toolpath; a value too
-# small to be plausible is what a CAM dialog would object to, not the generator.
+# A plain cylinder of shank behind the flutes, and the length the assembly hangs it out
+# of a holder by. Nothing recorded here says a toolpath reads either value - the
+# measured generation succeeded with these numbers, which is all this claims. A value
+# too small to be plausible is a CAM dialog's objection, not the generator's.
 SHANK_LENGTH_MM = 20.0
 HOLDER_GAUGE_LENGTH_MM = 20.0
+#: Feed per tooth, and the spindle speed every emitted preset uses. ``v_f`` below is
+#: derived from these and the flute count rather than fixed, because a preset whose
+#: per-tooth feed implies a different feed rate is a tool that cuts at the wrong speed.
+FEED_PER_TOOTH_MM = 0.05
+SPINDLE_RPM = 10000.0
 
 
 def _number(value: object, field: str) -> float:
@@ -96,11 +104,14 @@ def build_tool_json(
     )
     body_mm = flute_mm
     overall_mm = body_mm + SHANK_LENGTH_MM
-    # v_c follows the preset's own numbers: pi * D * n / 1000 for a millimetre
-    # diameter, which is what the shipped presets report for their diameters.
-    spindle_rpm = 10000.0
-    surface_speed = math.pi * diameter_mm * spindle_rpm / 1000.0
-    feed_rate = 1000.0
+    # v_c follows the shipped presets' own arithmetic: the library's 6 mm flat entry
+    # reports v_c 188.5 at n 10000, which is pi * D * n / 1000 for a millimetre
+    # diameter. Same formula, so the emitted preset is not fiction.
+    surface_speed = math.pi * diameter_mm * SPINDLE_RPM / 1000.0
+    # v_f = f_z x n x NOF: derived, so the preset stays self-consistent whatever the
+    # flute count is. A fixed feed beside a varying NOF describes a tool that cuts at
+    # half the intended rate at 4 flutes.
+    feed_rate = FEED_PER_TOOTH_MM * SPINDLE_RPM * flute_count
 
     tool = {
         "BMC": "unspecified",
@@ -151,16 +162,16 @@ def build_tool_json(
             "presets": [
                 {
                     "description": "Default preset",
-                    "f_n": 0.05,
-                    "f_z": 0.05,
+                    "f_n": FEED_PER_TOOTH_MM,
+                    "f_z": FEED_PER_TOOTH_MM,
                     "guid": str(uuid.uuid4()),
                     "material": {
                         "category": "all",
                         "query": "",
                         "use-hardness": False,
                     },
-                    "n": spindle_rpm,
-                    "n_ramp": spindle_rpm,
+                    "n": SPINDLE_RPM,
+                    "n_ramp": SPINDLE_RPM,
                     "name": "Default preset",
                     "ramp-angle": 2.0,
                     "tool-coolant": "flood",

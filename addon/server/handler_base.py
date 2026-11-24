@@ -509,7 +509,41 @@ class HandlerBase:
         )
 
     @staticmethod
-    def _wait_future(future, timeout: float = 25.0, operations=()):
+    def _operation_errors(operations) -> dict[str, str]:
+        """Map each operation to the error message Fusion recorded on it, if any.
+
+        Keyed by name - or by position for a nameless object - so a caller can snapshot
+        the verdicts *before* generating and compare afterwards. That comparison is what
+        tells this call's failure apart from the previous attempt's.
+
+        The operation is named in the message because ``generate_all`` has no target:
+        without it a caller with several operations learns that something failed and
+        not which. A deleted operation may refuse reads and a shape without
+        ``hasError`` is not an error; both are skipped rather than reported.
+        """
+        errors: dict[str, str] = {}
+        for index, operation in enumerate(operations):
+            try:
+                if not operation.hasError:
+                    continue
+                message = str(operation.error or "").strip()
+                name = getattr(operation, "name", None)
+            except (AttributeError, RuntimeError):
+                continue
+            key = name or f"#{index}"
+            if not message:
+                message = (
+                    f"Fusion reported an error on operation '{key}'"
+                    if name
+                    else "Fusion reported an error on an operation"
+                )
+            elif name:
+                message = f"Operation '{name}': {message}"
+            errors[key] = message
+        return errors
+
+    @staticmethod
+    def _wait_future(future, timeout: float = 25.0, operations=(), prior_errors=None):
         """Wait for a CAM generation future, bounded so a runaway
         generation fails as a structured error instead of freezing the
         main thread past the bridge timeout.
@@ -526,9 +560,6 @@ class HandlerBase:
         ``AttributeError``.
         """
 
-        seen_progress = False
-        #: Set once the future answers a completion field: until then an operation's
-        #: recorded error belongs to the previous attempt, not to this call.
         def read_field(name: str) -> tuple[bool, Any]:
             """Return (field exists, value); "not started" is (True, None).
 
@@ -537,23 +568,15 @@ class HandlerBase:
             ``RuntimeError`` proves the field is there but cannot answer yet, so
             it is treated as present and not complete; a different RuntimeError
             is a real failure and must reach the caller.
-
-            A non-``None`` answer means generation has begun, which is what makes
-            an operation's recorded error this call's error rather than the last
-            one's - see ``operation_error`` below.
             """
-            nonlocal seen_progress
             try:
-                value = getattr(future, name)
+                return True, getattr(future, name)
             except AttributeError:
                 return False, None
             except RuntimeError as exc:
                 if "Generation not started" in str(exc):
                     return True, None
                 raise
-            if value is not None:
-                seen_progress = True
-            return True, value
 
         flag = None
         for name in ("isGenerationCompleted", "isCompleted"):
@@ -568,8 +591,7 @@ class HandlerBase:
                 return present and bool(value)
 
         elif all(
-            read_field(name)[0]
-            for name in ("numberOfCompleted", "numberOfOperations")
+            read_field(name)[0] for name in ("numberOfCompleted", "numberOfOperations")
         ):
 
             def is_done() -> bool:
@@ -601,49 +623,38 @@ class HandlerBase:
 
         deadline = time.monotonic() + timeout
 
-        def operation_error() -> str | None:
-            """The first error Fusion recorded on *operations*, as its own sentence.
+        #: The verdict Fusion already had *before* this call generated. Measured on
+        #: 2706.1.17: a refused generation sets ``hasError`` and its message while the
+        #: future never answers - "Generation not started" for ever - so a gate that
+        #: waits for progress never opens and the bound answers ``TIMEOUT`` for a cause
+        #: Fusion had already named. Waiting for a *change* instead keeps the retry
+        #: this add-in supports working: fail for want of a tool, attach one, generate -
+        #: the pre-existing sentence is not this call's failure.
+        prior = dict(prior_errors or {})
 
-            Measured on 2706.1.17: a generation Fusion refuses - ``"Toolpath requires
-            tool to be selected."`` is the one this add-in can produce - sets
-            ``hasError`` and ``error`` at once while the future never completes. Waiting
-            the bound therefore answered ``TIMEOUT`` for a cause Fusion had already
-            named, 25 s after it was knowable.
-
-            Only consulted once the future has answered a completion field. Until then
-            ``hasError`` is the *previous* attempt's verdict - which is exactly the
-            retry this add-in supports, an operation that failed for want of a tool and
-            then got one - so quoting it first would refuse the call that would have
-            worked.
-
-            A deleted operation may refuse reads; a field this shape does not carry is
-            skipped rather than reported, because the bound is still the honest answer
-            for a future that simply never finishes.
-            """
-            for operation in operations:
-                try:
-                    if operation.hasError:
-                        message = str(operation.error or "").strip()
-                        return message or (
-                            f"Fusion reported an error on operation "
-                            f"'{operation.name}'"
-                        )
-                except (AttributeError, RuntimeError):
-                    continue
+        def new_error() -> str | None:
+            """The first recorded error this call did not inherit, or None."""
+            current = HandlerBase._operation_errors(operations)
+            for key, message in current.items():
+                if prior.get(key) != message:
+                    return message
             return None
 
+        def operation_failure(message: str) -> _hints.Refusal:
+            return _hints.Refusal(
+                "FUSION_REFUSED",
+                message,
+                hints=(
+                    "cam_get_operation_info shows the operation's parameters "
+                    "and tool.",
+                    "An operation with no tool cannot generate; give it one with "
+                    "cam_create_operation(tool_diameter=...) or tool_json.",
+                ),
+            )
+
         while not is_done():
-            if seen_progress and (error := operation_error()):
-                raise _hints.Refusal(
-                    "FUSION_REFUSED",
-                    error,
-                    hints=(
-                        "cam_get_operation_info shows the operation's parameters "
-                        "and tool.",
-                        "An operation with no tool cannot generate; give it one with "
-                        "cam_create_operation(tool_diameter=...) or tool_json.",
-                    ),
-                )
+            if error := new_error():
+                raise operation_failure(error)
             if time.monotonic() > deadline:
                 raise _hints.Refusal(
                     "TIMEOUT",
@@ -658,6 +669,14 @@ class HandlerBase:
                     ),
                 )
             time.sleep(0.1)
+
+        # A future can complete *with* an error. The measured case never completes, but
+        # nothing says that is the only one - and `is_done()` is evaluated before the
+        # error, so without this a generation Fusion refused would leave the loop and
+        # every call site would answer `generated: true`. That is the false success the
+        # read-back rule exists to prevent.
+        if error := new_error():
+            raise operation_failure(error)
 
     @staticmethod
     def _bbox_dict(bbox):

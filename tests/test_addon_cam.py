@@ -1134,9 +1134,7 @@ def test_wait_future_reports_the_operations_error_instead_of_waiting_the_bound(
 
     with pytest.raises(addon_hints.Refusal) as raised:
         handler_module.CommandHandler._wait_future(
-            FakeGenerationFlagFuture(completed_after=None),
-            timeout=5.0,
-            operations=[operation],
+            FakeNeverStartedFuture(), timeout=5.0, operations=[operation]
         )
 
     assert raised.value.error_kind == "FUSION_REFUSED"
@@ -1148,18 +1146,22 @@ def test_wait_future_ignores_an_error_recorded_before_generation_starts(
 ):
     """The retry case: an operation that failed *last* time must generate this time.
 
-    ``hasError`` is Fusion's record of the previous attempt until the new one begins,
-    and the future raises "Generation not started" until then - so reading the error
-    first would quote the stale sentence instantly and never generate. Only a future
-    that has answered a completion field can be held against an operation.
+    ``hasError`` keeps the previous attempt's sentence until this attempt rewrites it,
+    and a refused future answers "Generation not started" for ever - so both cases look
+    identical from inside the wait. The baseline taken *before* generating is what
+    separates them: an inherited sentence is not this call's failure.
     """
     stale = SimpleNamespace(
         hasError=True, error="Toolpath requires tool to be selected.\n"
     )
+    handler = handler_module.CommandHandler
 
     with pytest.raises(addon_hints.Refusal) as raised:
-        handler_module.CommandHandler._wait_future(
-            FakeNeverStartedFuture(), timeout=0.01, operations=[stale]
+        handler._wait_future(
+            FakeNeverStartedFuture(),
+            timeout=0.01,
+            operations=[stale],
+            prior_errors=handler._operation_errors([stale]),
         )
 
     assert raised.value.error_kind == "TIMEOUT", "not started is not this call's error"
@@ -1177,3 +1179,87 @@ def test_wait_future_still_times_out_for_a_clean_operation(handler_module):
         )
 
     assert raised.value.error_kind == "TIMEOUT"
+
+
+def test_wait_future_names_the_operation_its_error_belongs_to(handler_module):
+    """``generate_all`` has no target: a nameless sentence names nothing."""
+    operation = SimpleNamespace(
+        name="Rough1", hasError=True, error="Toolpath requires tool to be selected.\n"
+    )
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(
+            FakeGenerationFlagFuture(completed_after=None),
+            timeout=5.0,
+            operations=[operation],
+        )
+
+    assert str(raised.value) == (
+        "Operation 'Rough1': Toolpath requires tool to be selected."
+    )
+
+
+def test_wait_future_reports_an_error_that_completes_the_future(handler_module):
+    """Completion is checked before the error, and nothing used to run after the loop.
+
+    The measured refusal leaves the future pending; nothing says every failure does. A
+    generation that errors *and* completes left the loop clean, and each call site then
+    answered ``generated: True`` for an operation Fusion had refused.
+    """
+    operation = SimpleNamespace(
+        name="Rough1", hasError=True, error="3 : toolpath calculation failed"
+    )
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(
+            FakeGenerationFlagFuture(completed_after=1),
+            timeout=5.0,
+            operations=[operation],
+        )
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert str(raised.value) == ("Operation 'Rough1': 3 : toolpath calculation failed")
+
+
+def test_wait_future_reports_a_nameless_error_without_a_prefix(handler_module):
+    """No name is no prefix: Fusion's own sentence beats a dangling quote."""
+    operation = SimpleNamespace(hasError=True, error="3 : generation failed")
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(
+            FakeGenerationFlagFuture(completed_after=None),
+            timeout=5.0,
+            operations=[operation],
+        )
+
+    assert str(raised.value) == "3 : generation failed"
+
+
+def test_a_geometry_refusal_never_attaches_the_tool_first(handler_module):
+    """Order matters: attaching registers the tool in ``documentToolLibrary``.
+
+    The geometry seam is the only step that removes the operation after it exists, so
+    it runs first. Reversing them would leave a tool behind on every refused retry while
+    the refusal promised only that the operation was removed - and nothing in the reply
+    says a library entry was gained.
+    """
+    operation, value, _applied = _contour_operation()
+
+    def refuse(selections):
+        raise RuntimeError("3 : some input argument is invalid")
+
+    value.applyCurveSelections = refuse
+    handler = _creation_handler(handler_module, operation, faces=1)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            setup_name="Setup1",
+            strategy="contour2d",
+            body_name="Body1",
+            face_indices=[0],
+            tool_diameter=0.6,
+        )
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert operation.deleted == 1
+    assert not hasattr(operation, "tool"), "the tool was attached before the seam"

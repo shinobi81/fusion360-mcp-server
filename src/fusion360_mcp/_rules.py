@@ -12,6 +12,7 @@ package, so its copy is canonical.  Edit that file and run
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Mapping
 from typing import Any
@@ -174,6 +175,45 @@ CAM_NO_TOOL_WARNING = (
 )
 
 
+def _tool_json_shape_refusal(value: Any) -> _hints.Refusal | None:
+    """The refusal a ``tool_json`` that cannot be a tool object earns, or None.
+
+    Shape only: whether the object is a *valid* tool is Fusion's to say, and one
+    measured answer is that a partial object crashes rather than refusing - which is
+    why the add-in's own builder emits the whole shape and why a caller supplying JSON
+    is told to bring a complete one.  A string that is not JSON, or JSON that is not a
+    non-empty object, never reaches Fusion.
+    """
+    if not isinstance(value, str):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"tool_json must be a JSON string, not {type(value).__name__}",
+        )
+    try:
+        parsed = json.loads(value)
+    except ValueError as exc:
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"tool_json is not valid JSON: {exc}",
+            hints=("Copy one complete entry from a Fusion tool library's data array.",),
+        )
+    if not isinstance(parsed, dict):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"tool_json must be one tool object, not {type(parsed).__name__}",
+            hints=("One entry of a Fusion tool library's data array is the shape.",),
+        )
+    if not parsed:
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            "tool_json is an empty object - it must describe a complete tool",
+            hints=(
+                "A partial tool object crashed Fusion 2706.1.17; send the whole one.",
+            ),
+        )
+    return None
+
+
 def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal a contradictory tool request earns, or None when it is usable.
 
@@ -186,6 +226,11 @@ def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     ``tool_number`` numbers a tool the add-in creates; there is no library lookup yet,
     so a number on its own names nothing.  It used to reach Fusion as a parameter name
     that does not exist, which reported a silent ``parameters_failed``.
+
+    ``tool_json`` is checked for *shape* here as well, because it is forwarded verbatim
+    to ``Tool.createFromJson`` - the one call in this path with a measured crash history
+    (a partial object exited Fusion 2706.1.17).  A string Fusion will not parse is
+    answerable from the parameters alone, so mock mode answers it too.
     """
     tool_json = params.get("tool_json")
     shape_given = [
@@ -194,26 +239,41 @@ def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
         if params.get(name) is not None
     ]
     if tool_json is not None:
-        if shape_given:
+        if refusal := _tool_json_shape_refusal(tool_json):
+            return refusal
+        # ``tool_number`` is in the conflict list because the number lives inside the
+        # JSON's ``post-process`` block: passing both would drop the argument the
+        # caller sent, and a supplied-but-ignored value is not something this wire
+        # does.
+        conflicts = list(shape_given)
+        if params.get("tool_number") is not None:
+            conflicts.append("tool_number")
+        if conflicts:
             return _hints.Refusal(
                 "INVALID_INPUT",
                 "tool_json defines the whole tool - drop "
-                f"{', '.join(shape_given)} or the tool_json",
+                f"{', '.join(conflicts)} or the tool_json",
                 hints=(
                     "tool_json is for a complete tool object taken from a Fusion "
-                    "tool library.",
+                    "tool library; its post-process number is the tool number.",
                 ),
             )
         return None
-    # The schema's ``minimum`` is advice to a client, not a guard: a socket caller is
-    # not the schema, and a zero-diameter tool is a shape with a measured crash history
-    # (a partial one exited Fusion), so it is refused before anything is built.  A
-    # non-number is skipped here and refused by the builder, which owns the message for
-    # that case.
+    # The schema's ``minimum`` and ``type`` are advice to a client, not a guard: a
+    # socket caller is not the schema, and a malformed value either serialises
+    # ``Infinity`` into the tool JSON or builds a zero-diameter tool - and a malformed
+    # tool object is the shape with a measured crash history.  Both sides answer from
+    # here, so mock mode cannot accept what Fusion would be asked to swallow.
     for name in ("tool_diameter", "tool_length", "tool_flutes", "tool_number"):
         value = params.get(name)
-        if isinstance(value, bool) or not isinstance(value, int | float):
+        if value is None:
             continue
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"{name} must be a number, got {value!r}",
+                hints=("Lengths are centimetres; a count is a whole number.",),
+            )
         if value <= 0:
             return _hints.Refusal(
                 "INVALID_INPUT",

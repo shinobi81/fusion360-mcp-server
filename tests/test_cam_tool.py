@@ -173,3 +173,12 @@ def test_a_non_numeric_argument_is_refused_by_name(field, value):
 
     assert raised.value.error_kind == "INVALID_INPUT"
     assert field in str(raised.value)
+
+
+def test_the_preset_feed_follows_the_flute_count():
+    """``v_f = f_z * n * NOF``, or a 4-flute tool cuts at half the intended rate."""
+    for flutes in (2, 4):
+        tool = _built(tool_diameter=0.6, tool_flutes=flutes)
+        preset = tool["start-values"]["presets"][0]
+
+        assert preset["v_f"] == preset["f_z"] * preset["n"] * tool["geometry"]["NOF"]

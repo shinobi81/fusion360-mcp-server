@@ -2291,9 +2291,11 @@ TOOLS: list[dict] = [
             "type": "integer",
             "minimum": 1,
             "description": (
-                "Number the post writes for the tool, embedded in the tool the "
-                "tool_diameter/tool_json arguments create. A number on its own "
-                "names nothing: there is no library lookup yet."
+                "Number the post writes, embedded in the tool tool_diameter "
+                "creates. A tool supplied as tool_json carries its own number in "
+                "its post-process block, so passing tool_number beside tool_json "
+                "is refused rather than dropped. A number on its own names "
+                "nothing: there is no library lookup yet."
             ),
         },
         tool_diameter={

@@ -539,6 +539,9 @@ class TestCamEntryGuards:
             {"feed_rate": float("-inf")},
             {"spindle_speed": float("inf")},
             {"tool_number": float("inf")},
+            {"tool_diameter": float("inf")},
+            {"tool_length": float("nan")},
+            {"tool_flutes": float("-inf")},
         ],
     )
     def test_operation_refuses_a_non_finite_value_first(self, bound_handler, kwargs):

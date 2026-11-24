@@ -1069,7 +1069,16 @@ class TestMockCAM:
 
     @pytest.mark.parametrize(
         "field",
-        ["tool_number", "stepdown", "stepover", "feed_rate", "spindle_speed"],
+        [
+            "tool_number",
+            "tool_diameter",
+            "tool_length",
+            "tool_flutes",
+            "stepdown",
+            "stepover",
+            "feed_rate",
+            "spindle_speed",
+        ],
     )
     def test_cam_create_operation_refuses_a_non_finite_number(self, field):
         params = {"strategy": "contour2d", field: float("inf")}
@@ -1300,3 +1309,19 @@ def test_an_empty_body_name_is_refused(command, params):
 def test_an_empty_name_the_handler_does_not_look_up_is_not_refused(command, params):
     """The check is the lookup's: an empty name a caller may use is not refused."""
     assert mock_command(command, params)["ok"] is True
+
+    def test_cam_create_operation_promises_no_description_for_a_supplied_tool(self):
+        """The handler reads the tool back and may answer ``{}``: promise no more.
+
+        It used to answer ``{"description": "flat end mill"}`` for any ``tool_json`` -
+        invented for a ball-nose, and absent live when Fusion declines to describe the
+        tool - so a rehearsal indexing that key broke against Fusion.
+        """
+        params = {
+            "strategy": "pocket2d",
+            "tool_json": '{"type": "ball end mill", "description": "8mm ball"}',
+        }
+        result = mock_command("cam_create_operation", params)
+
+        assert result["ok"] is True
+        assert result["tool"] == {}
