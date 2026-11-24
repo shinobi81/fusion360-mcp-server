@@ -184,7 +184,8 @@ Five measured behaviours, worth reading instead of guessing:
   `start-values.presets` entry), `Operation.tool` takes the result, and Fusion registers
   it in `documentToolLibrary` by itself (`count` 0 → 1); generation then completes, and
   the operation reports `has_toolpath: true` through `cam_get_operation_info` (or
-  `cam_list_operations`) — `cam_generate_toolpath` itself answers only `generated`.
+  `cam_list_operations`) — `cam_generate_toolpath` itself answers `generated`, `scope`
+  and the name it resolved, and never whether the toolpath is valid.
   **A partial object is not refused — it crashed Fusion 360**
   (no `holder`, empty `start-values`), taking the document's unsaved state with it, which
   is why `addon/server/cam_tool.py` emits the whole shape — and why a caller-supplied

@@ -303,9 +303,16 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    Two things this section used to record are no longer true, both because the tool work
    closed them: the **fault ordering** now agrees (the tool sentence is judged from the
    parameters, so the handler answers it third - before `WORKSPACE_UNAVAILABLE` and the
-   setup lookup - exactly as mock does), and the **`tool`/`tool_warning` keys agree**,
-   including mock declining to invent a tool description it cannot read back. The
-   remaining divergence is the key *names* above.
+   setup lookup - exactly as mock does), and the **`tool`/`tool_warning` keys exist on
+   both sides**. The `tool` object promises only what the handler always answers -
+   `diameter_cm` for a built tool, `{}` for a supplied one - because the handler's
+   `description` is a read-back from Fusion that may be absent, and the string it returns
+   is Fusion's own (`#1 - Ø6mm flat (...)`), not something mock can predict.
+
+   `cam_generate_toolpath` diverges the same way and is listed here for the same reason:
+   handler `{generated, scope, setup, operation}`, mock `{setup_name, operation_name,
+   generated, toolpath_count}`. An agent rehearsing `toolpath_count` gets a `KeyError`
+   live and never sees `scope`.
 
 9. **`cam_create_setup`'s `stock_mode` vocabulary does not match the handler's map.**
    The schema advertises `relative_box`/`fixed_box`/`from_body`; `handler_cam.py` maps

@@ -885,8 +885,19 @@ def test_the_handler_and_the_mock_refuse_a_non_number_tool_argument(bare_handler
         {"tool_diameter": 0.6, "tool_number": 1.5},
         {"tool_diameter": 10**400},
         {"tool_flutes": 10**400},
+        {"tool_diameter": 1e308},
+        {"tool_diameter": 0.6, "tool_length": 1e308},
+        {"tool_diameter": 0.6, "tool_flutes": 10**308},
     ],
-    ids=["fractional flutes", "fractional number", "huge diameter", "huge flutes"],
+    ids=[
+        "fractional flutes",
+        "fractional number",
+        "huge diameter",
+        "huge flutes",
+        "finite but overflows when scaled",
+        "length overflows when scaled",
+        "flute count overflows the feed",
+    ],
 )
 def test_the_handler_and_the_mock_refuse_a_count_that_is_not_usable(
     bare_handler, params

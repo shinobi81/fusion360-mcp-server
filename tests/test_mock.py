@@ -1101,6 +1101,9 @@ class TestMockCAM:
         assert result["ok"] is True
         assert result["tool"]["diameter_cm"] == 0.6
         assert "tool_warning" not in result
+        # No description: the handler's is a read-back from Fusion, so mock promises
+        # only the key the handler always answers.
+        assert "description" not in result["tool"]
 
     def test_cam_create_operation_without_a_tool_says_generation_will_fail(self):
         """No tool source is a reply, not a refusal: Fusion's own sentence warns."""
@@ -1114,8 +1117,9 @@ class TestMockCAM:
         """One tool, one source: judged from the parameters, so mock refuses too."""
         params = {
             "strategy": "contour2d",
-            # Complete, so the *conflict* is what answers: a partial object is refused
-            # one rule earlier, by the shape check.
+            # Complete, so the *conflict* is what answers: the shape check accepts any
+            # non-empty object (Fusion ships tools without a holder), so a partial one
+            # would not be refused there.
             "tool_json": build_tool_json(tool_diameter=0.6, description="mine"),
             "tool_diameter": 0.6,
         }

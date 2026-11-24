@@ -1546,10 +1546,10 @@ def _cam_create_operation(p: dict) -> dict:
     # The tool keys use the handler's spelling, because that is what an agent rehearses
     # here and then reads against Fusion.
     if p.get("tool_diameter") is not None:
-        result["tool"] = {
-            "description": "flat end mill",
-            "diameter_cm": p["tool_diameter"],
-        }
+        # Only the key the handler always answers: its description is a read-back
+        # from Fusion, so live it may be absent - and the string would not match this
+        # placeholder anyway (``#1 Ø6mm Flat Endmill``).
+        result["tool"] = {"diameter_cm": p["tool_diameter"]}
     elif p.get("tool_json") is not None:
         # The handler reads the created tool back for its description and may answer
         # this same empty object, so mock mode promises nothing it cannot know: a

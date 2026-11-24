@@ -1026,8 +1026,9 @@ def test_tool_json_reaches_fusion_verbatim(handler_module):
     operation = _tool_op()
     handler = _handler(handler_module)
     handler._get_cam = lambda: _cam(_setup("Setup1", operation))
-    # A complete object: the shape rule refuses a partial one, because a partial one
-    # crashed Fusion (see cam_tool.py).
+    # A complete object, because a partial one crashed Fusion (see cam_tool.py). The
+    # shape rule cannot tell the difference - Fusion ships tools with no holder - which
+    # is why the builder emits the whole shape rather than the check enforcing it.
     supplied = build_tool_json(tool_diameter=0.6, description="mine")
 
     result = handler.cam_create_operation(
@@ -1331,4 +1332,43 @@ def test_generation_reports_an_error_the_call_itself_caused(handler_module):
         handler.cam_generate_toolpath(setup_name="Setup1", operation_name="Rough1")
 
     assert raised.value.error_kind == "FUSION_REFUSED"
-    assert "toolpath calculation failed" in str(raised.value)
+    # The whole sentence, not a substring: with the snapshot taken *after* the generate
+    # call the failure is inherited, and the reply carries the inherited-branch suffix -
+    # so only an equality assertion fails on that mutation.
+    assert str(raised.value) == ("Operation 'Rough1': 3 : toolpath calculation failed")
+
+
+def test_operation_errors_skips_what_it_cannot_read_and_names_a_blank_message(
+    handler_module,
+):
+    """The skip branches and the fallback are the other half of the read-back.
+
+    ``hasError`` is absent on some shapes and may refuse reads on a deleted operation;
+    either way that operation is skipped rather than reported. A blank message from
+    Fusion is replaced by one that names the operation, so a refusal never carries an
+    empty sentence.
+    """
+
+    class Deleted:
+        """A shape whose reads raise, as a deleted Fusion object's do."""
+
+        name = "Rough3"
+
+        @property
+        def hasError(self):
+            raise RuntimeError("3 : object deleted")
+
+    handler = handler_module.CommandHandler
+    errors = handler._operation_errors(
+        [
+            SimpleNamespace(name="Rough1", hasError=True, error="   "),
+            SimpleNamespace(name="Rough2"),  # no hasError at all
+            Deleted(),
+            SimpleNamespace(name="Rough4", hasError=True, error="kept"),
+        ]
+    )
+
+    assert errors[0] == "Fusion reported an error on operation 'Rough1'"
+    assert 1 not in errors, "a shape without hasError is skipped"
+    assert 2 not in errors, "a read that raises is skipped"
+    assert errors[3] == "Operation 'Rough4': kept"

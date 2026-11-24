@@ -19,6 +19,7 @@ hand edit in the ``src`` copy is overwritten.
 from __future__ import annotations
 
 import json
+import math
 import os
 from collections.abc import Mapping
 from typing import Any
@@ -226,6 +227,19 @@ def _tool_json_shape_refusal(value: Any) -> _hints.Refusal | None:
     return None
 
 
+#: What the builder multiplies each argument by, so a value that is finite on its own
+#: but overflows once scaled is refused here rather than serialised as ``Infinity`` -
+#: which ``json.dumps`` writes happily and ``Tool.createFromJson`` then has to swallow.
+#: Lengths go to the library's millimetres (x10); a flute count multiplies the feed
+#: (``FEED_PER_TOOTH_MM * SPINDLE_RPM`` = 500 in ``cam_tool``).
+_TOOL_SCALE = {
+    "tool_diameter": 10.0,
+    "tool_length": 10.0,
+    "tool_flutes": 500.0,
+    "tool_number": 1.0,
+}
+
+
 def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal a contradictory tool request earns, or None when it is usable.
 
@@ -295,8 +309,17 @@ def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
         except OverflowError:
             return _hints.Refusal(
                 "INVALID_INPUT",
-                f"{name} is too large for Fusion to store as a number, got {value!r}",
+                f"{name} is outside the numeric range Fusion can store, got {value!r}",
                 hints=("Send a value in Fusion's numeric range.",),
+            )
+        if not math.isfinite(magnitude * _TOOL_SCALE[name]):
+            # Finite on its own, infinite once the builder scales it: ``1e308``
+            # centimetres is ``inf`` millimetres, and ``json.dumps`` writes that as the
+            # non-standard ``Infinity`` for the call with the measured crash history.
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"{name} is too large for the tool it would build, got {value!r}",
+                hints=("A tool a few centimetres across is the intended range.",),
             )
         if magnitude <= 0:
             return _hints.Refusal(
@@ -310,7 +333,7 @@ def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
         if whole and not isinstance(value, int):
             return _hints.Refusal(
                 "INVALID_INPUT",
-                f"{name} must be a whole number, got {value!r}",
+                f"{name} must be passed as an integer, got {value!r}",
                 hints=("A flute count and a tool number are counts, not lengths.",),
             )
     if params.get("tool_diameter") is None:

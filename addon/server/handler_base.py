@@ -673,8 +673,13 @@ class HandlerBase:
                     raise _hints.Refusal(
                         "FUSION_REFUSED",
                         f"{inherited} (Fusion recorded this before the call and did "
-                        "not change it)",
-                        hints=_GENERATION_HINTS,
+                        f"not change it; the {timeout}s wait for this generation also "
+                        "expired)",
+                        hints=(
+                            *_GENERATION_HINTS,
+                            "cam_list_operations reports whether the toolpath "
+                            "finished in the background.",
+                        ),
                     )
                 raise _hints.Refusal(
                     "TIMEOUT",
@@ -690,11 +695,12 @@ class HandlerBase:
                 )
             time.sleep(0.1)
 
-        # A future can complete *with* an error. The measured case never completes, but
-        # nothing says that is the only one - and `is_done()` is evaluated before the
-        # error, so without this a generation Fusion refused would leave the loop and
-        # every call site would answer `generated: true`. That is the false success the
-        # read-back rule exists to prevent.
+        # A future can complete *with* an error. The measured case never completes,
+        # but nothing says that is the only one - and `is_done()` is evaluated before
+        # the error, so without this a generation that failed *and* completed would
+        # leave the loop and every call site would answer `generated: true`. Only a
+        # *new* error is caught here (`new_error`): one that predates the call is the
+        # previous attempt's verdict, and completion is this attempt's answer.
         if error := new_error():
             raise operation_failure(error)
 
