@@ -1714,3 +1714,80 @@ def test_a_parameter_fusion_will_not_take_is_reported_not_claimed(handler_module
     assert result["parameters_applied"] == {"maximumStepdown": 0.1}
     assert result["parameters_failed"] == {"tool_coolant": "flood"}
     assert result["warning"]
+
+
+@pytest.mark.parametrize(
+    ("argument", "parameter"),
+    [
+        ("stock_offset_sides", "job_stockOffset"),
+        ("stock_offset_top", "job_stockOffsetTop"),
+        ("stock_offset_bottom", "job_stockOffsetBottom"),
+    ],
+)
+def test_mock_and_the_handler_report_the_same_offset_names(
+    handler_module, argument, parameter
+):
+    """All three offsets, one at a time, under Fusion's own names."""
+    handler = _handler(handler_module)
+    cam, _created = _setup_cam()
+    handler._get_cam = lambda: cam
+    handler._body_by_name = lambda name: SimpleNamespace(name=name)
+
+    reply = handler.cam_create_setup("Body1", name="Setup1", **{argument: 0.5})
+
+    mock_reply = _mock_cam(
+        "cam_create_setup", {"body_name": "Body1", "name": "Setup1", argument: 0.5}
+    )
+
+    assert reply["stock_applied"] == mock_reply["stock_applied"]
+    assert reply["stock_applied"][parameter] == 0.5
+
+
+@pytest.mark.parametrize(
+    ("argument", "parameter"),
+    [
+        ("stepdown", "maximumStepdown"),
+        ("stepover", "maximumStepover"),
+        ("feed_rate", "tool_feedCutting"),
+        ("spindle_speed", "tool_spindleSpeed"),
+    ],
+)
+def test_mock_and_the_handler_report_the_same_parameter_names(
+    handler_module, argument, parameter
+):
+    """The handler writes Fusion's names into the operation; mock must answer them."""
+    operation = _tool_op()
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(_setup("Setup1", operation))
+
+    reply = handler.cam_create_operation(
+        "Setup1", "adaptive2d", coolant=None, **{argument: 1.0}
+    )
+
+    mock_reply = _mock_cam(
+        "cam_create_operation",
+        {
+            "setup_name": "Setup1",
+            "strategy": "adaptive2d",
+            argument: 1.0,
+            "coolant": None,
+        },
+    )
+
+    assert set(reply["parameters_applied"]) == {parameter}
+    assert reply["parameters_applied"] == mock_reply["parameters_applied"]
+
+
+def test_mock_and_the_handler_resolve_the_same_default_post_folder(handler_module):
+    """No ``output_folder`` given: both resolve the home Desktop path, not a literal."""
+    cam = _cam(_setup_with_operations("Setup1", _operation("Rough1")))
+    cam.postProcess = lambda *_args: None
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: cam
+    handler._resolve_post = lambda _name: "fanuc.cps"
+
+    reply = handler.cam_post_process("Setup1")
+
+    mock_reply = _mock_cam("cam_post_process", {"setup_name": "Setup1"})
+
+    assert reply["output_folder"] == mock_reply["output_folder"]

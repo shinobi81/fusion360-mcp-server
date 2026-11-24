@@ -1705,15 +1705,18 @@ def _cam_list_operations(p: dict) -> dict:
 
 def _cam_get_operation_info(p: dict) -> dict:
     # The handler's keys: `name`, the two validity flags, the tool (a read-back, so a
-    # description) and the operation's own parameter map. `strategy`/`tool_diameter`/
-    # `stepdown`/... were mock-only inventions; live they are inside `parameters`.
+    # description) and the operation's own parameter map. The last two are *conditional*
+    # live - an operation with no tool, or a shape without `parameters`, reports neither
+    # - and mock cannot model that absence, so it always answers both.
     return {
         "name": p.get("operation_name", "Face1"),
         "is_valid": True,
         "has_toolpath": True,
         "tool": {"description": "Ø6mm flat (mock)"},
+        # The parameter names measured on 2706 (roadmap item 6) and the feed ones the
+        # handler writes. `strategy` is an Operation *property* live, not a parameter,
+        # so it is not in here.
         "parameters": {
-            "strategy": "face",
             "tool_diameter": "6.",
             "maximumStepdown": "0.1",
             "tool_feedCutting": "100.",

@@ -1082,7 +1082,7 @@ class TestMockCAM:
             "ok",
             "mode",
         }
-        assert "strategy" in result["parameters"]
+        assert "tool_diameter" in result["parameters"]
 
     def test_cam_create_setup_answers_fusions_id_like_the_handler(self):
         """The name is the caller's, the id is Fusion's - and both modes answer the id.
