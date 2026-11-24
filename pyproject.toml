@@ -105,7 +105,7 @@ dev = [
     "pytest>=9.0.3",
     "pytest-cov>=6.0",
     "hypothesis>=6.170.15",
-    "ruff>=0.17.4",
+    "ruff>=0.17.5",
     "mypy>=2.4.1",
 ]
 # Not in `dev`: atheris publishes no Windows wheel and `ci.yml` syncs `--dev` on three
