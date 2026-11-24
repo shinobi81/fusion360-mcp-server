@@ -945,6 +945,24 @@ def test_a_tool_object_without_a_holder_is_accepted(bare_handler):
     assert mock._cam_create_operation(call).get("error_kind") is None
 
 
+def test_the_stock_mode_table_is_the_measured_one():
+    """Literally, and no test above could do this job.
+
+    Those parametrize over the table, so their only oracle is the table itself: rename
+    an id there and every one of them still passes, which is the exact class of bug this
+    change exists to fix (an invented id swept a real one aside for two releases). These
+    five pairs are what Fusion 2706.1.17 answered when ``job_stockMode`` was written one
+    candidate at a time.
+    """
+    assert rules.CAM_STOCK_MODES == {
+        "relative_box": "default",
+        "fixed_box": "fixedbox",
+        "relative_cylinder": "relativecylinder",
+        "fixed_cylinder": "fixedcylinder",
+        "from_solid": "solid",
+    }
+
+
 @pytest.mark.parametrize("mode", sorted(rules.CAM_STOCK_MODES))
 def test_every_measured_stock_mode_is_accepted_by_both_sides(mode):
     """The five ids measured on Fusion 2706.1.17, and nothing else.
@@ -964,7 +982,9 @@ def test_every_measured_stock_mode_is_accepted_by_both_sides(mode):
 
 
 @pytest.mark.parametrize(
-    "mode", ["from_body", "bogus", ""], ids=["old name", "typo", "empty"]
+    "mode",
+    ["from_body", "bogus", "", ["relative_box"], {"relative_box": 1}],
+    ids=["old name", "typo", "empty", "a list", "an object"],
 )
 def test_the_handler_and_the_mock_refuse_an_unknown_stock_mode(bare_handler, mode):
     """Refused before anything is created, so a typo cannot leave a stockless setup."""

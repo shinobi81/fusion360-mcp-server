@@ -271,6 +271,15 @@ def cam_stock_mode_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     ``stock_failed`` with no idea which values work.
     """
     mode = params.get("stock_mode", "relative_box")
+    # A table lookup hashes the key, so a list or an object - which a socket caller can
+    # send and no schema can stop - would raise TypeError out of a refusal function and
+    # reach the caller as UNKNOWN with no hints.
+    if not isinstance(mode, str):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"stock_mode must be a string, not {type(mode).__name__}",
+            hints=("Pass one of: " + ", ".join(CAM_STOCK_MODES),),
+        )
     if mode in CAM_STOCK_MODES:
         return None
     return _hints.Refusal(

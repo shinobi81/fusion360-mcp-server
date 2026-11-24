@@ -297,6 +297,10 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    `cam_create_setup`: handler `{name, body, operation_type, stock_applied|stock_failed,
    warning}`, mock `{setup_name, body_name, operation_type, stock_mode}`. An agent that
    rehearses a key in mock mode then reads it against Fusion and gets a `KeyError`.
+   For this command the success *values* differ too, which this section did not record:
+   mock echoes the `stock_mode` name the caller sent, while the handler answers
+   `stock_applied.stock_mode` with Fusion's id (`from_solid` -> `solid`). Both spellings
+   are in the schema, but a rehearsal that memorises one meets the other live.
    Pre-existing and pinned by `tests/test_mock.py`; left as a decision rather than a
    ride-along on #143.
 

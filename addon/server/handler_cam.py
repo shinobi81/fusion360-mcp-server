@@ -223,9 +223,11 @@ class CamCommands(_Contract):
         stock_offset_sides = _param_units.require_finite(stock_offset_sides)
         stock_offset_top = _param_units.require_finite(stock_offset_top)
         stock_offset_bottom = _param_units.require_finite(stock_offset_bottom)
-        # Judged here, before the CAM product is touched: an unknown mode used to be
-        # passed through to Fusion, which refuses it and left a setup behind with no
-        # stock applied.
+        # Judged here, before the CAM product is touched, so a mode Fusion would refuse
+        # cannot leave a setup behind with no stock applied - the old code passed the
+        # string through and reported `stock_failed` after the setup existed. (The
+        # refusal carries its own hints, not INVALID_INPUT's "nothing was written"; the
+        # ordering is what makes both true.)
         if stock_refusal := _rules.cam_stock_mode_refusal({"stock_mode": stock_mode}):
             raise stock_refusal
 
