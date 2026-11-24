@@ -509,7 +509,7 @@ class HandlerBase:
         )
 
     @staticmethod
-    def _wait_future(future, timeout: float = 25.0):
+    def _wait_future(future, timeout: float = 25.0, operations=()):
         """Wait for a CAM generation future, bounded so a runaway
         generation fails as a structured error instead of freezing the
         main thread past the bridge timeout.
@@ -589,7 +589,44 @@ class HandlerBase:
             )
 
         deadline = time.monotonic() + timeout
+
+        def operation_error() -> str | None:
+            """The first error Fusion recorded on *operations*, as its own sentence.
+
+            Measured on 2706.1.17: a generation Fusion refuses - ``"Toolpath requires
+            tool to be selected."`` is the one this add-in can produce - sets
+            ``hasError`` and ``error`` at once while the future never completes. Waiting
+            the bound therefore answered ``TIMEOUT`` for a cause Fusion had already
+            named, 25 s after it was knowable.
+
+            A deleted operation may refuse reads; a field this shape does not carry is
+            skipped rather than reported, because the bound is still the honest answer
+            for a future that simply never finishes.
+            """
+            for operation in operations:
+                try:
+                    if operation.hasError:
+                        message = str(operation.error or "").strip()
+                        return message or (
+                            f"Fusion reported an error on operation "
+                            f"'{operation.name}'"
+                        )
+                except (AttributeError, RuntimeError):
+                    continue
+            return None
+
         while not is_done():
+            if error := operation_error():
+                raise _hints.Refusal(
+                    "FUSION_REFUSED",
+                    error,
+                    hints=(
+                        "cam_get_operation_info shows the operation's parameters "
+                        "and tool.",
+                        "An operation with no tool cannot generate; give it one with "
+                        "cam_create_operation(tool_diameter=...) or tool_json.",
+                    ),
+                )
             if time.monotonic() > deadline:
                 raise _hints.Refusal(
                     "TIMEOUT",

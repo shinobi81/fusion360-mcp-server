@@ -2290,15 +2290,44 @@ TOOLS: list[dict] = [
         tool_number={
             "type": "integer",
             "minimum": 1,
-            "description": "Tool number from library",
+            "description": (
+                "Number the post writes for the tool, embedded in the tool the "
+                "tool_diameter/tool_json arguments create. A number on its own "
+                "names nothing: there is no library lookup yet."
+            ),
         },
         tool_diameter={
             "type": "number",
             "minimum": 0.001,
             "description": (
-                "Not supported — tool geometry comes from the CAM "
-                "tool library; select via tool_number instead. "
-                "Passing this raises an error."
+                "Diameter (cm) of the flat end mill this operation gets. The add-in "
+                "builds a complete tool object, hands it to Fusion, and the operation "
+                "can generate. Without a tool an operation cannot: Fusion answers "
+                "'Toolpath requires tool to be selected.'"
+            ),
+        },
+        tool_length={
+            "type": "number",
+            "minimum": 0.001,
+            "description": (
+                "Flute length (cm) of the tool tool_diameter creates; defaults to "
+                "three diameters."
+            ),
+        },
+        tool_flutes={
+            "type": "integer",
+            "minimum": 1,
+            "description": (
+                "Flute count of the tool tool_diameter creates; defaults to 2."
+            ),
+        },
+        tool_json={
+            "type": "string",
+            "description": (
+                "A complete tool object as JSON, taken from a Fusion tool library "
+                "(one entry of its data array). Used verbatim instead of "
+                "tool_diameter/tool_length/tool_flutes. It must be complete: a "
+                "partial object crashed Fusion 2706.1.17."
             ),
         },
         stepdown={

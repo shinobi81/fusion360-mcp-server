@@ -1077,17 +1077,41 @@ class TestMockCAM:
         assert result["ok"] is False
         assert result["error_kind"] == "INVALID_INPUT"
 
-    def test_cam_create_operation_refuses_tool_diameter(self):
-        """The add-in refuses ``tool_diameter`` outright: tool geometry is library-side.
+    def test_cam_create_operation_attaches_a_tool_for_a_diameter(self):
+        """``tool_diameter`` builds the tool now, so mock mode must not refuse it.
 
-        That refusal used to classify as ``UNKNOWN`` with no hints — a new failure
-        mode without a rule, which is what ``hints.py`` exists to prevent.
+        It used to be refused outright - tool geometry is library-side - and the reply
+        now carries the same ``tool`` key the handler answers, because that is the key
+        an agent rehearses here and then reads against Fusion.  Rehearsing a refusal
+        for a call that works is the drift this test exists to catch.
         """
         params = {"strategy": "contour2d", "tool_diameter": 0.6}
         result = mock_command("cam_create_operation", params)
+
+        assert result["ok"] is True
+        assert result["tool"]["diameter_cm"] == 0.6
+        assert "tool_warning" not in result
+
+    def test_cam_create_operation_without_a_tool_says_generation_will_fail(self):
+        """No tool source is a reply, not a refusal: Fusion's own sentence warns."""
+        result = mock_command("cam_create_operation", {"strategy": "contour2d"})
+
+        assert result["ok"] is True
+        assert result["tool"] is None
+        assert "requires tool to be selected" in result["tool_warning"]
+
+    def test_cam_create_operation_refuses_a_tool_json_and_a_diameter_together(self):
+        """One tool, one source: judged from the parameters, so mock refuses too."""
+        params = {
+            "strategy": "contour2d",
+            "tool_json": '{"type": "flat end mill"}',
+            "tool_diameter": 0.6,
+        }
+        result = mock_command("cam_create_operation", params)
+
         assert result["ok"] is False
         assert result["error_kind"] == "INVALID_INPUT"
-        assert any("tool_number" in hint for hint in result["hints"])
+        assert any("tool_json" in hint for hint in result["hints"])
 
     def test_cam_create_setup_refuses_an_unknown_operation_type(self):
         """The handler refuses any type outside milling/turning/cutting.

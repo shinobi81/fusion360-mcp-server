@@ -164,6 +164,68 @@ def cam_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     return None
 
 
+#: What a reply says for an operation created without a tool.  Fusion's own sentence
+#: (measured on 2706.1.17) is quoted rather than paraphrased, because it is what the
+#: caller's *next* call answers - and one string, mirrored into ``src``, is what keeps
+#: mock mode and the handler from drifting apart on it.
+CAM_NO_TOOL_WARNING = (
+    "No tool attached — generation answers 'Toolpath requires tool to be selected.' "
+    "Pass tool_diameter (cm) or tool_json."
+)
+
+
+def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal a contradictory tool request earns, or None when it is usable.
+
+    ``cam_create_operation`` can get a tool three ways and only one at a time: a
+    ``tool_json`` the caller measured, a ``tool_diameter`` the add-in turns into one, or
+    neither (a bare operation, which cannot generate).  Judged from the parameters
+    alone, so mock mode refuses exactly what the handler refuses - and so a caller
+    learns the combination without a design, or an operation left behind.
+
+    ``tool_number`` numbers a tool the add-in creates; there is no library lookup yet,
+    so a number on its own names nothing.  It used to reach Fusion as a parameter name
+    that does not exist, which reported a silent ``parameters_failed``.
+    """
+    tool_json = params.get("tool_json")
+    shape_given = [
+        name
+        for name in ("tool_diameter", "tool_length", "tool_flutes")
+        if params.get(name) is not None
+    ]
+    if tool_json is not None:
+        if shape_given:
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                "tool_json defines the whole tool - drop "
+                f"{', '.join(shape_given)} or the tool_json",
+                hints=(
+                    "tool_json is for a complete tool object taken from a Fusion "
+                    "tool library.",
+                ),
+            )
+        return None
+    if params.get("tool_diameter") is None:
+        if shape_given:
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"{', '.join(shape_given)} shapes the tool tool_diameter creates - "
+                "pass tool_diameter too",
+                hints=("tool_diameter is in centimetres, like every other length.",),
+            )
+        if params.get("tool_number") is not None:
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                "tool_number numbers a tool this command creates - pass tool_diameter "
+                "(cm) or tool_json too",
+                hints=(
+                    "Without a tool source the operation is created with no tool, "
+                    "and Fusion then refuses to generate its toolpath.",
+                ),
+            )
+    return None
+
+
 def joint_selector_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal an unknown joint type, quadrant or key point earns, or None.
 

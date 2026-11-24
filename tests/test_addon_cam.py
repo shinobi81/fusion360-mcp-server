@@ -13,6 +13,7 @@ The stubs are the smallest shape each method reads, not a model of the CAM tree:
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -166,7 +167,9 @@ def _setup_with_operations(name: str, *operations) -> SimpleNamespace:
 def _generating_handler(handler_module, cam):
     handler = _handler(handler_module)
     handler._get_cam = lambda: cam
-    handler._wait_future = lambda _future: None
+    # The generation tests are about the target, not the wait; the wait takes the
+    # operations it attributes an error to, so the stand-in accepts them.
+    handler._wait_future = lambda _future, **_kwargs: None
     return handler
 
 
@@ -764,7 +767,7 @@ def test_a_refused_face_selection_removes_the_operation(handler_module):
     """
     operation, value, applied = _contour_operation()
 
-    def refuse(_selections):
+    def refuse(selections):
         raise RuntimeError("3 : some input argument is invalid")
 
     value.applyCurveSelections = refuse
@@ -796,7 +799,7 @@ def test_an_add_in_defect_in_the_seam_is_an_internal_error(handler_module):
     """
     operation, value, _applied = _contour_operation()
 
-    def invented(_selections):
+    def invented(selections):
         raise AttributeError("'CadContours2dParameterValue' has no attribute 'apply'")
 
     value.applyCurveSelections = invented
@@ -954,3 +957,199 @@ def test_create_operation_removes_the_operation_when_no_parameter_is_found(
     )
     assert "the operation was removed again" in str(raised.value)
     assert operation.deleted == 1
+
+
+# ── a CAM operation's tool ───────────────────────────────────────────────────
+# Measured on Fusion 2706.1.17: an operation with no tool cannot generate
+# (``"Toolpath requires tool to be selected."``), ``Tool.createFromJson`` accepts a
+# complete tool object, and assigning the result to ``Operation.tool`` registers it
+# in the document library. These tests cover the add-in's side of that seam.
+
+
+def _tool_op(name: str = "Op1"):
+    """The operation shape the create path writes into: a name and a tool slot.
+
+    ``deleteMe`` is there because a tool refusal removes the operation again - the
+    same promise the geometry seam keeps, so a retry cannot leave a second one behind.
+    """
+    operation = SimpleNamespace(
+        name=name,
+        parameters=SimpleNamespace(itemByName=lambda _name: None),
+        deleted=0,
+    )
+    operation.deleteMe = lambda: setattr(operation, "deleted", operation.deleted + 1)
+    return operation
+
+
+def _recording_setup(operation):
+    """A setup whose ``operations.add`` records that it created anything at all."""
+    created = []
+
+    def add(_input):
+        created.append(operation)
+        return operation
+
+    return (
+        SimpleNamespace(
+            name="Setup1",
+            operations=SimpleNamespace(
+                count=0,
+                createInput=lambda _strategy: SimpleNamespace(name=None),
+                add=add,
+            ),
+        ),
+        created,
+    )
+
+
+def test_a_diameter_attaches_a_tool_the_operation_can_generate_with(handler_module):
+    operation = _tool_op()
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(_setup("Setup1", operation))
+
+    result = handler.cam_create_operation(
+        "Setup1", "pocket2d", tool_diameter=0.6, coolant=None
+    )
+
+    payload = json.loads(operation.tool.json)
+    assert payload["unit"] == "millimeters"
+    assert payload["geometry"]["DC"] == 6.0
+    assert result["tool"] == {
+        "description": operation.tool.description,
+        "diameter_cm": 0.6,
+    }
+
+
+def test_tool_json_reaches_fusion_verbatim(handler_module):
+    """A caller who measured their own tool object is not second-guessed."""
+    operation = _tool_op()
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(_setup("Setup1", operation))
+    supplied = '{"type": "flat end mill", "description": "mine"}'
+
+    result = handler.cam_create_operation(
+        "Setup1", "pocket2d", tool_json=supplied, coolant=None
+    )
+
+    assert operation.tool.json == supplied
+    assert result["tool"] == {"description": operation.tool.description}
+
+
+def test_a_tool_json_and_a_diameter_together_are_refused_first(handler_module):
+    """Two sources for one tool is an ambiguity, and nothing may be created for it."""
+    operation = _tool_op()
+    setup, created = _recording_setup(operation)
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(setup)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            "Setup1",
+            "pocket2d",
+            tool_json='{"type": "flat end mill"}',
+            tool_diameter=0.6,
+        )
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert raised.value.hints
+    assert created == []
+
+
+def test_a_non_numeric_diameter_is_refused_by_name(handler_module):
+    """``require_finite`` passes a string through, so this is the last guard."""
+    setup, created = _recording_setup(_tool_op())
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(setup)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation("Setup1", "pocket2d", tool_diameter="6mm")
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert "tool_diameter" in str(raised.value)
+    assert created == []
+
+
+def test_a_tool_number_without_a_tool_is_refused(handler_module):
+    """There is no library lookup yet, so a bare number would describe nothing."""
+    setup, created = _recording_setup(_tool_op())
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(setup)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation("Setup1", "pocket2d", tool_number=3)
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert "tool_diameter" in str(raised.value)
+    assert created == []
+
+
+def test_fusion_refusing_the_tool_object_is_a_refusal(handler_module, monkeypatch):
+    """A JSON Fusion will not build is a refusal, never a half-configured operation."""
+    operation = _tool_op()
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(_setup("Setup1", operation))
+
+    class RefusingTool:
+        @staticmethod
+        def createFromJson(_json):
+            raise RuntimeError("3 : tool definition is invalid")
+
+    monkeypatch.setattr(adsk.cam, "Tool", RefusingTool)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            "Setup1", "pocket2d", tool_diameter=0.6, coolant=None
+        )
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert "tool definition is invalid" in str(raised.value)
+    assert operation.deleted == 1, "no refusal leaves a half-built operation"
+
+
+def test_an_operation_without_a_tool_says_generation_will_fail(handler_module):
+    """The operation is still useful: a reply with a warning, not a refusal."""
+    operation = _tool_op()
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(_setup("Setup1", operation))
+
+    result = handler.cam_create_operation("Setup1", "pocket2d", coolant=None)
+
+    assert result["tool"] is None
+    assert "requires tool to be selected" in result["tool_warning"]
+    assert "tool_diameter" in result["tool_warning"]
+
+
+def test_wait_future_reports_the_operations_error_instead_of_waiting_the_bound(
+    handler_module,
+):
+    """An operation Fusion refuses fails *at once*: the bound must not hide the cause.
+
+    Measured on 2706.1.17: a generation with no tool sets ``hasError`` and a message
+    ("Toolpath requires tool to be selected.") while the future never completes, so
+    the 25 s bound reported ``TIMEOUT`` for a failure Fusion had already named.
+    """
+    operation = SimpleNamespace(
+        hasError=True, error="Toolpath requires tool to be selected.\n"
+    )
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(
+            FakeNeverStartedFuture(), timeout=5.0, operations=[operation]
+        )
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert str(raised.value) == "Toolpath requires tool to be selected."
+
+
+def test_wait_future_still_times_out_for_a_clean_operation(handler_module):
+    """Only a reported error short-circuits; a healthy operation waits the bound."""
+    operation = SimpleNamespace(hasError=False, error="")
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler_module.CommandHandler._wait_future(
+            FakeGenerationFlagFuture(completed_after=None),
+            timeout=0.01,
+            operations=[operation],
+        )
+
+    assert raised.value.error_kind == "TIMEOUT"

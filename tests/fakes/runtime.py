@@ -566,6 +566,9 @@ def install() -> None:
     cam = module(
         "adsk.cam",
         PostProcessInput=cam_fakes.FakePostProcessInput,
+        # ``Tool``: built from JSON only, so the handler's one seam into a tool is
+        # the measured ``createFromJson`` and nothing else.
+        Tool=cam_fakes.FakeTool,
         # ``PostOutputUnitOptions``: the three members are 0/1/2, read from Fusion
         # 2706.1.17 rather than guessed - the handler picks one by identity, so a
         # wrong number would pass and say nothing.

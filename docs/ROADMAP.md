@@ -238,21 +238,39 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    `cam_get_operation_info`, plus the generate path's own, are the proof that all three
    treat it one way; nothing proves Fusion can produce it.
 
-6. **A CAM operation still cannot generate, because it has no tool.** #143 fixed the
-   two causes in front of it - ten of the fifteen advertised strategy names were
-   invented, and the other five were Fusion's own (`compatibleStrategies` answers
-   56, so the schema advertises the ten measured rather than all 56) - and every
-   strategy's geometry parameter was left empty (`contours` / `pockets` /
-   `machiningBoundarySel`, discovered at run time and accepted with the same
-   `FaceContourSelection` for all five) - so `cam_create_operation` now
-   creates an operation with its faces selected. Generation then answers, measured on
-   2706.1.17: `hasError == True, error == "Toolpath requires tool to be selected."`
-   The operation has no tool, `cam.documentToolLibrary.count == 0`, and `Operation.tool`
-   accepts only a `Tool` - which Fusion builds from `Tool.createFromJson`,
-   `Tool.createFromP21File`, or a library entry (`DocumentToolLibrary.add`). The open
-   question is which tool JSON a document library starting empty will accept; it needs a
-   measurement, not a fake, and it is the last step between `cam_create_operation` and a
-   `has_toolpath: true` envelope.
+6. ~~A CAM operation still cannot generate, because it has no tool~~ - **closed.** #143
+   fixed the two causes in front of it (ten invented strategy names, and a geometry
+   parameter left empty on every strategy), so `cam_create_operation` created an
+   operation with its faces selected; generation then answered `hasError == True,
+   error == "Toolpath requires tool to be selected."` because the operation had no tool.
+
+   The measurement that closed it, on Fusion 2706.1.17: `Tool.createFromJson` accepts a
+   **complete** tool object - every key a shipped library entry carries, including
+   `holder` and one `start-values.presets` entry - and `Operation.tool` takes the result.
+   Fusion registers it in `documentToolLibrary` itself (`count` 0 → 1), so no explicit
+   `add` is needed, and `generateToolpath` then finishes: `has_toolpath: true`,
+   `isToolpathValid: true`, with the parameters reporting `tool_diameter: 6.`,
+   `tool_unit: 'millimeters'`, `tool_numberOfFlutes: 2`, `tool_vendor:
+   'fusion360-mcp-server'`.
+
+   **A partial object is not refused, it crashes Fusion.** An entry with no `holder` and
+   an empty `start-values` neither raised nor refused: Fusion 360 exited during
+   `createFromJson`, taking the document's unsaved state with it. That is why
+   `addon/server/cam_tool.py` emits the whole shape from one function instead of patching
+   the keys a caller passed, and why its test pins the key sets by name.
+
+   What shipped: `cam_create_operation` takes `tool_diameter` (cm, converted to the
+   library's millimetres), `tool_length`, `tool_flutes` and `tool_number`, or `tool_json`
+   for a complete object it uses verbatim; a reply without a tool says generation will
+   fail rather than leaving it to the next call. Only the flat end mill is measured end
+   to end. `_wait_future` also reports the operation's own error now: a generation Fusion
+   refuses sets `hasError` at once while the future never completes, so the 25 s bound
+   used to answer `TIMEOUT` for a cause already named.
+
+   Still open from this thread: `tool_number` cannot select an existing library tool -
+   `DocumentToolLibrary` exposes `item`/`createQuery`/`toolsBySetupOrFolder` and no
+   by-number lookup has been measured, so a number on its own is refused rather than
+   silently ignored.
 
 7. **No tool enumerates a body's faces.** `get_object_info` answers
    `faces_count`/`edges_count`/`vertices_count` and a bounding box; `list_edges` exists
