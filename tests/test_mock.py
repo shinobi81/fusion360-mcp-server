@@ -519,7 +519,9 @@ class TestMockConstructionGeometry:
             },
         )
         assert result["method"] == "offset"
-        assert "plane_name" in result
+        # The handler's keys: `created`, the plane `name`, and the method.
+        assert result["created"] is True
+        assert "name" in result
 
     def test_create_construction_axis_two_points(self):
         result = mock_command(
@@ -1278,6 +1280,15 @@ class TestMockFallback:
 EMPTY_BODY_NAME = [
     # ``handler_base._body_by_name`` is shared; each row is one of its call sites.
     ("create_construction_axis", {"method": "edge", "body_name": ""}),
+    (
+        "create_construction_axis",
+        {
+            "method": "perpendicular_at_point",
+            "body_name": "",
+            "face_index": 0,
+            "point_one": [0, 0, 0],
+        },
+    ),
     ("cam_create_setup", {"body_name": ""}),
     ("export_stl", {"body_name": ""}),
     ("export_step", {"body_name": ""}),

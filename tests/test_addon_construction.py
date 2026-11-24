@@ -312,14 +312,44 @@ def test_create_construction_axis_perpendicular_at_a_point(bound_handler):
 def test_create_construction_axis_perpendicular_names_the_missing_argument(
     bound_handler,
 ):
-    """No face index: refused before anything is created, naming the argument."""
-    design = FakeDesign(features=2)
+    """No face index: refused before anything is created, naming the argument.
 
-    with pytest.raises(RuntimeError, match="face_index"):
+    The body exists in the fixture, so the refusal cannot come from a body that is not
+    there - only the rule's sentence matches.
+    """
+    design = FakeDesign(features=2, bodies=[FakeBody(name="Plate")])
+
+    with pytest.raises(RuntimeError) as raised:
         bound_handler(design).create_construction_axis(
             "perpendicular_at_point", body_name="Plate", point_one=[1, 2, 3]
         )
 
+    assert str(raised.value) == (
+        "perpendicular_at_point needs face_index - it builds an axis normal to a "
+        "face at a point"
+    )
+    assert design.rootComponent.constructionAxes.count == 0
+
+
+def test_create_construction_axis_perpendicular_refuses_a_face_the_body_lacks(
+    bound_handler,
+):
+    """A wrong index names the range, before the API is asked."""
+    body = FakeBody(name="Plate", faces=FakeCollection([FakeFace(), FakeFace()]))
+    design = FakeDesign(features=2, bodies=[body])
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bound_handler(design).create_construction_axis(
+            "perpendicular_at_point",
+            body_name="Plate",
+            face_index=2,
+            point_one=[0.0, 0.0, 1.0],
+        )
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert str(raised.value) == (
+        "Face index 2 is out of range for body 'Plate' (2 faces)"
+    )
     assert design.rootComponent.constructionAxes.count == 0
 
 

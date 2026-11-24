@@ -638,17 +638,19 @@ def perpendicular_axis_refusal(params: Mapping[str, Any]) -> _hints.Refusal | No
 
     Fusion's ``setByPerpendicularAtPoint(face, pointEntity)`` takes a B-Rep face, and
     until this tool had ``face_index`` the method was advertised and refused outright
-    - the one enum value a caller could send and never satisfy. The three arguments
+    - one of two enum values a caller could send and never satisfy (`tangent` on
+    `create_construction_plane` still is). The three arguments
     it needs are judged from the parameters alone, so mock mode refuses the same call
     and names the same missing ones.
     """
     if params.get("method") != "perpendicular_at_point":
         return None
-    missing = [
-        name
-        for name in ("body_name", "face_index", "point_one")
-        if params.get(name) is None
-    ]
+    # `body_name` is deliberately not here: an empty or absent one earns the shared
+    # "A body name is required" every other tool answers, so one fault has one sentence.
+    # An empty list is not a point, and `is None` for the index - face 0 is a face.
+    missing = ["point_one"] if not params.get("point_one") else []
+    if params.get("face_index") is None:
+        missing.insert(0, "face_index")
     if not missing:
         return None
     return _hints.Refusal(

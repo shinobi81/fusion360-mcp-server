@@ -1036,8 +1036,10 @@ def _create_construction_plane(p: dict) -> dict:
         )
     if refusal is not None:
         return _refusal_error(refusal)
+    # The handler's keys, as for the axis: `plane_name` was never one of them.
     return {
-        "plane_name": "ConstructionPlane_mock",
+        "created": True,
+        "name": "ConstructionPlane_mock",
         "method": p.get("method", "offset"),
     }
 
@@ -1051,9 +1053,12 @@ def _create_construction_axis(p: dict) -> dict:
                 "point_two": p.get("point_two"),
             }
         )
+    if refusal is None and p.get("method") == "perpendicular_at_point":
+        # One point, not two: the axis passes through it, normal to the face.
+        refusal = point3d_refusal({"point_one": p.get("point_one")})
     if refusal is not None:
         return _refusal_error(refusal)
-    if p.get("method") == "edge":
+    if p.get("method") in ("edge", "perpendicular_at_point"):
         # The branches that name a body: the other two build from points or planes.
         refused = _body_name_required_error(p)
         if refused is not None:

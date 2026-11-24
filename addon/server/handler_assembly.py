@@ -227,26 +227,13 @@ class AssemblyCommands(_Contract):
             edge = body.edges.item(edge_index)
             inp.setByEdge(edge)
         elif method == "perpendicular_at_point":
+            # The point is judged first: it is a pure parameter, mock mode can see it
+            # without a design, and the two modes must answer the same fault for the
+            # same call. The body and the face index follow.
+            point = self._point3d(point_one, "point_one")
             body = self._body_by_name(body_name)
-            # The rule refused an absent face_index before anything was created; this is
-            # the defensive half, so the comparison below has an int to work with.
-            if face_index is None:
-                raise _hints.Refusal(
-                    "INVALID_INPUT",
-                    "perpendicular_at_point needs face_index",
-                    hints=("list_faces reports a body's face indices.",),
-                )
-            # A face index is judged against the body before the call, so a wrong one
-            # names the range instead of raising out of the API with no advice.
-            if not 0 <= face_index < body.faces.count:
-                raise _hints.Refusal(
-                    "INVALID_INPUT",
-                    f"Face index {face_index} is out of range for body "
-                    f"'{body.name}' ({body.faces.count} faces)",
-                    hints=("list_faces reports the indices for this body.",),
-                )
             inp.setByPerpendicularAtPoint(
-                body.faces.item(face_index), self._point3d(point_one, "point_one")
+                self._face_by_index(body, face_index), point
             )
 
         axis_obj = axes.add(inp)
@@ -351,18 +338,14 @@ class AssemblyCommands(_Contract):
             )
 
         body = bodies[0]
-        if face_index is None or not (0 <= face_index < body.faces.count):
-            raise _hints.Refusal(
-                "INVALID_INPUT",
-                f"Face index {face_index} is out of range for body '{body.name}' "
-                f"({body.faces.count} faces). Enumerate them with list_faces and "
-                f"pick a cylindrical face.",
-                hints=(
-                    "Face indices run from 0; list_faces reports them, with each "
-                    "face's surface_type.",
-                ),
-            )
-        return body.faces.item(face_index)
+        return self._face_by_index(
+            body,
+            face_index,
+            hints=(
+                "Face indices run from 0; a joint needs a cylindrical one, and "
+                "list_faces reports each face's surface_type.",
+            ),
+        )
 
     def add_joint(
         self,

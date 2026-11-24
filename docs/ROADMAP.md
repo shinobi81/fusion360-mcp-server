@@ -114,7 +114,7 @@ worked, across the seven rows below:
 | `flat_pattern` | `root.features.flatPatternFeatures` does not exist; a component creates a flat pattern | fixed (#130) |
 | `thicken_surface` | `isSymmetric` and `isChainSelection` were swapped, so `direction` never made anything symmetric | fixed (#130) |
 | `scale_body` | per-axis branch passed five arguments to a three-argument `createInput`; non-uniform is `setToNonUniform` | fixed (#131) |
-| `create_construction_axis("perpendicular_at_point")` | handed a `ConstructionPlane` to a `BRepFace` parameter; now refuses and names the missing argument | fixed (#131) |
+| `create_construction_axis("perpendicular_at_point")` | handed a `ConstructionPlane` to a `BRepFace` parameter; refused and named the missing argument until #149 made it build | fixed (#131), built (#149) |
 | `patch_surface` | wrote a property Fusion does not ship, so `continuity` was a silent no-op | fixed to `groupContinuity`; the argument is inert for sketch curves until the tool takes edges (#131) |
 | `create_flange`, `create_bend`, `trim_surface` | `FlangeFeatures` has no `createInput`; there is no `bendFeatures` at all; `TrimFeatures.createInput` takes the tool alone | **fixed and proven live (#134)** |
 
@@ -225,7 +225,8 @@ and asks the running Fusion whether it exists - 190 references, none missing on
 4. ~~`create_construction_axis("perpendicular_at_point")` refuses by design~~ -
    **closed (#149).** It needed a `BRepFace`, and the tool had no argument that could
    supply one: the method was advertised in the schema and refused by a rule, so it was
-   the one enum value a caller could send and never satisfy. The tool takes
+   one of two enum values a caller could send and never satisfy (`create_construction_
+   plane`'s `tangent` still is). The tool takes
    `face_index` (with `body_name`) now, and the axis is built through
    `setByPerpendicularAtPoint(face, point)`, whose two arguments are the stub's.
 
