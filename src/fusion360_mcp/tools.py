@@ -879,8 +879,7 @@ TOOLS: list[dict] = [
         (
             "List a body's faces with index, surface_type (Plane, Cylinder, Cone, "
             "...), planarity, area and centroid, plus the outward normal on a planar "
-            "face; these are the indices face_indices takes, and until this tool "
-            "existed they could only be learned through execute_code"
+            "face; these are the indices face_indices takes"
         ),
         body_name={
             "type": "string",

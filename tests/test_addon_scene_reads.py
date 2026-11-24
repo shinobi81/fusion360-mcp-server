@@ -36,7 +36,13 @@ import pytest
 from addon.server import handler_scene
 from addon.server import hints as addon_hints
 from addon.server.hints import classify
-from tests.fakes.bodies import FakeBody, FakeBoundingBox, FakeFace
+from tests.fakes.bodies import (
+    FakeBody,
+    FakeBoundingBox,
+    FakeEdge,
+    FakeEdges,
+    FakeFace,
+)
 from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
 from tests.fakes.features import FakeMeasureManager
@@ -481,8 +487,10 @@ def test_list_faces_compares_against_the_enum_member_not_an_integer():
     source = inspect.getsource(handler_scene)
 
     # The *assignment*, not the name: a comment mentioning the member would satisfy a
-    # substring test while the code compared against a literal.
-    assert "plane_type = adsk.core.SurfaceTypes.PlaneSurfaceType" in source
+    # substring test while the code compared against a literal. The whole comment-free
+    # line, indent included: a comment written as the assignment would satisfy a bare
+    # substring test.
+    assert "\n        plane_type = adsk.core.SurfaceTypes.PlaneSurfaceType\n" in source
     assert "geometry.surfaceType == plane_type" in source
 
 
@@ -494,9 +502,20 @@ def test_the_limit_contract_is_one_rule_on_both_sides(bound_handler, limit, expe
     200 to mock, so the same call returned different lists. These are the three cases
     that differ, and they are asserted for both list tools.
     """
-    two_faces = [_plate_with(FakeFace(), FakeFace())]
-    handler = bound_handler(FakeDesign(features=0, bodies=two_faces))
+    two_edges = FakeEdges(
+        [
+            FakeEdge((0.0, 0.0, 0.0), (1.0, 0.0, 0.0)),
+            FakeEdge((1.0, 0.0, 0.0), (1.0, 1.0, 0.0)),
+        ]
+    )
+    body = FakeBody(
+        name="Plate",
+        faces=FakeCollection([FakeFace(), FakeFace()]),
+        edges=two_edges,
+    )
+    handler = bound_handler(FakeDesign(features=0, bodies=[body]))
 
-    faces = handler.list_faces(body_name="Plate", limit=limit)
-
-    assert len(faces["faces"]) == expected
+    # Both tools, because the same line was changed in both - and reverting either one
+    # used to leave the suite green.
+    assert len(handler.list_faces(body_name="Plate", limit=limit)["faces"]) == expected
+    assert len(handler.list_edges(body_name="Plate", limit=limit)["edges"]) == expected
