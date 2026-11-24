@@ -320,8 +320,9 @@ and asks the running Fusion whether it exists - 190 references, none missing on
 
 9. ~~`cam_create_setup`'s `stock_mode` vocabulary does not match the handler's map~~
    - **closed, and measured.** The mismatch was real: the schema advertised
-   `relative_box`/`fixed_box`/`from_body`, the handler mapped five names the schema
-   never offered, and an unmapped value was passed through verbatim.
+   `relative_box`/`fixed_box`/`from_body`, the handler mapped five names - three of
+   them never offered by the schema - and an unmapped value was passed through
+   verbatim.
 
    Measured on 2706.1.17 by writing `job_stockMode` on a live setup, one candidate at a
    time: `default`, `fixedbox`, `relativecylinder`, `fixedcylinder` and `solid` are
