@@ -223,9 +223,12 @@ _RULES: list[tuple[str, str, list[str]]] = [
     (
         # A body whose edges all reported a dead parameter range cannot be probed
         # by point.  Without a rule this classified as UNKNOWN with no hints — the
-        # failure mode AGENTS.md says must never ship.
+        # failure mode AGENTS.md says must never ship.  The kind is the one the raise
+        # site already types it with (`_hints.Refusal("GEOMETRY_UNSUPPORTED", ...)` in
+        # `_edges_by_points`), so the table now agrees with production instead of
+        # contradicting it from a rule nothing reaches.
         r"no usable parameter range",
-        "INVALID_INPUT",
+        "GEOMETRY_UNSUPPORTED",
         [
             "No edge on that body could be measured; nothing was written.",
             "Call list_edges and choose with edge_indices instead.",
@@ -294,9 +297,12 @@ _RULES: list[tuple[str, str, list[str]]] = [
     (
         # Two causes, two messages, and the hint has to fit both: a body with no
         # edges has nothing to list, so pointing such a caller at list_edges would
-        # send them to an empty answer.
+        # send them to an empty answer.  The kind is GEOMETRY_UNSUPPORTED because the
+        # caller did nothing wrong - `all` is a valid selector - and the same
+        # `_select_edges` types the identical absence as GEOMETRY_UNSUPPORTED when it
+        # is reached through `points=`, so the route taken decided the answer.
         r"has no edges to select from|has no edges that can be rounded",
-        "INVALID_INPUT",
+        "GEOMETRY_UNSUPPORTED",
         [
             "That body has nothing a fillet can round; nothing was written.",
             "A degenerate edge (a cone's apex) has no geometry.",
@@ -646,6 +652,9 @@ _KIND_HINTS: dict[str, tuple[str, ...]] = {
         "The name does not exist in the active design.",
         "Enumerate with get_scene_info or list_components, then retry with a name "
         "from that list.",
+        # A CAM setup is not in the scene, so the two generic calls above cannot list
+        # one. AGENTS.md says the same; this keeps the two documents in step.
+        "For a CAM name, cam_list_setups then cam_list_operations.",
     ),
     "GEOMETRY_UNSUPPORTED": (
         "The body does not have the geometry this call needs.",

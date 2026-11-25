@@ -197,7 +197,9 @@ def test_the_no_match_refusal_is_classified_and_names_the_next_step(select):
         select([((0, 0, 0), (0, 0, 5))], "top")
     kind, hints = classify(raised.value)
     assert kind == "GEOMETRY_UNSUPPORTED"
-    assert any("list_edges" in hint for hint in hints), hints
+    # "list_edges" appears in five rules' hints, so it cannot prove *this* one fired;
+    # this phrase is unique to it.
+    assert any("highest/lowest edges" in hint for hint in hints), hints
 
 
 def test_planes_closer_than_the_epsilon_are_one_plane(bound_handler):
@@ -360,7 +362,7 @@ def test_a_body_whose_every_edge_is_degenerate_says_so(bound_handler):
     with pytest.raises(RuntimeError) as raised:
         handler._select_edges(body, "all")
     assert "no edges that can be rounded" in str(raised.value)
-    assert classify(raised.value)[0] == "INVALID_INPUT"
+    assert classify(raised.value)[0] == "GEOMETRY_UNSUPPORTED"
 
 
 def test_a_closed_edge_whose_ends_coincide_is_not_vertical(bound_handler):
@@ -400,7 +402,7 @@ def test_a_body_with_no_edges_refuses_rather_than_selecting_nothing(select):
     assert "has no edges to select from" in str(raised.value)
     assert "No edges matched" not in str(raised.value)
     kind, hints = classify(raised.value)
-    assert kind == "INVALID_INPUT"
+    assert kind == "GEOMETRY_UNSUPPORTED"
     # The kind alone cannot prove *this* rule fired — the generic INVALID_INPUT
     # rule gives the same kind, so the hint text is the assertion.
     assert any("nothing a fillet can round" in hint for hint in hints), hints
@@ -859,7 +861,11 @@ def test_a_body_whose_edges_have_no_usable_range_says_that_not_no_edges(bound_ha
     message = str(raised.value)
     assert "no usable parameter range" in message
     assert "has no edges" not in message
-    assert classify(raised.value)[0] == "INVALID_INPUT"
+    # The add-on's own classify, not the package mirror's: this raises an
+    # `addon.server.hints.Refusal`, and the mirror's is a different class, so its
+    # `isinstance` check misses and the message is re-matched by regex instead —
+    # which reported INVALID_INPUT for a refusal typed GEOMETRY_UNSUPPORTED.
+    assert addon_hints.classify(raised.value)[0] == "GEOMETRY_UNSUPPORTED"
 
 
 def test_an_edge_that_reports_a_failed_extent_is_skipped(bound_handler):
