@@ -96,6 +96,10 @@ The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
 - **Never merge a PR that still has unresolved review threads.** Inline comments — the
   CodeQL/Dependabot findings especially — are review threads. Resolve every one first,
   by fixing it or by replying with why it does not apply. See _Merging_ below.
+- Never create a GitHub release by hand: pushing a `v*` tag runs `release.yml`, whose
+  publish step attaches the wheel, sdist, SBOM and provenance. A release made first
+  leaves the workflow failing and the assets unpublished (`CONTRIBUTING.md`,
+  Releasing).
 - Never commit secrets. `.env` is gitignored — keep it that way.
 - Never edit `.venv/` by hand, and do not run `uv sync` while an MCP server is running.
 - Never call `close()` on the active Fusion document from `execute_code` — it crashed
