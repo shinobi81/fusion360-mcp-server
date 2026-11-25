@@ -188,7 +188,7 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    (`#134`), and `#143`'s caller-visible schema change - `cam_create_operation`'s
    strategy enum replaced with ten measured names and two new arguments (`body_name`,
    `face_indices`).
-2. ~~**Retag the rules that already carry a kind**~~ - **closed (#<pr>).** The work above
+2. ~~**Retag the rules that already carry a kind**~~ - **closed (#150).** The work above
    changed the tag of the 88 with none; a rule that already answered with a kind kept
    it, even where the new taxonomy disagreed. The two that disagreed answer the
    taxonomy now: the CAM `setup/operation not found` rule and `no faces matched`.
