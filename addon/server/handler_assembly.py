@@ -225,10 +225,38 @@ class AssemblyCommands(_Contract):
                             "Or pass point_one: the at-a-point form takes any face.",
                         ),
                     )
+                reference = self._construction_plane(plane)
+                # Measured on 2706.1.17, not inferred: `setByTangent` answers True for
+                # every reference and it is `constructionPlanes.add` that fails, with
+                # `2 : InternalValidationError : data_->execute(&obj, apiName)` - a
+                # sentence that names neither the argument nor the fix. The angle is
+                # measured *around* the face's axis, so the reference has to contain
+                # that axis; a reference plane whose normal is parallel to it is the
+                # one Fusion refuses. On a Z cylinder `xy` fails and `yz`/`xz` build,
+                # at 0 degrees and at 45.
+                face_axis = face.geometry.axis
+                normal = reference.geometry.normal
+                alignment = abs(
+                    face_axis.x * normal.x
+                    + face_axis.y * normal.y
+                    + face_axis.z * normal.z
+                )
+                if alignment > 1.0 - 1e-6:
+                    raise _hints.Refusal(
+                        "INVALID_INPUT",
+                        f"plane '{plane}' is perpendicular to the face's axis: a "
+                        "tangent plane's angle is measured around that axis",
+                        hints=(
+                            "Pass a reference plane that contains the axis: for a Z "
+                            "cylinder that is yz or xz, not xy.",
+                            "Or pass point_one: the at-a-point form takes any face "
+                            "and no reference plane.",
+                        ),
+                    )
                 inp.setByTangent(
                     face,
                     adsk.core.ValueInput.createByString(f"{angle or 0} deg"),
-                    self._construction_plane(plane),
+                    reference,
                 )
 
         plane_obj = planes.add(inp)

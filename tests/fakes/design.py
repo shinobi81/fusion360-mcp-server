@@ -54,6 +54,7 @@ from .runtime import (
     DIRECT,
     PARAMETRIC,
     FakeMatrix3D,
+    FakePlane,
     FakePoint3D,
     FakeUserCoordinateSystemGeometry,
     FakeValueInput,
@@ -375,15 +376,16 @@ class FakeAxes:
 
 
 class FakeConstructionPlane(FakeDeletable):
-    """A base construction plane: named and deletable, with no geometry.
+    """A base construction plane: named, deletable, and carrying its world normal.
 
-    It carried a ``geometry`` for ``trim_surface``'s side test, which the
-    ``keep_cells`` rewrite removed; nothing reads it now, and a fake that grows a
-    member no handler asks for is a seam nobody checks.
+    ``geometry.normal`` is what a tangent plane's reference is checked against: an
+    angle is measured *around* the tangent face's axis, so a reference whose normal
+    is parallel to that axis is the one Fusion refuses (measured on 2706).
     """
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, normal=(0.0, 0.0, 1.0)):
         super().__init__(name)
+        self.geometry = FakePlane((0.0, 0.0, 0.0), normal)
 
 
 class FakePlanes:
@@ -397,9 +399,9 @@ class FakePlanes:
     """
 
     def __init__(self):
-        self.xYConstructionPlane = FakeConstructionPlane("XY")
-        self.yZConstructionPlane = FakeConstructionPlane("YZ")
-        self.xZConstructionPlane = FakeConstructionPlane("XZ")
+        self.xYConstructionPlane = FakeConstructionPlane("XY", (0.0, 0.0, 1.0))
+        self.yZConstructionPlane = FakeConstructionPlane("YZ", (1.0, 0.0, 0.0))
+        self.xZConstructionPlane = FakeConstructionPlane("XZ", (0.0, 1.0, 0.0))
 
 
 class FakeRevolveInput:

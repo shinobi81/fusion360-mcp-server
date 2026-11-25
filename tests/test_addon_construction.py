@@ -248,7 +248,7 @@ def test_a_tangent_plane_at_an_angle_takes_the_face_and_the_reference_plane(
         method="tangent",
         body_name="Shaft",
         face_index=1,
-        plane="xy",
+        plane="xz",
         angle=45,
     )
 
@@ -262,7 +262,7 @@ def test_a_tangent_plane_at_an_angle_takes_the_face_and_the_reference_plane(
     face, angle, reference = created.args
     assert face is body.faces.item(1), "the face the index named, not the first one"
     assert (angle.kind, angle.value) == ("string", "45 deg")
-    assert reference is root.xYConstructionPlane
+    assert reference is root.xZConstructionPlane
 
 
 def test_a_tangent_plane_through_a_point_takes_the_face_and_the_point(bound_handler):
@@ -294,6 +294,54 @@ def test_a_tangent_plane_through_a_point_takes_the_face_and_the_point(bound_hand
     assert _coords(point) == (1.0, 2.0, 3.0)
 
 
+def test_a_tangent_plane_refuses_a_reference_plane_perpendicular_to_the_axis(
+    bound_handler,
+):
+    """Measured on 2706.1.17: Fusion refuses `add` with an InternalValidationError.
+
+    The angle is measured *around* the face's axis, so the reference plane has to
+    contain that axis. On a Z cylinder `plane="xy"` is perpendicular to it and the
+    add fails with `2 : InternalValidationError : data_->execute(&obj, apiName)` -
+    a sentence that names neither the argument nor the fix. `yz` and `xz` succeed,
+    at angle 0 and at 45, and the planes differ, so the angle is honoured.
+    """
+    body = FakeBody(
+        name="Shaft",
+        faces=FakeCollection([FakeFace(planar=False, radius=1.0)]),
+    )
+    design = FakeDesign(features=2, bodies=[body])
+
+    with pytest.raises(RuntimeError) as raised:
+        bound_handler(design).create_construction_plane(
+            method="tangent", body_name="Shaft", face_index=0, plane="xy", angle=45
+        )
+
+    refusal = raised.value
+    assert addon_hints.classify(refusal)[0] == "INVALID_INPUT"
+    assert "perpendicular to the face's axis" in str(refusal)
+    assert any("contains the axis" in hint for hint in refusal.hints)
+    assert design.rootComponent.constructionPlanes.count == 0
+
+
+def test_a_tangent_plane_measures_from_a_reference_that_contains_the_axis(
+    bound_handler,
+):
+    """`xz` on a Z cylinder: allowed, and nothing about the call changes."""
+    body = FakeBody(
+        name="Shaft",
+        faces=FakeCollection([FakeFace(planar=False, radius=1.0)]),
+    )
+    design = FakeDesign(features=2, bodies=[body])
+
+    bound_handler(design).create_construction_plane(
+        method="tangent", body_name="Shaft", face_index=0, plane="xz", angle=45
+    )
+
+    created = design.rootComponent.constructionPlanes.last_input
+    assert created.setter == "setByTangent"
+    assert created.args[2] is design.rootComponent.xZConstructionPlane
+
+
 def test_a_tangent_plane_refuses_a_face_it_cannot_be_tangent_to(bound_handler):
     """``setByTangent`` documents a cylindrical or conical face; a flat one is neither.
 
@@ -322,7 +370,7 @@ def test_a_tangent_plane_on_a_conical_face_is_built(bound_handler):
     design = FakeDesign(features=2, bodies=[body])
 
     bound_handler(design).create_construction_plane(
-        method="tangent", body_name="Cone", face_index=0, plane="xy"
+        method="tangent", body_name="Cone", face_index=0, plane="xz"
     )
 
     assert design.rootComponent.constructionPlanes.last_input.setter == "setByTangent"

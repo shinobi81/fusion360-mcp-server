@@ -102,11 +102,15 @@ class FakeCylinderGeometry:
     side face reports ``radius = 1.0``.
     """
 
-    def __init__(self, radius: float = 1.0):
+    def __init__(self, radius: float = 1.0, axis=(0.0, 0.0, 1.0)):
         self.radius = float(radius)
         #: Not ``PlaneSurfaceType``: a bend's cylindrical wall must never be
         #: mistaken for the stationary face.
         self.surfaceType = CYLINDER_SURFACE_TYPE
+        #: ``Cylinder.axis`` / ``Cone.axis``: a tangent plane's angle is measured
+        #: *around* it, which is what makes a perpendicular reference plane a
+        #: measured refusal rather than a guess.  Z is the fakes' default body axis.
+        self.axis = FakeVector3D(*axis)
 
     @staticmethod
     def cast(geometry):
