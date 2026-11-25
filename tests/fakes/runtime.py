@@ -39,6 +39,9 @@ DIRECT = "DirectDesignType"
 # ``PlaneSurfaceType = 0``, ``CylinderSurfaceType = 1``).  ``unfold`` scans a body's
 # faces for the first planar one, so a geometry that answered the wrong member
 # would pick a bend's side wall as the stationary face.
+ORTHOGRAPHIC_CAMERA_TYPE = 0
+PERSPECTIVE_CAMERA_TYPE = 1
+
 PLANE_SURFACE_TYPE = 0
 CYLINDER_SURFACE_TYPE = 1
 CONE_SURFACE_TYPE = 2
@@ -357,6 +360,19 @@ def _joint_key_points() -> types.SimpleNamespace:
     )
 
 
+def _camera_types() -> types.SimpleNamespace:
+    """``adsk.core.CameraTypes``: the two members the add-in asks for.
+
+    ``render_view`` and ``export_view_sheet`` set a camera's type to orthographic and
+    put the caller's back afterwards; the stub numbers the pair, and the numeric values
+    are not observable through the add-in, so the fake keeps two distinct ones.
+    """
+    return types.SimpleNamespace(
+        OrthographicCameraType=ORTHOGRAPHIC_CAMERA_TYPE,
+        PerspectiveCameraType=PERSPECTIVE_CAMERA_TYPE,
+    )
+
+
 def _surface_types() -> types.SimpleNamespace:
     """``adsk.core.SurfaceTypes``: the two members the add-in asks for.
 
@@ -541,6 +557,7 @@ def install() -> None:
         Matrix3D=FakeMatrix3D,
         DocumentTypes=_document_types(),
         SurfaceTypes=_surface_types(),
+        CameraTypes=_camera_types(),
         OrientedBoundingBox3D=_primitives().FakeOrientedBoundingBox3D,
         Application=FakeApplication,
         CustomEventHandler=FakeCustomEventHandler,

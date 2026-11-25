@@ -19,15 +19,26 @@ sweep that never ran — or one keyed on the wrong thing — would pass.
 
 from __future__ import annotations
 
+import base64
+import json
+import math
 import os
+import tempfile
 from types import SimpleNamespace
 
 import pytest
 
+from addon.server import fusion_api as adsk
 from addon.server import hints as addon_hints
 from tests.fakes.bodies import FakeBody
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
 from tests.fakes.mesh import FakeMeshBodies
+from tests.fakes.runtime import (
+    ORTHOGRAPHIC_CAMERA_TYPE,
+    PERSPECTIVE_CAMERA_TYPE,
+    FakePoint3D,
+    FakeVector3D,
+)
 
 
 def _root_body() -> FakeBody:
@@ -273,17 +284,68 @@ class TestImportMeshRefusals:
         )
 
 
-class _Viewport:
-    """``Viewport``: ``fit`` and the capture's boolean - all ``render_view`` reads."""
+class _FakeCamera:
+    """``adsk.core.Camera``: what the two viewport tools read and write.
 
-    def __init__(self, saved: bool):
+    ``render_view`` and ``export_view_sheet`` both save ``eye``/``target``/``upVector``
+    and ``cameraType`` and put them back afterwards, so the fake carries real
+    point/vector objects rather than tuples - a restore that wrote a tuple would pass
+    here and fail in Fusion.
+    """
+
+    def __init__(
+        self, eye=(10.0, 0.0, 0.0), target=(0.0, 0.0, 0.0), up=(0.0, 0.0, 1.0)
+    ):
+        self.eye = FakePoint3D(*eye)
+        self.target = FakePoint3D(*target)
+        self.upVector = FakeVector3D(*up)
+        self.cameraType = ORTHOGRAPHIC_CAMERA_TYPE
+        self.isFitView = False
+        self.isSmoothTransition = True
+
+    def state(self):
+        """The four values the restore has to bring back, as plain tuples."""
+        return (
+            (self.eye.x, self.eye.y, self.eye.z),
+            (self.target.x, self.target.y, self.target.z),
+            (self.upVector.x, self.upVector.y, self.upVector.z),
+            self.cameraType,
+        )
+
+
+class _Viewport:
+    """``Viewport``: ``fit``, the camera, ``refresh``, and a capture that writes bytes.
+
+    The capture writes a real file, because that is what ``render_view`` reads back and
+    base64-encodes - a fake returning ``True`` without a file only ever reached the
+    refusal this module already tested.
+    """
+
+    def __init__(self, saved: bool = True, camera: _FakeCamera | None = None):
         self.saved = saved
         self.fitted = 0
+        self.refreshed = 0
+        self.camera = camera or _FakeCamera()
+        self.captures: list[tuple[str, int, int]] = []
+        #: The camera's eye at each capture: ``export_view_sheet`` puts the caller's
+        #: view back, so a later read reports what was there before.
+        self.eyes_at_capture: list[tuple[float, float, float]] = []
 
     def fit(self):
         self.fitted += 1
 
+    def refresh(self):
+        self.refreshed += 1
+
     def saveAsImageFile(self, path, width, height):
+        self.captures.append((path, width, height))
+        eye = self.camera.eye
+        self.eyes_at_capture.append((eye.x, eye.y, eye.z))
+        if self.saved:
+            with open(path, "wb") as handle:
+                # A few recognisable bytes: the point is that a file exists to read
+                # back and base64-encode, not that it is a valid PNG.
+                handle.write(b"PNG" + bytes([int(width) % 256, int(height) % 256]))
         return self.saved
 
 
@@ -399,3 +461,276 @@ class TestNameCollision:
         assert executed.entity is root_body
         assert design.exportManager.visible_at_execute is None
         assert out["body"] == "Body1"
+
+
+class TestRenderViewCapture:
+    """The successful capture: the lines after the refusal nothing reached before.
+
+    ``render_view`` writes a tempfile, reads it back and base64-encodes it, and if the
+    view was repositioned it restores the camera. Every one of those steps was
+    uncovered: both existing tests stop at a refusal, one of them at
+    ``saveAsImageFile`` answering false.
+    """
+
+    def test_the_capture_returns_the_bytes_it_read_back(self, bound_handler):
+        viewport = _Viewport()
+        handler = bound_handler(
+            FakeDesign(), app=SimpleNamespace(activeViewport=viewport)
+        )
+
+        result = handler.render_view(width=320, height=240)
+
+        assert viewport.fitted == 1, "fit is asked for before the capture"
+        assert result["view"] == "current"
+        assert (result["width"], result["height"]) == (320, 240)
+        assert result["image_format"] == "png"
+        assert result["bytes"] == len(b"PNG" + bytes([320 % 256, 240 % 256]))
+        # The pixels the fake wrote, verbatim, so a re-encode cannot pass by luck.
+        assert base64.b64decode(result["image_base64"]) == (
+            b"PNG" + bytes([320 % 256, 240 % 256])
+        )
+
+    def test_the_capture_leaves_no_tempfile_behind(
+        self, bound_handler, tmp_path, monkeypatch
+    ):
+        """``mkstemp`` makes the file; the ``finally`` removes it."""
+        made: list[str] = []
+        real_mkstemp = tempfile.mkstemp
+
+        def recording_mkstemp(*args, **kwargs):
+            fd, path = real_mkstemp(*args, dir=tmp_path, **kwargs)
+            made.append(path)
+            return fd, path
+
+        monkeypatch.setattr(tempfile, "mkstemp", recording_mkstemp)
+        viewport = _Viewport()
+        bound_handler(
+            FakeDesign(), app=SimpleNamespace(activeViewport=viewport)
+        ).render_view()
+
+        assert made, "the capture went through a tempfile"
+        assert not os.path.exists(made[0]), "and it was removed afterwards"
+
+    def test_a_named_view_repositions_and_restores_the_camera(self, bound_handler):
+        """``view="iso"`` moves the camera, and the finally puts the caller's back."""
+        camera = _FakeCamera(
+            eye=(5.0, 5.0, 5.0), target=(1.0, 2.0, 3.0), up=(0.0, 0.0, 1.0)
+        )
+        camera.cameraType = PERSPECTIVE_CAMERA_TYPE
+        before = camera.state()
+        viewport = _Viewport(camera=camera)
+        handler = bound_handler(
+            FakeDesign(), app=SimpleNamespace(activeViewport=viewport)
+        )
+
+        result = handler.render_view(view="iso")
+
+        assert result["view"] == "iso"
+        assert camera.state() == before, "the caller's view is what they get back"
+        assert viewport.refreshed >= 1, "the restore refreshes the viewport"
+
+    def test_dimensions_are_clamped_to_a_renderable_range(self, bound_handler):
+        """An oversized capture would stall the main thread; the clamp is the guard."""
+        viewport = _Viewport()
+        handler = bound_handler(
+            FakeDesign(), app=SimpleNamespace(activeViewport=viewport)
+        )
+
+        small = handler.render_view(width=1, height=1)
+        large = handler.render_view(width=99999, height=99999)
+
+        assert (small["width"], small["height"]) == (16, 16)
+        assert (large["width"], large["height"]) == (4096, 4096)
+
+
+class _ImportingMeshBodies:
+    """``MeshBodies`` with the current ``add`` that answers a list, and the legacy pair.
+
+    The handler tries ``add`` first and falls back to ``addByFile`` on
+    ``AttributeError``, so a fake with both would never exercise the fallback and one
+    with only the legacy method would never exercise the current path.
+    """
+
+    def __init__(self, mesh_count: int = 1):
+        self.calls: list[tuple[str, object]] = []
+        self._mesh_count = mesh_count
+
+    def add(self, path, units):
+        self.calls.append((path, units))
+        return SimpleNamespace(
+            count=self._mesh_count, item=lambda index: FakeBody(name="Mesh1")
+        )
+
+
+class _LegacyMeshBodies:
+    """A build without ``MeshBodies.add``: the handler's ``AttributeError`` fallback.
+
+    A separate class, because ``del instance.add`` does not hide a method - the class
+    still answers the lookup, so the fallback would never run.
+    """
+
+    def __init__(self):
+        self.calls: list[tuple[str, object]] = []
+
+    def addByFile(self, path, units):
+        self.calls.append((path, units))
+        return FakeBody(name="Mesh1")
+
+
+class TestImportMeshSuccess:
+    """The path a caller with a real file takes: import, then describe."""
+
+    def test_a_imported_mesh_body_is_reported(self, bound_handler, tmp_path):
+        source = tmp_path / "part.stl"
+        source.write_bytes(b"solid part")
+        design = FakeDesign()
+        bodies = _ImportingMeshBodies()
+        design.rootComponent.meshBodies = bodies
+
+        result = bound_handler(design).import_mesh(str(source))
+
+        assert result["imported"] is True
+        assert result["file_path"] == str(source)
+        assert result["mesh_name"] == "Mesh1"
+        assert result["component"] == design.rootComponent.name
+        assert result["units"] == "mm"
+        assert result["bounding_box"]["size"] == [1.0, 1.0, 1.0]
+        assert bodies.calls == [(str(source), adsk.fusion.MeshUnits.MillimeterMeshUnit)]
+
+    def test_the_units_argument_reaches_fusions_enum(self, bound_handler, tmp_path):
+        source = tmp_path / "part.stl"
+        source.write_bytes(b"solid part")
+        design = FakeDesign()
+        bodies = _ImportingMeshBodies()
+        design.rootComponent.meshBodies = bodies
+
+        bound_handler(design).import_mesh(str(source), units="in")
+
+        assert bodies.calls == [(str(source), adsk.fusion.MeshUnits.InchMeshUnit)]
+
+    def test_the_legacy_import_path_still_imports(self, bound_handler, tmp_path):
+        """A build without ``MeshBodies.add`` takes ``addByFile``."""
+        source = tmp_path / "part.stl"
+        source.write_bytes(b"solid part")
+        design = FakeDesign()
+        bodies = _LegacyMeshBodies()
+        design.rootComponent.meshBodies = bodies
+
+        result = bound_handler(design).import_mesh(str(source))
+
+        assert result["mesh_name"] == "Mesh1"
+        assert bodies.calls == [(str(source), adsk.fusion.MeshUnits.MillimeterMeshUnit)]
+
+
+class TestExportDispatch:
+    def test_export_dispatches_stl_to_the_body_export(self, bound_handler, tmp_path):
+        """``export`` infers the format from the extension and hands stl on.
+
+        Every existing ``export`` test names step or f3d, so this branch was
+        unreachable from the suite while the two it calls were covered.
+        """
+        body = _root_body()
+        design = _design_with(body)
+        target = tmp_path / "part.stl"
+
+        result = bound_handler(design).export(body_name="Body1", file_path=str(target))
+
+        assert result["exported"] is True
+        assert result["body"] == "Body1"
+        assert result["file_path"] == str(target)
+        executed = design.exportManager.executed
+        assert executed[-1].kind == "stl", "the stl options, not step's"
+
+
+class TestExportViewSheet:
+    """The sheet's whole body: four PNGs, the HTML with them embedded, and the manifest.
+
+    None of it had ever run - not one of the lines from `_scene_center_and_radius`
+    through the manifest write. The viewport captures into the sheet's own directory,
+    which is what makes the PNG files assertable.
+    """
+
+    def test_the_sheet_writes_the_images_the_html_and_the_manifest(
+        self, bound_handler, tmp_path
+    ):
+        body = _root_body()
+        design = _design_with(body)
+        viewport = _Viewport()
+        handler = bound_handler(design, app=SimpleNamespace(activeViewport=viewport))
+
+        result = handler.export_view_sheet(
+            title="Bracket & <Plate>",
+            notes="check the bore\nthen ship",
+            views=["iso", "front"],
+            image_size=[400, 300],
+            output_dir=str(tmp_path),
+        )
+
+        assert result["html_path"] == os.path.join(str(tmp_path), "view_sheet.html")
+        assert result["title"] == "Bracket & <Plate>"
+        assert result["image_size"] == [400, 300]
+        assert [view["view"] for view in result["views"]] == ["iso", "front"]
+        for view in result["views"]:
+            assert os.path.exists(view["path"]), view
+            assert view["path"].endswith(f"{view['view']}.png")
+        assert [capture[1:] for capture in viewport.captures] == [
+            (400, 300),
+            (400, 300),
+        ]
+
+        html = (tmp_path / "view_sheet.html").read_text(encoding="utf-8")
+        assert html.count("<figure>") == 2, "one figure per view"
+        assert "data:image/png;base64," in html
+        assert "&amp;" in html and "&lt;Plate&gt;" in html, "the title is escaped"
+        assert "check the bore\nthen ship" in html, "the notes keep their newline"
+        assert "ISO" in html and "FRONT" in html, "the labels are the view names"
+
+        manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["title"] == "Bracket & <Plate>"
+        assert manifest["views"] == result["views"]
+        assert manifest["image_size"] == [400, 300]
+
+    def test_a_sheet_with_no_views_writes_no_figures(self, bound_handler, tmp_path):
+        """``views=[]`` is falsy, so the defaults apply - the documented behaviour."""
+        design = _design_with(_root_body())
+        handler = bound_handler(design, app=SimpleNamespace(activeViewport=_Viewport()))
+
+        result = handler.export_view_sheet(views=[], output_dir=str(tmp_path))
+
+        assert [view["view"] for view in result["views"]] == [
+            "iso",
+            "front",
+            "top",
+            "right",
+        ]
+
+    def test_the_camera_the_user_had_is_put_back(self, bound_handler, tmp_path):
+        """Four views, four camera moves, and the caller's own view at the end."""
+        camera = _FakeCamera(eye=(7.0, 8.0, 9.0), target=(1.0, 1.0, 1.0))
+        before = camera.state()
+        viewport = _Viewport(camera=camera)
+        handler = bound_handler(
+            _design_with(_root_body()), app=SimpleNamespace(activeViewport=viewport)
+        )
+
+        handler.export_view_sheet(views=["iso", "top"], output_dir=str(tmp_path))
+
+        assert camera.state() == before
+
+    def test_a_document_with_no_visible_body_frames_the_origin(
+        self, bound_handler, tmp_path
+    ):
+        """``_scene_center_and_radius`` has a no-body answer: the origin, radius 10."""
+        design = FakeDesign(features=0)
+        viewport = _Viewport()
+        handler = bound_handler(design, app=SimpleNamespace(activeViewport=viewport))
+
+        result = handler.export_view_sheet(views=["iso"], output_dir=str(tmp_path))
+
+        assert result["views"][0]["view"] == "iso"
+        # No visible body, so the frame is taken from the origin at radius 10 and the
+        # eye sits 3x that away when the frame is captured - the only moment it holds,
+        # since the sheet restores the caller's view afterwards.
+        eye = viewport.eyes_at_capture[0]
+        distance = math.sqrt(sum(coordinate * coordinate for coordinate in eye))
+        assert distance == pytest.approx(30.0)
