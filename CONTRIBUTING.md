@@ -136,9 +136,42 @@ error that motivated it.
    is the pipe's, not the check's.
 5. Annotated tag on the merge commit: `git tag -a vX.Y.Z -m "…"`, then
    `git push origin vX.Y.Z`.
+
+   **The push publishes the release.** `release.yml` triggers on `v*`, and its publish
+   step is `gh release create` with the wheel, the sdist, `sbom.cdx.json` and
+   `provenance.sigstore.json` - the four assets a tag is meant to carry. Do not run
+   `gh release create` yourself: a release that already exists makes that step fail with
+   `a release with the same tag name already exists`, and what is left behind is a
+   release with **no assets** - the attestation was produced, since
+   `attest-build-provenance` ran, but its bundle never became an asset. 0.10.0 hit
+   exactly this.
 6. Verify the tag actually installs:
 
    ```bash
    uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@vX.Y.Z' \
      fusion360-mcp-server --help
    ```
+
+   Then confirm the **release** published, not only the tag: this is the one step that
+   can see step 5's failure mode, because installing from a tag works whether or not a
+   release exists or carries anything.
+
+   ```bash
+   gh release view vX.Y.Z --json assets --jq '.assets[].name'
+   ```
+
+   Four names, or `gh run list --workflow release.yml -L 1` green.
+
+### If the release workflow failed
+
+`gh release create` refusing with `a release with the same tag name already exists` means
+a release was made by hand. Delete it and re-run the job:
+
+```bash
+gh release delete vX.Y.Z --yes   # the tag stays, which --verify-tag needs
+gh run rerun <run-id> --failed   # a job re-run starts at its first step, not at the
+                                 # one that failed, so the build and attestation redo
+```
+
+The assets arrive with the new run. Re-tagging is never the fix: the tag is correct, only
+the release was.
