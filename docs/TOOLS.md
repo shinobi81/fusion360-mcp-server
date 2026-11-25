@@ -171,10 +171,17 @@ what a selection returns.
 Fusion ships two definitions behind the one value, and the arguments decide which runs:
 
 - **`angle` + `plane`, with `body_name` + `face_index`** — `setByTangent(face, angle,
-  referencePlane)`. The face must be **cylindrical or conical** (Fusion's own docstring);
-  a flat face is refused `GEOMETRY_UNSUPPORTED`, naming the face's `surface_type`.
-  `angle` is in degrees and defaults to 0; `plane` is the reference it is measured from
-  and is required, because an angle has no zero without one.
+  referencePlane)`. The face must be **cylindrical**; `angle` is in degrees and defaults
+  to 0, and `plane` is the reference it is measured from and is required, because an
+  angle has no zero without one.
+
+  Two measured constraints, both refused here rather than passed to Fusion:
+
+  - the reference plane must **contain the face's axis** — the angle is measured around
+    it, so `xy` on a Z cylinder fails while `yz` and `xz` build.
+  - the face must be a **cylinder**. The binding's docstring says "cylindrical or
+    conical", and measured on 2706.1.17 a cone is refused whichever reference plane is
+    used; the route that works for a cone is `point_one` below.
 - **`point_one`, with `body_name` + `face_index`** — `setByTangentAtPoint(face, point)`.
   Any face, and the point need not lie on it.
 

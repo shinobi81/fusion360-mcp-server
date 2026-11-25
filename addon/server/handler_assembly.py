@@ -206,23 +206,26 @@ class AssemblyCommands(_Contract):
             if point_one is not None:
                 inp.setByTangentAtPoint(face, self._point3d(point_one, "point_one"))
             else:
-                # Measured, not assumed: `setByTangent` documents a cylindrical or
-                # conical face, and Fusion's answer to a flat one is not worth
-                # discovering per call. The kind is GEOMETRY_UNSUPPORTED because the
-                # caller's arguments are all usable - the move that works is another
-                # face, which is what list_faces is for.
+                # Measured on 2706.1.17, against the binding's own docstring: it
+                # says `setByTangent` takes a "cylindrical or conical" face, and a
+                # cone is refused whichever reference plane the angle is measured
+                # from. So the angle form is a cylinder's, and the documented route
+                # for a cone is the at-a-point form. GEOMETRY_UNSUPPORTED because
+                # every argument is usable - what is missing is a face of the kind
+                # this form needs.
                 surface = self._surface_type_name(face.geometry.surfaceType)
-                if face.geometry.surfaceType not in (
-                    adsk.core.SurfaceTypes.CylinderSurfaceType,
-                    adsk.core.SurfaceTypes.ConeSurfaceType,
+                if (
+                    face.geometry.surfaceType
+                    != adsk.core.SurfaceTypes.CylinderSurfaceType
                 ):
                     raise _hints.Refusal(
                         "GEOMETRY_UNSUPPORTED",
-                        f"A tangent plane at an angle needs a cylindrical or conical "
-                        f"face; this one is {surface}",
+                        f"A tangent plane at an angle needs a cylindrical face; this "
+                        f"one is {surface}",
                         hints=(
+                            "Pass point_one instead: the at-a-point form is measured "
+                            "to work on a cone and on a planar face.",
                             "list_faces reports each face's surface_type.",
-                            "Or pass point_one: the at-a-point form takes any face.",
                         ),
                     )
                 reference = self._construction_plane(plane)

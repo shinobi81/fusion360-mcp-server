@@ -352,42 +352,42 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_assembly.py",
-            288,
+            291,
             "raise refusal: kind comes from _rules.perpendicular_axis_refusal",
         ),
         (
             "handler_assembly.py",
-            448,
+            451,
             "raise selector_refusal: kind comes from _rules.joint_selector_refusal",
         ),
         (
             "handler_assembly.py",
-            464,
+            467,
             "raise component_refusal: kind comes from _rules.components_differ_refusal",
         ),
         (
             "handler_assembly.py",
-            469,
+            472,
             "raise geometry_refusal: kind comes from _rules.joint_geometry_refusal",
         ),
         (
             "handler_assembly.py",
-            735,
+            738,
             "raise selector_refusal: kind comes from _rules.joint_selector_refusal",
         ),
         (
             "handler_assembly.py",
-            750,
+            753,
             "raise component_refusal: kind comes from _rules.components_differ_refusal",
         ),
         (
             "handler_assembly.py",
-            761,
+            764,
             "raise geometry_refusal: kind comes from _rules.as_built_geometry_refusal",
         ),
         (
             "handler_assembly.py",
-            937,
+            940,
             "raise refusal: kind comes from _rules.rigid_group_size_refusal",
         ),
         (

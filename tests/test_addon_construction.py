@@ -362,18 +362,45 @@ def test_a_tangent_plane_refuses_a_face_it_cannot_be_tangent_to(bound_handler):
     assert design.rootComponent.constructionPlanes.count == 0
 
 
-def test_a_tangent_plane_on_a_conical_face_is_built(bound_handler):
-    """The docstring's other accepted surface type: a cone, not only a cylinder."""
+def _cone_face():
     cone = FakeFace(planar=False, radius=1.0)
     cone.geometry.surfaceType = CONE_SURFACE_TYPE
-    body = FakeBody(name="Cone", faces=FakeCollection([cone]))
+    return cone
+
+
+def test_a_tangent_plane_at_an_angle_refuses_a_cone(bound_handler):
+    """``setByTangent`` documents a *cylindrical or conical* face. Measured on
+    2706.1.17, a cone is refused by every reference plane (`yz`, `xz`, 0 and 30
+    degrees) with ``2 : InternalValidationError`` - so the documentation is advice
+    and the at-a-point form is the route that works. The refusal says so instead of
+    passing Fusion's opaque sentence through."""
+    body = FakeBody(name="Cone", faces=FakeCollection([_cone_face()]))
+    design = FakeDesign(features=2, bodies=[body])
+
+    with pytest.raises(RuntimeError) as raised:
+        bound_handler(design).create_construction_plane(
+            method="tangent", body_name="Cone", face_index=0, plane="xz"
+        )
+
+    refusal = raised.value
+    assert addon_hints.classify(refusal)[0] == "GEOMETRY_UNSUPPORTED"
+    assert "Cone" in str(refusal)
+    assert any("point_one" in hint for hint in refusal.hints)
+    assert design.rootComponent.constructionPlanes.count == 0
+
+
+def test_a_tangent_plane_through_a_point_builds_on_a_cone(bound_handler):
+    """The measured route for a cone: ``setByTangentAtPoint``, twice over."""
+    body = FakeBody(name="Cone", faces=FakeCollection([_cone_face()]))
     design = FakeDesign(features=2, bodies=[body])
 
     bound_handler(design).create_construction_plane(
-        method="tangent", body_name="Cone", face_index=0, plane="xz"
+        method="tangent", body_name="Cone", face_index=0, point_one=[0.0, 2.0, 0.0]
     )
 
-    assert design.rootComponent.constructionPlanes.last_input.setter == "setByTangent"
+    created = design.rootComponent.constructionPlanes.last_input
+    assert created.setter == "setByTangentAtPoint"
+    assert _coords(created.args[1]) == (0.0, 2.0, 0.0)
 
 
 # An unknown method no longer reaches the add-in: the schema gate refuses a value
