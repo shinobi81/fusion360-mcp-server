@@ -54,6 +54,7 @@ from .runtime import (
     DIRECT,
     PARAMETRIC,
     FakeMatrix3D,
+    FakePlane,
     FakePoint3D,
     FakeUserCoordinateSystemGeometry,
     FakeValueInput,
@@ -375,31 +376,33 @@ class FakeAxes:
 
 
 class FakeConstructionPlane(FakeDeletable):
-    """A base construction plane: named and deletable, with no geometry.
+    """A base construction plane: named, deletable, and carrying its world normal.
 
-    It carried a ``geometry`` for ``trim_surface``'s side test, which the
-    ``keep_cells`` rewrite removed; nothing reads it now, and a fake that grows a
-    member no handler asks for is a seam nobody checks.
+    ``geometry.normal`` is what a tangent plane's reference is checked against: an
+    angle is measured *around* the tangent face's axis, so a reference whose normal
+    is parallel to that axis is the one Fusion refuses (measured on 2706).
     """
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, normal=(0.0, 0.0, 1.0)):
         super().__init__(name)
+        self.geometry = FakePlane((0.0, 0.0, 0.0), normal)
 
 
 class FakePlanes:
     """The three base construction planes, as ``_construction_plane`` expects.
 
-    Name and delete only: a sketch placed on one takes the world frame, which is
-    enough for a handler that only records the supporting plane - a test that needs
-    a real frame builds ``FakeSketch(transform=yz_sketch())``, as
-    ``tests/fakes/sketch.py`` says.  They carried normals until the trim side test
-    was removed, and nothing supplied or read one after that.
+    Name and delete, plus the world normal a sketch does not need: a sketch placed on
+    one takes the world frame, which is enough for a handler that only records the
+    supporting plane - a test that needs a real frame builds
+    ``FakeSketch(transform=yz_sketch())``, as ``tests/fakes/sketch.py`` says.  The
+    normals came back for the tangent-plane check, which compares them with the face
+    axis.
     """
 
     def __init__(self):
-        self.xYConstructionPlane = FakeConstructionPlane("XY")
-        self.yZConstructionPlane = FakeConstructionPlane("YZ")
-        self.xZConstructionPlane = FakeConstructionPlane("XZ")
+        self.xYConstructionPlane = FakeConstructionPlane("XY", (0.0, 0.0, 1.0))
+        self.yZConstructionPlane = FakeConstructionPlane("YZ", (1.0, 0.0, 0.0))
+        self.xZConstructionPlane = FakeConstructionPlane("XZ", (0.0, 1.0, 0.0))
 
 
 class FakeRevolveInput:
@@ -1170,7 +1173,13 @@ class FakeConstructionInput:
 
 
 class FakeConstructionPlaneInput(FakeConstructionInput):
-    """The four plane definitions ``create_construction_plane`` builds."""
+    """The plane definitions ``create_construction_plane`` builds.
+
+    The two tangent setters take the arity the shipped stub declares:
+    ``setByTangent(tangentFace, angle, planarEntity)`` and
+    ``setByTangentAtPoint(tangentFace, pointEntity)`` - measured in
+    ``adsk/fusion.py``, not copied from the handler's call.
+    """
 
     def setByOffset(self, plane, offset) -> None:
         self._record("setByOffset", (plane, offset))
@@ -1183,6 +1192,12 @@ class FakeConstructionPlaneInput(FakeConstructionInput):
 
     def setByThreePoints(self, point_one, point_two, point_three) -> None:
         self._record("setByThreePoints", (point_one, point_two, point_three))
+
+    def setByTangent(self, tangent_face, angle, planar_entity) -> None:
+        self._record("setByTangent", (tangent_face, angle, planar_entity))
+
+    def setByTangentAtPoint(self, tangent_face, point_entity) -> None:
+        self._record("setByTangentAtPoint", (tangent_face, point_entity))
 
 
 class FakeConstructionAxisInput(FakeConstructionInput):

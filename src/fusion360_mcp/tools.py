@@ -1233,7 +1233,10 @@ TOOLS: list[dict] = [
         plane={
             "type": "string",
             "enum": ["xy", "yz", "xz"],
-            "description": ("Reference plane (for offset/angle)"),
+            "description": (
+                "Reference plane: what an offset/angle is measured from, and the "
+                "reference a tangent plane's angle is measured from"
+            ),
         },
         offset={
             "type": "number",
@@ -1241,7 +1244,9 @@ TOOLS: list[dict] = [
         },
         angle={
             "type": "number",
-            "description": "Angle in degrees (for angle method)",
+            "description": (
+                "Angle in degrees (for angle, and for tangent without point_one)"
+            ),
         },
         edge_name={
             "type": "string",
@@ -1277,6 +1282,21 @@ TOOLS: list[dict] = [
             "minItems": 3,
             "maxItems": 3,
             "description": "[x,y,z] third point",
+        },
+        body_name={
+            "type": "string",
+            "description": "Body holding the face (for tangent)",
+        },
+        face_index={
+            "type": "integer",
+            "minimum": 0,
+            "description": (
+                "Face the plane is tangent to (for tangent): list_faces reports the "
+                "indices. The at-a-angle form needs a cylindrical face and a "
+                "reference plane whose normal is not parallel to its axis; passing "
+                "point_one instead builds the plane through that point, on any face "
+                "including a cone"
+            ),
         },
     ),
     _tool(

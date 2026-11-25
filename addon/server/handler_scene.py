@@ -220,24 +220,6 @@ class SceneCommands(_Contract):
         # floor violation: both mean "at least one", never a different default.
         limit = 200 if limit is None else max(1, int(limit))
         plane_type = adsk.core.SurfaceTypes.PlaneSurfaceType
-        #: Fusion's own names, keyed by the enum *members* rather than by numbers, so
-        #: the table cannot drift from the enum. A build that lacks a member (the fakes
-        #: declare two) simply does not offer that name, and an unknown `surfaceType`
-        #: falls through as its raw value rather than being guessed at.
-        surface_names = {
-            getattr(adsk.core.SurfaceTypes, member): name
-            for member, name in (
-                ("PlaneSurfaceType", "Plane"),
-                ("CylinderSurfaceType", "Cylinder"),
-                ("ConeSurfaceType", "Cone"),
-                ("SphereSurfaceType", "Sphere"),
-                ("TorusSurfaceType", "Torus"),
-                ("EllipticalCylinderSurfaceType", "EllipticalCylinder"),
-                ("EllipticalConeSurfaceType", "EllipticalCone"),
-                ("NurbsSurfaceType", "Nurbs"),
-            )
-            if hasattr(adsk.core.SurfaceTypes, member)
-        }
 
         def coords(point):
             return [point.x, point.y, point.z]
@@ -249,9 +231,7 @@ class SceneCommands(_Contract):
             is_planar = geometry.surfaceType == plane_type
             entry = {
                 "index": index,
-                "surface_type": surface_names.get(
-                    geometry.surfaceType, str(geometry.surfaceType)
-                ),
+                "surface_type": self._surface_type_name(geometry.surfaceType),
                 "is_planar": is_planar,
                 "area": face.area,
                 "centroid": coords(face.centroid),

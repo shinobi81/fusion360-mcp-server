@@ -280,14 +280,15 @@ and asks the running Fusion whether it exists - 190 references, none missing on
 4. ~~`create_construction_axis("perpendicular_at_point")` refuses by design~~ -
    **closed (#149).** It needed a `BRepFace`, and the tool had no argument that could
    supply one: the method was advertised in the schema and refused by a rule, so it was
-   one of two enum values a caller could send and never satisfy (`create_construction_
-   plane`'s `tangent` still is). The tool takes
+   one of two enum values a caller could send and never satisfy (the other,
+   `create_construction_plane`'s `tangent`, was closed by #151). The tool takes
    `face_index` (with `body_name`) now, and the axis is built through
    `setByPerpendicularAtPoint(face, point)`, whose two arguments are the stub's.
 
    The refusal moved with it: instead of a blanket refusal, the rule names the
-   arguments that are missing (`body_name`, `face_index`, `point_one`) from the
-   parameters alone, so mock mode refuses the same call with the same sentence. A face
+   arguments that are missing (`face_index`, `point_one`, and a body name through the
+   shared refusal every body-naming tool answers) from the parameters alone, so mock
+   mode refuses the same call with the same sentence. A face
    index is judged against the body's face count before the call, so a wrong one names
    the range rather than raising out of the API with no advice - and `list_faces` is
    where a caller gets the indices.

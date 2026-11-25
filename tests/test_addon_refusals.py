@@ -347,47 +347,47 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_assembly.py",
-            164,
-            "raise refusal: kind comes from _rules.construction_method_refusal",
+            181,
+            "raise refusal: kind comes from _rules.construction_plane_tangent_refusal",
         ),
         (
             "handler_assembly.py",
-            214,
+            300,
             "raise refusal: kind comes from _rules.perpendicular_axis_refusal",
         ),
         (
             "handler_assembly.py",
-            374,
+            460,
             "raise selector_refusal: kind comes from _rules.joint_selector_refusal",
         ),
         (
             "handler_assembly.py",
-            390,
+            476,
             "raise component_refusal: kind comes from _rules.components_differ_refusal",
         ),
         (
             "handler_assembly.py",
-            395,
+            481,
             "raise geometry_refusal: kind comes from _rules.joint_geometry_refusal",
         ),
         (
             "handler_assembly.py",
-            661,
+            747,
             "raise selector_refusal: kind comes from _rules.joint_selector_refusal",
         ),
         (
             "handler_assembly.py",
-            676,
+            762,
             "raise component_refusal: kind comes from _rules.components_differ_refusal",
         ),
         (
             "handler_assembly.py",
-            687,
+            773,
             "raise geometry_refusal: kind comes from _rules.as_built_geometry_refusal",
         ),
         (
             "handler_assembly.py",
-            863,
+            949,
             "raise refusal: kind comes from _rules.rigid_group_size_refusal",
         ),
         (
@@ -402,12 +402,17 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_base.py",
-            685,
+            418,
+            "raise refusal: kind comes from _rules.construction_plane_name_refusal",
+        ),
+        (
+            "handler_base.py",
+            707,
             "message is not a literal",
         ),
         (
             "handler_base.py",
-            726,
+            748,
             "message is not a literal",
         ),
         (

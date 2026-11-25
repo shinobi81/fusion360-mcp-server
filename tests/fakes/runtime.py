@@ -41,6 +41,7 @@ DIRECT = "DirectDesignType"
 # would pick a bend's side wall as the stationary face.
 PLANE_SURFACE_TYPE = 0
 CYLINDER_SURFACE_TYPE = 1
+CONE_SURFACE_TYPE = 2
 
 
 class FakePoint3D:
@@ -101,11 +102,15 @@ class FakeCylinderGeometry:
     side face reports ``radius = 1.0``.
     """
 
-    def __init__(self, radius: float = 1.0):
+    def __init__(self, radius: float = 1.0, axis=(0.0, 0.0, 1.0)):
         self.radius = float(radius)
         #: Not ``PlaneSurfaceType``: a bend's cylindrical wall must never be
         #: mistaken for the stationary face.
         self.surfaceType = CYLINDER_SURFACE_TYPE
+        #: ``Cylinder.axis`` / ``Cone.axis``: a tangent plane's angle is measured
+        #: *around* it, which is what makes a perpendicular reference plane a
+        #: measured refusal rather than a guess.  Z is the fakes' default body axis.
+        self.axis = FakeVector3D(*axis)
 
     @staticmethod
     def cast(geometry):
@@ -362,6 +367,10 @@ def _surface_types() -> types.SimpleNamespace:
     return types.SimpleNamespace(
         PlaneSurfaceType=PLANE_SURFACE_TYPE,
         CylinderSurfaceType=CYLINDER_SURFACE_TYPE,
+        # A cone is the surface a tangent plane's at-a-point form is measured on,
+        # and the one the angle form must refuse, so the fake declares it rather
+        # than letting `getattr` hide its absence.
+        ConeSurfaceType=CONE_SURFACE_TYPE,
     )
 
 

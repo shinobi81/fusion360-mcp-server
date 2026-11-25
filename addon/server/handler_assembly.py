@@ -24,6 +24,12 @@ def _vector(v) -> list:
 #: joint frame and far above floating-point noise on a unit vector.
 _DEGENERATE_AXIS_SQUARED = 1e-12
 
+#: How close to parallel counts as parallel for two unit vectors: ~0.08 degrees, so a
+#: reference plane Fusion would refuse is caught and no buildable one is.  Both vectors
+#: are unit by contract - ``Cylinder.axis`` and ``Plane.normal`` - which the live probe
+#: corroborates: a non-unit axis would have refused the planes that do build.
+_PARALLEL_TOLERANCE = 1e-6
+
 
 def _is_zero(vector) -> bool:
     """Whether *vector* is too short to define a direction."""
@@ -157,11 +163,25 @@ class AssemblyCommands(_Contract):
         point_one: list | None = None,
         point_two: list | None = None,
         point_three: list | None = None,
+        body_name: str | None = None,
+        face_index: int | None = None,
     ):
+        # Judged before a design is read, so a bad shape refuses without one and mock
+        # mode answers the same sentence for the same call.
+        if refusal := _rules.construction_plane_tangent_refusal(
+            {
+                "method": method,
+                "body_name": body_name,
+                "face_index": face_index,
+                "point_one": point_one,
+                "angle": angle,
+                "plane": plane,
+            }
+        ):
+            raise refusal
+
         root = self._root()
         planes = root.constructionPlanes
-        if refusal := _rules.construction_method_refusal({"method": method}):
-            raise refusal
         inp = planes.createInput()
 
         if method == "offset":
@@ -184,6 +204,72 @@ class AssemblyCommands(_Contract):
             p2 = self._point3d(point_two, "point_two")
             p3 = self._point3d(point_three, "point_three")
             inp.setByThreePoints(p1, p2, p3)
+        elif method == "tangent":
+            # The rule has already decided which of Fusion's two definitions this call
+            # describes: a point, or an angle measured from a reference plane.
+            body = self._body_by_name(body_name)
+            face = self._face_by_index(body, face_index)
+            if point_one is not None:
+                inp.setByTangentAtPoint(face, self._point3d(point_one, "point_one"))
+            else:
+                # Measured on 2706.1.17, against the binding's own docstring: it
+                # says `setByTangent` takes a "cylindrical or conical" face, and a
+                # cone is refused whichever reference plane the angle is measured
+                # from. So the angle form is a cylinder's, and the documented route
+                # for a cone is the at-a-point form. GEOMETRY_UNSUPPORTED because
+                # every argument is usable - what is missing is a face of the kind
+                # this form needs.
+                # Resolved before the surface check, because it needs no face: mock
+                # judges the name and not the surface (it has no design), so this is
+                # the order that lets both modes answer the same fault for one call.
+                reference = self._construction_plane(plane)
+                surface = self._surface_type_name(face.geometry.surfaceType)
+                if (
+                    face.geometry.surfaceType
+                    != adsk.core.SurfaceTypes.CylinderSurfaceType
+                ):
+                    raise _hints.Refusal(
+                        "GEOMETRY_UNSUPPORTED",
+                        f"A tangent plane at an angle needs a cylindrical face; this "
+                        f"one is {surface}",
+                        hints=(
+                            "Pass point_one instead: the at-a-point form is measured "
+                            "to work on a cone and on a planar face.",
+                            "list_faces reports each face's surface_type.",
+                        ),
+                    )
+                # Measured on 2706.1.17, not inferred: `setByTangent` answers True for
+                # every reference and it is `constructionPlanes.add` that fails, with
+                # `2 : InternalValidationError : data_->execute(&obj, apiName)` - a
+                # sentence that names neither the argument nor the fix. The angle is
+                # measured *around* the face's axis, so the reference has to contain
+                # that axis; a reference plane whose normal is parallel to it is the
+                # one Fusion refuses. On a Z cylinder `xy` fails and `yz`/`xz` build,
+                # at 0 degrees and at 45.
+                face_axis = face.geometry.axis
+                normal = reference.geometry.normal
+                alignment = abs(
+                    face_axis.x * normal.x
+                    + face_axis.y * normal.y
+                    + face_axis.z * normal.z
+                )
+                if alignment > 1.0 - _PARALLEL_TOLERANCE:
+                    raise _hints.Refusal(
+                        "INVALID_INPUT",
+                        f"plane '{plane}' is perpendicular to the face's axis: a "
+                        "tangent plane's angle is measured around that axis",
+                        hints=(
+                            "Pass a reference plane that contains the axis: for a Z "
+                            "cylinder that is yz or xz, not xy.",
+                            "Or pass point_one: the at-a-point form takes any face "
+                            "and no reference plane.",
+                        ),
+                    )
+                inp.setByTangent(
+                    face,
+                    adsk.core.ValueInput.createByString(f"{angle or 0} deg"),
+                    reference,
+                )
 
         plane_obj = planes.add(inp)
         return {"created": True, "name": plane_obj.name, "method": method}

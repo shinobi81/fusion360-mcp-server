@@ -30,7 +30,8 @@ from ._rules import (
     cam_target_refusal,
     cam_tool_refusal,
     components_differ_refusal,
-    construction_method_refusal,
+    construction_plane_name_refusal,
+    construction_plane_tangent_refusal,
     edge_selector_refusal,
     export_body_refusal,
     export_target_refusal,
@@ -1023,7 +1024,7 @@ def _add_dimension(p: dict) -> dict:
 
 
 def _create_construction_plane(p: dict) -> dict:
-    refusal = construction_method_refusal(p)
+    refusal = construction_plane_tangent_refusal(p)
     if refusal is None and p.get("method") == "three_points":
         # The add-in builds a Point3D per point on this branch only, so the points an
         # offset or midplane call leaves unset are not judged.
@@ -1036,6 +1037,28 @@ def _create_construction_plane(p: dict) -> dict:
         )
     if refusal is not None:
         return _refusal_error(refusal)
+    if p.get("method") == "tangent":
+        # The tangent branches name a body, and `_body_by_name` refuses an empty name
+        # before Fusion is asked - and *before* the plane is resolved, which is the
+        # handler's order too.  The same split the axis makes for its body branches.
+        refused = _body_name_required_error(p)
+        if refused is not None:
+            return refused
+    # Only the names the chosen branch resolves, in the handler's order: an unset one
+    # is refused by the add-in ('' and None alike) and a name belonging to another
+    # branch was never looked up.  A tangent call with a point never reads `plane` -
+    # the point form takes none - so asking here would invent a fault.
+    by_method: dict[str, tuple[str, ...]] = {
+        "offset": ("plane",),
+        "angle": ("plane",),
+        "midplane": ("plane_one", "plane_two"),
+        "tangent": () if p.get("point_one") is not None else ("plane",),
+    }
+    resolved = by_method.get(str(p.get("method")), ())
+    for field in resolved:
+        name_refusal = construction_plane_name_refusal(p.get(field))
+        if name_refusal is not None:
+            return _refusal_error(name_refusal)
     # The handler's keys, as for the axis: `plane_name` was never one of them.
     return {
         "created": True,

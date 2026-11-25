@@ -612,36 +612,96 @@ def rigid_group_size_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None
     )
 
 
-def construction_method_refusal(
-    params: Mapping[str, Any],
-) -> _hints.Refusal | None:
-    """The refusal a tangent construction plane earns, or None.
+#: The base construction planes, by the name a caller passes.  One table, read by the
+#: refusal below and by the handler's lookup, so a name cannot be accepted by one and
+#: refused by the other.
+_CONSTRUCTION_PLANES: frozenset[str] = frozenset({"xy", "yz", "xz"})
 
-    A tangent plane needs a face to be tangent to, and the tool has no face
-    parameter, so the call cannot be built.  The method stays in the schema for
-    wire compatibility, where ``execute_code`` is the route that works.
+
+def construction_plane_name_refusal(plane: Any) -> _hints.Refusal | None:
+    """The refusal an unusable ``plane`` name earns, or None when it is one of the 3.
+
+    ``_construction_plane`` resolved the name against a table and refused a miss itself,
+    which meant mock mode answered ``created: true`` for ``plane="zz"``: a value Fusion
+    is never asked about, because the add-in refuses it first.  A parameter the add-in
+    can refuse from the parameters alone belongs here, so both sides answer one
+    sentence.  A ``tangent`` call reaches it once its own shape rule has passed.
     """
-    if params.get("method") != "tangent":
+    if str(plane or "").lower() in _CONSTRUCTION_PLANES:
         return None
     return _hints.Refusal(
         "INVALID_INPUT",
-        "Tangent plane needs face selection—use execute_code",
-        hints=(
-            "create_construction_plane has no face parameter; build this plane "
-            "with execute_code.",
-        ),
+        f"Unknown plane {plane!r} — use xy, yz, or xz",
+        hints=("Pass xy, yz or xz; the plane is lowercased, so XZ works.",),
     )
+
+
+def construction_plane_tangent_refusal(
+    params: Mapping[str, Any],
+) -> _hints.Refusal | None:
+    """The refusal a ``tangent`` construction plane earns, or None when buildable.
+
+    Fusion ships **two** definitions behind the one advertised value, and the parameters
+    decide which runs: ``point_one`` selects ``setByTangentAtPoint(face, point)``,
+    otherwise ``angle`` (default 0, degrees) and ``plane`` select
+    ``setByTangent(face, angle, referencePlane)``, which is a cylinder's - measured on
+    2706.1.17: a cone is refused however the reference plane is chosen.
+    Judged from the parameters alone, so mock mode refuses exactly what the add-in
+    refuses and a caller learns the shape without a design - and so the one method that
+    was advertised and refused outright (one of two enum values a caller could send and
+    never satisfy) can finally be built.
+
+    ``face_index``'s *range* is not judged here: that needs the body, and the handler
+    names it against the body it resolved, as ``perpendicular_at_point`` does.
+    """
+    if params.get("method") != "tangent":
+        return None
+    point = params.get("point_one")
+    if point is not None and (params.get("plane") or params.get("angle") is not None):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            "A tangent plane is built one way: pass point_one, or angle and plane - "
+            "not both",
+            hints=(
+                "point_one builds the plane through that point.",
+                "angle and plane build it at an angle measured from a reference plane.",
+            ),
+        )
+    # Every absent argument in ONE sentence, so a shape-less call costs one retry and
+    # not one per argument.  ``body_name`` is deliberately absent from this list: an
+    # empty or missing one earns the shared "A body name is required" every other tool
+    # answers, so one fault keeps one sentence - the same split the axis rule makes.
+    # An empty string is not a plane: ``_construction_plane`` refuses it, so the rule
+    # does too rather than letting mock mode build one.
+    missing = []
+    if params.get("face_index") is None:
+        missing.append("face_index")
+    if point is None and not params.get("plane"):
+        missing.append("plane")
+    if missing:
+        joined = " and ".join(missing)
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"tangent needs {joined}",
+            hints=(
+                "list_faces reports every face's index and surface_type.",
+                "plane is xy, yz or xz, and angle defaults to 0 degrees.",
+            ),
+        )
+    if point is not None:
+        return point3d_refusal({"point_one": point})
+    return None
 
 
 def perpendicular_axis_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal a ``perpendicular_at_point`` axis earns, or None when buildable.
 
     Fusion's ``setByPerpendicularAtPoint(face, pointEntity)`` takes a B-Rep face, and
-    until this tool had ``face_index`` the method was advertised and refused outright
-    - one of two enum values a caller could send and never satisfy (`tangent` on
-    `create_construction_plane` still is). The three arguments
-    it needs are judged from the parameters alone, so mock mode refuses the same call
-    and names the same missing ones.
+    until this tool had ``face_index`` the method was advertised and refused outright.
+    Both enum values a caller could send and never satisfy are closed now: this one,
+    and ``create_construction_plane``'s ``tangent`` (with ``face_index`` too). The
+    three arguments it needs are judged from the parameters alone, so mock mode
+    refuses the same call and names the same missing ones.
     """
     if params.get("method") != "perpendicular_at_point":
         return None

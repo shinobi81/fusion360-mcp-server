@@ -213,7 +213,7 @@ _TOOL_ARGUMENT_COUNTS = {
     "add_constraint": 5,
     "auto_constrain": 2,
     "add_dimension": 5,
-    "create_construction_plane": 10,
+    "create_construction_plane": 12,
     "create_construction_axis": 8,
     "create_ucs": 7,
     "draw_spline": 4,

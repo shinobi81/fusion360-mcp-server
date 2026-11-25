@@ -16,7 +16,8 @@ from addon.server import hints as addon_hints
 from addon.server import rules
 from addon.server.cam_tool import build_tool_json
 from fusion360_mcp import _rules, mock
-from tests.fakes.bodies import FakeBody, body_with_edges
+from tests.fakes.bodies import FakeBody, FakeFace, body_with_edges
+from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
 
 #: Refused from the parameters alone, so no body is ever touched.
@@ -232,12 +233,21 @@ PARAMETER_REFUSALS = [
     ),
     (
         "create_construction_plane",
-        {"method": "tangent"},
+        # The tangent branches name a body, so an empty one is the shared refusal -
+        # the same sentence every other body-naming tool answers.
+        {"method": "tangent", "face_index": 0, "plane": "xy"},
         "INVALID_INPUT",
-        "Tangent plane needs face selection—use execute_code",
+        "A body name is required",
+        ("Pass a body name; get_scene_info lists the bodies in this design.",),
+    ),
+    (
+        "create_construction_plane",
+        {"method": "tangent", "body_name": "Body1"},
+        "INVALID_INPUT",
+        "tangent needs face_index and plane",
         (
-            "create_construction_plane has no face parameter; build this plane "
-            "with execute_code.",
+            "list_faces reports every face's index and surface_type.",
+            "plane is xy, yz or xz, and angle defaults to 0 degrees.",
         ),
     ),
     # The perpendicular branch takes a point too, and a short one is a refusal on both
@@ -398,7 +408,8 @@ PARAMETER_REFUSALS = [
         "joint_geometry",
         "as_built_geometry",
         "rigid_group_size",
-        "construction_method",
+        "tangent_plane_body_name",
+        "tangent_plane_face",
         "perpendicular_axis",
         "perpendicular_point",
         "body_name_required",
@@ -1064,3 +1075,164 @@ def test_the_handler_and_the_mock_refuse_an_unknown_stock_mode(bare_handler, mod
     assert refused["error_kind"] == raised.value.error_kind
     assert refused["error_message"] == str(raised.value)
     assert "from_solid" in " ".join(raised.value.hints)
+
+
+# ── the tangent construction plane ───────────────────────────────────────────
+#
+# Fusion ships two calls behind one advertised `tangent` value:
+# `setByTangent(face, angle, referencePlane)` for a cylindrical face at an angle -
+# measured: a cone is refused by every reference plane, whatever the docstring says -
+# and `setByTangentAtPoint(face, point)` for a plane through a point, on any face.
+# Which one runs is decided by the parameters, so mock mode can judge it without a
+# design.
+
+
+@pytest.mark.parametrize(
+    ("params", "message"),
+    [
+        # Every absent argument in one sentence, so a shape-less call is one retry.
+        (
+            {"method": "tangent", "body_name": "Body1"},
+            "tangent needs face_index and plane",
+        ),
+        # Both definitions at once: one plane, one way to define it.
+        (
+            {
+                "method": "tangent",
+                "body_name": "Body1",
+                "face_index": 1,
+                "point_one": [0.0, 0.0, 0.0],
+                "plane": "xy",
+            },
+            "is built one way",
+        ),
+        # An angle is measured from a plane, so the angle form has no zero without one.
+        (
+            {"method": "tangent", "body_name": "Body1", "face_index": 1},
+            "tangent needs plane",
+        ),
+    ],
+)
+def test_the_tangent_plane_refusal_names_what_is_missing(params, message):
+    refusal = rules.construction_plane_tangent_refusal(params)
+
+    assert refusal is not None, params
+    assert refusal.error_kind == "INVALID_INPUT"
+    assert message in str(refusal), str(refusal)
+    assert refusal.hints, "a refusal always ships with a next step"
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"method": "tangent", "body_name": "B", "face_index": 0, "plane": "xy"},
+        {
+            "method": "tangent",
+            "body_name": "B",
+            "face_index": 0,
+            "angle": 45,
+            "plane": "yz",
+        },
+        {
+            "method": "tangent",
+            "body_name": "B",
+            "face_index": 0,
+            "point_one": [1, 2, 3],
+        },
+        # Every other method is untouched by this rule.
+        {"method": "offset", "plane": "xy", "offset": 1.0},
+        {"method": "three_points"},
+    ],
+)
+def test_a_buildable_construction_plane_request_earns_no_refusal(params):
+    assert rules.construction_plane_tangent_refusal(params) is None
+
+
+def test_a_tangent_point_is_shape_checked_like_every_other_point():
+    refusal = rules.construction_plane_tangent_refusal(
+        {"method": "tangent", "body_name": "B", "face_index": 0, "point_one": [1, 2]}
+    )
+
+    assert refusal is not None
+    assert "point_one must be [x, y, z]" in str(refusal)
+
+
+def test_the_handler_and_the_mock_refuse_a_tangent_plane_alike(bare_handler):
+    """Judged before a design is read, so the sentinel handler is enough."""
+    params = {"method": "tangent", "body_name": "Body1"}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.create_construction_plane(**params)
+
+    refused = mock._create_construction_plane(params)
+
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+
+
+@pytest.mark.parametrize(
+    ("params", "message"),
+    [
+        # An empty string is not a plane, and `_construction_plane` refuses it.
+        (
+            {"method": "tangent", "body_name": "B", "face_index": 0, "plane": ""},
+            "tangent needs plane",
+        ),
+        # Nor is a name outside the three, on either side of the wire.
+        (
+            {"method": "tangent", "body_name": "B", "face_index": 0, "plane": "zz"},
+            "Unknown plane 'zz'",
+        ),
+        ({"method": "offset", "plane": ""}, "Unknown plane ''"),
+        # The lookup lowercases and does not strip, so neither does the rule: one
+        # table, one behaviour.
+        ({"method": "offset", "plane": " YZ "}, "Unknown plane ' YZ '"),
+    ],
+)
+def test_the_plane_name_is_judged_from_the_parameters(params, message):
+    """Mock answered `created: true` for `plane="zz"`: a value Fusion is never shown,
+    because the add-in refuses it first. The name is a parameter, so the table owns it
+    and both sides answer one sentence."""
+    if params["method"] == "tangent":
+        refusal = rules.construction_plane_tangent_refusal(params)
+        if refusal is None:
+            refusal = rules.construction_plane_name_refusal(params["plane"])
+    else:
+        refusal = rules.construction_plane_name_refusal(params["plane"])
+
+    assert refusal is not None, params
+    assert refusal.error_kind == "INVALID_INPUT"
+    assert message in str(refusal)
+
+    # And mock mode, which is the half a caller actually rehearses: the same sentence,
+    # from the same table, for the same call.
+    refused = mock._create_construction_plane(params)
+    assert refused["error_kind"] == refusal.error_kind
+    assert refused["error_message"] == str(refusal)
+
+
+def test_a_tangent_call_with_two_faults_orders_them_alike_on_both_sides(
+    bound_handler,
+):
+    """A bad plane name *and* a face that cannot take an angle.
+
+    Mock has no faces, so it can never judge the surface - which is why the handler
+    resolves the reference before the surface check. Both then name the plane, and a
+    caller rehearsing a two-fault call reads the same sentence in either mode.
+    """
+    body = FakeBody(name="Plate", faces=FakeCollection([FakeFace()]))
+    params = {"method": "tangent", "body_name": "Plate", "face_index": 0, "plane": "zz"}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bound_handler(FakeDesign(bodies=[body])).create_construction_plane(**params)
+
+    refused = mock._create_construction_plane(params)
+
+    assert "Unknown plane 'zz'" in str(raised.value)
+    assert refused["error_message"] == str(raised.value)
+
+
+@pytest.mark.parametrize("plane", ["xy", "yz", "xz", "XZ"])
+def test_a_plane_name_the_lookup_accepts_is_refused_by_neither_side(plane):
+    """The lookup lowercases, and the schema's enum is advisory for a socket caller."""
+    assert rules.construction_plane_name_refusal(plane) is None
