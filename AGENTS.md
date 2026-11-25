@@ -87,15 +87,19 @@ The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
   shared helpers while the hierarchy `CommandHandler` composes stays unchanged.
   `tests/test_addon_sources.py` enforces both halves, and `handler_base.py` says why.
 - Every tool has a mock handler, so `--mode mock` works without Fusion.
-- **Editing files from a script: assert the anchor matched.** A `str.replace` whose text
-  is not there returns the string unchanged and reports success, so a "fix" that changed
-  nothing reads exactly like one that worked — this cost a review round on #154. Assert
-  the old text is present before replacing it, and prefer line-based edits for anything
-  a formatter may have reflowed.
-- **This shell is Windows-native.** `python` here writes CRLF, so a heredoc `\n`
-  inside a Python literal becomes a real newline in the file — use a raw string
-  (`r'''…'''`) or join lines explicitly. Old text read back from a file
-  keeps its CRLF, so a pattern written with `\n` will not match.
+
+## Editing files
+
+- **Assert the anchor matched.** `str.replace` returns the string unchanged when the old
+  text is not there, so an edit that changed nothing exits zero and reads like one that
+  worked — that is how a round-1 fix on #154 was reported done without landing. Assert the
+  old text is present before replacing it, and prefer line-based edits for prose a
+  formatter may have rewrapped.
+- **A scripted write must pin the line ending.** A Python literal `\n` written in
+  text mode lands as CRLF here; `.gitattributes` (`eol=lf`) normalises the committed
+  blob, not your working copy, so pass `newline="\n"` as `scripts/sync_mirrors.py`
+  does. An anchor read through a path that keeps CRLF (`newline=""`, bytes, `sed`) then
+  will not match a `\n` pattern.
 
 ## Boundaries
 
@@ -296,6 +300,8 @@ say whether a feature did _something_, a render whether it did the _right_ thing
   `docs/TESTING.md`).
 - After any error, call `get_scene_info` to check whether the operation partially applied.
 - Logs are written to `~/fusion360mcp.log` by the add-in.
-- Do not spend a session annotating editor/LSP findings on `addon/`: both static gates
-  exclude the tree, so most of them are stale or keyed to another checkout. One `grep`
-  settles whether the name exists.
+- Do not spend a session annotating editor/LSP findings on `addon/`: the type gate and
+  the formatter exclude the tree (the linter still covers it — CI names the directory),
+  so most editor findings there are stale or keyed to another checkout. One `grep`
+  settles whether the name exists; a `F`/`B`/`SIM`/`RUF` failure from the lint gate is
+  real.
