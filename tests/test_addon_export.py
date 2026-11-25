@@ -730,7 +730,12 @@ class TestExportViewSheet:
 
         html = (tmp_path / "view_sheet.html").read_text(encoding="utf-8")
         assert html.count("<figure>") == 2, "one figure per view"
-        assert "data:image/png;base64," in html
+        # The payload the fake wrote, encoded - a prefix would be satisfied by an
+        # encoder that emitted the path, or an empty string.
+        payload = base64.b64encode(b"PNG" + bytes([400 % 256, 300 % 256])).decode(
+            "ascii"
+        )
+        assert f"data:image/png;base64,{payload}" in html
         # `html.escape(sheet_title)` runs twice - the <title> and the <h1> - so a count
         # is what notices either one being dropped.
         assert html.count("&lt;Plate&gt;") == 2, "the title is escaped in both places"
