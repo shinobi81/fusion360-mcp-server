@@ -281,7 +281,7 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    **closed (#149).** It needed a `BRepFace`, and the tool had no argument that could
    supply one: the method was advertised in the schema and refused by a rule, so it was
    one of two enum values a caller could send and never satisfy (the other,
-   `create_construction_plane`'s `tangent`, was closed by #<pr>). The tool takes
+   `create_construction_plane`'s `tangent`, was closed by #151). The tool takes
    `face_index` (with `body_name`) now, and the axis is built through
    `setByPerpendicularAtPoint(face, point)`, whose two arguments are the stub's.
 
