@@ -192,8 +192,8 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    changed the tag of the 88 with none; a rule that already answered with a kind kept
    it, even where the new taxonomy disagreed.
 
-   **The five that disagreed answer the taxonomy now**: the item named two, and the two
-   review rounds found three more.
+   **The five that disagreed answer the taxonomy now**: the item named two, and the review
+   rounds found three more.
 
    - the CAM `setup/operation not found` rule -> `NAME_NOT_FOUND`;
    - `no faces matched` -> `GEOMETRY_UNSUPPORTED`, and its twin `no edges matched
@@ -254,7 +254,9 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    `cam_generate_toolpath(operation_name=…)` raises its own typed `NAME_NOT_FOUND` for
    a search that finds nothing, while the lookup rule answered `INVALID_INPUT` for the
    same fault. One fault, one kind, whichever command met it - pinned by
-   `test_a_missing_cam_name_answers_one_kind_whichever_way_it_is_raised`.
+   `test_a_missing_cam_name_answers_one_kind_whichever_way_it_is_raised` for the
+   sentence, and by `test_a_missing_cam_name_reaches_the_caller_as_name_not_found` for
+   the two raise sites that produce it.
    `InternalValidationError` had already retagged to `FUSION_REFUSED` on the same
    grounds (measured on Fusion 2706.1.17: `2 : InternalValidationError …`).
 3. **`handler_cam` (65%) and `handler_export` (44%)** - measured after #141 - are the
