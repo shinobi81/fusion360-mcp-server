@@ -5,7 +5,7 @@ import base64
 import mcp.types as types
 import pytest
 
-from fusion360_mcp.hints import classify
+from fusion360_mcp.hints import Refusal, classify
 from fusion360_mcp.mock import _MUTATION_MOCKS, mock_command
 from fusion360_mcp.server import _format_result
 
@@ -119,14 +119,32 @@ class TestHintClassification:
                 "Unknown operation_type 'laser' — use milling/turning/cutting",
                 "INVALID_INPUT",
             ),
-            ("Setup 'Nope' not found", "INVALID_INPUT"),
-            ("Operation 'Rough1' not found in setup 'Setup1'", "INVALID_INPUT"),
+            # A name that does not exist is NAME_NOT_FOUND, not a bad argument:
+            # the rule's own hints already send the caller to cam_list_setups,
+            # which is NAME_NOT_FOUND's next move. A client that branches on the
+            # kind was told the wrong thing to do with it.
+            ("Setup 'Nope' not found", "NAME_NOT_FOUND"),
+            ("Operation 'Rough1' not found in setup 'Setup1'", "NAME_NOT_FOUND"),
         ],
     )
     def test_cam_lookup_and_enum_refusals_are_classified(self, msg, expected_kind):
         kind, hints = classify(msg)
         assert kind == expected_kind, f"'{msg}' classified as {kind}"
         assert hints, f"'{msg}' must ship with a next step"
+
+    def test_a_missing_cam_name_answers_one_kind_whichever_way_it_is_raised(self):
+        """`cam_generate_toolpath` raises a typed NAME_NOT_FOUND for its own
+        search; the lookup rule classifies the same sentence as a RuntimeError.
+        One fault, one kind — otherwise a client branches twice for one mistake.
+
+        The first assertion compares the *same* text both ways on purpose:
+        ``classify(Refusal(...))`` returns the literal it was handed, so asserting
+        only that would pass with no rule in the table at all.
+        """
+        typed = Refusal("NAME_NOT_FOUND", "Operation 'Rough1' not found in any setup")
+
+        assert classify(typed)[0] == classify(str(typed))[0] == "NAME_NOT_FOUND"
+        assert classify("Setup 'Nope' not found")[0] == "NAME_NOT_FOUND"
 
     def test_the_cam_rules_do_not_swallow_the_body_and_sketch_rules(self):
         """A body named after a sketch must still be BODY_NOT_FOUND.
@@ -136,6 +154,28 @@ class TestHintClassification:
         """
         assert classify("Body 'Sketch1' not found")[0] == "BODY_NOT_FOUND"
         assert classify("Sketch 'Body1' not found")[0] == "SKETCH_NOT_FOUND"
+
+    @pytest.mark.parametrize(
+        "msg",
+        [
+            "No faces matched selection 'top'",
+            "No faces matched 'bottom'",
+        ],
+    )
+    def test_no_face_in_that_plane_is_geometry_unsupported(self, msg):
+        """The selector is not mistyped — the body has no face in that plane.
+
+        That is the same class as a component with no sheet-metal rule, which
+        already answers GEOMETRY_UNSUPPORTED: the body does not have the geometry
+        the call needs. A mistyped selector has its own rule, so this message can
+        never be a parameter fault. Unchanged: the three hints that say which
+        faces the selector means and where the indices come from.
+        """
+        kind, hints = classify(msg)
+
+        assert kind == "GEOMETRY_UNSUPPORTED"
+        assert any("selected plane" in hint for hint in hints)
+        assert any("list_faces" in hint for hint in hints)
 
     @pytest.mark.parametrize(
         "msg",

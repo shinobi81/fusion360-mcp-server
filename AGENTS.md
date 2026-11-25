@@ -163,7 +163,8 @@ API.
 Six of these say what the caller's next move is:
 
 - `NAME_NOT_FOUND` — enumerate the design (`get_scene_info`, `list_components`), then retry
-  by name.
+  by name; for a CAM name, `cam_list_setups` then `cam_list_operations`, since no scene
+  call lists a setup.
 - `GEOMETRY_UNSUPPORTED` — pick a different face or edge; the body does not have that
   geometry.
 - `FUSION_REFUSED` — Fusion did not do what was asked: check the state, then retry or

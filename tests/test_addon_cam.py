@@ -1791,3 +1791,32 @@ def test_mock_and_the_handler_resolve_the_same_default_post_folder(handler_modul
     mock_reply = _mock_cam("cam_post_process", {"setup_name": "Setup1"})
 
     assert reply["output_folder"] == mock_reply["output_folder"]
+
+
+def test_a_missing_cam_name_reaches_the_caller_as_name_not_found(handler_module):
+    """Both CAM raise sites the NAME_NOT_FOUND rule exists for, driven for real.
+
+    Classifying a hand-written copy of the sentence proves only the copy: reword an
+    f-string and the rule stops matching, so the caller gets ``UNKNOWN`` with no
+    hints — the failure mode AGENTS.md forbids — while the suite stays green. These
+    two go through ``_find_setup`` and ``_find_operation`` instead, which is the
+    code that actually raises the text the rule matches.
+    """
+    cam = _cam(_setup_with_operations("Setup1", _operation("Rough1")))
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: cam
+
+    with pytest.raises(RuntimeError) as setup_missing:
+        handler.cam_list_operations("NoSuchSetup")
+    with pytest.raises(RuntimeError) as operation_missing:
+        handler.cam_get_operation_info("Setup1", "NoSuchOp")
+
+    # The wording is deliberately not pinned: the rule matches ``not found`` or
+    # ``does not exist``, so a pin on one spelling would fail on a rename the rule
+    # still accepts. The hint proves the rule fired rather than some other refusal —
+    # ``_KIND_HINTS`` also names ``cam_list_setups`` now, but only a ``Refusal``
+    # reaches it and both lookups raise a plain ``RuntimeError``.
+    for raised in (setup_missing, operation_missing):
+        kind, hints = addon_hints.classify(raised.value)
+        assert kind == "NAME_NOT_FOUND"
+        assert any("cam_list_setups" in hint for hint in hints), hints

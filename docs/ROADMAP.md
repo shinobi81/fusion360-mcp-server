@@ -188,22 +188,77 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    (`#134`), and `#143`'s caller-visible schema change - `cam_create_operation`'s
    strategy enum replaced with ten measured names and two new arguments (`body_name`,
    `face_indices`).
-2. **Retag the rules that already carry a kind** - deferred, and named here so the
-   inconsistency reads as a decision rather than an oversight. The work above changed the
-   tag of the 88 with none; a rule that already answered with a kind kept it, even where
-   the new taxonomy disagrees: the CAM `setup/operation not found` rule is still
-   `INVALID_INPUT`, and so is `no faces matched`. Those tags are what a client may
-   already branch on, so changing them is a client-visible change with its own evidence
-   and release note, not a ride-along. One new path is deliberately asymmetric:
-   `cam_generate_toolpath(operation_name=…)` answers `NAME_NOT_FOUND`, because its hint
-   names the list to enumerate, while the CAM `setup/operation not found` rule still
-   answers `INVALID_INPUT`; the two coexist because retagging that rule is the deferred
-   change above, and the new search raises its own typed refusal rather than that
-   message. One retag did ship with this work, because the rule's own hint already said
-   so: `InternalValidationError` used to answer `INVALID_INPUT` and now reports
-   `FUSION_REFUSED` (measured on Fusion 2706.1.17: `2 : InternalValidationError …`),
-   pinned by `test_an_internal_validation_error_is_a_fusion_refusal` in
-   `tests/test_feedback.py`.
+2. ~~**Retag the rules that already carry a kind**~~ - **closed (#150).** The work above
+   changed the tag of the 88 with none; a rule that already answered with a kind kept
+   it, even where the new taxonomy disagreed.
+
+   **The five that disagreed answer the taxonomy now**: the item named two, and the review
+   rounds found three more.
+
+   - the CAM `setup/operation not found` rule -> `NAME_NOT_FOUND`;
+   - `no faces matched` -> `GEOMETRY_UNSUPPORTED`, and its twin `no edges matched
+     selection` with it, which the first pass left behind: a domed body answered
+     `INVALID_INPUT` for `fillet(edge_selection="top")` and `GEOMETRY_UNSUPPORTED` for
+     `shell(face_selection="top")` - the same selector mechanism, the same fault;
+   - `has no edges to select from|has no edges that can be rounded` ->
+     `GEOMETRY_UNSUPPORTED`, because `_select_edges` already typed the *identical*
+     absence that way when it was reached through `points=`; the route taken decided
+     the answer;
+   - the `no usable parameter range` table rule, whose only raise site was already a
+     typed `GEOMETRY_UNSUPPORTED` `Refusal` - the table contradicted production from a
+     branch nothing reaches. A test had hidden that for a year: it classified the
+     add-on's `Refusal` with the *package mirror's* `classify`, two distinct classes,
+     so the `isinstance` check missed and the message was re-matched by regex into
+     `INVALID_INPUT`. `tests/test_addon_edge_selection.py` now calls
+     `addon_hints.classify`, and asserts the kind production actually answers.
+
+   No message and no per-rule hint moved: the tag is the only thing a client sees
+   differently, apart from one CAM clause added to `_KIND_HINTS['NAME_NOT_FOUND']` -
+   the fallback advice for a `Refusal` that carries none, which no current refusal
+   reaches - so the item asked for its own release note rather than a ride-along. Pins
+   flipped or added in five files - `tests/test_feedback.py`,
+   `tests/test_addon_face_selection.py`, `tests/test_addon_feature_edits.py`,
+   `tests/test_addon_edge_selection.py`, `tests/test_addon_cam.py` - and one docstring's
+   reasoning went with them (it argued for `INVALID_INPUT` on the grounds that the body
+   was found and the *selector* did not apply; the tie-break is that the selector was
+   applied correctly and the body has no such face, which is geometry, not a
+   parameter).
+
+   **The remaining judgement calls, named one by one so the boundary is a decision.**
+   The criterion is AGENTS.md's: `GEOMETRY_UNSUPPORTED` means "pick a different face or
+   edge; the body does not have that geometry". These stay `INVALID_INPUT` for reasons
+   rather than inertia:
+
+   - `geometry's … axis is zero-length` - a degenerate face wants a different face, in
+     the taxonomy's own words; it is deferred because a joint-geometry refusal wants
+     its own evidence and its own release-note line, not one more ride-along tag.
+   - `not cylindrical` and `invalid free edge` - the entity exists and lacks a
+     property, so the argument/geometry line is genuinely ambiguous.
+   - `no edge within … cm of`, `equally close to edges`, and the index rules - the
+     point or the index was wrong, which is an unusable argument.
+   - `no intersecting target body|NO_TARGET_SWEEP_BODY` - the fix is moving the
+     profile, again an argument.
+   - `fillet_no_edge_found|no fillet edge found` - Fusion's own refusal when nothing
+     among those given can be rounded, and a near-twin of the `has no edges that can be
+     rounded` rule this item retagged. Left alone because Fusion blames the radius (its
+     hint says "use a smaller radius"), which is an argument — but the two now answer
+     differently for one body, and that is recorded rather than argued away.
+   - the point rule's `has no edges, so no point` alternative - production types that
+     sentence `GEOMETRY_UNSUPPORTED` at the raise site while the table answers
+     `INVALID_INPUT`, so the table and the typed answer disagree. Nothing raises it
+     untyped today, which is why nothing breaks; splitting the alternation into its own
+     rule is a pattern change, not a kind change, which is why it is here and not in
+     this PR.
+
+   The `NAME_NOT_FOUND` tag ends an asymmetry the item recorded rather than lost:
+   `cam_generate_toolpath(operation_name=…)` raises its own typed `NAME_NOT_FOUND` for
+   a search that finds nothing, while the lookup rule answered `INVALID_INPUT` for the
+   same fault. One fault, one kind, whichever command met it - pinned by
+   `test_a_missing_cam_name_answers_one_kind_whichever_way_it_is_raised` for the
+   sentence, and by `test_a_missing_cam_name_reaches_the_caller_as_name_not_found` for
+   the two raise sites that produce it.
+   `InternalValidationError` had already retagged to `FUSION_REFUSED` on the same
+   grounds (measured on Fusion 2706.1.17: `2 : InternalValidationError …`).
 3. **`handler_cam` (65%) and `handler_export` (44%)** - measured after #141 - are the
    two modules the coverage parcels above left where they were. The refusal work
    drove their refusal paths (that is the 23% -> 44% on `handler_export`: its refusals

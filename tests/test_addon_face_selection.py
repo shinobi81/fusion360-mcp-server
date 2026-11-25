@@ -187,7 +187,7 @@ def test_a_body_with_no_flat_top_refuses_and_says_where_it_lost(bound_handler):
         handler._select_faces(body, "top")
 
     kind, hints = classify(raised.value)
-    assert kind == "INVALID_INPUT"
+    assert kind == "GEOMETRY_UNSUPPORTED"
     assert any("flat plane" in hint for hint in hints), hints
 
 

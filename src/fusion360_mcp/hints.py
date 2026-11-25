@@ -151,8 +151,13 @@ _RULES: list[tuple[str, str, list[str]]] = [
     (
         # Our CAM lookups quote the name they could not find.  Anchored on the
         # quoted name so the BODY/SKETCH rules above keep their own wording.
+        # The kind is NAME_NOT_FOUND, not INVALID_INPUT: nothing about the call is
+        # unusable — the name does not exist — and the hint below already names the
+        # enumeration that answers it.  ``cam_generate_toolpath`` raises a typed
+        # NAME_NOT_FOUND for its own search of the same fault, so one mistake used
+        # to answer two ways depending on which command met it.
         r"(?:setup|operation)\s+['\"][^'\"]*['\"]\s+(?:not found|does not exist)",
-        "INVALID_INPUT",
+        "NAME_NOT_FOUND",
         [
             "No CAM setup or operation in this design has that name.",
             "cam_list_setups (then cam_list_operations) lists the real names.",
@@ -218,9 +223,12 @@ _RULES: list[tuple[str, str, list[str]]] = [
     (
         # A body whose edges all reported a dead parameter range cannot be probed
         # by point.  Without a rule this classified as UNKNOWN with no hints — the
-        # failure mode AGENTS.md says must never ship.
+        # failure mode AGENTS.md says must never ship.  The kind is the one the raise
+        # site already types it with (`_hints.Refusal("GEOMETRY_UNSUPPORTED", ...)` in
+        # `_edges_by_points`), so the table now agrees with production instead of
+        # contradicting it from a rule nothing reaches.
         r"no usable parameter range",
-        "INVALID_INPUT",
+        "GEOMETRY_UNSUPPORTED",
         [
             "No edge on that body could be measured; nothing was written.",
             "Call list_edges and choose with edge_indices instead.",
@@ -251,9 +259,12 @@ _RULES: list[tuple[str, str, list[str]]] = [
     ),
     (
         # The face selectors mean "the faces lying in the top/bottom PLANE", so a
-        # body whose top is a curved surface has none there.
+        # body whose top is a curved surface has none there.  That is the body's
+        # geometry, not a mistyped selector - the selector's own enum is refused by
+        # its own rule below - so the kind says which move the caller has:
+        # a different face, not a different argument.
         r"no faces matched",
-        "INVALID_INPUT",
+        "GEOMETRY_UNSUPPORTED",
         [
             "No face of that body lies in the selected plane; nothing was written.",
             "top and bottom take the faces in the highest or lowest flat plane.",
@@ -286,9 +297,12 @@ _RULES: list[tuple[str, str, list[str]]] = [
     (
         # Two causes, two messages, and the hint has to fit both: a body with no
         # edges has nothing to list, so pointing such a caller at list_edges would
-        # send them to an empty answer.
+        # send them to an empty answer.  The kind is GEOMETRY_UNSUPPORTED because the
+        # caller did nothing wrong - `all` is a valid selector - and the same
+        # `_select_edges` types the identical absence as GEOMETRY_UNSUPPORTED when it
+        # is reached through `points=`, so the route taken decided the answer.
         r"has no edges to select from|has no edges that can be rounded",
-        "INVALID_INPUT",
+        "GEOMETRY_UNSUPPORTED",
         [
             "That body has nothing a fillet can round; nothing was written.",
             "A degenerate edge (a cone's apex) has no geometry.",
@@ -299,9 +313,13 @@ _RULES: list[tuple[str, str, list[str]]] = [
         # The coarse selectors take the highest / lowest plane that holds an
         # *edge*.  Nothing matching is a real answer — a body whose top is a
         # curved surface has no edge in a top plane — and live it classified as
-        # UNKNOWN with no hints, which AGENTS.md says must never ship.
+        # UNKNOWN with no hints, which AGENTS.md says must never ship.  The kind is
+        # the face rule's above, because it is the same fault met by the other
+        # selector: the body lacks the geometry, so the move that works is another
+        # edge.  AGENTS.md spells GEOMETRY_UNSUPPORTED as "pick a different face or
+        # edge" for exactly this.
         r"no edges matched selection",
-        "INVALID_INPUT",
+        "GEOMETRY_UNSUPPORTED",
         [
             "No edge of that body lies in the selected plane; nothing was written.",
             "top and bottom take the highest/lowest edges a body has.",
@@ -634,6 +652,9 @@ _KIND_HINTS: dict[str, tuple[str, ...]] = {
         "The name does not exist in the active design.",
         "Enumerate with get_scene_info or list_components, then retry with a name "
         "from that list.",
+        # A CAM setup is not in the scene, so the two generic calls above cannot list
+        # one. AGENTS.md says the same; this keeps the two documents in step.
+        "For a CAM name, cam_list_setups then cam_list_operations.",
     ),
     "GEOMETRY_UNSUPPORTED": (
         "The body does not have the geometry this call needs.",

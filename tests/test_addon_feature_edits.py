@@ -282,12 +282,13 @@ def test_offset_faces_takes_the_indices_over_the_selection(plate):
 
 
 def test_offset_faces_with_no_face_in_the_top_plane_is_refused(bound_handler):
-    """A body found, a selector that matched nothing: INVALID_INPUT, not a body.
+    """A body found, a selector that matched nothing: GEOMETRY_UNSUPPORTED.
 
-    The brief for this task expected BODY_NOT_FOUND here.  That is not what the
-    add-in answers: ``_select_faces`` raises "No faces matched selection" before
-    any feature is built, and the hints table classifies that as INVALID_INPUT -
-    the body was found, it is the *selector* that does not apply to it.
+    Not BODY_NOT_FOUND - the body was found.  And not INVALID_INPUT either, which
+    is where this answered until the taxonomy caught up: nothing about the call's
+    arguments is unusable, the body simply has no face in the top plane.  That is
+    the same answer a component with no sheet-metal rule gets, and it tells the
+    caller the move that works is a different face, not a different argument.
     """
     wall = (1.0, 0.0, 0.0)
     body = FakeBody("Bracket", faces=FakeCollection([face(0.0, 2.0, wall)]))
@@ -296,7 +297,7 @@ def test_offset_faces_with_no_face_in_the_top_plane_is_refused(bound_handler):
     with pytest.raises(RuntimeError) as raised:
         handler.offset_faces("Bracket", distance=0.5, face_selection="top")
 
-    assert classify(raised.value)[0] == "INVALID_INPUT"
+    assert classify(raised.value)[0] == "GEOMETRY_UNSUPPORTED"
     assert handler._root().features.offsetFeatures.added == []
 
 
@@ -360,6 +361,10 @@ def test_move_body_hands_fusion_one_body_and_a_translation(plate):
     inp = root.features.moveFeatures.added[0]
     assert [body.name for body in inp.inputEntities] == ["Bracket"]
     assert isinstance(inp.transform, FakeMatrix3D)
+    # ``translation`` is None until a setTo* call fills it, so this is the assertion
+    # that the matrix carries an offset at all - and it is what lets the read below
+    # be typed rather than guard-and-hope.
+    assert inp.transform.translation is not None
     assert inp.transform.translation.coords() == (1.0, 2.0, 3.0)
     assert result["translation"] == [1.0, 2.0, 3.0]
     assert result["feature_name"] == root.features.moveFeatures.created[0].name

@@ -196,8 +196,10 @@ def test_the_no_match_refusal_is_classified_and_names_the_next_step(select):
     with pytest.raises(RuntimeError) as raised:
         select([((0, 0, 0), (0, 0, 5))], "top")
     kind, hints = classify(raised.value)
-    assert kind == "INVALID_INPUT"
-    assert any("list_edges" in hint for hint in hints), hints
+    assert kind == "GEOMETRY_UNSUPPORTED"
+    # "list_edges" appears in six rules' hints, so it cannot prove *this* one fired;
+    # "highest/lowest edges" is unique to it.
+    assert any("highest/lowest edges" in hint for hint in hints), hints
 
 
 def test_planes_closer_than_the_epsilon_are_one_plane(bound_handler):
@@ -290,6 +292,10 @@ def test_an_edge_whose_sample_is_at_the_top_but_sags_is_not_top(bound_handler):
     with pytest.raises(RuntimeError) as raised:
         alone._select_edges(only, "top")
     assert "No edges matched" in str(raised.value)
+    # The same answer the face selector gives for the same fault: the body has no
+    # edge in that plane, so the move that works is a different edge, not a
+    # different argument. One fault, one kind, whichever selector met it.
+    assert classify(raised.value)[0] == "GEOMETRY_UNSUPPORTED"
 
     floor = FakeEdge((0.0, 0.0, 0.0), (2.0, 0.0, 0.0), index=1)
     body = FakeBody("Domed", edges=FakeEdges([sagging, floor]))
@@ -356,7 +362,7 @@ def test_a_body_whose_every_edge_is_degenerate_says_so(bound_handler):
     with pytest.raises(RuntimeError) as raised:
         handler._select_edges(body, "all")
     assert "no edges that can be rounded" in str(raised.value)
-    assert classify(raised.value)[0] == "INVALID_INPUT"
+    assert classify(raised.value)[0] == "GEOMETRY_UNSUPPORTED"
 
 
 def test_a_closed_edge_whose_ends_coincide_is_not_vertical(bound_handler):
@@ -396,9 +402,9 @@ def test_a_body_with_no_edges_refuses_rather_than_selecting_nothing(select):
     assert "has no edges to select from" in str(raised.value)
     assert "No edges matched" not in str(raised.value)
     kind, hints = classify(raised.value)
-    assert kind == "INVALID_INPUT"
-    # The kind alone cannot prove *this* rule fired — the generic INVALID_INPUT
-    # rule gives the same kind, so the hint text is the assertion.
+    assert kind == "GEOMETRY_UNSUPPORTED"
+    # The kind proves this rule fired — the generic rule gives INVALID_INPUT — but the
+    # hint pins the *wording*, which is what a future reword of the message would move.
     assert any("nothing a fillet can round" in hint for hint in hints), hints
 
 
@@ -855,7 +861,18 @@ def test_a_body_whose_edges_have_no_usable_range_says_that_not_no_edges(bound_ha
     message = str(raised.value)
     assert "no usable parameter range" in message
     assert "has no edges" not in message
-    assert classify(raised.value)[0] == "INVALID_INPUT"
+    # The add-on's own classify, not the package mirror's: this raises an
+    # `addon.server.hints.Refusal`, and the mirror's is a different class, so its
+    # `isinstance` check misses and the message is re-matched by regex instead —
+    # which reported INVALID_INPUT for a refusal typed GEOMETRY_UNSUPPORTED.
+    assert addon_hints.classify(raised.value)[0] == "GEOMETRY_UNSUPPORTED"
+    # The table rule too, not only the raise site: the kind above comes from the
+    # Refusal, so it would stay green with the rule reverted. Nothing in production
+    # raises this sentence untyped - this assertion is what keeps the table's answer
+    # from drifting back to INVALID_INPUT, where it contradicted the raise site.
+    kind, rule_hints = addon_hints.classify(message)
+    assert kind == "GEOMETRY_UNSUPPORTED"
+    assert any("No edge on that body could be measured" in h for h in rule_hints)
 
 
 def test_an_edge_that_reports_a_failed_extent_is_skipped(bound_handler):

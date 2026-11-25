@@ -162,6 +162,24 @@ def test_a_refusal_with_no_matching_rule_takes_its_kind_default():
     assert "inf, -inf and nan" not in " ".join(hints)
 
 
+def test_the_name_not_found_fallback_names_the_cam_enumeration():
+    """A CAM name is not in the scene, so the generic advice cannot list it.
+
+    No current refusal reaches this entry - every ``Refusal("NAME_NOT_FOUND", ...)``
+    in ``addon/server`` passes hints of its own, and ``_hints_for`` returns those
+    first - so this pins the data rather than a behaviour. It is pinned because
+    ``AGENTS.md`` states the same next move, and two documents that must agree are
+    exactly the pair that drifts.
+    """
+    kind, hints = addon_hints.classify(
+        addon_hints.Refusal("NAME_NOT_FOUND", "nothing in the table reads like this")
+    )
+
+    assert kind == "NAME_NOT_FOUND"
+    assert hints == list(addon_hints._KIND_HINTS["NAME_NOT_FOUND"])
+    assert any("cam_list_setups" in hint for hint in hints)
+
+
 @pytest.mark.parametrize(
     ("message", "kind"),
     [
