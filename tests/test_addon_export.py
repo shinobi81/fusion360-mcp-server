@@ -232,6 +232,10 @@ class _LegacyEmptyImport:
 
     ``add`` is absent rather than raising, because that is the build this models: the
     handler's ``except AttributeError`` is what takes it to the legacy call.
+
+    The ``addByFile`` arity is the *handler's* assumption about a pre-2025 build, not a
+    measurement - no installed stub declares the name at all - so this pins that the
+    fallback does not crash, and nothing more.
     """
 
     def addByFile(self, file_path, units):

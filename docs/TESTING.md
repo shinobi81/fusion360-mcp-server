@@ -32,8 +32,8 @@ recorded there. The floor is **two gates**, because one number cannot hold two v
 different populations:
 
 - **59** for the whole suite, which now measures `src/fusion360_mcp` **and**
-  `addon/server`. The add-in's CAM paths only run inside Fusion, and they account for
-  almost all of the uncovered statements left.
+  `addon/server`. The CAM paths still uncovered only run inside Fusion, and they
+  account for almost all of the statements left.
   (The export family *is* covered offline, by `tests/test_addon_export.py`: body
   STL/STEP and f3d against a fake export manager, both default output paths, and —
   once the fake runtime gained `adsk.core.CameraTypes` and the test module grew a
