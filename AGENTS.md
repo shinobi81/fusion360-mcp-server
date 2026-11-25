@@ -88,18 +88,20 @@ The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
   `tests/test_addon_sources.py` enforces both halves, and `handler_base.py` says why.
 - Every tool has a mock handler, so `--mode mock` works without Fusion.
 
-## Editing files
+## Scripted edits
 
-- **Assert the anchor matched.** `str.replace` returns the string unchanged when the old
-  text is not there, so an edit that changed nothing exits zero and reads like one that
-  worked — that is how a round-1 fix on #154 was reported done without landing. Assert the
-  old text is present before replacing it, and prefer line-based edits for prose a
-  formatter may have rewrapped.
-- **A scripted write must pin the line ending.** A Python literal `\n` written in
-  text mode lands as CRLF here; `.gitattributes` (`eol=lf`) normalises the committed
-  blob, not your working copy, so pass `newline="\n"` as `scripts/sync_mirrors.py`
-  does. An anchor read through a path that keeps CRLF (`newline=""`, bytes, `sed`) then
-  will not match a `\n` pattern.
+- **Assert the anchor matched, and that it matches once.** `str.replace` returns the
+  string unchanged when the old text is absent, so an edit that changed nothing exits
+  zero and reads like one that worked - which is how a fix on #154 passed a review
+  without landing. `assert text.count(old) == 1` first; a second copy would be
+  rewritten too. Prefer line-based edits for prose: it is wrapped by hand at 88
+  columns, so an edit above the anchor moves the wrap.
+- **Set the line ending explicitly.** `.gitattributes` puts tracked files on `eol=lf`
+  (`*.ps1`, `*.bat`, `*.cmd` are CRLF on purpose), and on Windows a Python literal `\n`
+  written in text mode reaches the working tree as CRLF while the blob stays LF. Pass
+  `newline="\n"` - `newline="\r\n"` for those three suffixes - as
+  `scripts/sync_mirrors.py` does. An anchor read back through `newline=""`, bytes or
+  `sed` keeps its CRLF, so read it with `read_text()`.
 
 ## Boundaries
 
@@ -118,7 +120,9 @@ The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
 - Never call `close()` on the active Fusion document from `execute_code` — it crashed
   Fusion 2705.
 - Do not "fix" `addon/` type errors by adding ignores; `adsk` cannot resolve outside
-  Fusion and the directory is excluded on purpose.
+  Fusion and the directory is excluded on purpose. Editor findings there are mostly
+  noise for the same reason: the type gate and the formatter skip the tree, while
+  `ruff check` still covers it and a failure from it is real.
 - Do not edit `build/`, `.venv/`, or `uv.lock` by hand (`uv lock` regenerates it).
 
 ## Merging
@@ -300,8 +304,3 @@ say whether a feature did _something_, a render whether it did the _right_ thing
   `docs/TESTING.md`).
 - After any error, call `get_scene_info` to check whether the operation partially applied.
 - Logs are written to `~/fusion360mcp.log` by the add-in.
-- Do not spend a session annotating editor/LSP findings on `addon/`: the type gate and
-  the formatter exclude the tree (the linter still covers it — CI names the directory),
-  so most editor findings there are stale or keyed to another checkout. One `grep`
-  settles whether the name exists; a `F`/`B`/`SIM`/`RUF` failure from the lint gate is
-  real.
