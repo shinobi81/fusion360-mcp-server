@@ -28,7 +28,7 @@ from addon.server import hints as addon_hints
 from tests.fakes.bodies import FakeBody, FakeFace, body_with_edges
 from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
-from tests.fakes.runtime import CONE_SURFACE_TYPE, FakePoint3D
+from tests.fakes.runtime import CONE_SURFACE_TYPE, FakePoint3D, FakeVector3D
 from tests.fakes.sketch import FakeAutoConstrainResult, FakeSketch
 
 
@@ -366,6 +366,43 @@ def _cone_face():
     cone = FakeFace(planar=False, radius=1.0)
     cone.geometry.surfaceType = CONE_SURFACE_TYPE
     return cone
+
+
+def test_a_tangent_plane_without_an_angle_measures_from_zero(bound_handler):
+    """The documented default, pinned: no ``angle`` sends ``"0 deg"``.
+
+    Without it, dropping the default would send `"None deg"` for the most likely call
+    a user makes - a tangent plane flush with the reference - and the suite would stay
+    green.
+    """
+    body = FakeBody(
+        name="Shaft",
+        faces=FakeCollection([FakeFace(planar=False, radius=1.0)]),
+    )
+    design = FakeDesign(features=2, bodies=[body])
+
+    bound_handler(design).create_construction_plane(
+        method="tangent", body_name="Shaft", face_index=0, plane="xz"
+    )
+
+    angle = design.rootComponent.constructionPlanes.last_input.args[1]
+    assert (angle.kind, angle.value) == ("string", "0 deg")
+
+
+def test_a_tangent_plane_reads_a_negative_axis_as_parallel_too(bound_handler):
+    """The comparison is on ``abs(dot)``: a face whose axis points -Z is the same
+    failure, and only a signed comparison would let it through."""
+    face = FakeFace(planar=False, radius=1.0)
+    face.geometry.axis = FakeVector3D(0.0, 0.0, -1.0)
+    body = FakeBody(name="Shaft", faces=FakeCollection([face]))
+    design = FakeDesign(features=2, bodies=[body])
+
+    with pytest.raises(RuntimeError) as raised:
+        bound_handler(design).create_construction_plane(
+            method="tangent", body_name="Shaft", face_index=0, plane="xy"
+        )
+
+    assert "perpendicular to the face's axis" in str(raised.value)
 
 
 def test_a_tangent_plane_at_an_angle_refuses_a_cone(bound_handler):

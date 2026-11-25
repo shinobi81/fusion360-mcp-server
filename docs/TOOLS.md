@@ -175,10 +175,13 @@ Fusion ships two definitions behind the one value, and the arguments decide whic
   to 0, and `plane` is the reference it is measured from and is required, because an
   angle has no zero without one.
 
-  Two measured constraints, both refused here rather than passed to Fusion:
+  Two measured constraints. The first is refused here, before Fusion sees the call; the
+  second is refused here too, because Fusion's own answer names nothing:
 
-  - the reference plane must **contain the face's axis** — the angle is measured around
-    it, so `xy` on a Z cylinder fails while `yz` and `xz` build.
+  - a reference plane whose **normal is parallel to the face's axis** is refused —
+    `xy` on a Z cylinder fails in Fusion, `yz` and `xz` build, at 0° and at 45°. The
+    angle is measured *around* the axis. A face whose axis is oblique is not judged:
+    the call goes to Fusion, which answers `FUSION_REFUSED` if it cannot build it.
   - the face must be a **cylinder**. The binding's docstring says "cylindrical or
     conical", and measured on 2706.1.17 a cone is refused whichever reference plane is
     used; the route that works for a cone is `point_one` below.

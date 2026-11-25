@@ -632,9 +632,7 @@ def construction_plane_tangent_refusal(
     if params.get("method") != "tangent":
         return None
     point = params.get("point_one")
-    if point is not None and (
-        params.get("plane") is not None or params.get("angle") is not None
-    ):
+    if point is not None and (params.get("plane") or params.get("angle") is not None):
         return _hints.Refusal(
             "INVALID_INPUT",
             "A tangent plane is built one way: pass point_one, or angle and plane - "
@@ -644,22 +642,26 @@ def construction_plane_tangent_refusal(
                 "angle and plane build it at an angle measured from a reference plane.",
             ),
         )
-    # The face first: a reference plane with no face to be tangent to names nothing.
+    # Every absent argument in ONE sentence, so a shape-less call costs one retry and
+    # not one per argument.  ``body_name`` is deliberately absent from this list: an
+    # empty or missing one earns the shared "A body name is required" every other tool
+    # answers, so one fault keeps one sentence - the same split the axis rule makes.
+    # An empty string is not a plane: ``_construction_plane`` refuses it, so the rule
+    # does too rather than letting mock mode build one.
+    missing = []
     if params.get("face_index") is None:
+        missing.append("face_index")
+    if point is None and not params.get("plane"):
+        missing.append("plane")
+    if missing:
+        joined = " and ".join(missing)
         return _hints.Refusal(
             "INVALID_INPUT",
-            "tangent needs face_index and body_name: the face the plane is tangent to",
+            f"tangent needs {joined}",
             hints=(
                 "list_faces reports every face's index and surface_type.",
-                "body_name names the body that face belongs to.",
+                "plane is xy, yz or xz, and angle defaults to 0 degrees.",
             ),
-        )
-    if point is None and params.get("plane") is None:
-        return _hints.Refusal(
-            "INVALID_INPUT",
-            "A tangent plane at an angle needs plane: the reference the angle is "
-            "measured from",
-            hints=("plane is xy, yz or xz, and angle defaults to 0 degrees.",),
         )
     if point is not None:
         return point3d_refusal({"point_one": point})
@@ -670,11 +672,11 @@ def perpendicular_axis_refusal(params: Mapping[str, Any]) -> _hints.Refusal | No
     """The refusal a ``perpendicular_at_point`` axis earns, or None when buildable.
 
     Fusion's ``setByPerpendicularAtPoint(face, pointEntity)`` takes a B-Rep face, and
-    until this tool had ``face_index`` the method was advertised and refused outright
-    - one of two enum values a caller could send and never satisfy (`tangent` on
-    `create_construction_plane` still is). The three arguments
-    it needs are judged from the parameters alone, so mock mode refuses the same call
-    and names the same missing ones.
+    until this tool had ``face_index`` the method was advertised and refused outright.
+    Both enum values a caller could send and never satisfy are closed now: this one,
+    and ``create_construction_plane``'s ``tangent`` (with ``face_index`` too). The
+    three arguments it needs are judged from the parameters alone, so mock mode
+    refuses the same call and names the same missing ones.
     """
     if params.get("method") != "perpendicular_at_point":
         return None

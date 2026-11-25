@@ -24,6 +24,12 @@ def _vector(v) -> list:
 #: joint frame and far above floating-point noise on a unit vector.
 _DEGENERATE_AXIS_SQUARED = 1e-12
 
+#: How close to parallel counts as parallel for two unit vectors: ~0.08 degrees, so a
+#: reference plane Fusion would refuse is caught and no buildable one is.  Both vectors
+#: are unit by contract - ``Cylinder.axis`` and ``Plane.normal`` - which the live probe
+#: corroborates: a non-unit axis would have refused the planes that do build.
+_PARALLEL_TOLERANCE = 1e-6
+
 
 def _is_zero(vector) -> bool:
     """Whether *vector* is too short to define a direction."""
@@ -244,7 +250,7 @@ class AssemblyCommands(_Contract):
                     + face_axis.y * normal.y
                     + face_axis.z * normal.z
                 )
-                if alignment > 1.0 - 1e-6:
+                if alignment > 1.0 - _PARALLEL_TOLERANCE:
                     raise _hints.Refusal(
                         "INVALID_INPUT",
                         f"plane '{plane}' is perpendicular to the face's axis: a "

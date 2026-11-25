@@ -1036,6 +1036,13 @@ def _create_construction_plane(p: dict) -> dict:
         )
     if refusal is not None:
         return _refusal_error(refusal)
+    if p.get("method") == "tangent":
+        # The tangent branches name a body, and `_body_by_name` refuses an empty name
+        # before Fusion is asked: without this, mock reported a plane the add-in would
+        # have refused.  The same split the axis makes for its body-naming branches.
+        refused = _body_name_required_error(p)
+        if refused is not None:
+            return refused
     # The handler's keys, as for the axis: `plane_name` was never one of them.
     return {
         "created": True,

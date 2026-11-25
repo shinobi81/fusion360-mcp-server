@@ -1292,9 +1292,9 @@ TOOLS: list[dict] = [
             "minimum": 0,
             "description": (
                 "Face the plane is tangent to (for tangent): list_faces reports the "
-                "indices. The at-a-angle form needs a cylindrical or conical face; "
-                "passing point_one instead builds the plane through that point, on "
-                "any face"
+                "indices. The at-a-angle form needs a cylindrical face, and a "
+                "reference plane that contains its axis; passing point_one instead "
+                "builds the plane through that point, on any face including a cone"
             ),
         },
     ),

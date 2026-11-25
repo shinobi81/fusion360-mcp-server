@@ -367,8 +367,9 @@ def _surface_types() -> types.SimpleNamespace:
     return types.SimpleNamespace(
         PlaneSurfaceType=PLANE_SURFACE_TYPE,
         CylinderSurfaceType=CYLINDER_SURFACE_TYPE,
-        # A cone is what the tangent-plane rule accepts beside a cylinder, so the
-        # fake declares it rather than letting `getattr` hide its absence.
+        # A cone is the surface a tangent plane's at-a-point form is measured on,
+        # and the one the angle form must refuse, so the fake declares it rather
+        # than letting `getattr` hide its absence.
         ConeSurfaceType=CONE_SURFACE_TYPE,
     )
 

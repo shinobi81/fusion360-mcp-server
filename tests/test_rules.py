@@ -232,12 +232,21 @@ PARAMETER_REFUSALS = [
     ),
     (
         "create_construction_plane",
+        # The tangent branches name a body, so an empty one is the shared refusal -
+        # the same sentence every other body-naming tool answers.
+        {"method": "tangent", "face_index": 0, "plane": "xy"},
+        "INVALID_INPUT",
+        "A body name is required",
+        ("Pass a body name; get_scene_info lists the bodies in this design.",),
+    ),
+    (
+        "create_construction_plane",
         {"method": "tangent", "body_name": "Body1"},
         "INVALID_INPUT",
-        "tangent needs face_index and body_name: the face the plane is tangent to",
+        "tangent needs face_index and plane",
         (
             "list_faces reports every face's index and surface_type.",
-            "body_name names the body that face belongs to.",
+            "plane is xy, yz or xz, and angle defaults to 0 degrees.",
         ),
     ),
     # The perpendicular branch takes a point too, and a short one is a refusal on both
@@ -398,6 +407,7 @@ PARAMETER_REFUSALS = [
         "joint_geometry",
         "as_built_geometry",
         "rigid_group_size",
+        "tangent_plane_body_name",
         "tangent_plane_face",
         "perpendicular_axis",
         "perpendicular_point",
@@ -1069,18 +1079,20 @@ def test_the_handler_and_the_mock_refuse_an_unknown_stock_mode(bare_handler, mod
 # ── the tangent construction plane ───────────────────────────────────────────
 #
 # Fusion ships two calls behind one advertised `tangent` value:
-# `setByTangent(face, angle, referencePlane)` for a cylindrical or conical face at an
-# angle, and `setByTangentAtPoint(face, point)` for a plane through a point.  Which one
-# runs is decided by the parameters, so mock mode can judge it without a design.
+# `setByTangent(face, angle, referencePlane)` for a cylindrical face at an angle -
+# measured: a cone is refused by every reference plane, whatever the docstring says -
+# and `setByTangentAtPoint(face, point)` for a plane through a point, on any face.
+# Which one runs is decided by the parameters, so mock mode can judge it without a
+# design.
 
 
 @pytest.mark.parametrize(
     ("params", "message"),
     [
-        # One sentence names both, because a face index alone names nothing.
+        # Every absent argument in one sentence, so a shape-less call is one retry.
         (
             {"method": "tangent", "body_name": "Body1"},
-            "tangent needs face_index and body_name",
+            "tangent needs face_index and plane",
         ),
         # Both definitions at once: one plane, one way to define it.
         (
@@ -1096,7 +1108,7 @@ def test_the_handler_and_the_mock_refuse_an_unknown_stock_mode(bare_handler, mod
         # An angle is measured from a plane, so the angle form has no zero without one.
         (
             {"method": "tangent", "body_name": "Body1", "face_index": 1},
-            "needs plane",
+            "tangent needs plane",
         ),
     ],
 )
