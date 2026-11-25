@@ -347,47 +347,47 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_assembly.py",
-            164,
-            "raise refusal: kind comes from _rules.construction_method_refusal",
+            175,
+            "raise refusal: kind comes from _rules.construction_plane_tangent_refusal",
         ),
         (
             "handler_assembly.py",
-            214,
+            260,
             "raise refusal: kind comes from _rules.perpendicular_axis_refusal",
         ),
         (
             "handler_assembly.py",
-            374,
+            420,
             "raise selector_refusal: kind comes from _rules.joint_selector_refusal",
         ),
         (
             "handler_assembly.py",
-            390,
+            436,
             "raise component_refusal: kind comes from _rules.components_differ_refusal",
         ),
         (
             "handler_assembly.py",
-            395,
+            441,
             "raise geometry_refusal: kind comes from _rules.joint_geometry_refusal",
         ),
         (
             "handler_assembly.py",
-            661,
+            707,
             "raise selector_refusal: kind comes from _rules.joint_selector_refusal",
         ),
         (
             "handler_assembly.py",
-            676,
+            722,
             "raise component_refusal: kind comes from _rules.components_differ_refusal",
         ),
         (
             "handler_assembly.py",
-            687,
+            733,
             "raise geometry_refusal: kind comes from _rules.as_built_geometry_refusal",
         ),
         (
             "handler_assembly.py",
-            863,
+            909,
             "raise refusal: kind comes from _rules.rigid_group_size_refusal",
         ),
         (
@@ -402,12 +402,12 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_base.py",
-            685,
+            711,
             "message is not a literal",
         ),
         (
             "handler_base.py",
-            726,
+            752,
             "message is not a literal",
         ),
         (

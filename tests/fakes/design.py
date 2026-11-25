@@ -1170,7 +1170,13 @@ class FakeConstructionInput:
 
 
 class FakeConstructionPlaneInput(FakeConstructionInput):
-    """The four plane definitions ``create_construction_plane`` builds."""
+    """The plane definitions ``create_construction_plane`` builds.
+
+    The two tangent setters take the arity the shipped stub declares:
+    ``setByTangent(tangentFace, angle, planarEntity)`` and
+    ``setByTangentAtPoint(tangentFace, pointEntity)`` - measured in
+    ``adsk/fusion.py``, not copied from the handler's call.
+    """
 
     def setByOffset(self, plane, offset) -> None:
         self._record("setByOffset", (plane, offset))
@@ -1183,6 +1189,12 @@ class FakeConstructionPlaneInput(FakeConstructionInput):
 
     def setByThreePoints(self, point_one, point_two, point_three) -> None:
         self._record("setByThreePoints", (point_one, point_two, point_three))
+
+    def setByTangent(self, tangent_face, angle, planar_entity) -> None:
+        self._record("setByTangent", (tangent_face, angle, planar_entity))
+
+    def setByTangentAtPoint(self, tangent_face, point_entity) -> None:
+        self._record("setByTangentAtPoint", (tangent_face, point_entity))
 
 
 class FakeConstructionAxisInput(FakeConstructionInput):

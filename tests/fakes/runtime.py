@@ -41,6 +41,7 @@ DIRECT = "DirectDesignType"
 # would pick a bend's side wall as the stationary face.
 PLANE_SURFACE_TYPE = 0
 CYLINDER_SURFACE_TYPE = 1
+CONE_SURFACE_TYPE = 2
 
 
 class FakePoint3D:
@@ -362,6 +363,9 @@ def _surface_types() -> types.SimpleNamespace:
     return types.SimpleNamespace(
         PlaneSurfaceType=PLANE_SURFACE_TYPE,
         CylinderSurfaceType=CYLINDER_SURFACE_TYPE,
+        # A cone is what the tangent-plane rule accepts beside a cylinder, so the
+        # fake declares it rather than letting `getattr` hide its absence.
+        ConeSurfaceType=CONE_SURFACE_TYPE,
     )
 
 

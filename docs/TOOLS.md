@@ -162,9 +162,23 @@ what a selection returns.
 
 | Tool                        | Description                                                                       |
 | --------------------------- | --------------------------------------------------------------------------------- |
-| `create_construction_plane` | Offset, angle, midplane, 3-point, tangent                                         |
+| `create_construction_plane` | Offset, angle, midplane, 3-point, tangent (`body_name` + `face_index`; `angle` + `plane`, or `point_one`) |
 | `create_construction_axis`  | Two-point, intersection, edge, perpendicular (`face_index` + `point_one`)          |
 | `create_ucs`                | **(2026+, preview API)** User Coordinate System at a point with optional rotation |
+
+### What a `tangent` construction plane takes
+
+Fusion ships two definitions behind the one value, and the arguments decide which runs:
+
+- **`angle` + `plane`, with `body_name` + `face_index`** — `setByTangent(face, angle,
+  referencePlane)`. The face must be **cylindrical or conical** (Fusion's own docstring);
+  a flat face is refused `GEOMETRY_UNSUPPORTED`, naming the face's `surface_type`.
+  `angle` is in degrees and defaults to 0; `plane` is the reference it is measured from
+  and is required, because an angle has no zero without one.
+- **`point_one`, with `body_name` + `face_index`** — `setByTangentAtPoint(face, point)`.
+  Any face, and the point need not lie on it.
+
+Passing both is refused from the parameters alone, so real and mock mode answer alike.
 
 ## Assembly
 

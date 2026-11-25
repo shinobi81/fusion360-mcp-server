@@ -30,7 +30,7 @@ from ._rules import (
     cam_target_refusal,
     cam_tool_refusal,
     components_differ_refusal,
-    construction_method_refusal,
+    construction_plane_tangent_refusal,
     edge_selector_refusal,
     export_body_refusal,
     export_target_refusal,
@@ -1023,7 +1023,7 @@ def _add_dimension(p: dict) -> dict:
 
 
 def _create_construction_plane(p: dict) -> dict:
-    refusal = construction_method_refusal(p)
+    refusal = construction_plane_tangent_refusal(p)
     if refusal is None and p.get("method") == "three_points":
         # The add-in builds a Point3D per point on this branch only, so the points an
         # offset or midplane call leaves unset are not judged.

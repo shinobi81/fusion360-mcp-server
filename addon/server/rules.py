@@ -612,25 +612,58 @@ def rigid_group_size_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None
     )
 
 
-def construction_method_refusal(
+def construction_plane_tangent_refusal(
     params: Mapping[str, Any],
 ) -> _hints.Refusal | None:
-    """The refusal a tangent construction plane earns, or None.
+    """The refusal a ``tangent`` construction plane earns, or None when buildable.
 
-    A tangent plane needs a face to be tangent to, and the tool has no face
-    parameter, so the call cannot be built.  The method stays in the schema for
-    wire compatibility, where ``execute_code`` is the route that works.
+    Fusion ships **two** definitions behind the one advertised value, and the parameters
+    decide which runs: ``point_one`` selects ``setByTangentAtPoint(face, point)``,
+    otherwise ``angle`` (default 0, degrees) and ``plane`` select
+    ``setByTangent(face, angle, referencePlane)`` for a cylindrical or conical face.
+    Judged from the parameters alone, so mock mode refuses exactly what the add-in
+    refuses and a caller learns the shape without a design - and so the one method that
+    was advertised and refused outright (one of two enum values a caller could send and
+    never satisfy) can finally be built.
+
+    ``face_index``'s *range* is not judged here: that needs the body, and the handler
+    names it against the body it resolved, as ``perpendicular_at_point`` does.
     """
     if params.get("method") != "tangent":
         return None
-    return _hints.Refusal(
-        "INVALID_INPUT",
-        "Tangent plane needs face selection—use execute_code",
-        hints=(
-            "create_construction_plane has no face parameter; build this plane "
-            "with execute_code.",
-        ),
-    )
+    point = params.get("point_one")
+    if point is not None and (
+        params.get("plane") is not None or params.get("angle") is not None
+    ):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            "A tangent plane is built one way: pass point_one, or angle and plane - "
+            "not both",
+            hints=(
+                "point_one builds the plane through that point.",
+                "angle and plane build it at an angle measured from a reference plane.",
+            ),
+        )
+    # The face first: a reference plane with no face to be tangent to names nothing.
+    if params.get("face_index") is None:
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            "tangent needs face_index and body_name: the face the plane is tangent to",
+            hints=(
+                "list_faces reports every face's index and surface_type.",
+                "body_name names the body that face belongs to.",
+            ),
+        )
+    if point is None and params.get("plane") is None:
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            "A tangent plane at an angle needs plane: the reference the angle is "
+            "measured from",
+            hints=("plane is xy, yz or xz, and angle defaults to 0 degrees.",),
+        )
+    if point is not None:
+        return point3d_refusal({"point_one": point})
+    return None
 
 
 def perpendicular_axis_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:

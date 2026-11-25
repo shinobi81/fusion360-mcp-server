@@ -280,8 +280,8 @@ and asks the running Fusion whether it exists - 190 references, none missing on
 4. ~~`create_construction_axis("perpendicular_at_point")` refuses by design~~ -
    **closed (#149).** It needed a `BRepFace`, and the tool had no argument that could
    supply one: the method was advertised in the schema and refused by a rule, so it was
-   one of two enum values a caller could send and never satisfy (`create_construction_
-   plane`'s `tangent` still is). The tool takes
+   one of two enum values a caller could send and never satisfy (the other,
+   `create_construction_plane`'s `tangent`, was closed by #<pr>). The tool takes
    `face_index` (with `body_name`) now, and the axis is built through
    `setByPerpendicularAtPoint(face, point)`, whose two arguments are the stub's.
 

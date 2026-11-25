@@ -346,6 +346,32 @@ class HandlerBase:
         return self._root().bRepBodies.item(body_index)
 
     @staticmethod
+    def _surface_type_name(surface_type):
+        """Fusion's own name for a ``SurfaceTypes`` member, keyed by the *member*.
+
+        Two domains ask: ``list_faces`` reports it, and a refused tangent plane names
+        the face's type.  Keying on the enum members rather than on numbers is what
+        keeps the table from drifting from the enum: a build that lacks a member (the
+        fakes declare three) simply does not offer that name, and an unknown value
+        falls through as its raw form rather than being guessed at.
+        """
+        names = {
+            getattr(adsk.core.SurfaceTypes, member): name
+            for member, name in (
+                ("PlaneSurfaceType", "Plane"),
+                ("CylinderSurfaceType", "Cylinder"),
+                ("ConeSurfaceType", "Cone"),
+                ("SphereSurfaceType", "Sphere"),
+                ("TorusSurfaceType", "Torus"),
+                ("EllipticalCylinderSurfaceType", "EllipticalCylinder"),
+                ("EllipticalConeSurfaceType", "EllipticalCone"),
+                ("NurbsSurfaceType", "Nurbs"),
+            )
+            if hasattr(adsk.core.SurfaceTypes, member)
+        }
+        return names.get(surface_type, str(surface_type))
+
+    @staticmethod
     def _face_by_index(body, face_index, hints=None):
         """The face at *face_index*, or a refusal naming the body's range.
 

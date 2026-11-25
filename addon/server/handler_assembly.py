@@ -157,11 +157,25 @@ class AssemblyCommands(_Contract):
         point_one: list | None = None,
         point_two: list | None = None,
         point_three: list | None = None,
+        body_name: str | None = None,
+        face_index: int | None = None,
     ):
+        # Judged before a design is read, so a bad shape refuses without one and mock
+        # mode answers the same sentence for the same call.
+        if refusal := _rules.construction_plane_tangent_refusal(
+            {
+                "method": method,
+                "body_name": body_name,
+                "face_index": face_index,
+                "point_one": point_one,
+                "angle": angle,
+                "plane": plane,
+            }
+        ):
+            raise refusal
+
         root = self._root()
         planes = root.constructionPlanes
-        if refusal := _rules.construction_method_refusal({"method": method}):
-            raise refusal
         inp = planes.createInput()
 
         if method == "offset":
@@ -184,6 +198,38 @@ class AssemblyCommands(_Contract):
             p2 = self._point3d(point_two, "point_two")
             p3 = self._point3d(point_three, "point_three")
             inp.setByThreePoints(p1, p2, p3)
+        elif method == "tangent":
+            # The rule has already decided which of Fusion's two definitions this call
+            # describes: a point, or an angle measured from a reference plane.
+            body = self._body_by_name(body_name)
+            face = self._face_by_index(body, face_index)
+            if point_one is not None:
+                inp.setByTangentAtPoint(face, self._point3d(point_one, "point_one"))
+            else:
+                # Measured, not assumed: `setByTangent` documents a cylindrical or
+                # conical face, and Fusion's answer to a flat one is not worth
+                # discovering per call. The kind is GEOMETRY_UNSUPPORTED because the
+                # caller's arguments are all usable - the move that works is another
+                # face, which is what list_faces is for.
+                surface = self._surface_type_name(face.geometry.surfaceType)
+                if face.geometry.surfaceType not in (
+                    adsk.core.SurfaceTypes.CylinderSurfaceType,
+                    adsk.core.SurfaceTypes.ConeSurfaceType,
+                ):
+                    raise _hints.Refusal(
+                        "GEOMETRY_UNSUPPORTED",
+                        f"A tangent plane at an angle needs a cylindrical or conical "
+                        f"face; this one is {surface}",
+                        hints=(
+                            "list_faces reports each face's surface_type.",
+                            "Or pass point_one: the at-a-point form takes any face.",
+                        ),
+                    )
+                inp.setByTangent(
+                    face,
+                    adsk.core.ValueInput.createByString(f"{angle or 0} deg"),
+                    self._construction_plane(plane),
+                )
 
         plane_obj = planes.add(inp)
         return {"created": True, "name": plane_obj.name, "method": method}

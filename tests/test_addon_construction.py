@@ -28,7 +28,7 @@ from addon.server import hints as addon_hints
 from tests.fakes.bodies import FakeBody, FakeFace, body_with_edges
 from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
-from tests.fakes.runtime import FakePoint3D
+from tests.fakes.runtime import CONE_SURFACE_TYPE, FakePoint3D
 from tests.fakes.sketch import FakeAutoConstrainResult, FakeSketch
 
 
@@ -227,14 +227,105 @@ def test_a_point_that_is_not_a_list_is_refused_rather_than_raising(bound_handler
     assert design.rootComponent.constructionPlanes.count == 0
 
 
-def test_a_tangent_plane_is_refused_with_the_alternative(bound_handler):
-    """A tangent plane needs a face, which this tool does not take - so it says so."""
-    design = FakeDesign(features=2)
+def test_a_tangent_plane_at_an_angle_takes_the_face_and_the_reference_plane(
+    bound_handler,
+):
+    """``setByTangent(face, angle, planarEntity)``, the stub's three arguments.
 
-    with pytest.raises(RuntimeError, match="needs face selection"):
-        bound_handler(design).create_construction_plane(method="tangent")
+    The angle carries its unit, as the ``angle`` method's does, and the reference is
+    the plane the caller named; ``plane`` is required for this form because an angle
+    is measured from something.
+    """
+    body = FakeBody(
+        name="Shaft",
+        faces=FakeCollection([FakeFace(), FakeFace(planar=False, radius=1.0)]),
+    )
+    design = FakeDesign(features=2, bodies=[body])
+    root = design.rootComponent
+    handler = bound_handler(design)
 
+    result = handler.create_construction_plane(
+        method="tangent",
+        body_name="Shaft",
+        face_index=1,
+        plane="xy",
+        angle=45,
+    )
+
+    assert result == {
+        "created": True,
+        "name": "Construction Plane1",
+        "method": "tangent",
+    }
+    created = root.constructionPlanes.last_input
+    assert created.setter == "setByTangent"
+    face, angle, reference = created.args
+    assert face is body.faces.item(1), "the face the index named, not the first one"
+    assert (angle.kind, angle.value) == ("string", "45 deg")
+    assert reference is root.xYConstructionPlane
+
+
+def test_a_tangent_plane_through_a_point_takes_the_face_and_the_point(bound_handler):
+    """``setByTangentAtPoint(face, point)``: the point wins when it is given.
+
+    The point need not lie on the face - Fusion's own docstring says so - which is why
+    this form takes no reference plane and no angle.
+    """
+    body = FakeBody(
+        name="Shaft",
+        faces=FakeCollection([FakeFace(), FakeFace(planar=False, radius=1.0)]),
+    )
+    design = FakeDesign(features=2, bodies=[body])
+    root = design.rootComponent
+    handler = bound_handler(design)
+
+    result = handler.create_construction_plane(
+        method="tangent",
+        body_name="Shaft",
+        face_index=1,
+        point_one=[1.0, 2.0, 3.0],
+    )
+
+    assert result["method"] == "tangent"
+    created = root.constructionPlanes.last_input
+    assert created.setter == "setByTangentAtPoint"
+    face, point = created.args
+    assert face is body.faces.item(1)
+    assert _coords(point) == (1.0, 2.0, 3.0)
+
+
+def test_a_tangent_plane_refuses_a_face_it_cannot_be_tangent_to(bound_handler):
+    """``setByTangent`` documents a cylindrical or conical face; a flat one is neither.
+
+    The refusal names the face's own surface type and sends the caller to
+    ``list_faces``, and nothing is created: the check runs before the add.
+    """
+    body = FakeBody(name="Plate", faces=FakeCollection([FakeFace()]))
+    design = FakeDesign(features=2, bodies=[body])
+
+    with pytest.raises(RuntimeError) as raised:
+        bound_handler(design).create_construction_plane(
+            method="tangent", body_name="Plate", face_index=0, plane="xy"
+        )
+
+    refusal = raised.value
+    assert addon_hints.classify(refusal)[0] == "GEOMETRY_UNSUPPORTED"
+    assert "Plane" in str(refusal), "the sentence names what the face is"
     assert design.rootComponent.constructionPlanes.count == 0
+
+
+def test_a_tangent_plane_on_a_conical_face_is_built(bound_handler):
+    """The docstring's other accepted surface type: a cone, not only a cylinder."""
+    cone = FakeFace(planar=False, radius=1.0)
+    cone.geometry.surfaceType = CONE_SURFACE_TYPE
+    body = FakeBody(name="Cone", faces=FakeCollection([cone]))
+    design = FakeDesign(features=2, bodies=[body])
+
+    bound_handler(design).create_construction_plane(
+        method="tangent", body_name="Cone", face_index=0, plane="xy"
+    )
+
+    assert design.rootComponent.constructionPlanes.last_input.setter == "setByTangent"
 
 
 # An unknown method no longer reaches the add-in: the schema gate refuses a value
