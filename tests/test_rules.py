@@ -1203,6 +1203,12 @@ def test_the_plane_name_is_judged_from_the_parameters(params, message):
     assert refusal.error_kind == "INVALID_INPUT"
     assert message in str(refusal)
 
+    # And mock mode, which is the half a caller actually rehearses: the same sentence,
+    # from the same table, for the same call.
+    refused = mock._create_construction_plane(params)
+    assert refused["error_kind"] == refusal.error_kind
+    assert refused["error_message"] == str(refusal)
+
 
 @pytest.mark.parametrize("plane", ["xy", "yz", "xz", "XZ"])
 def test_a_plane_name_the_lookup_accepts_is_refused_by_neither_side(plane):

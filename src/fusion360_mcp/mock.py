@@ -1037,21 +1037,28 @@ def _create_construction_plane(p: dict) -> dict:
         )
     if refusal is not None:
         return _refusal_error(refusal)
-    # Every branch that resolves a plane name resolves it here too, so a name the
-    # handler refuses is never rehearsed as a built plane.
-    for field in ("plane", "plane_one", "plane_two"):
-        if p.get(field) is None:
-            continue
-        name_refusal = construction_plane_name_refusal(p.get(field))
-        if name_refusal is not None:
-            return _refusal_error(name_refusal)
     if p.get("method") == "tangent":
         # The tangent branches name a body, and `_body_by_name` refuses an empty name
-        # before Fusion is asked: without this, mock reported a plane the add-in would
-        # have refused.  The same split the axis makes for its body-naming branches.
+        # before Fusion is asked - and *before* the plane is resolved, which is the
+        # handler's order too.  The same split the axis makes for its body branches.
         refused = _body_name_required_error(p)
         if refused is not None:
             return refused
+    # Only the names the chosen branch resolves, in the handler's order: an unset one
+    # is refused by the add-in ('' and None alike) and a name belonging to another
+    # branch was never looked up.  A tangent call with a point never reads `plane` -
+    # the point form takes none - so asking here would invent a fault.
+    by_method: dict[str, tuple[str, ...]] = {
+        "offset": ("plane",),
+        "angle": ("plane",),
+        "midplane": ("plane_one", "plane_two"),
+        "tangent": () if p.get("point_one") is not None else ("plane",),
+    }
+    resolved = by_method.get(str(p.get("method")), ())
+    for field in resolved:
+        name_refusal = construction_plane_name_refusal(p.get(field))
+        if name_refusal is not None:
+            return _refusal_error(name_refusal)
     # The handler's keys, as for the axis: `plane_name` was never one of them.
     return {
         "created": True,

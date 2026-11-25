@@ -426,6 +426,24 @@ def test_a_tangent_plane_at_an_angle_refuses_a_cone(bound_handler):
     assert design.rootComponent.constructionPlanes.count == 0
 
 
+def test_a_tangent_plane_through_a_point_builds_on_a_planar_face(bound_handler):
+    """The claim the cylinder refusal's hint makes: the at-a-point form takes any face.
+
+    Pinned on a *planar* face, because that is the case the hint and `docs/TOOLS.md`
+    send a caller to, and a cylinder-only test cannot tell the two apart.
+    """
+    body = FakeBody(name="Plate", faces=FakeCollection([FakeFace()]))
+    design = FakeDesign(features=2, bodies=[body])
+
+    bound_handler(design).create_construction_plane(
+        method="tangent", body_name="Plate", face_index=0, point_one=[0.0, 0.0, 5.0]
+    )
+
+    created = design.rootComponent.constructionPlanes.last_input
+    assert created.setter == "setByTangentAtPoint"
+    assert _coords(created.args[1]) == (0.0, 0.0, 5.0)
+
+
 def test_a_tangent_plane_through_a_point_builds_on_a_cone(bound_handler):
     """The measured route for a cone: ``setByTangentAtPoint``, twice over."""
     body = FakeBody(name="Cone", faces=FakeCollection([_cone_face()]))

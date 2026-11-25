@@ -526,6 +526,43 @@ class TestMockConstructionGeometry:
         # The handler's keys plus the envelope's own: `plane_name` was never one.
         assert {"created", "name", "method"} <= set(reply)
 
+    def test_mock_refuses_an_unset_plane_for_every_method_that_resolves_one(self):
+        """The add-in refuses `None` and `''` alike, for `offset`, `angle` and
+        `midplane`. Mock skipping an absent name rehearsed success for a call the
+        add-in answers `Unknown plane None` - an MCP caller's `plane` is optional."""
+        for params in (
+            {"method": "offset", "offset": 5},
+            {"method": "angle", "angle": 30},
+            {"method": "midplane", "plane_one": "xy"},
+        ):
+            reply = mock_command("create_construction_plane", params)
+
+            assert reply.get("created") is not True, params
+            assert reply["error_kind"] == "INVALID_INPUT", params
+            assert "Unknown plane" in reply["error_message"], params
+
+    def test_mock_ignores_a_plane_name_the_chosen_branch_never_reads(self):
+        """`offset` never resolves `plane_one`, and a tangent call with a point never
+        resolves `plane`: inventing a refusal for either would answer a call the add-in
+        builds."""
+        offset = mock_command(
+            "create_construction_plane",
+            {"method": "offset", "plane": "xy", "offset": 5, "plane_one": "zz"},
+        )
+        tangent = mock_command(
+            "create_construction_plane",
+            {
+                "method": "tangent",
+                "body_name": "Body1",
+                "face_index": 0,
+                "point_one": [0.0, 0.0, 5.0],
+                "plane": "",
+            },
+        )
+
+        assert offset["created"] is True
+        assert tangent["created"] is True
+
     def test_mock_refuses_a_plane_name_the_add_in_refuses(self):
         """`plane="zz"` is truthy, so the shape rule passes it: without the name check
         mock built a plane the handler refuses before Fusion is asked."""

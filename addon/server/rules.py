@@ -624,8 +624,8 @@ def construction_plane_name_refusal(plane: Any) -> _hints.Refusal | None:
     ``_construction_plane`` resolved the name against a table and refused a miss itself,
     which meant mock mode answered ``created: true`` for ``plane="zz"``: a value Fusion
     is never asked about, because the add-in refuses it first.  A parameter the add-in
-    can refuse from the parameters alone belongs here, so both sides answer one sentence
-    - and the tangent rule below can reach this from its own judgement.
+    can refuse from the parameters alone belongs here, so both sides answer one
+    sentence.  A ``tangent`` call reaches it once its own shape rule has passed.
     """
     if str(plane or "").lower() in _CONSTRUCTION_PLANES:
         return None
