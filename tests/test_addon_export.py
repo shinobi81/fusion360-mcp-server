@@ -329,8 +329,10 @@ class _Viewport:
     """``Viewport``: ``fit``, the camera, ``refresh``, and a capture that writes bytes.
 
     The capture writes a real file, because that is what ``render_view`` reads back and
-    base64-encodes - a fake returning ``True`` without a file only ever reached the
-    refusal this module already tested.
+    base64-encodes. A ``True``-returning fake that wrote nothing would not reach the
+    refusal - ``mkstemp`` already made the file, so ``os.path.exists`` is true either
+    way - it would hand back zero bytes and an empty string. That is why the payload is
+    pinned as a round-trip rather than a length.
     """
 
     def __init__(self, saved: bool = True, camera: _FakeCamera | None = None):
@@ -347,6 +349,9 @@ class _Viewport:
         #: The camera's eye at each capture, from the stored camera: the sheet puts the
         #: caller's view back, so a read afterwards reports what was there before.
         self.eyes_at_capture: list[tuple[float, float, float]] = []
+        #: The up vector at each capture: ``_apply_view`` writes it per view and the
+        #: restore overwrites it, so a later read cannot tell the views apart.
+        self.ups_at_capture: list[tuple[float, float, float]] = []
 
     @property
     def camera(self) -> _FakeCamera:
@@ -376,11 +381,17 @@ class _Viewport:
         self.captures.append((path, width, height))
         eye = self._camera.eye
         self.eyes_at_capture.append((eye.x, eye.y, eye.z))
+        up = self._camera.upVector
+        self.ups_at_capture.append((up.x, up.y, up.z))
         if self.saved:
             with open(path, "wb") as handle:
-                # A few recognisable bytes: the point is that a file exists to read
-                # back and base64-encode, not that it is a valid PNG.
-                handle.write(b"PNG" + bytes([int(width) % 256, int(height) % 256]))
+                # Recognisable, and *per file*: the basename goes in, so two views write
+                # two different payloads and an HTML that embedded one twice fails.
+                handle.write(
+                    b"PNG"
+                    + os.path.basename(path).encode("ascii")
+                    + bytes([int(width) % 256, int(height) % 256])
+                )
         return self.saved
 
 
@@ -519,11 +530,12 @@ class TestRenderViewCapture:
         assert result["view"] == "current"
         assert (result["width"], result["height"]) == (320, 240)
         assert result["image_format"] == "png"
-        assert result["bytes"] == len(b"PNG" + bytes([320 % 256, 240 % 256]))
-        # The pixels the fake wrote, verbatim, so a re-encode cannot pass by luck.
-        assert base64.b64decode(result["image_base64"]) == (
-            b"PNG" + bytes([320 % 256, 240 % 256])
-        )
+        decoded = base64.b64decode(result["image_base64"])
+        assert result["bytes"] == len(decoded)
+        # The bytes the fake wrote, verbatim: the tempfile's name is random, so the
+        # payload is checked by its fixed head and tail - a re-encode cannot pass.
+        assert decoded.startswith(b"PNGfusion_render_")
+        assert decoded.endswith(bytes([320 % 256, 240 % 256]))
 
     def test_the_capture_leaves_no_tempfile_behind(
         self, bound_handler, tmp_path, monkeypatch
@@ -730,12 +742,13 @@ class TestExportViewSheet:
 
         html = (tmp_path / "view_sheet.html").read_text(encoding="utf-8")
         assert html.count("<figure>") == 2, "one figure per view"
-        # The payload the fake wrote, encoded - a prefix would be satisfied by an
-        # encoder that emitted the path, or an empty string.
-        payload = base64.b64encode(b"PNG" + bytes([400 % 256, 300 % 256])).decode(
-            "ascii"
-        )
-        assert f"data:image/png;base64,{payload}" in html
+        # Each view's own bytes, once: a count is what notices a second figure that
+        # embedded the first view's payload - both used to be identical.
+        for name in ("iso.png", "front.png"):
+            payload = base64.b64encode(
+                b"PNG" + name.encode("ascii") + bytes([400 % 256, 300 % 256])
+            ).decode("ascii")
+            assert html.count(f"data:image/png;base64,{payload}") == 1, name
         # `html.escape(sheet_title)` runs twice - the <title> and the <h1> - so a count
         # is what notices either one being dropped.
         assert html.count("&lt;Plate&gt;") == 2, "the title is escaped in both places"
@@ -789,6 +802,9 @@ class TestExportViewSheet:
             (2.232, -1.232, 2.232), abs=1e-3
         )
         assert [eye != before[0] for eye in viewport.eyes_at_capture] == [True, True]
+        # Each view writes its own up vector, which the restore then overwrites: a
+        # transposed up column in _VIEW_DIRS shows here and nowhere else.
+        assert viewport.ups_at_capture == [(0.0, 0.0, 1.0), (0.0, 1.0, 0.0)]
 
     def test_a_document_with_no_visible_body_frames_the_origin(
         self, bound_handler, tmp_path
@@ -807,3 +823,45 @@ class TestExportViewSheet:
         eye = viewport.eyes_at_capture[0]
         distance = math.sqrt(sum(coordinate * coordinate for coordinate in eye))
         assert distance == pytest.approx(30.0)
+
+
+class TestTheTwoDefaultPaths:
+    """The two branches that decide a path when the caller names none.
+
+    Both were unreached: every sheet test passes ``output_dir`` and every f3d test
+    passes ``file_path``, while the stl and step twins are pinned. The defaults here are
+    a timestamped Desktop folder and ``<doc>.f3d``, so the home directory is patched.
+    """
+
+    def test_a_sheet_with_no_output_dir_lands_in_a_timestamped_desktop_folder(
+        self, bound_handler, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        monkeypatch.setenv("HOME", str(tmp_path))
+        viewport = _Viewport()
+        handler = bound_handler(
+            _design_with(_root_body()), app=SimpleNamespace(activeViewport=viewport)
+        )
+
+        result = handler.export_view_sheet(views=["iso"])
+
+        expected_folder = tmp_path / "Desktop"
+        assert os.path.dirname(result["output_dir"]) == str(expected_folder)
+        assert os.path.basename(result["output_dir"]).startswith(
+            f"{_design_with(_root_body()).parentDocument.name}_views_"
+        )
+        assert os.path.exists(result["html_path"])
+
+    def test_f3d_with_no_path_lands_on_the_desktop_named_after_the_document(
+        self, bound_handler, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        monkeypatch.setenv("HOME", str(tmp_path))
+        design = _design_with(_root_body())
+
+        result = bound_handler(design).export_f3d()
+
+        assert result["file_path"] == os.path.join(
+            str(tmp_path), "Desktop", f"{design.parentDocument.name}.f3d"
+        )
+        assert design.exportManager.executed[-1].kind == "f3d"

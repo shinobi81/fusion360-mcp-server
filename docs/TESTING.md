@@ -35,11 +35,12 @@ different populations:
   `addon/server`. The add-in's CAM paths only run inside Fusion, and they account for
   almost all of the uncovered statements left.
   (The export family *is* covered offline, by `tests/test_addon_export.py`: body
-  STL/STEP and f3d against a fake export manager, and — since the fake runtime gained
-  `adsk.core.CameraTypes` and a viewport that writes bytes and hands out the camera
-  *copy* Fusion documents — `render_view`'s capture and decode, the whole view sheet,
-  `import_mesh`'s two import paths and `export`'s stl dispatch. `handler_export` is at
-  91%; the floor itself has not moved, because moving it is a separate decision.)
+  STL/STEP and f3d against a fake export manager, both default output paths, and —
+  once the fake runtime gained `adsk.core.CameraTypes` and the test module grew a
+  viewport that writes bytes and hands the camera out as the *copy* Fusion documents —
+  `render_view`'s capture and decode, `export_view_sheet` end to end, `import_mesh`'s
+  two import paths and `export`'s stl dispatch. `handler_export` is at 93%; the floor
+  itself has not moved, because moving it is a separate decision.)
 - **95** for the server alone, enforced separately in CI:
   `uv run coverage report --include="src/fusion360_mcp/*" --fail-under=95`. Without it,
   an add-in regression would buy slack for `src/`.
