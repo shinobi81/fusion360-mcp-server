@@ -1813,8 +1813,9 @@ def test_a_missing_cam_name_reaches_the_caller_as_name_not_found(handler_module)
 
     # The wording is deliberately not pinned: the rule matches ``not found`` or
     # ``does not exist``, so a pin on one spelling would fail on a rename the rule
-    # still accepts. The hint is unique to this rule, and it is what proves the rule
-    # fired rather than the message merely being REFUSED somewhere else.
+    # still accepts. The hint proves the rule fired rather than some other refusal —
+    # ``_KIND_HINTS`` also names ``cam_list_setups`` now, but only a ``Refusal``
+    # reaches it and both lookups raise a plain ``RuntimeError``.
     for raised in (setup_missing, operation_missing):
         kind, hints = addon_hints.classify(raised.value)
         assert kind == "NAME_NOT_FOUND"

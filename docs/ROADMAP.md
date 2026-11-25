@@ -192,8 +192,8 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    changed the tag of the 88 with none; a rule that already answered with a kind kept
    it, even where the new taxonomy disagreed.
 
-   **The five that disagreed answer the taxonomy now**, and the two review rounds found
-   four of them - the item named two:
+   **The five that disagreed answer the taxonomy now**: the item named two, and the two
+   review rounds found three more.
 
    - the CAM `setup/operation not found` rule -> `NAME_NOT_FOUND`;
    - `no faces matched` -> `GEOMETRY_UNSUPPORTED`, and its twin `no edges matched
@@ -212,8 +212,10 @@ and asks the running Fusion whether it exists - 190 references, none missing on
      `INVALID_INPUT`. `tests/test_addon_edge_selection.py` now calls
      `addon_hints.classify`, and asserts the kind production actually answers.
 
-   No message and no hint moved: the tag is the only thing a client sees differently,
-   which is why the item asked for its own release note rather than a ride-along. Pins
+   No message and no per-rule hint moved: the tag is the only thing a client sees
+   differently, apart from one CAM clause added to `_KIND_HINTS['NAME_NOT_FOUND']` -
+   the fallback advice for a `Refusal` that carries none, which no current refusal
+   reaches - so the item asked for its own release note rather than a ride-along. Pins
    flipped or added in five files - `tests/test_feedback.py`,
    `tests/test_addon_face_selection.py`, `tests/test_addon_feature_edits.py`,
    `tests/test_addon_edge_selection.py`, `tests/test_addon_cam.py` - and one docstring's
@@ -229,13 +231,23 @@ and asks the running Fusion whether it exists - 190 references, none missing on
 
    - `geometry's … axis is zero-length` - a degenerate face wants a different face, in
      the taxonomy's own words; it is deferred because a joint-geometry refusal wants
-     its own evidence and its own release-note line, not a fifth ride-along tag.
+     its own evidence and its own release-note line, not one more ride-along tag.
    - `not cylindrical` and `invalid free edge` - the entity exists and lacks a
      property, so the argument/geometry line is genuinely ambiguous.
    - `no edge within … cm of`, `equally close to edges`, and the index rules - the
      point or the index was wrong, which is an unusable argument.
    - `no intersecting target body|NO_TARGET_SWEEP_BODY` - the fix is moving the
      profile, again an argument.
+   - `fillet_no_edge_found|no fillet edge found` - Fusion's own refusal when nothing
+     among those given can be rounded, and a near-twin of the `has no edges that can be
+     rounded` rule this item retagged. Left alone because Fusion blames the radius (its
+     hint says "use a smaller radius"), which is an argument — but the two now answer
+     differently for one body, and that is recorded rather than argued away.
+   - the point rule's `has no edges, so no point` alternative - production types that
+     sentence `GEOMETRY_UNSUPPORTED` at the raise site while the table answers
+     `INVALID_INPUT`, so a plain-exception path and the typed one disagree. Splitting
+     the alternation into its own rule is a pattern change, not a kind change, which is
+     why it is here and not in this PR.
 
    The `NAME_NOT_FOUND` tag ends an asymmetry the item recorded rather than lost:
    `cam_generate_toolpath(operation_name=…)` raises its own typed `NAME_NOT_FOUND` for

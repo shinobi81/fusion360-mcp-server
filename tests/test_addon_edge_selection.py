@@ -403,8 +403,8 @@ def test_a_body_with_no_edges_refuses_rather_than_selecting_nothing(select):
     assert "No edges matched" not in str(raised.value)
     kind, hints = classify(raised.value)
     assert kind == "GEOMETRY_UNSUPPORTED"
-    # The kind alone cannot prove *this* rule fired — the generic INVALID_INPUT
-    # rule gives the same kind, so the hint text is the assertion.
+    # The kind proves this rule fired — the generic rule gives INVALID_INPUT — but the
+    # hint pins the *wording*, which is what a future reword of the message would move.
     assert any("nothing a fillet can round" in hint for hint in hints), hints
 
 
@@ -866,6 +866,12 @@ def test_a_body_whose_edges_have_no_usable_range_says_that_not_no_edges(bound_ha
     # `isinstance` check misses and the message is re-matched by regex instead —
     # which reported INVALID_INPUT for a refusal typed GEOMETRY_UNSUPPORTED.
     assert addon_hints.classify(raised.value)[0] == "GEOMETRY_UNSUPPORTED"
+    # The table rule too, not only the raise site: the kind above comes from the
+    # Refusal, so it would stay green with the rule reverted. A plain-exception path
+    # and mock mode reach this sentence as a string, and they get the table's answer.
+    kind, rule_hints = addon_hints.classify(message)
+    assert kind == "GEOMETRY_UNSUPPORTED"
+    assert any("No edge on that body could be measured" in h for h in rule_hints)
 
 
 def test_an_edge_that_reports_a_failed_extent_is_skipped(bound_handler):
