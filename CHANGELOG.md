@@ -10,9 +10,11 @@ and published; they are the fork history.
 ## [0.10.0] - 2026-11-25
 
 This release is about what the tools can *do*. Eight changes since 0.9.0, and every one
-of them was measured against a running Fusion 2706.1.17 rather than inferred from the
-binding - which mattered, because three of them contradicted what the documentation said
-and one took a live probe to discover at all.
+that could be was measured against a running Fusion 2706.1.17 rather than inferred from
+the binding - which mattered, because three of them contradicted what the documentation
+said and one took a live probe to discover at all. The exception is
+`create_construction_axis`'s `face_index`, whose two arguments come from the shipped stub:
+the tool builds through the documented call, but no live envelope proves it yet.
 
 ### Added
 
@@ -39,20 +41,26 @@ and one took a live probe to discover at all.
 
 ### Changed
 
-- **`create_construction_axis("perpendicular_at_point")` takes `face_index`** (with
-  `body_name`) and builds through `setByPerpendicularAtPoint(face, point)`. Its blanket
-  refusal became one that names the missing arguments.
+**Breaking:** the first two change what a caller sends or branches on.
+
 - **`cam_create_setup`'s `stock_mode` is one measured table.** Fusion accepts `default`,
   `fixedbox`, `relativecylinder`, `fixedcylinder` and `solid`; the advertised
   `from_body` never worked and is refused as `3 : Invalid enumeration value.` The
   schema, the handler and mock mode all read one table, so `from_solid` is its name.
-- **Five `error_kind` values retagged**, to the taxonomy the rest of the add-in speaks:
-  the CAM `setup/operation not found` rule is `NAME_NOT_FOUND`, and `no faces matched`,
-  `no edges matched selection`, `has no edges to select from` and the
-  `no usable parameter range` rule are `GEOMETRY_UNSUPPORTED`. A client that branches on
-  the old `INVALID_INPUT` for those will see the difference. `docs/ROADMAP.md` records
-  the judgement calls that were deliberately *not* retagged.
-- **The schema gained five arguments**: `body_name` + `face_index` on
+- **Five `hints.py` rules retagged**, to the taxonomy the rest of the add-in speaks: the
+  CAM `setup/operation not found` rule is now `NAME_NOT_FOUND`, and `no faces matched`,
+  `no edges matched selection`, `has no edges to select from` /
+  `has no edges that can be rounded`, and the `no usable parameter range` rule are
+  `GEOMETRY_UNSUPPORTED`. A client that branches on the old `INVALID_INPUT` for those
+  will see the difference; `docs/ROADMAP.md` records the judgement calls that were
+  deliberately *not* retagged.
+- **`create_construction_axis("perpendicular_at_point")` takes `face_index`** (with
+  `body_name`) and builds through `setByPerpendicularAtPoint(face, point)`. Its blanket
+  refusal became one that names the arguments that are missing.
+- **Hints stopped sending callers to `execute_code` for a face.** `list_faces` exists, so
+  the hints and schema descriptions that named `execute_code` as the way to learn a face
+  index name the tool instead.
+- **The schema gained three arguments**: `body_name` + `face_index` on
   `create_construction_plane` (10 → 12) and `face_index` on `create_construction_axis`.
 
 ### Fixed
@@ -60,6 +68,8 @@ and one took a live probe to discover at all.
 - **A CAM operation can generate a toolpath**, and a generation Fusion refuses now
   reports Fusion's own sentence instead of `TIMEOUT` after 25 s: a refused future never
   completes, so the bound belonged to the wrong cause.
+- **A CAM operation created without a tool says so up front**, with `tool: null` and a
+  warning, instead of leaving it to the next call's generation to fail.
 - **Mock mode answers the CAM handlers' keys** across seven commands. It used to answer
   `toolpath_count` where the handler answers `generated` and `scope`, `output_file` where
   the live key is `output_folder`, and a `strategy` per operation the handler never sends
