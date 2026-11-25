@@ -7,6 +7,90 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.10.0] - 2026-11-25
+
+This release is about what the tools can *do*. Eight changes since 0.9.0, and every one
+that could be was measured against a running Fusion 2706.1.17 rather than inferred from
+the binding - which mattered, because three of them contradicted what the documentation
+said and one took a live probe to discover at all. The exception is
+`create_construction_axis`'s `face_index`, whose two arguments come from the shipped stub:
+the tool builds through the documented call, but no live envelope proves it yet.
+
+### Added
+
+- **`list_faces`** - a body's faces with their index, `surface_type`, planarity, area
+  and centroid, plus the outward normal on a planar face, and `count`/`truncated` like
+  `list_edges`. The indices `face_indices` takes could previously only be learned
+  through `execute_code`. Measured: `geometry.normal` is **not** the outward normal - on
+  a box the bottom and all four sides carry `isParamReversed`, so the tool negates where
+  it is set, and six faces report six distinct directions. 98 tools now.
+- **A tool on a CAM operation**, so its toolpath can generate. `cam_create_operation`
+  takes `tool_diameter` (cm), `tool_length`, `tool_flutes` and `tool_number` and builds
+  a complete flat end mill, or `tool_json` for a tool object used verbatim. A *partial*
+  tool object is not refused: measured, it **crashed Fusion**, taking the document's
+  unsaved state with it - which is why the builder emits the whole shape.
+- **`tool_number` on its own selects a tool the document library already holds.** The
+  reply says `from_library`, and a number nothing holds is `NAME_NOT_FOUND` naming the
+  numbers that would work. `DocumentToolLibrary` has no by-number lookup, so the
+  measured route is `count` plus `item(i)` and each tool's own `tool_number` parameter.
+- **`create_construction_plane(method="tangent")` builds a plane.** It was advertised in
+  the schema and refused by a rule - the last enum value a caller could send and never
+  satisfy. It takes `body_name` and `face_index`, and two forms: `angle` + `plane` for a
+  cylindrical face (`setByTangent`), or `point_one` for any face
+  (`setByTangentAtPoint`).
+
+### Changed
+
+**Breaking:** the first two change what a caller sends or branches on.
+
+- **`cam_create_setup`'s `stock_mode` is one measured table.** Fusion accepts `default`,
+  `fixedbox`, `relativecylinder`, `fixedcylinder` and `solid`; the advertised
+  `from_body` never worked and is refused as `3 : Invalid enumeration value.` The
+  schema, the handler and mock mode all read one table, so `from_solid` is its name.
+- **Five `hints.py` rules retagged**, to the taxonomy the rest of the add-in speaks: the
+  CAM `setup/operation not found` rule is now `NAME_NOT_FOUND`, and `no faces matched`,
+  `no edges matched selection`, `has no edges to select from` /
+  `has no edges that can be rounded`, and the `no usable parameter range` rule are
+  `GEOMETRY_UNSUPPORTED`. A client that branches on the old `INVALID_INPUT` for those
+  will see the difference; `docs/ROADMAP.md` records the judgement calls that were
+  deliberately *not* retagged.
+- **`create_construction_axis("perpendicular_at_point")` takes `face_index`** (with
+  `body_name`) and builds through `setByPerpendicularAtPoint(face, point)`. Its blanket
+  refusal became one that names the arguments that are missing.
+- **Hints stopped sending callers to `execute_code` for a face.** `list_faces` exists, so
+  the hints and schema descriptions that named `execute_code` as the way to learn a face
+  index name the tool instead.
+- **The schema gained three arguments**: `body_name` + `face_index` on
+  `create_construction_plane` (10 → 12) and `face_index` on `create_construction_axis`.
+
+### Fixed
+
+- **A CAM operation can generate a toolpath**, and a generation Fusion refuses now
+  reports Fusion's own sentence instead of `TIMEOUT` after 25 s: a refused future never
+  completes, so the bound belonged to the wrong cause.
+- **A CAM operation created without a tool says so up front**, with `tool: null` and a
+  warning, instead of leaving it to the next call's generation to fail.
+- **Mock mode answers the CAM handlers' keys** across seven commands. It used to answer
+  `toolpath_count` where the handler answers `generated` and `scope`, `output_file` where
+  the live key is `output_folder`, and a `strategy` per operation the handler never sends
+  - so an agent that rehearsed against mock got a `KeyError` against Fusion, after the
+  expensive half of a sequence had already run.
+- **Two construction-plane refusals name what Fusion does not**: a reference plane whose
+  normal is parallel to the face's axis is refused here, because Fusion answers
+  `2 : InternalValidationError : data_->execute(&obj, apiName)` and names neither the
+  argument nor the fix; and a cone is refused on the angle form, because - measured - the
+  binding documents "cylindrical or conical" and **every** reference plane is refused for
+  a cone, while the at-a-point form works on it.
+
+### Under the hood
+
+- `handler_export` went from 44% to 93% coverage, and the combined figure from 94.10% to
+  96.75%: the view sheet, the viewport capture, both `import_mesh` import paths and
+  `export`'s `stl` dispatch are covered offline now. The fake runtime gained
+  `adsk.core.CameraTypes`, and the viewport fake hands the camera out as a **copy** -
+  Fusion's documented contract - so a dropped assignment fails instead of passing.
+- `scripts/check_fusion_api.py` covers 197 `adsk` references, none missing.
+
 ## [0.9.0] - 2026-11-23
 
 This release is mostly about what a caller is told when something goes wrong. Every
@@ -1026,6 +1110,7 @@ reporting a result it had only echoed back.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.10.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.5...v0.9.0
 [0.8.5]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.4...v0.8.5
 [0.8.4]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.3...v0.8.4
