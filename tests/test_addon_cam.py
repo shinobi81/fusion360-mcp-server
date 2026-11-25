@@ -1190,6 +1190,47 @@ def test_two_tools_on_one_number_take_the_first_and_list_it_once(handler_module)
     assert "the numbers it holds are 7, 9" in str(raised.value)
 
 
+def test_a_missing_tool_number_is_answered_before_a_missing_setup(handler_module):
+    """The order mock can follow: it has no setups to look in, so the tool sentence is
+    the one both modes answer for a call carrying two faults."""
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(tool_numbers=(7,))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation("NoSuchSetup", "pocket2d", tool_number=3)
+
+    assert "No tool numbered 3" in str(raised.value)
+
+
+def test_a_missing_tool_number_is_answered_before_a_missing_body(handler_module):
+    """The same, one block earlier: a body mock cannot resolve either."""
+    handler = _handler(handler_module)
+    # Mock's own list, so the two sentences are comparable rather than coincidentally
+    # close: the numbers are part of the sentence.
+    handler._get_cam = lambda: _cam(tool_numbers=_mock_document_library())
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            "Setup1", "pocket2d", body_name="Nope", face_indices=[0], tool_number=3
+        )
+
+    from fusion360_mcp.mock import mock_command
+
+    refused = mock_command(
+        "cam_create_operation",
+        {
+            "setup_name": "Setup1",
+            "strategy": "pocket2d",
+            "body_name": "Nope",
+            "face_indices": [0],
+            "tool_number": 3,
+        },
+    )
+
+    assert "No tool numbered 3" in str(raised.value)
+    assert refused["error_message"] == str(raised.value)
+
+
 def test_an_empty_document_library_says_it_is_empty(handler_module):
     """A document with no tool registered: the hint says how to make one."""
     setup, created = _recording_setup(_tool_op())

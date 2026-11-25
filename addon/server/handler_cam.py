@@ -601,6 +601,20 @@ class CamCommands(_Contract):
                 tool_number=tool_number if tool_number is not None else 1,
             )
 
+        cam = self._get_cam()
+
+        # A number on its own selects a tool the document already holds. Judged before
+        # the operation exists, so a miss leaves nothing behind, and before the setup or
+        # the body is resolved - the order mock can follow, since it has neither to look
+        # in - so a call carrying two faults gets one sentence in both modes. The
+        # sentence answers the numbers that would have worked, which is what a
+        # NAME_NOT_FOUND hint promises.
+        library_tool = None
+        if tool_payload is None and tool_number is not None:
+            library_tool, held = self._library_tool(cam, tool_number)
+            if library_refusal := _rules.cam_library_tool_refusal(tool_number, held):
+                raise library_refusal
+
         # Everything a face selection needs is judged before the operation exists, so
         # no refusal here can leave a half-built one behind: the body must resolve and
         # every index must be in range against it.
@@ -610,19 +624,6 @@ class CamCommands(_Contract):
             selection_faces = [
                 self._face_by_index(body, index) for index in face_indices
             ]
-
-        cam = self._get_cam()
-
-        # A number on its own selects a tool the document already holds. Judged before
-        # the operation exists, so a miss leaves nothing behind, and before the setup is
-        # resolved, which is the order mock can follow: it has no setups to look in. The
-        # sentence answers the numbers that would have worked, which is what a
-        # NAME_NOT_FOUND hint promises.
-        library_tool = None
-        if tool_payload is None and tool_number is not None:
-            library_tool, held = self._library_tool(cam, tool_number)
-            if library_refusal := _rules.cam_library_tool_refusal(tool_number, held):
-                raise library_refusal
 
         setup = self._find_setup(cam, setup_name)
         op_input = setup.operations.createInput(strategy)
