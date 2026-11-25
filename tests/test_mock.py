@@ -1206,6 +1206,18 @@ class TestMockCAM:
         assert result["ok"] is False
         assert result["error_kind"] == "INVALID_INPUT"
 
+    def test_cam_create_operation_attaches_a_library_tool_by_number(self):
+        """The feature this PR exists for, rehearsed: number 1 is what mock holds."""
+        result = mock_command(
+            "cam_create_operation",
+            {"setup_name": "Setup1", "strategy": "pocket2d", "tool_number": 1},
+        )
+
+        assert result["ok"] is True
+        assert result["tool"] == {"number": 1, "from_library": True}
+        assert "diameter_cm" not in result["tool"], "the diameter is the library's"
+        assert "tool_warning" not in result, "a tool arrived, so nothing is missing"
+
     def test_cam_create_operation_attaches_a_tool_for_a_diameter(self):
         """``tool_diameter`` builds the tool now, so mock mode must not refuse it.
 

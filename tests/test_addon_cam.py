@@ -1138,6 +1138,29 @@ def test_a_tool_number_no_tool_holds_is_name_not_found(handler_module):
     assert created == [], "a miss must not leave an operation behind"
 
 
+def test_the_scan_reads_a_float_parameter_and_skips_an_unreadable_entry(handler_module):
+    """Two shapes a real library holds: Fusion reports some parameters as ``6.``, and
+    one corrupt entry must not cost the caller the numbers the others carry."""
+    setup, _created = _recording_setup(_tool_op())
+    cam = _cam(setup)
+    # Out of order, one float-valued (as Fusion reports them) and one unreadable.
+    cam.documentToolLibrary = FakeDocumentToolLibrary(
+        [
+            FakeLibraryTool(9.0),
+            FakeLibraryTool(0, unreadable=True),
+            FakeLibraryTool(7),
+        ]
+    )
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: cam
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation("Setup1", "pocket2d", tool_number=3)
+
+    # Sorted, integral, and without the entry that could not be read.
+    assert "the numbers it holds are 7, 9" in str(raised.value)
+
+
 def test_an_empty_document_library_says_it_is_empty(handler_module):
     """A document with no tool registered: the hint says how to make one."""
     setup, created = _recording_setup(_tool_op())

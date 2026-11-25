@@ -151,9 +151,15 @@ class FakeLibraryTool:
     answer.
     """
 
-    def __init__(self, number: int, description: str | None = None):
+    def __init__(
+        self, number, description: str | None = None, unreadable: bool = False
+    ):
         self.description = description or f"#{number} Ø6mm Flat Endmill"
-        self.parameters = _FakeToolParameters(number)
+        #: ``unreadable`` models an entry whose parameters cannot be read: the handler
+        #: logs and skips it rather than failing the whole scan for one bad record.
+        self.parameters = (
+            _UnreadableParameters() if unreadable else _FakeToolParameters(number)
+        )
 
 
 class _FakeToolParameters:
@@ -178,6 +184,13 @@ class _FakeToolParameter:
         self.name = "tool_number"
         self.value = types.SimpleNamespace(value=number)
         self.expression = str(number)
+
+
+class _UnreadableParameters:
+    """A tool whose ``parameters`` raise, as a corrupt library entry would."""
+
+    def itemByName(self, name: str):
+        raise RuntimeError(f"{name} unreadable")
 
 
 class FakeDocumentToolLibrary:

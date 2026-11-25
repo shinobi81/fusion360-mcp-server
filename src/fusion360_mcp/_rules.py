@@ -291,11 +291,12 @@ def cam_stock_mode_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
 def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal a contradictory tool request earns, or None when it is usable.
 
-    ``cam_create_operation`` can get a tool three ways and only one at a time: a
-    ``tool_json`` the caller measured, a ``tool_diameter`` the add-in turns into one, or
-    neither (a bare operation, which cannot generate).  Judged from the parameters
-    alone, so mock mode refuses exactly what the handler refuses - and so a caller
-    learns the combination without a design, or an operation left behind.
+    ``cam_create_operation`` can get a tool four ways and only one at a time: a
+    ``tool_json`` the caller measured, a ``tool_diameter`` the add-in turns into one, a
+    ``tool_number`` selecting one the document library holds, or none at all (a bare
+    operation, which cannot generate).  Judged from the parameters alone, so mock mode
+    refuses exactly what the handler refuses - and so a caller learns the combination
+    without a design, or an operation left behind.
 
     ``tool_number`` beside ``tool_diameter``/``tool_json`` numbers the tool that defines
     - it lives inside the JSON, so passing both would drop the argument the caller sent.

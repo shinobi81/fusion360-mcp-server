@@ -342,11 +342,9 @@ class CamCommands(_Contract):
         A refusal here removes the operation, the promise the geometry seam keeps too:
         a retry must not leave a second half-built operation in the setup.
 
-        The two calls are guarded apart because they fail for different reasons: a
-        ``RuntimeError`` from ``createFromJson`` is Fusion judging the JSON, while an
-        ``AttributeError`` from the *assignment* is a build where ``Operation.tool`` is
-        not settable - a defect of ours that the caller cannot fix by resending the
-        same payload. One shared message would blame the wrong one.
+        This half guards ``createFromJson`` alone - Fusion judging the JSON, or a build
+        without the class. The assignment that follows has its own guards in
+        ``_set_operation_tool``, because it fails for a different reason.
         """
 
         try:
@@ -404,7 +402,8 @@ class CamCommands(_Contract):
             description = getattr(op.tool, "description", None)
         return {"description": description} if description else {}
 
-    def _library_tool(self, cam, number: int):
+    @staticmethod
+    def _library_tool(cam, number: int):
         """The library tool numbered *number*, and every number the library holds.
 
         Measured on 2706.1.17: ``DocumentToolLibrary`` has no by-number lookup, but
@@ -412,18 +411,31 @@ class CamCommands(_Contract):
         out, from a library an operation had registered. ``createQuery`` exposes a
         ``NamedValues`` whose accepted keys the binding does not document, so a scan of
         a documented surface is the honest implementation of an undocumented one.
+
+        Two tie-breaks, both stated rather than implied: a parameter that reads as a
+        float (Fusion reports some as ``6.``) is truncated to the integer it names, and
+        when two tools carry one number the **first in library order** wins - the reply
+        carries that tool's description, so a caller can see which one it got. A tool
+        whose parameters cannot be read is logged and skipped rather than failing the
+        call: the sentence names the numbers that could be read, and the log says which
+        entry was not. ``library.item(i)`` itself is deliberately outside the guard -
+        a library that cannot enumerate is a Fusion failure, not a corrupt entry.
         """
         library = cam.documentToolLibrary
-        numbers = []
+        numbers: set[int] = set()
         found = None
-        for i in range(library.count):
-            tool = library.item(i)
-            with suppress(Exception):
+        for index in range(library.count):
+            tool = library.item(index)
+            try:
                 value = tool.parameters.itemByName("tool_number").value.value
-                numbers.append(int(value))
-                if int(value) == number and found is None:
-                    found = tool
-        return found, numbers
+                held = int(value)
+            except Exception as exc:
+                log.debug("library tool %s has no readable number: %s", index, exc)
+                continue
+            numbers.add(held)
+            if held == number and found is None:
+                found = tool
+        return found, sorted(numbers)
 
     @staticmethod
     def _all_operations(cam) -> list:
@@ -599,17 +611,19 @@ class CamCommands(_Contract):
             ]
 
         cam = self._get_cam()
-        setup = self._find_setup(cam, setup_name)
 
         # A number on its own selects a tool the document already holds. Judged before
-        # the operation exists, so a miss leaves nothing behind - and it answers the
-        # numbers that would have worked, which is what a NAME_NOT_FOUND hint promises.
+        # the operation exists, so a miss leaves nothing behind, and before the setup is
+        # resolved, which is the order mock can follow: it has no setups to look in. The
+        # sentence answers the numbers that would have worked, which is what a
+        # NAME_NOT_FOUND hint promises.
         library_tool = None
         if tool_payload is None and tool_number is not None:
             library_tool, held = self._library_tool(cam, tool_number)
             if library_refusal := _rules.cam_library_tool_refusal(tool_number, held):
                 raise library_refusal
 
+        setup = self._find_setup(cam, setup_name)
         op_input = setup.operations.createInput(strategy)
         if name:
             op_input.name = name
