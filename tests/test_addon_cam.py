@@ -1157,8 +1157,10 @@ def test_the_scan_reads_a_float_parameter_and_skips_an_unreadable_entry(handler_
     with pytest.raises(addon_hints.Refusal) as raised:
         handler.cam_create_operation("Setup1", "pocket2d", tool_number=3)
 
-    # Sorted, integral, and without the entry that could not be read.
-    assert "the numbers it holds are 7, 9" in str(raised.value)
+    # Sorted, integral, and without the entry that could not be read. `endswith`, not
+    # `in`: "7, 9" is a prefix of "7, 9.0", so a substring assertion would pass with the
+    # truncation removed - which is the only thing it is here to pin.
+    assert str(raised.value).endswith("the numbers it holds are 7, 9")
 
 
 def test_two_tools_on_one_number_take_the_first_and_list_it_once(handler_module):
