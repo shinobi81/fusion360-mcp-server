@@ -343,7 +343,7 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    used to answer `TIMEOUT` for a cause already named.
 
    ~~Still open from this thread: `tool_number` cannot select an existing library
-   tool~~ - **closed (#<pr>).** `DocumentToolLibrary` has no by-number lookup, so the
+   tool~~ - **closed (#152).** `DocumentToolLibrary` has no by-number lookup, so the
    measured route is `count` plus `item(i)` and each tool's own `tool_number` parameter
    (number 7 in, 7 out, measured on 2706.1.17), and `Operation.tool` takes the result
    without the library count changing. `createQuery`'s `criteria` is an
