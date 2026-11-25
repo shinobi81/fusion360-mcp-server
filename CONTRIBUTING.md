@@ -136,6 +136,16 @@ error that motivated it.
    is the pipe's, not the check's.
 5. Annotated tag on the merge commit: `git tag -a vX.Y.Z -m "…"`, then
    `git push origin vX.Y.Z`.
+
+   **The push publishes the release.** `release.yml` triggers on `v*` and its last step
+   is `gh release create` with the wheel, the sdist, `sbom.cdx.json` and
+   `provenance.sigstore.json` - the four assets a tag is supposed to carry. Do not run
+   `gh release create` yourself: a release that already exists makes that step fail with
+   `a release with the same tag name already exists`, and the release you get instead has
+   **no artifacts and no attestation**. 0.10.0 hit exactly this. If you do publish by
+   accident, delete the release (`gh release delete vX.Y.Z --yes`, which leaves the tag)
+   and re-run the failed job (`gh run rerun <id> --failed`): the job rebuilds and
+   re-attests, so the assets arrive with it.
 6. Verify the tag actually installs:
 
    ```bash
