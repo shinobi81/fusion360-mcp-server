@@ -11,6 +11,8 @@ that invents ``wait()`` cannot pass by finding it here.
 
 from __future__ import annotations
 
+import types
+
 from .collection import FakeItemCollection
 
 _NOT_STARTED = "3 : Generation not started"
@@ -137,6 +139,59 @@ class FakeCAMProduct:
     def generateToolpath(self, target):
         self.generated.append(target)
         return self.future
+
+
+class FakeLibraryTool:
+    """A ``DocumentToolLibrary`` entry, as far as the by-number scan reads it.
+
+    Measured on 2706.1.17: the library has no by-number lookup, so the handler reads
+    each tool's own ``tool_number`` parameter - ``Tool.parameters`` (a
+    ``CAMParameters``) -> ``itemByName`` -> ``Parameter.value.value``.  A fake that
+    exposed a ``number`` property would let a handler pass here that Fusion cannot
+    answer.
+    """
+
+    def __init__(self, number: int, description: str | None = None):
+        self.description = description or f"#{number} Ø6mm Flat Endmill"
+        self.parameters = _FakeToolParameters(number)
+
+
+class _FakeToolParameters:
+    def __init__(self, number: int):
+        self._number = number
+
+    @property
+    def count(self) -> int:
+        return 1
+
+    def item(self, index: int):
+        return self.itemByName("tool_number")
+
+    def itemByName(self, name: str):
+        if name != "tool_number":
+            raise KeyError(name)
+        return _FakeToolParameter(self._number)
+
+
+class _FakeToolParameter:
+    def __init__(self, number: int):
+        self.name = "tool_number"
+        self.value = types.SimpleNamespace(value=number)
+        self.expression = str(number)
+
+
+class FakeDocumentToolLibrary:
+    """``adsk.cam.DocumentToolLibrary``: ``count`` and ``item(i)``, in that order."""
+
+    def __init__(self, tools=()):
+        self._tools = list(tools)
+
+    @property
+    def count(self) -> int:
+        return len(self._tools)
+
+    def item(self, index: int):
+        return self._tools[index]
 
 
 class FakePostProcessInput:

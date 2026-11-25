@@ -25,6 +25,7 @@ from ._rules import (
     as_built_geometry_refusal,
     body_name_required_refusal,
     cam_geometry_refusal,
+    cam_library_tool_refusal,
     cam_stock_mode_refusal,
     cam_strategy_refusal,
     cam_target_refusal,
@@ -1020,6 +1021,12 @@ def _add_dimension(p: dict) -> dict:
     }
 
 
+#: The tool numbers mock mode's document library holds.  One tool, because a fake
+#: cannot model what a caller's Fusion document holds - and a number it does not hold is
+#: answered with the sentence the handler would give for that same list.
+DOCUMENT_TOOL_LIBRARY = (1,)
+
+
 # ── construction geometry ─────────────────────────────────────────────
 
 
@@ -1615,6 +1622,14 @@ def _cam_create_operation(p: dict) -> dict:
     )
     if selector_refusal is not None:
         return _refusal_error(selector_refusal)
+    # A number alone selects from the document library, so a miss is the library's
+    # answer and not a shape fault.
+    if p.get("tool_diameter") is None and p.get("tool_json") is None:
+        library_refusal = cam_library_tool_refusal(
+            p.get("tool_number"), DOCUMENT_TOOL_LIBRARY
+        )
+        if library_refusal is not None:
+            return _refusal_error(library_refusal)
     result = {
         "name": p.get("name", "Operation1"),
         "setup": p.get("setup_name", "Setup1"),
@@ -1643,6 +1658,11 @@ def _cam_create_operation(p: dict) -> dict:
         # rehearsal that indexed ``result["tool"]["description"]`` here would break
         # live for a JSON Fusion declines to describe.
         result["tool"] = {}
+    elif p.get("tool_number") is not None:
+        # A number on its own selects a library tool. The handler also answers its
+        # description, read back from Fusion - which a fake cannot know, so this
+        # promises only the two keys the call itself settles.
+        result["tool"] = {"number": p["tool_number"], "from_library": True}
     else:
         result["tool"] = None
         result["tool_warning"] = CAM_NO_TOOL_WARNING

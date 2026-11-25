@@ -26,8 +26,10 @@ from tests.fakes.cam import (
     FakeCAMProduct,
     FakeCompletedFlagFuture,
     FakeCounterFuture,
+    FakeDocumentToolLibrary,
     FakeGenerationFailureFuture,
     FakeGenerationFlagFuture,
+    FakeLibraryTool,
     FakeNeverStartedFuture,
     FakeNoFlagFuture,
     FakeNotStartedCounterFuture,
@@ -54,8 +56,20 @@ def _setup(name: str = "Setup1", operation=None) -> SimpleNamespace:
     )
 
 
-def _cam(*setups, generic_post=None) -> SimpleNamespace:
-    return SimpleNamespace(setups=_items(*setups), genericPostFolder=generic_post)
+def _cam(*setups, generic_post=None, tool_numbers=()) -> SimpleNamespace:
+    """A CAM product: setups, the post folder, and the document tool library.
+
+    The library defaults to empty, so a test that passes ``tool_number`` on its own has
+    to say what Fusion's document holds - which is the point, since mock mode declares
+    its own list and the two must answer one sentence for the same numbers.
+    """
+    return SimpleNamespace(
+        setups=_items(*setups),
+        genericPostFolder=generic_post,
+        documentToolLibrary=FakeDocumentToolLibrary(
+            [FakeLibraryTool(number) for number in tool_numbers]
+        ),
+    )
 
 
 def _handler(handler_module):
@@ -1087,18 +1101,83 @@ def test_a_non_numeric_diameter_is_refused_by_name(handler_module):
     assert created == []
 
 
-def test_a_tool_number_without_a_tool_is_refused(handler_module):
-    """There is no library lookup yet, so a bare number would describe nothing."""
+def test_a_tool_number_selects_a_tool_the_library_holds(handler_module):
+    """Measured on 2706.1.17: the library has no by-number lookup, so the handler reads
+    each tool's own ``tool_number`` parameter, and ``Operation.tool`` takes the result.
+
+    The reply says where the tool came from and carries no ``diameter_cm``: its
+    diameter is the library's, not something this call chose.
+    """
+    operation = _tool_op()
+    setup, created = _recording_setup(operation)
+    cam = _cam(setup, tool_numbers=(7, 9))
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: cam
+
+    result = handler.cam_create_operation("Setup1", "pocket2d", tool_number=9)
+
+    assert operation.tool is cam.documentToolLibrary.item(1)
+    assert result["tool"]["number"] == 9
+    assert result["tool"]["from_library"] is True
+    assert "diameter_cm" not in result["tool"]
+    assert created == [operation], "the operation the call created, and only it"
+
+
+def test_a_tool_number_no_tool_holds_is_name_not_found(handler_module):
+    """The sentence names the numbers that would have worked, and nothing is created."""
+    setup, created = _recording_setup(_tool_op())
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(setup, tool_numbers=(7, 9))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation("Setup1", "pocket2d", tool_number=3)
+
+    assert raised.value.error_kind == "NAME_NOT_FOUND"
+    assert "No tool numbered 3" in str(raised.value)
+    assert "7, 9" in str(raised.value)
+    assert created == [], "a miss must not leave an operation behind"
+
+
+def test_an_empty_document_library_says_it_is_empty(handler_module):
+    """A document with no tool registered: the hint says how to make one."""
     setup, created = _recording_setup(_tool_op())
     handler = _handler(handler_module)
     handler._get_cam = lambda: _cam(setup)
 
     with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation("Setup1", "pocket2d", tool_number=1)
+
+    assert "it is empty" in str(raised.value)
+    assert any("tool_diameter" in hint for hint in raised.value.hints)
+    assert created == []
+
+
+def _mock_document_library():
+    """The numbers mock's fake document holds, so this test cannot drift from it."""
+    from fusion360_mcp.mock import DOCUMENT_TOOL_LIBRARY
+
+    return DOCUMENT_TOOL_LIBRARY
+
+
+def test_mock_and_the_handler_refuse_a_missing_tool_number_alike(handler_module):
+    """One number, one list, one sentence - mock declares (1,), so the handler is fed
+    the same list rather than a literal."""
+    setup, _created = _recording_setup(_tool_op())
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(setup, tool_numbers=_mock_document_library())
+
+    with pytest.raises(addon_hints.Refusal) as raised:
         handler.cam_create_operation("Setup1", "pocket2d", tool_number=3)
 
-    assert raised.value.error_kind == "INVALID_INPUT"
-    assert "tool_diameter" in str(raised.value)
-    assert created == []
+    from fusion360_mcp.mock import mock_command
+
+    refused = mock_command(
+        "cam_create_operation",
+        {"setup_name": "Setup1", "strategy": "pocket2d", "tool_number": 3},
+    )
+
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
 
 
 def test_fusion_refusing_the_tool_object_is_a_refusal(handler_module, monkeypatch):

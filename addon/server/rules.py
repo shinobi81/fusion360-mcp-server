@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 # ``_hints.Refusal``, not ``from .hints import Refusal``: the add-in reloads these
@@ -303,9 +303,10 @@ def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     alone, so mock mode refuses exactly what the handler refuses - and so a caller
     learns the combination without a design, or an operation left behind.
 
-    ``tool_number`` numbers a tool the add-in creates; there is no library lookup yet,
-    so a number on its own names nothing.  It used to reach Fusion as a parameter name
-    that does not exist, which reported a silent ``parameters_failed``.
+    ``tool_number`` beside ``tool_diameter``/``tool_json`` numbers the tool that defines
+    - it lives inside the JSON, so passing both would drop the argument the caller sent.
+    On its own it selects a tool the document tool library already holds, which is a
+    lookup (``cam_library_tool_refusal`` answers a miss), not a shape check.
 
     ``tool_json`` is checked for *shape* here as well, because it is forwarded verbatim
     to ``Tool.createFromJson`` - the one call in this path with a measured crash history
@@ -390,25 +391,47 @@ def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
                 f"{name} must be passed as an integer, got {value!r}",
                 hints=("A flute count and a tool number are counts, not lengths.",),
             )
-    if params.get("tool_diameter") is None:
-        if shape_given:
-            return _hints.Refusal(
-                "INVALID_INPUT",
-                f"{', '.join(shape_given)} shapes the tool tool_diameter creates - "
-                "pass tool_diameter too",
-                hints=("tool_diameter is in centimetres, like every other length.",),
-            )
-        if params.get("tool_number") is not None:
-            return _hints.Refusal(
-                "INVALID_INPUT",
-                "tool_number numbers a tool this command creates - pass tool_diameter "
-                "(cm) or tool_json too",
-                hints=(
-                    "Without a tool source the operation is created with no tool, "
-                    "and Fusion then refuses to generate its toolpath.",
-                ),
-            )
+    if params.get("tool_diameter") is None and shape_given:
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"{', '.join(shape_given)} shapes the tool tool_diameter creates - "
+            "pass tool_diameter too",
+            hints=("tool_diameter is in centimetres, like every other length.",),
+        )
     return None
+
+
+def cam_library_tool_refusal(
+    tool_number: int | None,
+    available: Iterable[int],
+) -> _hints.Refusal | None:
+    """The refusal a ``tool_number`` no library tool carries earns, or None.
+
+    ``tool_number`` alone selects a tool the document's library already holds - measured
+    on 2706.1.17: ``documentToolLibrary.item(i)``, then the tool's own ``tool_number``
+    parameter, then ``Operation.tool`` takes it (the library count does not change, so
+    nothing is registered twice).
+
+    The numbers come from whatever the caller can see: the handler passes the live
+    library's, mock mode the ones it declares.  Both then answer one sentence for one
+    call, and the sentence names the numbers that would have worked instead of leaving
+    the caller to guess - the same shape ``NAME_NOT_FOUND`` takes everywhere else.
+    """
+    if tool_number is None:
+        return None
+    numbers = sorted(available)
+    if tool_number in numbers:
+        return None
+    listed = ", ".join(str(number) for number in numbers)
+    where = f"the numbers it holds are {listed}" if numbers else "it is empty"
+    return _hints.Refusal(
+        "NAME_NOT_FOUND",
+        f"No tool numbered {tool_number} in the document tool library - {where}",
+        hints=(
+            "cam_create_operation(tool_diameter=...) creates a tool and registers it.",
+            "Then pass tool_number alone to reuse one the library already holds.",
+        ),
+    )
 
 
 def joint_selector_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:

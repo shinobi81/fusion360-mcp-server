@@ -24,6 +24,17 @@ from . import rules as _rules
 
 log = get_logger("handler")
 
+
+def _remove_operation(op) -> None:
+    """Take a half-built operation out again, never masking the refusal being raised.
+
+    ``deleteMe`` is measured to work on 2706.1.17, but if it ever refuses, its exception
+    would replace a classified refusal with ``UNKNOWN`` and no hints - the shape #138
+    removed.
+    """
+    with suppress(Exception):
+        op.deleteMe()
+
 # The advice a name-based refusal gives: ``cam_list_operations`` needs a setup, so
 # the chain that reaches the real names starts at the setups.
 _OPERATION_LIST_HINT = (
@@ -338,21 +349,11 @@ class CamCommands(_Contract):
         same payload. One shared message would blame the wrong one.
         """
 
-        def remove_operation() -> None:
-            """Take the operation out again, never masking the refusal being raised.
-
-            ``deleteMe`` is measured to work on 2706.1.17, but if it ever refuses, its
-            exception would replace a classified refusal with ``UNKNOWN`` and no hints -
-            the shape #138 removed.
-            """
-            with suppress(Exception):
-                op.deleteMe()
-
         try:
             tool = adsk.cam.Tool.createFromJson(tool_payload)
         except AttributeError as exc:
             # ``adsk.cam.Tool`` missing is this environment, not the caller's JSON.
-            remove_operation()
+            _remove_operation(op)
             raise _hints.Refusal(
                 "INTERNAL_ERROR",
                 f"This Fusion build has no usable Tool.createFromJson: {exc}. "
@@ -360,7 +361,7 @@ class CamCommands(_Contract):
                 hints=("This is an add-in defect, not an input problem.",),
             ) from exc
         except Exception as exc:
-            remove_operation()
+            _remove_operation(op)
             raise _hints.Refusal(
                 "FUSION_REFUSED",
                 f"Fusion refused the tool definition: {exc}. The operation was "
@@ -370,10 +371,19 @@ class CamCommands(_Contract):
                     "complete tool_json taken from a Fusion tool library.",
                 ),
             ) from exc
+        return self._set_operation_tool(op, tool)
+
+    def _set_operation_tool(self, op, tool) -> dict[str, Any]:
+        """Put *tool* on *op* and describe it, or remove the operation and refuse.
+
+        Shared by the two ways a tool arrives - built from JSON, or selected from the
+        document library - because the assignment is where they meet and the two
+        failure modes are the operation's, not the tool's.
+        """
         try:
             op.tool = tool
         except AttributeError as exc:
-            remove_operation()
+            _remove_operation(op)
             raise _hints.Refusal(
                 "INTERNAL_ERROR",
                 f"This Fusion build does not take a tool on an operation: {exc}. "
@@ -381,7 +391,7 @@ class CamCommands(_Contract):
                 hints=("This is an add-in defect, not an input problem.",),
             ) from exc
         except Exception as exc:
-            remove_operation()
+            _remove_operation(op)
             raise _hints.Refusal(
                 "FUSION_REFUSED",
                 f"Fusion refused the tool on the operation: {exc}. The operation "
@@ -393,6 +403,27 @@ class CamCommands(_Contract):
         with suppress(Exception):
             description = getattr(op.tool, "description", None)
         return {"description": description} if description else {}
+
+    def _library_tool(self, cam, number: int):
+        """The library tool numbered *number*, and every number the library holds.
+
+        Measured on 2706.1.17: ``DocumentToolLibrary`` has no by-number lookup, but
+        ``item(i)`` and each tool's own ``tool_number`` parameter answer it - 7 in, 7
+        out, from a library an operation had registered. ``createQuery`` exposes a
+        ``NamedValues`` whose accepted keys the binding does not document, so a scan of
+        a documented surface is the honest implementation of an undocumented one.
+        """
+        library = cam.documentToolLibrary
+        numbers = []
+        found = None
+        for i in range(library.count):
+            tool = library.item(i)
+            with suppress(Exception):
+                value = tool.parameters.itemByName("tool_number").value.value
+                numbers.append(int(value))
+                if int(value) == number and found is None:
+                    found = tool
+        return found, numbers
 
     @staticmethod
     def _all_operations(cam) -> list:
@@ -570,6 +601,15 @@ class CamCommands(_Contract):
         cam = self._get_cam()
         setup = self._find_setup(cam, setup_name)
 
+        # A number on its own selects a tool the document already holds. Judged before
+        # the operation exists, so a miss leaves nothing behind - and it answers the
+        # numbers that would have worked, which is what a NAME_NOT_FOUND hint promises.
+        library_tool = None
+        if tool_payload is None and tool_number is not None:
+            library_tool, held = self._library_tool(cam, tool_number)
+            if library_refusal := _rules.cam_library_tool_refusal(tool_number, held):
+                raise library_refusal
+
         op_input = setup.operations.createInput(strategy)
         if name:
             op_input.name = name
@@ -617,6 +657,14 @@ class CamCommands(_Contract):
             result["tool"] = self._attach_tool(op, tool_payload)
             if tool_diameter is not None:
                 result["tool"]["diameter_cm"] = tool_diameter
+        elif library_tool is not None:
+            # The library's own tool, so the reply says where it came from: its
+            # diameter is the library's, not something this call chose.
+            result["tool"] = {
+                **self._set_operation_tool(op, library_tool),
+                "number": tool_number,
+                "from_library": True,
+            }
         else:
             # A reply rather than a refusal: the operation is usable and a tool can
             # arrive later.  Generation, however, will not: Fusion answers this exact

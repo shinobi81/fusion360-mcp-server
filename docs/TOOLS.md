@@ -299,6 +299,27 @@ Every `add_joint` result carries the measurements behind that:
 | `cam_list_operations`    | List operations in a setup                                                                                          |
 | `cam_get_operation_info` | Get operation details (strategy, tool, parameters)                                                                  |
 
+### How `cam_create_operation` gets a tool
+
+Three ways, one at a time:
+
+- **`tool_diameter`** (cm) — the add-in builds a complete flat end mill, Fusion
+  registers it in the document tool library itself, and the reply carries
+  `diameter_cm`. `tool_length`, `tool_flutes` and `tool_number` shape that tool.
+- **`tool_json`** — a complete tool object taken from a Fusion tool library, used
+  verbatim. A *partial* object is not refused: measured on 2706.1.17 it **crashed
+  Fusion**, taking the document's unsaved state with it, which is why the builder
+  emits the whole shape.
+- **`tool_number` on its own** — selects a tool the **document tool library already
+  holds**, and the reply says `from_library: true` with no `diameter_cm` (the diameter
+  is the library's). A number nothing holds is `NAME_NOT_FOUND`, naming the numbers
+  that would work — or saying the library is empty, which is what a new document's is
+  until an operation registers a tool.
+
+Measured on 2706.1.17: `DocumentToolLibrary` has no by-number lookup, but `count` plus
+`item(i)` and each tool's own `tool_number` parameter answer it (number 7 in, 7 out),
+and `Operation.tool` takes the result without the library count changing.
+
 ## Code Execution
 
 | Tool           | Description                                 |
