@@ -136,9 +136,7 @@ class TestHintClassification:
         """`cam_generate_toolpath` raises a typed NAME_NOT_FOUND for its own
         search; the lookup rule classifies a RuntimeError for the same fault. One
         fault, one kind — otherwise a client branches twice for one mistake."""
-        typed = Refusal(
-            "NAME_NOT_FOUND", "Operation 'Rough1' not found in any setup"
-        )
+        typed = Refusal("NAME_NOT_FOUND", "Operation 'Rough1' not found in any setup")
 
         assert classify(typed)[0] == "NAME_NOT_FOUND"
         assert classify("Setup 'Nope' not found")[0] == "NAME_NOT_FOUND"
@@ -151,6 +149,28 @@ class TestHintClassification:
         """
         assert classify("Body 'Sketch1' not found")[0] == "BODY_NOT_FOUND"
         assert classify("Sketch 'Body1' not found")[0] == "SKETCH_NOT_FOUND"
+
+    @pytest.mark.parametrize(
+        "msg",
+        [
+            "No faces matched selection 'top'",
+            "No faces matched 'bottom'",
+        ],
+    )
+    def test_no_face_in_that_plane_is_geometry_unsupported(self, msg):
+        """The selector is not mistyped — the body has no face in that plane.
+
+        That is the same class as a component with no sheet-metal rule, which
+        already answers GEOMETRY_UNSUPPORTED: the body does not have the geometry
+        the call needs. A mistyped selector has its own rule, so this message can
+        never be a parameter fault. Unchanged: the three hints that say which
+        faces the selector means and where the indices come from.
+        """
+        kind, hints = classify(msg)
+
+        assert kind == "GEOMETRY_UNSUPPORTED"
+        assert any("selected plane" in hint for hint in hints)
+        assert any("list_faces" in hint for hint in hints)
 
     @pytest.mark.parametrize(
         "msg",

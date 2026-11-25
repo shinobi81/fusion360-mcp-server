@@ -188,22 +188,26 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    (`#134`), and `#143`'s caller-visible schema change - `cam_create_operation`'s
    strategy enum replaced with ten measured names and two new arguments (`body_name`,
    `face_indices`).
-2. **Retag the rules that already carry a kind** - deferred, and named here so the
-   inconsistency reads as a decision rather than an oversight. The work above changed the
-   tag of the 88 with none; a rule that already answered with a kind kept it, even where
-   the new taxonomy disagrees: the CAM `setup/operation not found` rule is still
-   `INVALID_INPUT`, and so is `no faces matched`. Those tags are what a client may
-   already branch on, so changing them is a client-visible change with its own evidence
-   and release note, not a ride-along. One new path is deliberately asymmetric:
-   `cam_generate_toolpath(operation_name=…)` answers `NAME_NOT_FOUND`, because its hint
-   names the list to enumerate, while the CAM `setup/operation not found` rule still
-   answers `INVALID_INPUT`; the two coexist because retagging that rule is the deferred
-   change above, and the new search raises its own typed refusal rather than that
-   message. One retag did ship with this work, because the rule's own hint already said
-   so: `InternalValidationError` used to answer `INVALID_INPUT` and now reports
-   `FUSION_REFUSED` (measured on Fusion 2706.1.17: `2 : InternalValidationError …`),
-   pinned by `test_an_internal_validation_error_is_a_fusion_refusal` in
-   `tests/test_feedback.py`.
+2. ~~**Retag the rules that already carry a kind**~~ - **closed (#<pr>).** The work above
+   changed the tag of the 88 with none; a rule that already answered with a kind kept
+   it, even where the new taxonomy disagreed. The two that disagreed answer the
+   taxonomy now: the CAM `setup/operation not found` rule and `no faces matched`.
+   Nothing about either message or hint moved - the tag is the only thing a client sees
+   differently - so this is the client-visible change with its own release note the
+   item asked for, not a ride-along. Three test pins flipped with it, in
+   `tests/test_feedback.py`, `tests/test_addon_face_selection.py` and
+   `tests/test_addon_feature_edits.py`, and one docstring's reasoning went with them
+   (it argued for `INVALID_INPUT` on the grounds that the body was found and the
+   *selector* did not apply; the tie-break is that the selector was applied correctly
+   and the body has no such face, which is geometry, not a parameter).
+
+   The `NAME_NOT_FOUND` tag ends an asymmetry the item recorded rather than lost:
+   `cam_generate_toolpath(operation_name=…)` raises its own typed `NAME_NOT_FOUND` for
+   a search that finds nothing, while the lookup rule answered `INVALID_INPUT` for the
+   same fault. One fault, one kind, whichever command met it - pinned by
+   `test_a_missing_cam_name_answers_one_kind_whichever_way_it_is_raised`.
+   `InternalValidationError` had already retagged to `FUSION_REFUSED` on the same
+   grounds (measured on Fusion 2706.1.17: `2 : InternalValidationError …`).
 3. **`handler_cam` (65%) and `handler_export` (44%)** - measured after #141 - are the
    two modules the coverage parcels above left where they were. The refusal work
    drove their refusal paths (that is the 23% -> 44% on `handler_export`: its refusals

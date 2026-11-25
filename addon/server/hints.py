@@ -257,9 +257,12 @@ _RULES: list[tuple[str, str, list[str]]] = [
     ),
     (
         # The face selectors mean "the faces lying in the top/bottom PLANE", so a
-        # body whose top is a curved surface has none there.
+        # body whose top is a curved surface has none there.  That is the body's
+        # geometry, not a mistyped selector - the selector's own enum is refused by
+        # its own rule below - so the kind says which move the caller has:
+        # a different face, not a different argument.
         r"no faces matched",
-        "INVALID_INPUT",
+        "GEOMETRY_UNSUPPORTED",
         [
             "No face of that body lies in the selected plane; nothing was written.",
             "top and bottom take the faces in the highest or lowest flat plane.",
