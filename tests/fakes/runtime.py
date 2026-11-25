@@ -35,15 +35,16 @@ _ADAPTER_NAMES = ("cam", "core", "fusion", "doEvents")
 PARAMETRIC = "ParametricDesignType"
 DIRECT = "DirectDesignType"
 
+#: ``CameraTypes``: the member ``export_view_sheet`` sets, and the one a test needs to
+#: start from. Their numbers are not observable through the add-in - which is why they
+#: are not the ones below, whatever they look like.
+ORTHOGRAPHIC_CAMERA_TYPE = 0
+PERSPECTIVE_CAMERA_TYPE = 1
+
 # ``adsk.core.SurfaceTypes``, as the shipped stub numbers it (``adsk/core.py``:
 # ``PlaneSurfaceType = 0``, ``CylinderSurfaceType = 1``).  ``unfold`` scans a body's
 # faces for the first planar one, so a geometry that answered the wrong member
 # would pick a bend's side wall as the stationary face.
-#: ``CameraTypes``: the member ``export_view_sheet`` sets, and the one a test needs to
-#: start from. Their numbers are not observable through the add-in.
-ORTHOGRAPHIC_CAMERA_TYPE = 0
-PERSPECTIVE_CAMERA_TYPE = 1
-
 PLANE_SURFACE_TYPE = 0
 CYLINDER_SURFACE_TYPE = 1
 CONE_SURFACE_TYPE = 2

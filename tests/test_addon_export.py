@@ -290,8 +290,8 @@ class _FakeCamera:
 
     ``render_view`` and ``export_view_sheet`` both save ``eye``/``target``/``upVector``
     and ``cameraType`` and put them back afterwards, so the fake carries real
-    point/vector objects rather than tuples - a restore that wrote a tuple would pass
-    here and fail in Fusion.
+    point/vector objects rather than tuples: a restore that wrote a tuple raises here,
+    at the first capture or at ``state()``, where Fusion would simply ignore it.
     """
 
     def __init__(
@@ -356,6 +356,9 @@ class _Viewport:
         #: orthographic and the restore writes the caller's back, so only a capture-time
         #: read sees that it was set at all.
         self.types_at_capture: list[int] = []
+        #: ``isFitView`` at each capture, for the same reason as the type:
+        #: ``_apply_view`` sets it and the restore does not reset it.
+        self.fit_view_at_capture: list[bool] = []
 
     @property
     def camera(self) -> _FakeCamera:
@@ -388,6 +391,7 @@ class _Viewport:
         up = self._camera.upVector
         self.ups_at_capture.append((up.x, up.y, up.z))
         self.types_at_capture.append(self._camera.cameraType)
+        self.fit_view_at_capture.append(self._camera.isFitView)
         if self.saved:
             with open(path, "wb") as handle:
                 # Recognisable, and *per file*: the basename goes in, so two views write
@@ -605,7 +609,10 @@ class TestRenderViewCapture:
 
 
 class _ImportingMeshBodies:
-    """``MeshBodies`` with the current ``add`` that answers a list.
+    """``MeshBodies`` with the current ``add``, which answers a ``MeshBodyList``.
+
+    ``count``/``item(i)``, not a Python list: the handler reads those two, and a list
+    would break it in a way no fake should model as normal.
 
     The handler tries ``add`` first and falls back to ``addByFile`` on
     ``AttributeError``, so a fake with both would never exercise the fallback and one
@@ -816,6 +823,12 @@ class TestExportViewSheet:
             ORTHOGRAPHIC_CAMERA_TYPE,
             ORTHOGRAPHIC_CAMERA_TYPE,
         ]
+        assert viewport.fit_view_at_capture == [True, True], (
+            "_apply_view asks for a fit"
+        )
+        # One refresh per view from _apply_view, one more from the restore: the bare
+        # ``>= 1`` a refusal test can use would be satisfied by the restore alone.
+        assert viewport.refreshed == 3
 
     def test_a_document_with_no_visible_body_frames_the_origin(
         self, bound_handler, tmp_path
