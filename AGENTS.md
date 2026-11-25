@@ -23,7 +23,9 @@ per-item `threading.Event` until the main thread completes it. Details: `ARCHITE
 ```bash
 uv sync --locked               # install deps into .venv; refuses a stale lock
 uv run python scripts/check_fusion_api.py  # every adsk name the add-in uses, checked
-                               # against the running Fusion; exit 1 on an invented one
+                               # against the running Fusion. Exit 1 on an invented
+                               # name, a failed connection, or an audit it could not
+                               # run - which it cannot without a document open
 uv run pytest -q               # suite runs without Fusion
 uv run pytest -q --no-cov tests/test_tools.py   # subset: the coverage floor
                                                 # applies to the whole suite
@@ -90,19 +92,20 @@ The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
 
 ## Scripted edits
 
-- **Assert the anchor matches — exactly once.** `str.replace` returns the string
+- **Require the anchor to match — exactly once.** `str.replace` returns the string
   unchanged when the old text is absent, so an edit that changed nothing exits zero
   and reads like one that worked. Count the occurrences: `text.count(old)` must be 1 —
   0 means the anchor is gone, 2 means it is ambiguous. Insert whole lines — a new
-  bullet or section — rather than reflowing it: prose in this file is hard-wrapped at
-  the MD013 limit (`.markdownlint-cli2.jsonc`), so a reflow breaks the anchor.
+  bullet or section — rather than reflowing the paragraph an anchor sits in: prose in
+  this file is hard-wrapped at the MD013 limit (`.markdownlint-cli2.jsonc`), so a
+  reflow breaks the anchor.
 - **Set the line ending explicitly.** `.gitattributes` puts tracked text files on
-  `eol=lf`, while `*.ps1`, `*.bat` and `*.cmd` keep CRLF by policy — a batch file with
-  LF is misparsed by cmd.exe. On Windows, text-mode writes turn every `\n` into CRLF
-  in the working tree while the blob stays LF: pass `encoding="utf-8"` and
-  `newline="\n"` as `scripts/sync_mirrors.py` does, and `newline="\r\n"` for those
-  three suffixes. For those three, an anchor read back through `newline=""` or as
-  bytes keeps its CRLF; read it with `read_text()`.
+  `eol=lf`, while `*.ps1`, `*.bat` and `*.cmd` keep CRLF by policy (see that file). On
+  Windows, text-mode writes turn every `\n` into CRLF in the working tree while the
+  blob stays LF: pass `encoding="utf-8"` and `newline="\n"` as
+  `scripts/sync_mirrors.py` does, and `newline="\r\n"` for those three suffixes: an
+  anchor read back through `newline=""` or as bytes keeps its CRLF, so read it with
+  `read_text(encoding="utf-8")`.
 
 ## Boundaries
 
@@ -121,9 +124,9 @@ The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
 - Never call `close()` on the active Fusion document from `execute_code` — it crashed
   Fusion 2705.
 - Do not "fix" `addon/` type errors by adding ignores; `adsk` cannot resolve outside
-  Fusion and the directory is excluded on purpose. Settle one with
-  `scripts/check_fusion_api.py`, with Fusion running (exit 1 also means
-  `not connected`), and a lint finding with the lint gate above, which names `addon/`.
+  Fusion and the directory is excluded on purpose. Settle a missing name with
+  `scripts/check_fusion_api.py`, which proves names and not arities; a lint finding
+  needs the lint gate above.
 - Do not edit `build/`, `.venv/`, or `uv.lock` by hand (`uv lock` regenerates it).
 
 ## Merging
