@@ -90,20 +90,21 @@ The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
 
 ## Scripted edits
 
-- **Assert the anchor matched — exactly once.** `str.replace` returns the string
-  unchanged when the old text is absent, so an edit that changed nothing exits zero
-  and reads like one that worked — which is how a version bump was once reported as
-  landed with the file unchanged. `assert text.count(old) == 1` first, since a second
-  copy would be rewritten too. Prefer line-based anchors for prose: it is
-  hard-wrapped at 88 (markdownlint's MD013), so inserting above an anchor rewraps the
-  lines below and the anchor no longer matches.
+- **Assert the anchor matches — exactly once.** `str.replace` returns the string
+  unchanged when the old text is absent, so an edit that changed nothing exits zero and
+  reads like one that worked — which is how an edit to `docs/ROADMAP.md` was once
+  reported as landed with the file unchanged. Count the occurrences first:
+  `text.count(old)` must be 1, since a second copy would be rewritten too. And insert
+  whole lines — a new bullet or paragraph — rather than reflowing a paragraph: prose
+  here is hard-wrapped at 88 (markdownlint's MD013), so a reflow breaks every anchor
+  inside it.
 - **Set the line ending explicitly.** `.gitattributes` puts tracked text files on
-  `eol=lf` (`*.ps1`, `*.bat` and `*.cmd` are CRLF on purpose), and on Windows a
-  Python literal `\n` written in text mode reaches the working tree as CRLF
-  while the blob stays LF. Pass `newline="\n"` as `scripts/sync_mirrors.py`
-  does — `newline="\r\n"` for those three suffixes. An anchor read back
-  through `newline=""`, bytes or `sed` keeps its CRLF, so read it with
-  `read_text()`.
+  `eol=lf` (`*.ps1`, `*.bat` and `*.cmd` are CRLF on purpose — cmd.exe misparses them
+  otherwise), and on Windows a Python literal `\n` written in text mode reaches the
+  working tree as CRLF while the blob stays LF. Pass `newline="\n"` as
+  `scripts/sync_mirrors.py` does, and `newline="\r\n"` for those three suffixes. An
+  anchor read back through `newline=""`, as bytes, or through `sed` keeps its CRLF, so
+  read it with `read_text()`.
 
 ## Boundaries
 
@@ -122,9 +123,11 @@ The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
 - Never call `close()` on the active Fusion document from `execute_code` — it crashed
   Fusion 2705.
 - Do not "fix" `addon/` type errors by adding ignores; `adsk` cannot resolve outside
-  Fusion and the directory is excluded on purpose. Editor or LSP findings there are
-  mostly stale or misattributed: settle an `adsk` name with
-  `scripts/check_fusion_api.py`, a lint finding with `ruff check`.
+  Fusion and the directory is excluded on purpose. Most editor or LSP findings there are
+  stale or misattributed: settle an `adsk` name with `scripts/check_fusion_api.py`, with
+  Fusion running (exit 1 also means "not connected"), and a lint finding with
+  `ruff check addon/`, since `extend-exclude` in `pyproject.toml` skips the directory
+  otherwise.
 - Do not edit `build/`, `.venv/`, or `uv.lock` by hand (`uv lock` regenerates it).
 
 ## Merging
