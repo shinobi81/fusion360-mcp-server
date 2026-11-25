@@ -1240,7 +1240,7 @@ def test_a_missing_tool_number_is_answered_before_a_missing_body(handler_module)
         {"strategy": "2d_contour"},
         {"strategy": "contour2d", "face_indices": [0]},
     ],
-    ids=["unknown strategy", "geometry on a strategy without one"],
+    ids=["unknown strategy", "face_indices without a body name"],
 )
 def test_a_parameter_fault_outranks_the_library_check_on_both_sides(
     handler_module, extra

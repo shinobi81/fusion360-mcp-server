@@ -2350,8 +2350,9 @@ TOOLS: list[dict] = [
                 "Number the post writes. On its own it selects a tool the "
                 "document tool library already holds - the reply says "
                 "from_library, and a number nothing holds is refused naming the "
-                "numbers that would work. Beside tool_diameter it numbers the "
-                "tool that creates. A tool supplied as tool_json carries its own "
+                "numbers that would work - or saying the library is empty. Beside "
+                "tool_diameter it numbers the tool that creates. A tool supplied as "
+                "tool_json carries its own "
                 "number in its post-process block, so passing tool_number beside "
                 "tool_json is refused rather than dropped."
             ),
