@@ -151,8 +151,13 @@ _RULES: list[tuple[str, str, list[str]]] = [
     (
         # Our CAM lookups quote the name they could not find.  Anchored on the
         # quoted name so the BODY/SKETCH rules above keep their own wording.
+        # The kind is NAME_NOT_FOUND, not INVALID_INPUT: nothing about the call is
+        # unusable — the name does not exist — and the hint below already names the
+        # enumeration that answers it.  ``cam_generate_toolpath`` raises a typed
+        # NAME_NOT_FOUND for its own search of the same fault, so one mistake used
+        # to answer two ways depending on which command met it.
         r"(?:setup|operation)\s+['\"][^'\"]*['\"]\s+(?:not found|does not exist)",
-        "INVALID_INPUT",
+        "NAME_NOT_FOUND",
         [
             "No CAM setup or operation in this design has that name.",
             "cam_list_setups (then cam_list_operations) lists the real names.",

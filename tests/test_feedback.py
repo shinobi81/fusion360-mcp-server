@@ -5,7 +5,7 @@ import base64
 import mcp.types as types
 import pytest
 
-from fusion360_mcp.hints import classify
+from fusion360_mcp.hints import Refusal, classify
 from fusion360_mcp.mock import _MUTATION_MOCKS, mock_command
 from fusion360_mcp.server import _format_result
 
@@ -119,14 +119,29 @@ class TestHintClassification:
                 "Unknown operation_type 'laser' — use milling/turning/cutting",
                 "INVALID_INPUT",
             ),
-            ("Setup 'Nope' not found", "INVALID_INPUT"),
-            ("Operation 'Rough1' not found in setup 'Setup1'", "INVALID_INPUT"),
+            # A name that does not exist is NAME_NOT_FOUND, not a bad argument:
+            # the rule's own hints already send the caller to cam_list_setups,
+            # which is NAME_NOT_FOUND's next move. A client that branches on the
+            # kind was told the wrong thing to do with it.
+            ("Setup 'Nope' not found", "NAME_NOT_FOUND"),
+            ("Operation 'Rough1' not found in setup 'Setup1'", "NAME_NOT_FOUND"),
         ],
     )
     def test_cam_lookup_and_enum_refusals_are_classified(self, msg, expected_kind):
         kind, hints = classify(msg)
         assert kind == expected_kind, f"'{msg}' classified as {kind}"
         assert hints, f"'{msg}' must ship with a next step"
+
+    def test_a_missing_cam_name_answers_one_kind_whichever_way_it_is_raised(self):
+        """`cam_generate_toolpath` raises a typed NAME_NOT_FOUND for its own
+        search; the lookup rule classifies a RuntimeError for the same fault. One
+        fault, one kind — otherwise a client branches twice for one mistake."""
+        typed = Refusal(
+            "NAME_NOT_FOUND", "Operation 'Rough1' not found in any setup"
+        )
+
+        assert classify(typed)[0] == "NAME_NOT_FOUND"
+        assert classify("Setup 'Nope' not found")[0] == "NAME_NOT_FOUND"
 
     def test_the_cam_rules_do_not_swallow_the_body_and_sketch_rules(self):
         """A body named after a sketch must still be BODY_NOT_FOUND.
