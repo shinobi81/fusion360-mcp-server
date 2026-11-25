@@ -445,7 +445,7 @@ def test_a_tangent_plane_through_a_point_builds_on_a_planar_face(bound_handler):
 
 
 def test_a_tangent_plane_through_a_point_builds_on_a_cone(bound_handler):
-    """The measured route for a cone: ``setByTangentAtPoint``, twice over."""
+    """The measured route for a cone: ``setByTangentAtPoint``."""
     body = FakeBody(name="Cone", faces=FakeCollection([_cone_face()]))
     design = FakeDesign(features=2, bodies=[body])
 

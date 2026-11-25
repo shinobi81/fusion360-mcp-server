@@ -219,6 +219,10 @@ class AssemblyCommands(_Contract):
                 # for a cone is the at-a-point form. GEOMETRY_UNSUPPORTED because
                 # every argument is usable - what is missing is a face of the kind
                 # this form needs.
+                # Resolved before the surface check, because it needs no face: mock
+                # judges the name and not the surface (it has no design), so this is
+                # the order that lets both modes answer the same fault for one call.
+                reference = self._construction_plane(plane)
                 surface = self._surface_type_name(face.geometry.surfaceType)
                 if (
                     face.geometry.surfaceType
@@ -234,7 +238,6 @@ class AssemblyCommands(_Contract):
                             "list_faces reports each face's surface_type.",
                         ),
                     )
-                reference = self._construction_plane(plane)
                 # Measured on 2706.1.17, not inferred: `setByTangent` answers True for
                 # every reference and it is `constructionPlanes.add` that fails, with
                 # `2 : InternalValidationError : data_->execute(&obj, apiName)` - a

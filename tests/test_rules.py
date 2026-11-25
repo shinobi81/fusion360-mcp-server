@@ -16,7 +16,8 @@ from addon.server import hints as addon_hints
 from addon.server import rules
 from addon.server.cam_tool import build_tool_json
 from fusion360_mcp import _rules, mock
-from tests.fakes.bodies import FakeBody, body_with_edges
+from tests.fakes.bodies import FakeBody, FakeFace, body_with_edges
+from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
 
 #: Refused from the parameters alone, so no body is ever touched.
@@ -1208,6 +1209,27 @@ def test_the_plane_name_is_judged_from_the_parameters(params, message):
     refused = mock._create_construction_plane(params)
     assert refused["error_kind"] == refusal.error_kind
     assert refused["error_message"] == str(refusal)
+
+
+def test_a_tangent_call_with_two_faults_orders_them_alike_on_both_sides(
+    bound_handler,
+):
+    """A bad plane name *and* a face that cannot take an angle.
+
+    Mock has no faces, so it can never judge the surface - which is why the handler
+    resolves the reference before the surface check. Both then name the plane, and a
+    caller rehearsing a two-fault call reads the same sentence in either mode.
+    """
+    body = FakeBody(name="Plate", faces=FakeCollection([FakeFace()]))
+    params = {"method": "tangent", "body_name": "Plate", "face_index": 0, "plane": "zz"}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bound_handler(FakeDesign(bodies=[body])).create_construction_plane(**params)
+
+    refused = mock._create_construction_plane(params)
+
+    assert "Unknown plane 'zz'" in str(raised.value)
+    assert refused["error_message"] == str(raised.value)
 
 
 @pytest.mark.parametrize("plane", ["xy", "yz", "xz", "XZ"])
