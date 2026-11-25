@@ -39,8 +39,8 @@ DIRECT = "DirectDesignType"
 # ``PlaneSurfaceType = 0``, ``CylinderSurfaceType = 1``).  ``unfold`` scans a body's
 # faces for the first planar one, so a geometry that answered the wrong member
 # would pick a bend's side wall as the stationary face.
-#: ``CameraTypes``: two distinct members, set by ``render_view`` and
-#: ``export_view_sheet``. Their numbers are not observable through the add-in.
+#: ``CameraTypes``: the member ``export_view_sheet`` sets, and the one a test needs to
+#: start from. Their numbers are not observable through the add-in.
 ORTHOGRAPHIC_CAMERA_TYPE = 0
 PERSPECTIVE_CAMERA_TYPE = 1
 
@@ -363,11 +363,12 @@ def _joint_key_points() -> types.SimpleNamespace:
 
 
 def _camera_types() -> types.SimpleNamespace:
-    """``adsk.core.CameraTypes``: the two members the add-in asks for.
+    """``adsk.core.CameraTypes``: what the add-in sets, and what a test needs.
 
-    ``render_view`` and ``export_view_sheet`` set a camera's type to orthographic and
-    put the caller's back afterwards; the stub numbers the pair, and the numeric values
-    are not observable through the add-in, so the fake keeps two distinct ones.
+    ``_apply_view`` puts a camera into orthographic - only ``export_view_sheet`` reaches
+    it - and both viewport tools put the caller's own type back afterwards. The stub
+    numbers the members and those numbers are not observable through the add-in, so the
+    fake keeps two distinct ones and nothing depends on which is which.
     """
     return types.SimpleNamespace(
         OrthographicCameraType=ORTHOGRAPHIC_CAMERA_TYPE,

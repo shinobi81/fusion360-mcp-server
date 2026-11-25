@@ -305,7 +305,7 @@ class _FakeCamera:
         self.isSmoothTransition = False
 
     def copy(self) -> "_FakeCamera":
-        """A camera holding the same four values, as a separate object."""
+        """A camera holding the same values, as a separate object."""
         clone = _FakeCamera()
         clone.eye = FakePoint3D(self.eye.x, self.eye.y, self.eye.z)
         clone.target = FakePoint3D(self.target.x, self.target.y, self.target.z)
@@ -352,6 +352,10 @@ class _Viewport:
         #: The up vector at each capture: ``_apply_view`` writes it per view and the
         #: restore overwrites it, so a later read cannot tell the views apart.
         self.ups_at_capture: list[tuple[float, float, float]] = []
+        #: The camera type at each capture, for the same reason: ``_apply_view`` sets it
+        #: orthographic and the restore writes the caller's back, so only a capture-time
+        #: read sees that it was set at all.
+        self.types_at_capture: list[int] = []
 
     @property
     def camera(self) -> _FakeCamera:
@@ -383,6 +387,7 @@ class _Viewport:
         self.eyes_at_capture.append((eye.x, eye.y, eye.z))
         up = self._camera.upVector
         self.ups_at_capture.append((up.x, up.y, up.z))
+        self.types_at_capture.append(self._camera.cameraType)
         if self.saved:
             with open(path, "wb") as handle:
                 # Recognisable, and *per file*: the basename goes in, so two views write
@@ -600,7 +605,7 @@ class TestRenderViewCapture:
 
 
 class _ImportingMeshBodies:
-    """``MeshBodies`` with the current ``add`` that answers a list, and the legacy pair.
+    """``MeshBodies`` with the current ``add`` that answers a list.
 
     The handler tries ``add`` first and falls back to ``addByFile`` on
     ``AttributeError``, so a fake with both would never exercise the fallback and one
@@ -805,6 +810,12 @@ class TestExportViewSheet:
         # Each view writes its own up vector, which the restore then overwrites: a
         # transposed up column in _VIEW_DIRS shows here and nowhere else.
         assert viewport.ups_at_capture == [(0.0, 0.0, 1.0), (0.0, 1.0, 0.0)]
+        # Orthographic at every capture: the caller's camera is perspective here, so a
+        # dropped ``cam.cameraType = …`` in _apply_view would leave perspective frames.
+        assert viewport.types_at_capture == [
+            ORTHOGRAPHIC_CAMERA_TYPE,
+            ORTHOGRAPHIC_CAMERA_TYPE,
+        ]
 
     def test_a_document_with_no_visible_body_frames_the_origin(
         self, bound_handler, tmp_path
