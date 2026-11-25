@@ -26,8 +26,10 @@ from tests.fakes.cam import (
     FakeCAMProduct,
     FakeCompletedFlagFuture,
     FakeCounterFuture,
+    FakeDocumentToolLibrary,
     FakeGenerationFailureFuture,
     FakeGenerationFlagFuture,
+    FakeLibraryTool,
     FakeNeverStartedFuture,
     FakeNoFlagFuture,
     FakeNotStartedCounterFuture,
@@ -54,8 +56,20 @@ def _setup(name: str = "Setup1", operation=None) -> SimpleNamespace:
     )
 
 
-def _cam(*setups, generic_post=None) -> SimpleNamespace:
-    return SimpleNamespace(setups=_items(*setups), genericPostFolder=generic_post)
+def _cam(*setups, generic_post=None, tool_numbers=()) -> SimpleNamespace:
+    """A CAM product: setups, the post folder, and the document tool library.
+
+    The library defaults to empty, so a test that passes ``tool_number`` on its own has
+    to say what Fusion's document holds - which is the point, since mock mode declares
+    its own list and the two must answer one sentence for the same numbers.
+    """
+    return SimpleNamespace(
+        setups=_items(*setups),
+        genericPostFolder=generic_post,
+        documentToolLibrary=FakeDocumentToolLibrary(
+            [FakeLibraryTool(number) for number in tool_numbers]
+        ),
+    )
 
 
 def _handler(handler_module):
@@ -1087,18 +1101,211 @@ def test_a_non_numeric_diameter_is_refused_by_name(handler_module):
     assert created == []
 
 
-def test_a_tool_number_without_a_tool_is_refused(handler_module):
-    """There is no library lookup yet, so a bare number would describe nothing."""
+def test_a_tool_number_selects_a_tool_the_library_holds(handler_module):
+    """Measured on 2706.1.17: the library has no by-number lookup, so the handler reads
+    each tool's own ``tool_number`` parameter, and ``Operation.tool`` takes the result.
+
+    The reply says where the tool came from and carries no ``diameter_cm``: its
+    diameter is the library's, not something this call chose.
+    """
+    operation = _tool_op()
+    setup, created = _recording_setup(operation)
+    cam = _cam(setup, tool_numbers=(7, 9))
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: cam
+
+    result = handler.cam_create_operation("Setup1", "pocket2d", tool_number=9)
+
+    assert operation.tool is cam.documentToolLibrary.item(1)
+    assert result["tool"]["number"] == 9
+    assert result["tool"]["from_library"] is True
+    assert "diameter_cm" not in result["tool"]
+    assert created == [operation], "the operation the call created, and only it"
+
+
+def test_a_tool_number_no_tool_holds_is_name_not_found(handler_module):
+    """The sentence names the numbers that would have worked, and nothing is created."""
+    setup, created = _recording_setup(_tool_op())
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(setup, tool_numbers=(7, 9))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation("Setup1", "pocket2d", tool_number=3)
+
+    assert raised.value.error_kind == "NAME_NOT_FOUND"
+    assert "No tool numbered 3" in str(raised.value)
+    assert "7, 9" in str(raised.value)
+    assert created == [], "a miss must not leave an operation behind"
+
+
+def test_the_scan_reads_a_float_parameter_and_skips_an_unreadable_entry(handler_module):
+    """Two shapes a real library holds: Fusion reports some parameters as ``6.``, and
+    one corrupt entry must not cost the caller the numbers the others carry."""
+    setup, _created = _recording_setup(_tool_op())
+    cam = _cam(setup)
+    # Out of order, one float-valued (as Fusion reports them) and one unreadable.
+    cam.documentToolLibrary = FakeDocumentToolLibrary(
+        [
+            FakeLibraryTool(9.0),
+            FakeLibraryTool(0, unreadable=True),
+            FakeLibraryTool(7),
+        ]
+    )
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: cam
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation("Setup1", "pocket2d", tool_number=3)
+
+    # Sorted, integral, and without the entry that could not be read. `endswith`, not
+    # `in`: "7, 9" is a prefix of "7, 9.0", so a substring assertion would pass with the
+    # truncation removed - which is the only thing it is here to pin.
+    assert str(raised.value).endswith("the numbers it holds are 7, 9")
+
+
+def test_two_tools_on_one_number_take_the_first_and_list_it_once(handler_module):
+    """Two vendor libraries merged really can hold one number twice.
+
+    The first in library order wins - the reply's description is how a caller sees
+    which it got - and the sentence lists the number once, because "7, 7" reads like two
+    usable tools when there is one number.
+    """
+    operation = _tool_op()
+    setup, _created = _recording_setup(operation)
+    first = FakeLibraryTool(7, description="the first seven")
+    second = FakeLibraryTool(7, description="the second seven")
+    cam = _cam(setup)
+    cam.documentToolLibrary = FakeDocumentToolLibrary(
+        [first, second, FakeLibraryTool(9)]
+    )
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: cam
+
+    result = handler.cam_create_operation("Setup1", "pocket2d", tool_number=7)
+
+    assert operation.tool is first, "the first in library order, not the last"
+    assert result["tool"]["description"] == "the first seven"
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation("Setup1", "pocket2d", tool_number=3)
+
+    assert "the numbers it holds are 7, 9" in str(raised.value)
+
+
+def test_a_missing_tool_number_is_answered_before_a_missing_setup(handler_module):
+    """The order mock can follow: it has no setups to look in, so the tool sentence is
+    the one both modes answer for a call carrying two faults."""
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(tool_numbers=(7,))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation("NoSuchSetup", "pocket2d", tool_number=3)
+
+    assert "No tool numbered 3" in str(raised.value)
+
+
+def test_a_missing_tool_number_is_answered_before_a_missing_body(handler_module):
+    """The same, one block earlier: a body mock cannot resolve either."""
+    handler = _handler(handler_module)
+    # Mock's own list, so the two sentences are comparable rather than coincidentally
+    # close: the numbers are part of the sentence.
+    handler._get_cam = lambda: _cam(tool_numbers=_mock_document_library())
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(
+            "Setup1", "pocket2d", body_name="Nope", face_indices=[0], tool_number=3
+        )
+
+    from fusion360_mcp.mock import mock_command
+
+    refused = mock_command(
+        "cam_create_operation",
+        {
+            "setup_name": "Setup1",
+            "strategy": "pocket2d",
+            "body_name": "Nope",
+            "face_indices": [0],
+            "tool_number": 3,
+        },
+    )
+
+    assert "No tool numbered 3" in str(raised.value)
+    assert refused["error_message"] == str(raised.value)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        # A parameter fault, which the rules answer before the library is consulted.
+        {"strategy": "2d_contour"},
+        {"strategy": "contour2d", "face_indices": [0]},
+    ],
+    ids=["unknown strategy", "face_indices without a body name"],
+)
+def test_a_parameter_fault_outranks_the_library_check_on_both_sides(
+    handler_module, extra
+):
+    """The library check sits below the parameter rules, and neither mode may drift.
+
+    Mock runs the rules before the library, so a handler that resolved the number first
+    would answer NAME_NOT_FOUND where mock answers the strategy or geometry sentence -
+    the same split round 3 found for the setup and the body.
+    """
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(tool_numbers=_mock_document_library())
+    params = {"setup_name": "Setup1", "tool_number": 3, **extra}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(**params)
+
+    from fusion360_mcp.mock import mock_command
+
+    refused = mock_command("cam_create_operation", params)
+
+    assert "tool numbered" not in str(raised.value), "the parameter rule answers first"
+    assert refused["error_message"] == str(raised.value)
+
+
+def test_an_empty_document_library_says_it_is_empty(handler_module):
+    """A document with no tool registered: the hint says how to make one."""
     setup, created = _recording_setup(_tool_op())
     handler = _handler(handler_module)
     handler._get_cam = lambda: _cam(setup)
 
     with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation("Setup1", "pocket2d", tool_number=1)
+
+    assert "it is empty" in str(raised.value)
+    assert any("tool_diameter" in hint for hint in raised.value.hints)
+    assert created == []
+
+
+def _mock_document_library():
+    """The numbers mock's fake document holds, so this test cannot drift from it."""
+    from fusion360_mcp.mock import DOCUMENT_TOOL_LIBRARY
+
+    return DOCUMENT_TOOL_LIBRARY
+
+
+def test_mock_and_the_handler_refuse_a_missing_tool_number_alike(handler_module):
+    """One number, one list, one sentence - mock declares (1,), so the handler is fed
+    the same list rather than a literal."""
+    setup, _created = _recording_setup(_tool_op())
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(setup, tool_numbers=_mock_document_library())
+
+    with pytest.raises(addon_hints.Refusal) as raised:
         handler.cam_create_operation("Setup1", "pocket2d", tool_number=3)
 
-    assert raised.value.error_kind == "INVALID_INPUT"
-    assert "tool_diameter" in str(raised.value)
-    assert created == []
+    from fusion360_mcp.mock import mock_command
+
+    refused = mock_command(
+        "cam_create_operation",
+        {"setup_name": "Setup1", "strategy": "pocket2d", "tool_number": 3},
+    )
+
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
 
 
 def test_fusion_refusing_the_tool_object_is_a_refusal(handler_module, monkeypatch):

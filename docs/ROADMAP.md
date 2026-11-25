@@ -342,10 +342,14 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    refuses sets `hasError` at once while the future never completes, so the 25 s bound
    used to answer `TIMEOUT` for a cause already named.
 
-   Still open from this thread: `tool_number` cannot select an existing library tool -
-   `DocumentToolLibrary` exposes `item`/`createQuery`/`toolsBySetupOrFolder` and no
-   by-number lookup has been measured, so a number on its own is refused rather than
-   silently ignored.
+   ~~Still open from this thread: `tool_number` cannot select an existing library
+   tool~~ - **closed (#152).** `DocumentToolLibrary` has no by-number lookup, so the
+   measured route is `count` plus `item(i)` and each tool's own `tool_number` parameter
+   (number 7 in, 7 out, measured on 2706.1.17), and `Operation.tool` takes the result
+   without the library count changing. `createQuery`'s `criteria` is an
+   `adsk.core.NamedValues` whose accepted keys the binding does not document, so a scan
+   of a documented surface implements an undocumented one. A number nothing holds is
+   `NAME_NOT_FOUND` naming the numbers that would work.
 
 7. ~~No tool enumerates a body's faces~~ - **closed (#147).** `get_object_info` answered
    `faces_count`/`edges_count`/`vertices_count` and a bounding box; `list_edges` had
