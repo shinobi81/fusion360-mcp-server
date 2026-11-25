@@ -307,9 +307,13 @@ _RULES: list[tuple[str, str, list[str]]] = [
         # The coarse selectors take the highest / lowest plane that holds an
         # *edge*.  Nothing matching is a real answer — a body whose top is a
         # curved surface has no edge in a top plane — and live it classified as
-        # UNKNOWN with no hints, which AGENTS.md says must never ship.
+        # UNKNOWN with no hints, which AGENTS.md says must never ship.  The kind is
+        # the face rule's above, because it is the same fault met by the other
+        # selector: the body lacks the geometry, so the move that works is another
+        # edge.  AGENTS.md spells GEOMETRY_UNSUPPORTED as "pick a different face or
+        # edge" for exactly this.
         r"no edges matched selection",
-        "INVALID_INPUT",
+        "GEOMETRY_UNSUPPORTED",
         [
             "No edge of that body lies in the selected plane; nothing was written.",
             "top and bottom take the highest/lowest edges a body has.",

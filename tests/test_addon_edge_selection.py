@@ -196,7 +196,7 @@ def test_the_no_match_refusal_is_classified_and_names_the_next_step(select):
     with pytest.raises(RuntimeError) as raised:
         select([((0, 0, 0), (0, 0, 5))], "top")
     kind, hints = classify(raised.value)
-    assert kind == "INVALID_INPUT"
+    assert kind == "GEOMETRY_UNSUPPORTED"
     assert any("list_edges" in hint for hint in hints), hints
 
 
@@ -290,6 +290,10 @@ def test_an_edge_whose_sample_is_at_the_top_but_sags_is_not_top(bound_handler):
     with pytest.raises(RuntimeError) as raised:
         alone._select_edges(only, "top")
     assert "No edges matched" in str(raised.value)
+    # The same answer the face selector gives for the same fault: the body has no
+    # edge in that plane, so the move that works is a different edge, not a
+    # different argument. One fault, one kind, whichever selector met it.
+    assert classify(raised.value)[0] == "GEOMETRY_UNSUPPORTED"
 
     floor = FakeEdge((0.0, 0.0, 0.0), (2.0, 0.0, 0.0), index=1)
     body = FakeBody("Domed", edges=FakeEdges([sagging, floor]))

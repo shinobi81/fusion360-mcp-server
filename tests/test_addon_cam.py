@@ -1791,3 +1791,26 @@ def test_mock_and_the_handler_resolve_the_same_default_post_folder(handler_modul
     mock_reply = _mock_cam("cam_post_process", {"setup_name": "Setup1"})
 
     assert reply["output_folder"] == mock_reply["output_folder"]
+
+
+def test_a_missing_cam_name_reaches_the_caller_as_name_not_found(handler_module):
+    """Both CAM raise sites the NAME_NOT_FOUND rule exists for, driven for real.
+
+    Classifying a hand-written copy of the sentence proves only the copy: reword an
+    f-string and the rule stops matching, so the caller gets ``UNKNOWN`` with no
+    hints — the failure mode AGENTS.md forbids — while the suite stays green. These
+    two go through ``_find_setup`` and ``_find_operation`` instead, which is the
+    code that actually raises the text the rule matches.
+    """
+    cam = _cam(_setup_with_operations("Setup1", _operation("Rough1")))
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: cam
+
+    with pytest.raises(RuntimeError) as setup_missing:
+        handler.cam_list_operations("NoSuchSetup")
+    with pytest.raises(RuntimeError) as operation_missing:
+        handler.cam_get_operation_info("Setup1", "NoSuchOp")
+
+    assert str(setup_missing.value) == "Setup 'NoSuchSetup' not found"
+    assert addon_hints.classify(setup_missing.value)[0] == "NAME_NOT_FOUND"
+    assert addon_hints.classify(operation_missing.value)[0] == "NAME_NOT_FOUND"

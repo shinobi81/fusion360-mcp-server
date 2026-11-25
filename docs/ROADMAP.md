@@ -190,16 +190,30 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    `face_indices`).
 2. ~~**Retag the rules that already carry a kind**~~ - **closed (#150).** The work above
    changed the tag of the 88 with none; a rule that already answered with a kind kept
-   it, even where the new taxonomy disagreed. The two that disagreed answer the
-   taxonomy now: the CAM `setup/operation not found` rule and `no faces matched`.
-   Nothing about either message or hint moved - the tag is the only thing a client sees
+   it, even where the new taxonomy disagreed. The three that disagreed answer the
+   taxonomy now: the CAM `setup/operation not found` rule, `no faces matched`, and its
+   twin `no edges matched selection` - which the first pass left behind, and a review
+   caught reading as "the table is consistent" while a domed body answered
+   `INVALID_INPUT` for `fillet(edge_selection="top")` and `GEOMETRY_UNSUPPORTED` for
+   `shell(face_selection="top")`. The same selector, the same fault, one kind.
+   Nothing about any message or hint moved - the tag is the only thing a client sees
    differently - so this is the client-visible change with its own release note the
-   item asked for, not a ride-along. Three test pins flipped with it, in
-   `tests/test_feedback.py`, `tests/test_addon_face_selection.py` and
-   `tests/test_addon_feature_edits.py`, and one docstring's reasoning went with them
-   (it argued for `INVALID_INPUT` on the grounds that the body was found and the
-   *selector* did not apply; the tie-break is that the selector was applied correctly
-   and the body has no such face, which is geometry, not a parameter).
+   item asked for, not a ride-along. Four test pins flipped with it, in
+   `tests/test_feedback.py`, `tests/test_addon_face_selection.py`,
+   `tests/test_addon_feature_edits.py` and `tests/test_addon_edge_selection.py`, and
+   one docstring's reasoning went with them (it argued for `INVALID_INPUT` on the
+   grounds that the body was found and the *selector* did not apply; the tie-break is
+   that the selector was applied correctly and the body has no such face, which is
+   geometry, not a parameter).
+
+   **Still answering `INVALID_INPUT` for "the body lacks this geometry", and named
+   here so the boundary is a decision rather than an oversight:** `has no edges to
+   select from|has no edges that can be rounded` (a cone's degenerate apex),
+   `no usable parameter range`, and the point- and curve-index rules. The criterion
+   these would be judged by is written down in AGENTS.md: `GEOMETRY_UNSUPPORTED` is
+   "pick a different face or edge; the body does not have that geometry". Those three
+   are candidate retags for a later pass - each needs the same two things this one
+   had, a kind and a handler-level pin, and none of them is touched here.
 
    The `NAME_NOT_FOUND` tag ends an asymmetry the item recorded rather than lost:
    `cam_generate_toolpath(operation_name=…)` raises its own typed `NAME_NOT_FOUND` for

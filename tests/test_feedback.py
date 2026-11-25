@@ -134,11 +134,16 @@ class TestHintClassification:
 
     def test_a_missing_cam_name_answers_one_kind_whichever_way_it_is_raised(self):
         """`cam_generate_toolpath` raises a typed NAME_NOT_FOUND for its own
-        search; the lookup rule classifies a RuntimeError for the same fault. One
-        fault, one kind — otherwise a client branches twice for one mistake."""
+        search; the lookup rule classifies the same sentence as a RuntimeError.
+        One fault, one kind — otherwise a client branches twice for one mistake.
+
+        The first assertion compares the *same* text both ways on purpose:
+        ``classify(Refusal(...))`` returns the literal it was handed, so asserting
+        only that would pass with no rule in the table at all.
+        """
         typed = Refusal("NAME_NOT_FOUND", "Operation 'Rough1' not found in any setup")
 
-        assert classify(typed)[0] == "NAME_NOT_FOUND"
+        assert classify(typed)[0] == classify(str(typed))[0] == "NAME_NOT_FOUND"
         assert classify("Setup 'Nope' not found")[0] == "NAME_NOT_FOUND"
 
     def test_the_cam_rules_do_not_swallow_the_body_and_sketch_rules(self):
