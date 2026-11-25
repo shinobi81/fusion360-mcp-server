@@ -509,6 +509,39 @@ class TestMockConstraints:
 
 
 class TestMockConstructionGeometry:
+    def test_create_construction_plane_tangent_answers_the_handlers_keys(self):
+        """The rehearsal path for the form this PR added: no design, no body lookup."""
+        reply = mock_command(
+            "create_construction_plane",
+            {
+                "method": "tangent",
+                "body_name": "Body1",
+                "face_index": 0,
+                "plane": "xz",
+            },
+        )
+
+        assert reply["created"] is True
+        assert reply["method"] == "tangent"
+        # The handler's keys plus the envelope's own: `plane_name` was never one.
+        assert {"created", "name", "method"} <= set(reply)
+
+    def test_mock_refuses_a_plane_name_the_add_in_refuses(self):
+        """`plane="zz"` is truthy, so the shape rule passes it: without the name check
+        mock built a plane the handler refuses before Fusion is asked."""
+        reply = mock_command(
+            "create_construction_plane",
+            {
+                "method": "tangent",
+                "body_name": "Body1",
+                "face_index": 0,
+                "plane": "zz",
+            },
+        )
+
+        assert reply["error_kind"] == "INVALID_INPUT"
+        assert "Unknown plane 'zz'" in reply["error_message"]
+
     def test_create_construction_plane_offset(self):
         result = mock_command(
             "create_construction_plane",

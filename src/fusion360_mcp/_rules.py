@@ -606,6 +606,30 @@ def rigid_group_size_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None
     )
 
 
+#: The base construction planes, by the name a caller passes.  One table, read by the
+#: refusal below and by the handler's lookup, so a name cannot be accepted by one and
+#: refused by the other.
+_CONSTRUCTION_PLANES: frozenset[str] = frozenset({"xy", "yz", "xz"})
+
+
+def construction_plane_name_refusal(plane: Any) -> _hints.Refusal | None:
+    """The refusal an unusable ``plane`` name earns, or None when it is one of the 3.
+
+    ``_construction_plane`` resolved the name against a table and refused a miss itself,
+    which meant mock mode answered ``created: true`` for ``plane="zz"``: a value Fusion
+    is never asked about, because the add-in refuses it first.  A parameter the add-in
+    can refuse from the parameters alone belongs here, so both sides answer one sentence
+    - and the tangent rule below can reach this from its own judgement.
+    """
+    if str(plane or "").lower() in _CONSTRUCTION_PLANES:
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        f"Unknown plane {plane!r} — use xy, yz, or xz",
+        hints=("Pass xy, yz or xz; the plane is lowercased, so XZ works.",),
+    )
+
+
 def construction_plane_tangent_refusal(
     params: Mapping[str, Any],
 ) -> _hints.Refusal | None:
@@ -614,7 +638,8 @@ def construction_plane_tangent_refusal(
     Fusion ships **two** definitions behind the one advertised value, and the parameters
     decide which runs: ``point_one`` selects ``setByTangentAtPoint(face, point)``,
     otherwise ``angle`` (default 0, degrees) and ``plane`` select
-    ``setByTangent(face, angle, referencePlane)`` for a cylindrical or conical face.
+    ``setByTangent(face, angle, referencePlane)``, which is a cylinder's - measured on
+    2706.1.17: a cone is refused however the reference plane is chosen.
     Judged from the parameters alone, so mock mode refuses exactly what the add-in
     refuses and a caller learns the shape without a design - and so the one method that
     was advertised and refused outright (one of two enum values a caller could send and

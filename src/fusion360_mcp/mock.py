@@ -30,6 +30,7 @@ from ._rules import (
     cam_target_refusal,
     cam_tool_refusal,
     components_differ_refusal,
+    construction_plane_name_refusal,
     construction_plane_tangent_refusal,
     edge_selector_refusal,
     export_body_refusal,
@@ -1036,6 +1037,14 @@ def _create_construction_plane(p: dict) -> dict:
         )
     if refusal is not None:
         return _refusal_error(refusal)
+    # Every branch that resolves a plane name resolves it here too, so a name the
+    # handler refuses is never rehearsed as a built plane.
+    for field in ("plane", "plane_one", "plane_two"):
+        if p.get(field) is None:
+            continue
+        name_refusal = construction_plane_name_refusal(p.get(field))
+        if name_refusal is not None:
+            return _refusal_error(name_refusal)
     if p.get("method") == "tangent":
         # The tangent branches name a body, and `_body_by_name` refuses an empty name
         # before Fusion is asked: without this, mock reported a plane the add-in would

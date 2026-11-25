@@ -286,8 +286,9 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    `setByPerpendicularAtPoint(face, point)`, whose two arguments are the stub's.
 
    The refusal moved with it: instead of a blanket refusal, the rule names the
-   arguments that are missing (`body_name`, `face_index`, `point_one`) from the
-   parameters alone, so mock mode refuses the same call with the same sentence. A face
+   arguments that are missing (`face_index`, `point_one`, and a body name through the
+   shared refusal every body-naming tool answers) from the parameters alone, so mock
+   mode refuses the same call with the same sentence. A face
    index is judged against the body's face count before the call, so a wrong one names
    the range rather than raising out of the API with no advice - and `list_faces` is
    where a caller gets the indices.

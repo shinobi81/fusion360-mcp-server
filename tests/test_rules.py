@@ -1167,3 +1167,44 @@ def test_the_handler_and_the_mock_refuse_a_tangent_plane_alike(bare_handler):
 
     assert refused["error_kind"] == raised.value.error_kind
     assert refused["error_message"] == str(raised.value)
+
+
+@pytest.mark.parametrize(
+    ("params", "message"),
+    [
+        # An empty string is not a plane, and `_construction_plane` refuses it.
+        (
+            {"method": "tangent", "body_name": "B", "face_index": 0, "plane": ""},
+            "tangent needs plane",
+        ),
+        # Nor is a name outside the three, on either side of the wire.
+        (
+            {"method": "tangent", "body_name": "B", "face_index": 0, "plane": "zz"},
+            "Unknown plane 'zz'",
+        ),
+        ({"method": "offset", "plane": ""}, "Unknown plane ''"),
+        # The lookup lowercases and does not strip, so neither does the rule: one
+        # table, one behaviour.
+        ({"method": "offset", "plane": " YZ "}, "Unknown plane ' YZ '"),
+    ],
+)
+def test_the_plane_name_is_judged_from_the_parameters(params, message):
+    """Mock answered `created: true` for `plane="zz"`: a value Fusion is never shown,
+    because the add-in refuses it first. The name is a parameter, so the table owns it
+    and both sides answer one sentence."""
+    if params["method"] == "tangent":
+        refusal = rules.construction_plane_tangent_refusal(params)
+        if refusal is None:
+            refusal = rules.construction_plane_name_refusal(params["plane"])
+    else:
+        refusal = rules.construction_plane_name_refusal(params["plane"])
+
+    assert refusal is not None, params
+    assert refusal.error_kind == "INVALID_INPUT"
+    assert message in str(refusal)
+
+
+@pytest.mark.parametrize("plane", ["xy", "yz", "xz", "XZ"])
+def test_a_plane_name_the_lookup_accepts_is_refused_by_neither_side(plane):
+    """The lookup lowercases, and the schema's enum is advisory for a socket caller."""
+    assert rules.construction_plane_name_refusal(plane) is None

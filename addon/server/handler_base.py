@@ -411,16 +411,12 @@ class HandlerBase:
             "yz": root.yZConstructionPlane,
             "xz": root.xZConstructionPlane,
         }
-        # Still a refusal: an unset plane is a caller mistake, and defaulting to
-        # xy would build geometry nobody asked for.
-        p = m.get((plane or "").lower())
-        if p is None:
-            raise _hints.Refusal(
-                "INVALID_INPUT",
-                f"Unknown plane {plane!r} — use xy, yz, or xz",
-                hints=("Pass xy, yz or xz; the plane is lowercased, so XZ works.",),
-            )
-        return p
+        # Still a refusal, and now one the rule table owns: an unset plane is a caller
+        # mistake, defaulting to xy would build geometry nobody asked for, and mock
+        # mode had no way to answer a name Fusion is never shown.
+        if refusal := _rules.construction_plane_name_refusal(plane):
+            raise refusal
+        return m[plane.lower()]
 
     def _construction_axis(self, axis: str):
         root = self._root()
