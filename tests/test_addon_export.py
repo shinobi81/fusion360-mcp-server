@@ -339,10 +339,9 @@ class _Viewport:
         self.refreshed = 0
         #: The camera the viewport actually holds. ``camera`` below hands out a copy.
         self._camera = camera or _FakeCamera()
-        #: How many times a camera was *assigned back*. Fusion's camera is a copy, so
-        #: editing one changes nothing until it is assigned back - which is what makes
-        #: this count the only thing that notices a dropped ``vp.camera = cam``: the
-        #: stored state alone would look restored either way.
+        #: How many times a camera was *assigned back*. Fusion hands the camera out as a
+        #: copy, so an edit has no effect until the assignment - this counts them, which
+        #: pins "moved once, restored once" independently of the values themselves.
         self.camera_writes = 0
         self.captures: list[tuple[str, int, int]] = []
         #: The camera's eye at each capture, from the stored camera: the sheet puts the
@@ -711,7 +710,7 @@ class TestExportViewSheet:
 
         result = handler.export_view_sheet(
             title="Bracket & <Plate>",
-            notes="check the bore\nthen ship",
+            notes="check the bore & <gap>\nthen ship",
             views=["iso", "front"],
             image_size=[400, 300],
             output_dir=str(tmp_path),
@@ -732,8 +731,16 @@ class TestExportViewSheet:
         html = (tmp_path / "view_sheet.html").read_text(encoding="utf-8")
         assert html.count("<figure>") == 2, "one figure per view"
         assert "data:image/png;base64," in html
-        assert "&amp;" in html and "&lt;Plate&gt;" in html, "the title is escaped"
-        assert "check the bore\nthen ship" in html, "the notes keep their newline"
+        # `html.escape(sheet_title)` runs twice - the <title> and the <h1> - so a count
+        # is what notices either one being dropped.
+        assert html.count("&lt;Plate&gt;") == 2, "the title is escaped in both places"
+        assert "&amp;" in html
+        # Markup in the notes, because text without `&`/`<`/`>` cannot show that
+        # `html.escape` ran: the unescaped string is in the page either way.
+        assert "check the bore &amp; &lt;gap&gt;\nthen ship" in html, (
+            "the notes are escaped and keep their newline"
+        )
+        assert "<gap>" not in html, "no raw markup survives"
         assert "ISO" in html and "FRONT" in html, "the labels are the view names"
 
         manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
