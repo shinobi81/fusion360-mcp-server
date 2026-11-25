@@ -30,7 +30,7 @@ import pytest
 
 from addon.server import fusion_api as adsk
 from addon.server import hints as addon_hints
-from tests.fakes.bodies import FakeBody
+from tests.fakes.bodies import FakeBody, FakeBoundingBox
 from tests.fakes.design import FakeComponent, FakeDesign, FakeOccurrence
 from tests.fakes.mesh import FakeMeshBodies
 from tests.fakes.runtime import (
@@ -227,11 +227,12 @@ class _EmptyImport(FakeMeshBodies):
         return FakeMeshBodies([])
 
 
-class _LegacyEmptyImport(FakeMeshBodies):
-    """Pre-2025 ``addByFile``: no ``add`` at all, and no body for a meshless file."""
+class _LegacyEmptyImport:
+    """Pre-2025 ``addByFile`` answering no body, and no ``add`` to fall back from.
 
-    def add(self, file_path, units):
-        raise AttributeError("addByFile")
+    ``add`` is absent rather than raising, because that is the build this models: the
+    handler's ``except AttributeError`` is what takes it to the legacy call.
+    """
 
     def addByFile(self, file_path, units):
         return None
@@ -301,7 +302,18 @@ class _FakeCamera:
         self.upVector = FakeVector3D(*up)
         self.cameraType = ORTHOGRAPHIC_CAMERA_TYPE
         self.isFitView = False
-        self.isSmoothTransition = True
+        self.isSmoothTransition = False
+
+    def copy(self) -> "_FakeCamera":
+        """A camera holding the same four values, as a separate object."""
+        clone = _FakeCamera()
+        clone.eye = FakePoint3D(self.eye.x, self.eye.y, self.eye.z)
+        clone.target = FakePoint3D(self.target.x, self.target.y, self.target.z)
+        clone.upVector = FakeVector3D(self.upVector.x, self.upVector.y, self.upVector.z)
+        clone.cameraType = self.cameraType
+        clone.isFitView = self.isFitView
+        clone.isSmoothTransition = self.isSmoothTransition
+        return clone
 
     def state(self):
         """The four values the restore has to bring back, as plain tuples."""
@@ -325,21 +337,44 @@ class _Viewport:
         self.saved = saved
         self.fitted = 0
         self.refreshed = 0
-        self.camera = camera or _FakeCamera()
+        #: The camera the viewport actually holds. ``camera`` below hands out a copy.
+        self._camera = camera or _FakeCamera()
+        #: How many times a camera was *assigned back*. Fusion's camera is a copy, so
+        #: editing one changes nothing until it is assigned - which is why the handler's
+        #: two ``vp.camera = cam`` lines need a count to notice their removal.
+        self.camera_writes = 0
         self.captures: list[tuple[str, int, int]] = []
-        #: The camera's eye at each capture: ``export_view_sheet`` puts the caller's
-        #: view back, so a later read reports what was there before.
+        #: The camera's eye at each capture, from the stored camera: the sheet puts the
+        #: caller's view back, so a read afterwards reports what was there before.
         self.eyes_at_capture: list[tuple[float, float, float]] = []
 
-    def fit(self):
-        self.fitted += 1
+    @property
+    def camera(self) -> _FakeCamera:
+        """``Viewport.camera``: a copy, as the stub documents it.
 
-    def refresh(self):
+        "The camera returned is a copy... Editing the properties of the camera will have
+        no effect on the viewport until the camera is assigned back" - so a fake that
+        handed back the stored object would let a handler that never assigns back pass,
+        while live it would render the caller's view four times.
+        """
+        return self._camera.copy()
+
+    @camera.setter
+    def camera(self, value: _FakeCamera) -> None:
+        self._camera = value
+        self.camera_writes += 1
+
+    def fit(self) -> bool:
+        self.fitted += 1
+        return True
+
+    def refresh(self) -> bool:
         self.refreshed += 1
+        return True
 
     def saveAsImageFile(self, path, width, height):
         self.captures.append((path, width, height))
-        eye = self.camera.eye
+        eye = self._camera.eye
         self.eyes_at_capture.append((eye.x, eye.y, eye.z))
         if self.saved:
             with open(path, "wb") as handle:
@@ -541,6 +576,10 @@ class TestRenderViewCapture:
 
         assert (small["width"], small["height"]) == (16, 16)
         assert (large["width"], large["height"]) == (4096, 4096)
+        # The echo is built from the clamped locals, so what was *captured* is the
+        # assertion that a clamp applied only to the reply would fail.
+        assert viewport.captures[0][1:] == (16, 16)
+        assert viewport.captures[1][1:] == (4096, 4096)
 
 
 class _ImportingMeshBodies:
@@ -557,9 +596,13 @@ class _ImportingMeshBodies:
 
     def add(self, path, units):
         self.calls.append((path, units))
-        return SimpleNamespace(
-            count=self._mesh_count, item=lambda index: FakeBody(name="Mesh1")
+        body = FakeBody(
+            name="Mesh1",
+            # Not the fake's default 0..1 box: `size` and `maxPoint` coincide there, so
+            # an assertion on size alone could not tell the two apart.
+            bounding_box=FakeBoundingBox((-1.0, -2.0, -3.0), (2.0, 4.0, 6.0)),
         )
+        return SimpleNamespace(count=self._mesh_count, item=lambda index: body)
 
 
 class _LegacyMeshBodies:
@@ -594,7 +637,9 @@ class TestImportMeshSuccess:
         assert result["mesh_name"] == "Mesh1"
         assert result["component"] == design.rootComponent.name
         assert result["units"] == "mm"
-        assert result["bounding_box"]["size"] == [1.0, 1.0, 1.0]
+        assert result["bounding_box"]["min"] == [-1.0, -2.0, -3.0]
+        assert result["bounding_box"]["max"] == [2.0, 4.0, 6.0]
+        assert result["bounding_box"]["size"] == [3.0, 6.0, 9.0]
         assert bodies.calls == [(str(source), adsk.fusion.MeshUnits.MillimeterMeshUnit)]
 
     def test_the_units_argument_reaches_fusions_enum(self, bound_handler, tmp_path):
@@ -690,7 +735,9 @@ class TestExportViewSheet:
         assert manifest["views"] == result["views"]
         assert manifest["image_size"] == [400, 300]
 
-    def test_a_sheet_with_no_views_writes_no_figures(self, bound_handler, tmp_path):
+    def test_an_empty_views_list_falls_back_to_the_defaults(
+        self, bound_handler, tmp_path
+    ):
         """``views=[]`` is falsy, so the defaults apply - the documented behaviour."""
         design = _design_with(_root_body())
         handler = bound_handler(design, app=SimpleNamespace(activeViewport=_Viewport()))
@@ -705,8 +752,9 @@ class TestExportViewSheet:
         ]
 
     def test_the_camera_the_user_had_is_put_back(self, bound_handler, tmp_path):
-        """Four views, four camera moves, and the caller's own view at the end."""
+        """Two views, two camera moves, and the caller's own view at the end."""
         camera = _FakeCamera(eye=(7.0, 8.0, 9.0), target=(1.0, 1.0, 1.0))
+        camera.cameraType = PERSPECTIVE_CAMERA_TYPE
         before = camera.state()
         viewport = _Viewport(camera=camera)
         handler = bound_handler(
@@ -715,7 +763,8 @@ class TestExportViewSheet:
 
         handler.export_view_sheet(views=["iso", "top"], output_dir=str(tmp_path))
 
-        assert camera.state() == before
+        assert viewport.camera.state() == before
+        assert [eye != before[0] for eye in viewport.eyes_at_capture] == [True, True]
 
     def test_a_document_with_no_visible_body_frames_the_origin(
         self, bound_handler, tmp_path
