@@ -197,8 +197,8 @@ def test_the_no_match_refusal_is_classified_and_names_the_next_step(select):
         select([((0, 0, 0), (0, 0, 5))], "top")
     kind, hints = classify(raised.value)
     assert kind == "GEOMETRY_UNSUPPORTED"
-    # "list_edges" appears in five rules' hints, so it cannot prove *this* one fired;
-    # this phrase is unique to it.
+    # "list_edges" appears in six rules' hints, so it cannot prove *this* one fired;
+    # "highest/lowest edges" is unique to it.
     assert any("highest/lowest edges" in hint for hint in hints), hints
 
 
@@ -867,8 +867,9 @@ def test_a_body_whose_edges_have_no_usable_range_says_that_not_no_edges(bound_ha
     # which reported INVALID_INPUT for a refusal typed GEOMETRY_UNSUPPORTED.
     assert addon_hints.classify(raised.value)[0] == "GEOMETRY_UNSUPPORTED"
     # The table rule too, not only the raise site: the kind above comes from the
-    # Refusal, so it would stay green with the rule reverted. A plain-exception path
-    # and mock mode reach this sentence as a string, and they get the table's answer.
+    # Refusal, so it would stay green with the rule reverted. Nothing in production
+    # raises this sentence untyped - this assertion is what keeps the table's answer
+    # from drifting back to INVALID_INPUT, where it contradicted the raise site.
     kind, rule_hints = addon_hints.classify(message)
     assert kind == "GEOMETRY_UNSUPPORTED"
     assert any("No edge on that body could be measured" in h for h in rule_hints)

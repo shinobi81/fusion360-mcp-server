@@ -245,9 +245,10 @@ and asks the running Fusion whether it exists - 190 references, none missing on
      differently for one body, and that is recorded rather than argued away.
    - the point rule's `has no edges, so no point` alternative - production types that
      sentence `GEOMETRY_UNSUPPORTED` at the raise site while the table answers
-     `INVALID_INPUT`, so a plain-exception path and the typed one disagree. Splitting
-     the alternation into its own rule is a pattern change, not a kind change, which is
-     why it is here and not in this PR.
+     `INVALID_INPUT`, so the table and the typed answer disagree. Nothing raises it
+     untyped today, which is why nothing breaks; splitting the alternation into its own
+     rule is a pattern change, not a kind change, which is why it is here and not in
+     this PR.
 
    The `NAME_NOT_FOUND` tag ends an asymmetry the item recorded rather than lost:
    `cam_generate_toolpath(operation_name=…)` raises its own typed `NAME_NOT_FOUND` for
