@@ -1231,6 +1231,39 @@ def test_a_missing_tool_number_is_answered_before_a_missing_body(handler_module)
     assert refused["error_message"] == str(raised.value)
 
 
+@pytest.mark.parametrize(
+    "extra",
+    [
+        # A parameter fault, which the rules answer before the library is consulted.
+        {"strategy": "2d_contour"},
+        {"strategy": "contour2d", "face_indices": [0]},
+    ],
+    ids=["unknown strategy", "geometry on a strategy without one"],
+)
+def test_a_parameter_fault_outranks_the_library_check_on_both_sides(
+    handler_module, extra
+):
+    """The library check sits below the parameter rules, and neither mode may drift.
+
+    Mock runs the rules before the library, so a handler that resolved the number first
+    would answer NAME_NOT_FOUND where mock answers the strategy or geometry sentence -
+    the same split round 3 found for the setup and the body.
+    """
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: _cam(tool_numbers=_mock_document_library())
+    params = {"setup_name": "Setup1", "tool_number": 3, **extra}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation(**params)
+
+    from fusion360_mcp.mock import mock_command
+
+    refused = mock_command("cam_create_operation", params)
+
+    assert "tool numbered" not in str(raised.value), "the parameter rule answers first"
+    assert refused["error_message"] == str(raised.value)
+
+
 def test_an_empty_document_library_says_it_is_empty(handler_module):
     """A document with no tool registered: the hint says how to make one."""
     setup, created = _recording_setup(_tool_op())
