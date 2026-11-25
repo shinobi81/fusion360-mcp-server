@@ -1021,12 +1021,6 @@ def _add_dimension(p: dict) -> dict:
     }
 
 
-#: The tool numbers mock mode's document library holds.  One tool, because a fake
-#: cannot model what a caller's Fusion document holds - and a number it does not hold is
-#: answered with the sentence the handler would give for that same list.
-DOCUMENT_TOOL_LIBRARY = (1,)
-
-
 # ── construction geometry ─────────────────────────────────────────────
 
 
@@ -1597,6 +1591,12 @@ def _cam_create_setup(p: dict) -> dict:
         "operation_type": operation_type,
         "stock_applied": stock,
     }
+
+
+#: The tool numbers mock mode's document library holds.  One tool, because a fake
+#: cannot model what a caller's Fusion document holds - and a number it does not hold is
+#: answered with the sentence the handler would give for that same list.
+DOCUMENT_TOOL_LIBRARY = (1,)
 
 
 def _cam_create_operation(p: dict) -> dict:

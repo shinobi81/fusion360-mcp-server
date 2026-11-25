@@ -298,10 +298,11 @@ def cam_tool_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     refuses exactly what the handler refuses - and so a caller learns the combination
     without a design, or an operation left behind.
 
-    ``tool_number`` beside ``tool_diameter``/``tool_json`` numbers the tool that defines
-    - it lives inside the JSON, so passing both would drop the argument the caller sent.
-    On its own it selects a tool the document tool library already holds, which is a
-    lookup (``cam_library_tool_refusal`` answers a miss), not a shape check.
+    ``tool_number`` beside ``tool_diameter`` *numbers* the tool that call builds.
+    Beside ``tool_json`` it is a contradiction, because the number lives inside that
+    JSON and passing both would drop the argument the caller sent.  On its own it
+    selects a tool the document tool library already holds, which is a lookup
+    (``cam_library_tool_refusal`` answers a miss), not a shape check.
 
     ``tool_json`` is checked for *shape* here as well, because it is forwarded verbatim
     to ``Tool.createFromJson`` - the one call in this path with a measured crash history
@@ -414,7 +415,9 @@ def cam_library_tool_refusal(
     """
     if tool_number is None:
         return None
-    numbers = sorted(available)
+    # The caller's order is the caller's: the handler hands over a sorted, de-duplicated
+    # list, and re-sorting here would hide which side is responsible for it.
+    numbers = list(available)
     if tool_number in numbers:
         return None
     listed = ", ".join(str(number) for number in numbers)

@@ -414,8 +414,9 @@ class CamCommands(_Contract):
 
         Two tie-breaks, both stated rather than implied: a parameter that reads as a
         float (Fusion reports some as ``6.``) is truncated to the integer it names, and
-        when two tools carry one number the **first in library order** wins - the reply
-        carries that tool's description, so a caller can see which one it got. A tool
+        when two tools carry one number the **first in library order** wins, with that
+        tool's description (when it has one) in the reply so a caller sees which one it
+        got. A tool
         whose parameters cannot be read is logged and skipped rather than failing the
         call: the sentence names the numbers that could be read, and the log says which
         entry was not. ``library.item(i)`` itself is deliberately outside the guard -

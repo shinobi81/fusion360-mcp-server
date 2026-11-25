@@ -1161,6 +1161,35 @@ def test_the_scan_reads_a_float_parameter_and_skips_an_unreadable_entry(handler_
     assert "the numbers it holds are 7, 9" in str(raised.value)
 
 
+def test_two_tools_on_one_number_take_the_first_and_list_it_once(handler_module):
+    """Two vendor libraries merged really can hold one number twice.
+
+    The first in library order wins - the reply's description is how a caller sees
+    which it got - and the sentence lists the number once, because "7, 7" reads like two
+    usable tools when there is one number.
+    """
+    operation = _tool_op()
+    setup, _created = _recording_setup(operation)
+    first = FakeLibraryTool(7, description="the first seven")
+    second = FakeLibraryTool(7, description="the second seven")
+    cam = _cam(setup)
+    cam.documentToolLibrary = FakeDocumentToolLibrary(
+        [first, second, FakeLibraryTool(9)]
+    )
+    handler = _handler(handler_module)
+    handler._get_cam = lambda: cam
+
+    result = handler.cam_create_operation("Setup1", "pocket2d", tool_number=7)
+
+    assert operation.tool is first, "the first in library order, not the last"
+    assert result["tool"]["description"] == "the first seven"
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.cam_create_operation("Setup1", "pocket2d", tool_number=3)
+
+    assert "the numbers it holds are 7, 9" in str(raised.value)
+
+
 def test_an_empty_document_library_says_it_is_empty(handler_module):
     """A document with no tool registered: the hint says how to make one."""
     setup, created = _recording_setup(_tool_op())
