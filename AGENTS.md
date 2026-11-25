@@ -44,8 +44,10 @@ it replace `.venv/Scripts/fusion360-mcp-server.exe` while a running MCP server h
 (`os error 32`). Use `uv run --no-sync …`, or stop the server first.
 
 Coverage is two gates: `pytest` floors the combined `src/` + `addon/server` total at 59
-(low on purpose — the add-in's CAM, view-sheet and viewport families only run inside
-Fusion), and CI separately requires 95 on `src/`. The lazy `adsk` adapter, the fake runtime
+(low on purpose — the CAM paths that remain uncovered only run inside Fusion; the
+export family, viewport captures and the view sheet are covered offline in
+`tests/test_addon_export.py`),
+and CI separately requires 95 on `src/`. The lazy `adsk` adapter, the fake runtime
 and the atheris targets: `docs/TESTING.md`.
 
 ## Adding a tool

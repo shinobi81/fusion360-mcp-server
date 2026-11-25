@@ -32,13 +32,15 @@ recorded there. The floor is **two gates**, because one number cannot hold two v
 different populations:
 
 - **59** for the whole suite, which now measures `src/fusion360_mcp` **and**
-  `addon/server`. The add-in's CAM paths, and the render a view sheet or a viewport
-  capture performs, only run inside Fusion; the decode around a capture (tempfile, read,
-  base64) is fake-settleable, and the view sheet additionally needs `adsk.core.CameraTypes`,
-  which the fake runtime does not declare. Together they account for almost all of the
-  uncovered statements.
-  (Body STL/STEP and f3d export *are* covered offline, by
-  `tests/test_addon_export.py`, against a fake export manager.)
+  `addon/server`. The CAM paths still uncovered only run inside Fusion, and they
+  account for almost all of the statements left.
+  (The export family *is* covered offline, by `tests/test_addon_export.py`: body
+  STL/STEP and f3d against a fake export manager, both default output paths, and —
+  once the fake runtime gained `adsk.core.CameraTypes` and the test module grew a
+  viewport that writes bytes and hands the camera out as the *copy* Fusion documents —
+  `render_view`'s capture and decode, `export_view_sheet` end to end, `import_mesh`'s
+  two import paths and `export`'s stl dispatch. `handler_export` is at 93%; the floor
+  itself has not moved, because moving it is a separate decision.)
 - **95** for the server alone, enforced separately in CI:
   `uv run coverage report --include="src/fusion360_mcp/*" --fail-under=95`. Without it,
   an add-in regression would buy slack for `src/`.

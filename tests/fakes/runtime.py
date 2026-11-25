@@ -35,6 +35,12 @@ _ADAPTER_NAMES = ("cam", "core", "fusion", "doEvents")
 PARAMETRIC = "ParametricDesignType"
 DIRECT = "DirectDesignType"
 
+#: ``CameraTypes``: the member ``export_view_sheet`` sets, and the one a test needs to
+#: start from. Nothing in the add-in reads the values, only the members, so two
+#: distinct numbers are all this has to be.
+ORTHOGRAPHIC_CAMERA_TYPE = 0
+PERSPECTIVE_CAMERA_TYPE = 1
+
 # ``adsk.core.SurfaceTypes``, as the shipped stub numbers it (``adsk/core.py``:
 # ``PlaneSurfaceType = 0``, ``CylinderSurfaceType = 1``).  ``unfold`` scans a body's
 # faces for the first planar one, so a geometry that answered the wrong member
@@ -357,6 +363,20 @@ def _joint_key_points() -> types.SimpleNamespace:
     )
 
 
+def _camera_types() -> types.SimpleNamespace:
+    """``adsk.core.CameraTypes``: what the add-in sets, and what a test needs.
+
+    ``_apply_view`` puts a camera into orthographic - only ``export_view_sheet`` reaches
+    it - and both viewport tools put the caller's own type back afterwards. The stub
+    numbers the members and those numbers are not observable through the add-in, so the
+    fake keeps two distinct ones and nothing depends on which is which.
+    """
+    return types.SimpleNamespace(
+        OrthographicCameraType=ORTHOGRAPHIC_CAMERA_TYPE,
+        PerspectiveCameraType=PERSPECTIVE_CAMERA_TYPE,
+    )
+
+
 def _surface_types() -> types.SimpleNamespace:
     """``adsk.core.SurfaceTypes``: the two members the add-in asks for.
 
@@ -541,6 +561,7 @@ def install() -> None:
         Matrix3D=FakeMatrix3D,
         DocumentTypes=_document_types(),
         SurfaceTypes=_surface_types(),
+        CameraTypes=_camera_types(),
         OrientedBoundingBox3D=_primitives().FakeOrientedBoundingBox3D,
         Application=FakeApplication,
         CustomEventHandler=FakeCustomEventHandler,
