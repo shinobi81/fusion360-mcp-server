@@ -25,9 +25,9 @@ uv sync --locked               # install deps into .venv; refuses a stale lock
 uv run python scripts/check_fusion_api.py  # every adsk name under addon/server,
                                # checked against the running Fusion. Exit 1 for four
                                # reasons: a name Fusion does not have, no connection,
-                               # an audit that could not run (it needs a document
-                               # open), or a report it could not read - that last one
-                               # prints nothing at all
+                               # an audit that could not run (the usual cause: no
+                               # document open), or a report it could not read - that
+                               # last one prints nothing at all
 uv run pytest -q               # suite runs without Fusion
 uv run pytest -q --no-cov tests/test_tools.py   # subset: the coverage floor
                                                 # applies to the whole suite
@@ -100,15 +100,15 @@ The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
   `text.count(old)` must be 1 — 0 means the anchor is gone, more than 1 means it is
   ambiguous; stop rather than write. Insert whole lines — a new bullet or section —
   rather than reflowing the paragraph an anchor sits in: prose in this file is
-  hard-wrapped at the MD013 limit (`.markdownlint-cli2.jsonc`), so a reflow breaks the
-  anchor.
+  hard-wrapped at the MD013 limit (`.markdownlint-cli2.jsonc`), so a reflow breaks an
+  anchor that spans a line break.
 - **Set the line ending explicitly.** `.gitattributes` puts text files on `eol=lf`,
-  while `*.ps1`, `*.bat` and `*.cmd` keep CRLF by policy (`.gitattributes`, again). On
-  Windows, text-mode writes turn every `\n` into CRLF in the working tree while the
-  blob stays LF. Pass `encoding="utf-8"` and `newline="\n"` as
+  while `*.ps1`, `*.bat` and `*.cmd` are checked out with CRLF by policy (see that
+  file). On Windows, text-mode writes turn every `\n` into CRLF in the working tree
+  while the blob stays LF. Pass `encoding="utf-8"` and `newline="\n"` as
   `scripts/sync_mirrors.py` does — `newline="\r\n"` for those three suffixes. A file
-  read back with `newline=""`, or as bytes, keeps its CRLF, so read it the default
-  way: `read_text(encoding="utf-8")`.
+  read back with `newline=""`, or as bytes, keeps its CRLF, so leave `newline` at its
+  default: `read_text(encoding="utf-8")`.
 
 ## Boundaries
 
