@@ -36,8 +36,8 @@ PARAMETRIC = "ParametricDesignType"
 DIRECT = "DirectDesignType"
 
 #: ``CameraTypes``: the member ``export_view_sheet`` sets, and the one a test needs to
-#: start from. Their numbers are not observable through the add-in - which is why they
-#: are not the ones below, whatever they look like.
+#: start from. Nothing in the add-in reads the values, only the members, so two
+#: distinct numbers are all this has to be.
 ORTHOGRAPHIC_CAMERA_TYPE = 0
 PERSPECTIVE_CAMERA_TYPE = 1
 

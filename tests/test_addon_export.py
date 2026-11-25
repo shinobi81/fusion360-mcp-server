@@ -290,8 +290,9 @@ class _FakeCamera:
 
     ``render_view`` and ``export_view_sheet`` both save ``eye``/``target``/``upVector``
     and ``cameraType`` and put them back afterwards, so the fake carries real
-    point/vector objects rather than tuples: a restore that wrote a tuple raises here,
-    at the first capture or at ``state()``, where Fusion would simply ignore it.
+    point/vector objects rather than tuples. Fusion refuses such an assignment outright
+    - the setters take a ``Point3D``/``Vector3D``, and a tuple fails SWIG's conversion -
+    while the fake takes the write and raises later, at the capture or at ``state()``.
     """
 
     def __init__(
@@ -356,9 +357,14 @@ class _Viewport:
         #: orthographic and the restore writes the caller's back, so only a capture-time
         #: read sees that it was set at all.
         self.types_at_capture: list[int] = []
-        #: ``isFitView`` at each capture, for the same reason as the type:
-        #: ``_apply_view`` sets it and the restore does not reset it.
+        #: ``isFitView`` at each capture: ``_apply_view`` sets it and the restore does
+        #: not reset it, so a later read sees it too - but not at the moment it matters.
         self.fit_view_at_capture: list[bool] = []
+        #: The target at each capture: ``_apply_view`` aims the camera at the frame
+        #: centre and the restore writes the caller's back, so only a capture-time read
+        #: shows where it pointed. A viewport looks along eye - target, so a dropped
+        #: target renders the model against the origin instead of the frame's centre.
+        self.targets_at_capture: list[tuple[float, float, float]] = []
 
     @property
     def camera(self) -> _FakeCamera:
@@ -392,6 +398,8 @@ class _Viewport:
         self.ups_at_capture.append((up.x, up.y, up.z))
         self.types_at_capture.append(self._camera.cameraType)
         self.fit_view_at_capture.append(self._camera.isFitView)
+        target = self._camera.target
+        self.targets_at_capture.append((target.x, target.y, target.z))
         if self.saved:
             with open(path, "wb") as handle:
                 # Recognisable, and *per file*: the basename goes in, so two views write
@@ -777,6 +785,8 @@ class TestExportViewSheet:
         assert manifest["title"] == "Bracket & <Plate>"
         assert manifest["views"] == result["views"]
         assert manifest["image_size"] == [400, 300]
+        assert manifest["html_path"] == result["html_path"]
+        assert manifest["document"] == design.parentDocument.name
 
     def test_an_empty_views_list_falls_back_to_the_defaults(
         self, bound_handler, tmp_path
@@ -826,6 +836,8 @@ class TestExportViewSheet:
         assert viewport.fit_view_at_capture == [True, True], (
             "_apply_view asks for a fit"
         )
+        # Aimed at the body's box centre, the same point for both views.
+        assert viewport.targets_at_capture == [(0.5, 0.5, 0.5), (0.5, 0.5, 0.5)]
         # One refresh per view from _apply_view, one more from the restore: the bare
         # ``>= 1`` a refusal test can use would be satisfied by the restore alone.
         assert viewport.refreshed == 3
@@ -847,6 +859,9 @@ class TestExportViewSheet:
         eye = viewport.eyes_at_capture[0]
         distance = math.sqrt(sum(coordinate * coordinate for coordinate in eye))
         assert distance == pytest.approx(30.0)
+        assert viewport.targets_at_capture == [(0.0, 0.0, 0.0)], (
+            "the origin is the centre"
+        )
 
 
 class TestTheTwoDefaultPaths:

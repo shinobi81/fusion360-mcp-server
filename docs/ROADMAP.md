@@ -268,7 +268,7 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    PNGs, the HTML with each embedded once, the manifest, and the Desktop default),
    `export_f3d`'s default path, both `import_mesh` import paths, and `export`'s `stl`
    dispatch. `handler_export` went 44% -> 93% and the combined figure
-   94.10% -> 96.7%. The fakes are the reason it is worth anything: the
+   94.10% -> 96.75%. The fakes are the reason it is worth anything: the
    viewport hands the camera out as a *copy* (Fusion's own contract), so a dropped
    `vp.camera = cam` fails instead of passing. Both tools were still driven live on
    2706.1.17 first - a 19287-byte PNG, and a sheet writing exactly the files the fake
