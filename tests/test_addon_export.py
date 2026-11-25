@@ -340,8 +340,9 @@ class _Viewport:
         #: The camera the viewport actually holds. ``camera`` below hands out a copy.
         self._camera = camera or _FakeCamera()
         #: How many times a camera was *assigned back*. Fusion's camera is a copy, so
-        #: editing one changes nothing until it is assigned - which is why the handler's
-        #: two ``vp.camera = cam`` lines need a count to notice their removal.
+        #: editing one changes nothing until it is assigned back - which is what makes
+        #: this count the only thing that notices a dropped ``vp.camera = cam``: the
+        #: stored state alone would look restored either way.
         self.camera_writes = 0
         self.captures: list[tuple[str, int, int]] = []
         #: The camera's eye at each capture, from the stored camera: the sheet puts the
@@ -561,7 +562,12 @@ class TestRenderViewCapture:
         result = handler.render_view(view="iso")
 
         assert result["view"] == "iso"
-        assert camera.state() == before, "the caller's view is what they get back"
+        assert viewport.eyes_at_capture[0] != before[0], "iso actually moved the camera"
+        # The *stored* camera, not the object this test built: Fusion hands out copies,
+        # so after the first assignment the stored one is a different object, and
+        # comparing the original with its own snapshot would pass over any restore.
+        assert viewport.camera.state() == before, "the caller's view is what comes back"
+        assert viewport.camera_writes == 2, "moved once, restored once"
         assert viewport.refreshed >= 1, "the restore refreshes the viewport"
 
     def test_dimensions_are_clamped_to_a_renderable_range(self, bound_handler):
@@ -764,6 +770,12 @@ class TestExportViewSheet:
         handler.export_view_sheet(views=["iso", "top"], output_dir=str(tmp_path))
 
         assert viewport.camera.state() == before
+        assert viewport.camera_writes == 3, "two moves and one restore"
+        # The body's box is 0..1, so the frame is centred on (0.5, 0.5, 0.5) at radius 1
+        # and the iso eye sits 3 cm out - the visible-body branch, not the fallback.
+        assert viewport.eyes_at_capture[0] == pytest.approx(
+            (2.232, -1.232, 2.232), abs=1e-3
+        )
         assert [eye != before[0] for eye in viewport.eyes_at_capture] == [True, True]
 
     def test_a_document_with_no_visible_body_frames_the_origin(
