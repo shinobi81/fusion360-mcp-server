@@ -259,7 +259,10 @@ class HandlerBase:
                 # ok: true, and an agent that stops there has learned nothing.  A
                 # refusal would be wrong - clipping nothing can be what was asked - so
                 # it is reported instead, from the one table that says which commands'
-                # success the snapshot cannot judge.
+                # success the snapshot cannot judge.  ``setdefault``: a handler's own
+                # warning describes the call it just made and outranks this one.  ``or
+                # ""`` is not reachable - the dispatch above matched on this key - and
+                # only narrows the name for a checker.
                 if (warning := no_op_warning(cmd_type or "", deltas)) is not None:
                     result.setdefault("warning", warning)
 
@@ -794,7 +797,7 @@ class HandlerBase:
                 except Exception:
                     bbox_dict = None
 
-            mass_g = 0.0
+            mass_g: float | None = 0.0
             if body_count > 0:
                 try:
                     # physicalProperties.mass is in kg.  Sum occurrence
@@ -806,7 +809,10 @@ class HandlerBase:
                             mass_kg += float(occ.physicalProperties.mass)
                     mass_g = mass_kg * 1000.0
                 except Exception:
-                    mass_g = 0.0
+                    # None, not 0.0: a design with bodies whose mass could not be read
+                    # is unknown, and a zero would let ``no_op_warning`` claim the mass
+                    # did not move on the strength of a number nothing measured.
+                    mass_g = None
 
             return {
                 "body_count": body_count,
@@ -819,15 +825,27 @@ class HandlerBase:
 
     @staticmethod
     def _compute_deltas(before: dict, after: dict) -> dict:
-        """Return a diff suitable for an agent: counts + masses + bboxes."""
+        """Return a diff suitable for an agent: counts + masses + bboxes.
+
+        A mass that either snapshot could not read is ``None`` on both sides and in the
+        delta: the difference of an unknown is unknown, and a caller that reads
+        ``mass_g_delta: 0.0`` would be told that nothing moved.
+        """
+        mass_before = before.get("mass_g")
+        mass_after = after.get("mass_g")
+        mass_delta = (
+            None
+            if mass_before is None or mass_after is None
+            else mass_after - mass_before
+        )
         return {
             "body_count_before": before.get("body_count", 0),
             "body_count_after": after.get("body_count", 0),
             "body_count_delta": after.get("body_count", 0)
             - before.get("body_count", 0),
-            "mass_g_before": before.get("mass_g", 0.0),
-            "mass_g_after": after.get("mass_g", 0.0),
-            "mass_g_delta": after.get("mass_g", 0.0) - before.get("mass_g", 0.0),
+            "mass_g_before": mass_before,
+            "mass_g_after": mass_after,
+            "mass_g_delta": mass_delta,
             "bbox_before": before.get("bbox"),
             "bbox_after": after.get("bbox"),
         }

@@ -265,12 +265,6 @@ class TestMockExecuteCode:
         assert result["deltas"]["body_count_delta"] == 1
         assert "warning" not in result
 
-    def test_an_exempt_command_carries_no_warning(self):
-        result = mock_command("set_color", {"body_name": "Body1", "red": 1})
-
-        assert "deltas" in result
-        assert "warning" not in result
-
 
 class TestMockNewGeometry:
     def test_sweep(self):

@@ -70,7 +70,8 @@ order — first match wins. Adding a failure mode means adding a rule to
 branch instead of parsing prose (`TIMEOUT`, `NOT_ENTITLED`, `DESIGN_TYPE_MISMATCH`).
 
 Mutations additionally carry `deltas` (body count, mass, bbox before/after) so a no-op
-is visible without a render.
+is visible without a render, and a mutation that left all three identical carries a
+`warning` saying so — the deltas are the evidence, the warning is the verdict.
 
 ## Sketch, timeline and undo semantics
 

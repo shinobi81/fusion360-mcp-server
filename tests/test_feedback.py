@@ -364,6 +364,15 @@ class TestFormatResult:
         assert "+1" in text
         assert "7.85" in text
 
+    def test_a_no_op_warning_reaches_the_rendered_text(self):
+        """What this pins is that the key is *not* in ``_SPECIAL_KEYS``: a render that
+        dropped the fields it does not know would leave an MCP caller with ``ok: true``
+        and nothing else.  The envelope is mock's, so it also pins that mock's deltas
+        meet the same judgement the add-in's do."""
+        out = _format_result("execute_code", mock_command("execute_code", {}))
+
+        assert "warning: nothing changed: " in _text_of(out)
+
     def test_render_view_returns_image_content(self):
         result = mock_command("render_view", {})
         out = _format_result("render_view", result)

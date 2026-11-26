@@ -69,12 +69,12 @@ MUTATION_COMMANDS: frozenset[str] = frozenset(
     }
 )
 
-#: Commands whose success the snapshot cannot judge, and the reason each is here.
-#:
-#: A mutation whose three measures all come back identical did nothing *measurable*, and
-#: ``no_op_warning`` says so - except for these, where an unchanged snapshot is either
-#: the normal outcome or a change the snapshot has no field for.  One reason per entry:
-#: an exemption without one is indistinguishable from a forgotten case.
+# Commands whose success the snapshot cannot judge, and the reason each is here.
+#
+# A mutation whose three measures all come back identical did nothing *measurable*, and
+# ``no_op_warning`` says so - except for these, where an unchanged snapshot is either
+# the normal outcome or a change the snapshot has no field for.  One reason per entry:
+# an exemption without one is indistinguishable from a forgotten case.
 NO_OP_EXEMPT: dict[str, str] = {
     "auto_constrain": (
         "sketch constraints are not bodies: mass, count and bbox cannot see them"
@@ -84,6 +84,12 @@ NO_OP_EXEMPT: dict[str, str] = {
     ),
     "create_ucs": (
         "a user coordinate system is construction geometry, invisible to the snapshot"
+    ),
+    "move_body": (
+        "a successful move always translates a body - Fusion refuses a zero "
+        "translation with '3 : invalid transform', measured on 2706.1.17 - while the "
+        "root box is a union, so a body moved inside another's extents changes none "
+        "of the three measures (measured: a 1 cm move that answered 'nothing changed')"
     ),
     "set_color": "an appearance changes no body's mass, count or bounding box",
     "set_parameter": (
@@ -107,8 +113,9 @@ NO_OP_EXEMPT: dict[str, str] = {
     ),
 }
 
-#: Mass is compared with a tolerance: a no-op repeats Fusion's own evaluation, and only
-#: the snapshot's kg -> g conversion could move the last bit.
+# Mass is compared with a tolerance: a no-op still re-evaluates the design, and Fusion's
+# two evaluations of the same body need not agree in the last bit.  1e-6 g is far below
+# anything a feature removes, and far above the float noise it can add.
 _MASS_TOLERANCE_G = 1e-6
 
 
@@ -121,26 +128,48 @@ def no_op_warning(command: str, deltas: dict) -> str | None:
     count nor mass, so a rule built on those two would accuse a real change of being a
     no-op.
 
+    Nothing unmeasured is read as unchanged.  A design with bodies whose mass could not
+    be read answers ``None`` for it (``_snapshot`` says why), and a box that was never
+    read is ``None`` too, so both refuse the judgement instead of supplying a zero -
+    "unknown is not zero" is the whole point of the key.
+
     Never a refusal - clipping nothing can be exactly what was asked - and never a claim
     about the design: the wording names the snapshot, because a topology-only command
-    (``split_face``) changes the body without moving any of these three numbers.
+    (``split_face``) changes the body without moving any of these three numbers.  The
+    arrow is ASCII on purpose: this string is built in the add-in and travels on the
+    wire, where only the MCP renderer's own prose uses a real arrow.
     """
     if command in NO_OP_EXEMPT:
         return None
+    count_before = deltas.get("body_count_before")
+    count_after = deltas.get("body_count_after")
     count_delta = deltas.get("body_count_delta")
+    mass_before = deltas.get("mass_g_before")
+    mass_after = deltas.get("mass_g_after")
     mass_delta = deltas.get("mass_g_delta")
-    if count_delta is None or mass_delta is None:
-        # Unknown is not zero: a deltas dict without a measure cannot be judged.
+    if (
+        count_before is None
+        or count_after is None
+        or count_delta is None
+        or mass_before is None
+        or mass_after is None
+        or mass_delta is None
+    ):
+        # Unknown is not zero: a measure this snapshot does not carry cannot be judged.
         return None
     if count_delta != 0 or abs(mass_delta) > _MASS_TOLERANCE_G:
         return None
-    if deltas.get("bbox_before") != deltas.get("bbox_after"):
+    box_before = deltas.get("bbox_before")
+    box_after = deltas.get("bbox_after")
+    if count_before and box_before is None:
+        # Bodies but no box: the read failed, so "identical" is unproven - measured,
+        # root.boundingBox covers the occurrence bodies body_count counts too.
+        return None
+    if box_before != box_after:
         return None
     return (
-        f"nothing changed: body_count {deltas.get('body_count_before')} -> "
-        f"{deltas.get('body_count_after')}, mass_g "
-        f"{deltas.get('mass_g_before', 0.0):.3f} -> "
-        f"{deltas.get('mass_g_after', 0.0):.3f}, and the bounding box is identical. "
-        "The command reported success but nothing measurable moved - check that the "
-        "profile, target or name reached a body."
+        f"nothing changed: body_count {count_before} -> {count_after}, mass_g "
+        f"{mass_before:.3f} -> {mass_after:.3f}, and the bounding box is identical. "
+        "The call succeeded, but every measure came back the same - check that the "
+        "script, profile, target or name reached a body."
     )

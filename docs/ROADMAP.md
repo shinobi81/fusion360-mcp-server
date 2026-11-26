@@ -439,10 +439,11 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    description says so too. The first tests to name `stock_mode` at all cover the five
    ids, the refusal, and that the setup does not exist when the vocabulary is refused.
 
-10. ~~**A mutation that changed nothing says so**~~ - **closed (this PR).**
-    `_snapshot` computed `body_count_delta` and `mass_g_delta` for every mutation and
-    nothing read them back as a judgement, so a mutation that moved nothing answered
-    `ok: true` and an agent working unattended stopped there. The three measures are now
+10. ~~**A mutation that changed nothing says so**~~ - **closed (#157).**
+    `execute_command` computed `body_count_delta` and `mass_g_delta` for every mutation
+    (through `_compute_deltas`, from what `_snapshot` measured) and nothing read them
+    back as a judgement, so a mutation that moved nothing answered `ok: true` and an
+    agent working unattended stopped there. The three measures are now
     judged together - count, mass and bbox - and a mutation that left all three identical
     carries `warning: "nothing changed: …"`. Never a refusal: clipping nothing can be
     exactly what was asked.
@@ -455,13 +456,14 @@ and asks the running Fusion whether it exists - 190 references, none missing on
     by Fusion (`3 : No target body found to cut or intersect!`) and can never be the
     evidence.
 
-    Nine commands are exempt, each for a reason written beside it in
+    Ten commands are exempt, each for a reason written beside it in
     `addon/server/mutation_commands.py` - `set_parameter`, `suppress_feature`,
-    `unsuppress_feature`, `undo`, `set_color`, `create_ucs`, `auto_constrain`,
-    `split_face`, `create_thread` - and the table is pinned by name in
-    `tests/test_addon_no_op.py`, so a new mutation cannot inherit an exemption by
-    accident. Mock mode judges its synthetic deltas with the same function, and its
-    `execute_code` now reports zero deltas because mock runs nothing.
+    `unsuppress_feature`, `undo`, `move_body`, `set_color`, `create_ucs`,
+    `auto_constrain`, `split_face`, `create_thread` - and the table is pinned by name in
+    `tests/test_addon_no_op.py`, so an exemption cannot be added - or kept through a
+    rename - without a listing and a reason. Mock mode judges its synthetic deltas with
+    the same function, and its `execute_code` now reports zero deltas because mock runs
+    nothing.
 
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.

@@ -67,9 +67,13 @@ _MOCK_DELTAS = {
     "bbox_after": {"min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 1.0]},
 }
 
-#: The deltas for a mutation mock *ran nothing* for.  ``execute_code`` is the one: mock
-#: executes no Python, so claiming the synthetic "a body appeared" would report a build
-#: that never happened - and the add-in's own judgement then says it: nothing changed.
+#: The deltas for a mutation mock *ran nothing* for.  ``execute_code`` is the one:
+#: mock executes no Python, so claiming the synthetic "a body appeared" would report a
+#: build that never happened.  Zero is the truthful answer for a mock world where
+#: nothing ran, which is why the judgement adds its warning - as the add-in does for a
+#: script that touched nothing.  What mock cannot know is what the script *would* have
+#: built; that is a divergence recorded in ``docs/ROADMAP.md``, not one this table can
+#: fix.
 _NO_CHANGE_DELTAS = {
     "body_count_before": 0,
     "body_count_after": 0,
@@ -161,7 +165,8 @@ def mock_command(command_type: str, params: dict[str, Any] | None = None) -> dic
         result["deltas"] = deltas
         # The same judgement the add-in makes, from the same table: a mock rehearsal
         # that changed nothing must say so, or an agent rehearsing here learns the
-        # opposite of what real mode reports.
+        # opposite of what real mode reports.  ``setdefault`` for the same reason as
+        # there: a handler's own warning outranks this one.
         if (warning := no_op_warning(command_type, deltas)) is not None:
             result.setdefault("warning", warning)
     result["mode"] = "mock"
