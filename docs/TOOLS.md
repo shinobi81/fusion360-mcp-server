@@ -5,16 +5,17 @@ envelope — `ok`, plus tool-specific fields, plus `deltas` for mutations — an
 back as data (`error_kind`, `hints`, `traceback`) rather than exceptions.
 
 A mutation whose snapshot did not move — body count, mass and bounding box all
-identical — also carries `warning: "nothing changed: …"`, because `ok: true` alone reads
-as success to a caller that stops there. It is information, never a refusal: clipping
-nothing can be exactly what was asked. Commands whose success the snapshot cannot judge
-(`set_parameter`, `suppress_feature`, `unsuppress_feature`, `undo`, `move_body`,
-`set_color`, `create_ucs`, `auto_constrain`, `split_face`, `create_thread`) never carry
-it, each
-for a reason recorded beside it in `addon/server/mutation_commands.py`. A command that
-sets a `warning` of its own keeps it — the CAM handlers use one for a partial failure —
-because that sentence describes the call that was just made, and this key never
-replaces it.
+identical — also carries `warning: "nothing changed in the snapshot: …"`, because
+`ok: true` alone reads as success to a caller that stops there. It is information, never
+a refusal: clipping nothing can be exactly what was asked. Commands whose success the
+snapshot cannot judge (`set_parameter`, `suppress_feature`, `unsuppress_feature`, `undo`,
+`move_body`, `delete_all`, `set_color`, `create_ucs`, `auto_constrain`, `split_face`,
+`create_thread`) never carry it, each for a reason recorded beside it in
+`addon/server/mutation_commands.py`. A command that sets a `warning` of its own keeps it
+— the CAM handlers use one for a partial failure — because that sentence describes the
+call that was just made, and this key never replaces it. A `mass_g_before`,
+`mass_g_after` or `mass_g_delta` of `null` means the mass could not be read, and the
+warning is never raised on one.
 
 Units are **centimetres** throughout: Fusion's internal unit, not millimetres. Tools
 marked **(2026+)** use APIs that need a Fusion build from 2026 or later; the rest were

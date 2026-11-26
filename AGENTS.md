@@ -256,11 +256,14 @@ Read the deltas before rendering. `body_count_delta: 0, mass_g_delta: 0` means t
 operation did nothing — check interference before retrying; with `keep_tool=True` the body
 count does not drop even when the cut worked, so read `mass_g_delta`. A mutation whose
 count, mass _and_ bbox all come back identical carries a `warning` saying so ("nothing
-changed: …"), so a no-op is visible without reading three numbers; a command exempt from
-that judgement (ten today, each listed with its reason in `docs/TOOLS.md`) never carries
-the key. `render_view` costs
-200KB–2MB of base64, so render at a checkpoint rather than after every mutation: deltas
-say whether a feature did _something_, a render whether it did the _right_ thing.
+changed in the snapshot: …"), so a no-op is visible without reading three numbers; a
+command exempt from that judgement (eleven today — `docs/TOOLS.md` lists them and
+`addon/server/mutation_commands.py` records a reason for each) never carries the key.
+Those three `mass_g_*` fields are `null` when the mass could not be read, which is not
+the same as `0.0`: unknown is not zero, and a `null` never triggers the warning.
+`render_view` costs 200KB–2MB of base64, so render at a checkpoint rather than after
+every mutation: deltas say whether a feature did _something_, a render whether it did
+the _right_ thing.
 
 ## MCP protocol features
 

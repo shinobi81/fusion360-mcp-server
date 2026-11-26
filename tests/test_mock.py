@@ -256,7 +256,10 @@ class TestMockExecuteCode:
 
         assert result["deltas"]["body_count_delta"] == 0
         assert result["deltas"]["mass_g_delta"] == 0.0
-        assert result["warning"].startswith("nothing changed: ")
+        # Mock's scene already has its one body: the numbers say "unchanged from here",
+        # not "nothing exists".
+        assert result["deltas"]["body_count_before"] == 1
+        assert result["warning"].startswith("nothing changed in the snapshot: ")
 
     def test_a_building_mutation_carries_no_warning(self):
         """The other half of the parity: mock's extrude really does add its body."""

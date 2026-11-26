@@ -15,6 +15,7 @@ and it is what these tests pin.
 
 from __future__ import annotations
 
+import pathlib
 from types import SimpleNamespace
 
 import pytest
@@ -52,7 +53,7 @@ def test_an_unchanged_snapshot_warns_and_names_the_two_deltas():
     warning = no_op_warning("execute_code", _deltas())
 
     assert warning is not None
-    assert warning.startswith("nothing changed: ")
+    assert warning.startswith("nothing changed in the snapshot: ")
     assert "body_count 3 -> 3" in warning
     assert "mass_g 7850.000 -> 7850.000" in warning
 
@@ -87,18 +88,10 @@ def test_a_bounding_box_change_alone_does_not_warn():
     assert no_op_warning("unfold", deltas) is None
 
 
-def test_a_move_is_never_judged_even_when_the_root_box_cannot_see_it():
-    """Measured on 2706.1.17: a 1 cm move of a body inside a larger body's extents left
-    the root box identical, so the union cannot prove a move did nothing - and Fusion
-    refuses a zero translation anyway."""
-    deltas = _deltas()
-
-    assert no_op_warning("move_body", deltas) is None
-
-
 def test_a_mass_delta_below_the_tolerance_still_warns():
-    """A no-op repeats Fusion's own number; the tolerance only absorbs the kg -> g
-    conversion's last bit."""
+    """The tolerance absorbs Fusion's own re-evaluation, not ours: the kg -> g
+    conversion is identical on both sides of a no-op, so a last-bit difference is Fusion
+    computing the mass twice."""
     deltas = _deltas(mass_g_after=7850.0000001, mass_g_delta=1e-7)
 
     assert no_op_warning("execute_code", deltas) is not None
@@ -132,7 +125,7 @@ def test_an_empty_design_has_two_absent_bounding_boxes_that_are_not_a_change():
         bbox_after=None,
     )
 
-    assert no_op_warning("delete_all", deltas) is not None
+    assert no_op_warning("execute_code", deltas) is not None
 
 
 def test_bodies_with_no_bounding_box_are_unknown_not_unchanged():
@@ -148,10 +141,16 @@ def test_bodies_with_no_bounding_box_are_unknown_not_unchanged():
 #: Pinned by name on purpose: a name reaches this table only by being listed here, so an
 #: exemption cannot be added - or quietly inherited by a rename - without a test that
 #: says so and a reason beside it.
+#:
+#: ``move_body`` is here because a 1 cm move of a body *inside* a larger body's extents
+#: left the root box identical, measured on 2706.1.17: the union cannot prove a move
+#: did nothing, and Fusion refuses a zero translation anyway.  ``delete_all`` is here
+#: because it sweeps sketches and timeline entries, which the snapshot does not count.
 _EXEMPT = {
     "auto_constrain",
     "create_thread",
     "create_ucs",
+    "delete_all",
     "move_body",
     "set_color",
     "set_parameter",
@@ -180,6 +179,19 @@ def test_every_exemption_carries_a_reason():
 @pytest.mark.parametrize("command", sorted(_EXEMPT))
 def test_an_exempt_command_never_warns(command):
     assert no_op_warning(command, _deltas()) is None
+
+
+@pytest.mark.parametrize("doc", ["docs/TOOLS.md", "docs/ROADMAP.md"])
+def test_every_exemption_is_named_in_the_docs(doc):
+    """The two prose lists are hand-copied, so membership is checked rather than their
+    wording: an exemption added in code alone leaves the caller-facing docs claiming
+    every mutation is judged.  Rewording is free; dropping a name is not."""
+    text = (pathlib.Path(__file__).resolve().parents[1] / doc).read_text(
+        encoding="utf-8"
+    )
+
+    missing = [name for name in NO_OP_EXEMPT if f"`{name}`" not in text]
+    assert not missing, (doc, missing)
 
 
 # ── through the envelope ──────────────────────────────────────────────
@@ -297,6 +309,20 @@ def test_a_design_with_bodies_and_no_bounding_box_is_not_judged(bound_handler):
     result = _result(handler, "execute_code", code="count = 1")
 
     assert result["deltas"]["bbox_after"] is None
+    assert "warning" not in result
+
+
+def test_delete_all_does_not_claim_nothing_changed_on_a_body_less_design(bound_handler):
+    """Measured on 2706.1.17: a sketch-only design answers ``ok: true`` with all three
+    measures identical and the sketch gone - so the judgement has nothing to stand on,
+    and the command is exempt."""
+    handler = bound_handler(_measured_design())
+    handler._root().bRepBodies._items.clear()
+
+    result = _result(handler, "delete_all")
+
+    assert result["ok"] is True
+    assert result["deltas"]["body_count_delta"] == 0
     assert "warning" not in result
 
 

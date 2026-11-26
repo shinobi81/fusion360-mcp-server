@@ -364,6 +364,27 @@ class TestFormatResult:
         assert "+1" in text
         assert "7.85" in text
 
+    def test_an_unknown_mass_renders_as_unknown_not_as_nothing(self):
+        """``_snapshot`` answers ``null`` for a mass it could not read; a renderer that
+        skipped the line would leave the caller unable to tell that from a massless
+        design."""
+        result = {
+            "ok": True,
+            "deltas": {
+                "body_count_before": 1,
+                "body_count_after": 1,
+                "body_count_delta": 0,
+                "mass_g_before": None,
+                "mass_g_after": None,
+                "mass_g_delta": None,
+                "bbox_before": None,
+                "bbox_after": None,
+            },
+        }
+        out = _format_result("execute_code", result)
+
+        assert "mass_g:     unknown" in _text_of(out)
+
     def test_a_no_op_warning_reaches_the_rendered_text(self):
         """What this pins is that the key is *not* in ``_SPECIAL_KEYS``: a render that
         dropped the fields it does not know would leave an MCP caller with ``ok: true``
@@ -371,7 +392,7 @@ class TestFormatResult:
         meet the same judgement the add-in's do."""
         out = _format_result("execute_code", mock_command("execute_code", {}))
 
-        assert "warning: nothing changed: " in _text_of(out)
+        assert "warning: nothing changed in the snapshot: " in _text_of(out)
 
     def test_render_view_returns_image_content(self):
         result = mock_command("render_view", {})

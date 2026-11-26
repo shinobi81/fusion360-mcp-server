@@ -42,6 +42,7 @@ MUTATION_COMMANDS: frozenset[str] = frozenset(
         "boolean_operation",
         # primitives
         "create_box",
+        "create_box_parametric",
         "create_cylinder",
         "create_sphere",
         "create_torus",
@@ -84,6 +85,11 @@ NO_OP_EXEMPT: dict[str, str] = {
     ),
     "create_ucs": (
         "a user coordinate system is construction geometry, invisible to the snapshot"
+    ),
+    "delete_all": (
+        "it removes sketches, joints, construction geometry and timeline entries - a "
+        "design with no bodies has nothing left that the snapshot counts, so a sweep "
+        "of a sketch-only design measured nothing"
     ),
     "move_body": (
         "a successful move always translates a body - Fusion refuses a zero "
@@ -162,13 +168,17 @@ def no_op_warning(command: str, deltas: dict) -> str | None:
     box_before = deltas.get("bbox_before")
     box_after = deltas.get("bbox_after")
     if count_before and box_before is None:
-        # Bodies but no box: the read failed, so "identical" is unproven - measured,
-        # root.boundingBox covers the occurrence bodies body_count counts too.
+        # Bodies but no box: the read failed, so "identical" is unproven.  Measured on
+        # 2706.1.17: moving a body inside a component moved root.boundingBox with it,
+        # so the two measures agree there - but get_bounding_box unions occurrences by
+        # hand, so a *transformed* occurrence is one probe this does not cover, and the
+        # guard keeps that case silent rather than wrong.
         return None
     if box_before != box_after:
         return None
     return (
-        f"nothing changed: body_count {count_before} -> {count_after}, mass_g "
+        f"nothing changed in the snapshot: body_count {count_before} -> "
+        f"{count_after}, mass_g "
         f"{mass_before:.3f} -> {mass_after:.3f}, and the bounding box is identical. "
         "The call succeeded, but every measure came back the same - check that the "
         "script, profile, target or name reached a body."

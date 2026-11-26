@@ -56,6 +56,10 @@ from .hints import classify as _classify
 # command real mode treats as read-only.
 _MUTATION_MOCKS = MUTATION_COMMANDS
 
+#: The box mock's one body occupies - ``_MOCK_DELTAS`` grows into it, and the unchanged
+#: deltas below sit on it.
+_MOCK_BOX = {"min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 1.0]}
+
 _MOCK_DELTAS = {
     "body_count_before": 0,
     "body_count_after": 1,
@@ -64,25 +68,25 @@ _MOCK_DELTAS = {
     "mass_g_after": 10.0,
     "mass_g_delta": 10.0,
     "bbox_before": None,
-    "bbox_after": {"min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 1.0]},
+    "bbox_after": _MOCK_BOX,
 }
 
-#: The deltas for a mutation mock *ran nothing* for.  ``execute_code`` is the one:
-#: mock executes no Python, so claiming the synthetic "a body appeared" would report a
-#: build that never happened.  Zero is the truthful answer for a mock world where
-#: nothing ran, which is why the judgement adds its warning - as the add-in does for a
+#: The deltas for a mutation mock *ran nothing* for.  ``execute_code`` is the one: mock
+#: executes no Python, so claiming the synthetic "a body appeared" would report a build
+#: that never happened.  The numbers are mock's own scene - one body, 10 g, that box -
+#: unchanged, which is why the judgement adds its warning, as the add-in does for a
 #: script that touched nothing.  What mock cannot know is what the script *would* have
 #: built; that is a divergence recorded in ``docs/ROADMAP.md``, not one this table can
 #: fix.
 _NO_CHANGE_DELTAS = {
-    "body_count_before": 0,
-    "body_count_after": 0,
+    "body_count_before": 1,
+    "body_count_after": 1,
     "body_count_delta": 0,
-    "mass_g_before": 0.0,
-    "mass_g_after": 0.0,
+    "mass_g_before": 10.0,
+    "mass_g_after": 10.0,
     "mass_g_delta": 0.0,
-    "bbox_before": None,
-    "bbox_after": None,
+    "bbox_before": _MOCK_BOX,
+    "bbox_after": _MOCK_BOX,
 }
 
 

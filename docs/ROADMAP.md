@@ -456,14 +456,28 @@ and asks the running Fusion whether it exists - 190 references, none missing on
     by Fusion (`3 : No target body found to cut or intersect!`) and can never be the
     evidence.
 
-    Ten commands are exempt, each for a reason written beside it in
+    Eleven commands are exempt, each for a reason written beside it in
     `addon/server/mutation_commands.py` - `set_parameter`, `suppress_feature`,
-    `unsuppress_feature`, `undo`, `move_body`, `set_color`, `create_ucs`,
+    `unsuppress_feature`, `undo`, `move_body`, `delete_all`, `set_color`, `create_ucs`,
     `auto_constrain`, `split_face`, `create_thread` - and the table is pinned by name in
     `tests/test_addon_no_op.py`, so an exemption cannot be added - or kept through a
     rename - without a listing and a reason. Mock mode judges its synthetic deltas with
-    the same function, and its `execute_code` now reports zero deltas because mock runs
-    nothing.
+    the same function, and its `execute_code` reports mock's own scene unchanged because
+    mock runs nothing.
+
+    Two scope additions, both found by probing rather than by reading.
+
+    `move_body` and `delete_all` were *judged* until measurement showed the judgement
+    could not stand on those three numbers: a 1 cm move of a body inside a larger body's
+    extents leaves the root box identical, and `delete_all` sweeps sketches, joints and
+    timeline entries that the snapshot does not count - a sketch-only design answered
+    "nothing changed" while the sketch was gone. Both are exempt, and the warning now
+    says "nothing changed in the **snapshot**", because a script that only draws a sketch
+    changes the design without moving any of the three.
+
+    `create_box_parametric` was in neither table: a body-creating tool that reported no
+    `deltas` at all, so the one command family whose whole point is a new body was the
+    one whose body count nobody was told. It is a mutation now.
 
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.

@@ -174,10 +174,15 @@ def _format_deltas(deltas: dict) -> list[str]:
     mg_before = deltas.get("mass_g_before")
     mg_after = deltas.get("mass_g_after")
     mg_delta = deltas.get("mass_g_delta")
-    if mg_delta is not None:
+    if mg_delta is not None and mg_before is not None and mg_after is not None:
         lines.append(
             f"    mass_g:     {mg_before:.3f} → {mg_after:.3f} (Δ{mg_delta:+.3f})"
         )
+    elif any(key in deltas for key in ("mass_g_before", "mass_g_after")):
+        # A design whose mass could not be read answers null, and saying nothing would
+        # read as "no mass", which is a different fact.  The add-in pairs each null
+        # with a null delta; this branch covers a caller-supplied dict too.
+        lines.append("    mass_g:     unknown (the design's mass could not be read)")
     if deltas.get("bbox_before") is not None:
         lines.append(f"    bbox_before: {deltas['bbox_before']}")
     if deltas.get("bbox_after") is not None:
