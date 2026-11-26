@@ -163,14 +163,21 @@ _SPECIAL_KEYS = {
 }
 
 
+def _grams(value: object) -> str:
+    """A mass field for the text block: three decimals, or ``unknown`` for a null."""
+    return f"{value:.3f}" if isinstance(value, (int, float)) else "unknown"
+
+
 def _format_deltas(deltas: dict) -> list[str]:
     """Render the deltas sub-dict as indented bullet lines."""
     lines = ["  deltas:"]
     bc_before = deltas.get("body_count_before")
     bc_after = deltas.get("body_count_after")
     bc_delta = deltas.get("body_count_delta")
-    if bc_before is not None or bc_after is not None:
+    if (bc_before is not None or bc_after is not None) and bc_delta is not None:
         lines.append(f"    body_count: {bc_before} → {bc_after} (Δ{bc_delta:+d})")
+    elif bc_before is not None or bc_after is not None:
+        lines.append(f"    body_count: {bc_before} → {bc_after} (Δ unknown)")
     mg_before = deltas.get("mass_g_before")
     mg_after = deltas.get("mass_g_after")
     mg_delta = deltas.get("mass_g_delta")
@@ -180,9 +187,10 @@ def _format_deltas(deltas: dict) -> list[str]:
         )
     elif any(key in deltas for key in ("mass_g_before", "mass_g_after")):
         # A design whose mass could not be read answers null, and saying nothing would
-        # read as "no mass", which is a different fact.  The add-in pairs each null
-        # with a null delta; this branch covers a caller-supplied dict too.
-        lines.append("    mass_g:     unknown (the design's mass could not be read)")
+        # read as "no mass", which is a different fact.  The add-in blanks the delta
+        # whenever either side is null; this covers a caller-supplied dict too.
+        known = [_grams(value) for value in (mg_before, mg_after)]
+        lines.append(f"    mass_g:     {known[0]} → {known[1]} (Δ unknown)")
     if deltas.get("bbox_before") is not None:
         lines.append(f"    bbox_before: {deltas['bbox_before']}")
     if deltas.get("bbox_after") is not None:

@@ -383,7 +383,36 @@ class TestFormatResult:
         }
         out = _format_result("execute_code", result)
 
-        assert "mass_g:     unknown" in _text_of(out)
+        assert "mass_g:     unknown → unknown" in _text_of(out)
+
+    def test_a_half_readable_mass_keeps_the_side_that_was_measured(self):
+        """The delta is blank whenever either side is, but the side that was read is a
+        fact - and `unknown` for both would tell a caller more than is true."""
+        result = {
+            "ok": True,
+            "deltas": {
+                "body_count_before": 1,
+                "body_count_after": 1,
+                "body_count_delta": 0,
+                "mass_g_before": None,
+                "mass_g_after": 500.0,
+                "mass_g_delta": None,
+            },
+        }
+        out = _format_result("execute_code", result)
+
+        assert "mass_g:     unknown → 500.000 (Δ unknown)" in _text_of(out)
+
+    def test_a_body_count_without_a_delta_renders_as_unknown(self):
+        """``_compute_deltas`` always sends the three; a caller-supplied dict need not,
+        and the renderer must not raise on the one field it prints signed."""
+        result = {
+            "ok": True,
+            "deltas": {"body_count_before": 1, "body_count_after": 2},
+        }
+        out = _format_result("execute_code", result)
+
+        assert "body_count: 1 → 2 (Δ unknown)" in _text_of(out)
 
     def test_a_no_op_warning_reaches_the_rendered_text(self):
         """What this pins is that the key is *not* in ``_SPECIAL_KEYS``: a render that

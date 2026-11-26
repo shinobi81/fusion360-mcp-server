@@ -445,8 +445,8 @@ and asks the running Fusion whether it exists - 190 references, none missing on
     back as a judgement, so a mutation that moved nothing answered `ok: true` and an
     agent working unattended stopped there. The three measures are now
     judged together - count, mass and bbox - and a mutation that left all three identical
-    carries `warning: "nothing changed: …"`. Never a refusal: clipping nothing can be
-    exactly what was asked.
+    carries `warning: "nothing changed in the snapshot: …"`. Never a refusal: clipping
+    nothing can be exactly what was asked.
 
     The bbox is load-bearing, not decoration. Measured on 2706.1.17: `move_body(x=2)`
     reports `body_count_delta: 0` **and** `mass_g_delta: 0.0` while the box moves 2 cm,

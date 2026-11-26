@@ -253,7 +253,9 @@ Five measured behaviours, worth reading instead of guessing:
   confirmed with `get_scene_info`.
 
 Read the deltas before rendering. `body_count_delta: 0, mass_g_delta: 0` means the
-operation did nothing — check interference before retrying; with `keep_tool=True` the body
+operation moved nothing **by those two measures** — read the bbox before concluding it did
+nothing, because `move_body` moves geometry with both at zero; check interference before
+retrying, and note that with `keep_tool=True` the body
 count does not drop even when the cut worked, so read `mass_g_delta`. A mutation whose
 count, mass _and_ bbox all come back identical carries a `warning` saying so ("nothing
 changed in the snapshot: …"), so a no-op is visible without reading three numbers; a

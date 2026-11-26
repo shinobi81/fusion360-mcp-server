@@ -232,6 +232,16 @@ class TestMockSceneControl:
         result = mock_command("delete_all")
         assert result["deleted"] is True
 
+    def test_delete_all_sweeps_mocks_one_body(self):
+        """Mock's scene is one body; the synthetic "a body appeared" would invert the
+        one command whose real effect is emptying the design."""
+        result = mock_command("delete_all")
+
+        assert result["deltas"]["body_count_delta"] == -1
+        assert result["deltas"]["mass_g_delta"] == -10.0
+        assert result["deltas"]["bbox_after"] is None
+        assert "warning" not in result
+
     def test_undo(self):
         result = mock_command("undo")
         assert result["undone"] == "issued"

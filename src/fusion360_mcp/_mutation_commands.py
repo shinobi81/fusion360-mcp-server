@@ -73,9 +73,11 @@ MUTATION_COMMANDS: frozenset[str] = frozenset(
 # Commands whose success the snapshot cannot judge, and the reason each is here.
 #
 # A mutation whose three measures all come back identical did nothing *measurable*, and
-# ``no_op_warning`` says so - except for these, where an unchanged snapshot is either
-# the normal outcome or a change the snapshot has no field for.  One reason per entry:
-# an exemption without one is indistinguishable from a forgotten case.
+# ``no_op_warning`` says so - except for these, where an unchanged snapshot is one of
+# three things: the normal outcome (a cosmetic thread), a change the snapshot has no
+# field for (a split face), or a change inside the numbers it does read (a body moved
+# within a union box).  One reason per entry: an exemption without one is
+# indistinguishable from a forgotten case.
 NO_OP_EXEMPT: dict[str, str] = {
     "auto_constrain": (
         "sketch constraints are not bodies: mass, count and bbox cannot see them"
@@ -121,7 +123,8 @@ NO_OP_EXEMPT: dict[str, str] = {
 
 # Mass is compared with a tolerance: a no-op still re-evaluates the design, and Fusion's
 # two evaluations of the same body need not agree in the last bit.  1e-6 g is far below
-# anything a feature removes, and far above the float noise it can add.
+# anything the reply can show - it prints three decimals, so 1e-3 g is the smallest
+# change a caller could read - and far above the float noise Fusion can add.
 _MASS_TOLERANCE_G = 1e-6
 
 
@@ -130,14 +133,18 @@ def no_op_warning(command: str, deltas: dict) -> str | None:
 
     A mutation whose body count, mass and bounding box all came back identical moved
     nothing measurable, and ``ok: true`` alone reads as success to a caller that stops
-    there.  The three are judged together: ``move_body`` and ``unfold`` change neither
-    count nor mass, so a rule built on those two would accuse a real change of being a
-    no-op.
+    there.  The box is part of the judgement because a real change can leave count and
+    mass at zero while it moves (measured: a 2 cm ``move_body``).  A command whose
+    change the box *cannot* show - it is a union, so a body moved inside another's
+    extents leaves it identical - is exempt instead, which is why ``move_body`` is in
+    the table below and never reaches this function.
 
     Nothing unmeasured is read as unchanged.  A design with bodies whose mass could not
     be read answers ``None`` for it (``_snapshot`` says why), and a box that was never
     read is ``None`` too, so both refuse the judgement instead of supplying a zero -
-    "unknown is not zero" is the whole point of the key.
+    "unknown is not zero" is the whole point of the key.  With no bodies on either side
+    there is no box to read, and two ``None`` boxes really are unchanged: that case is
+    judged.
 
     Never a refusal - clipping nothing can be exactly what was asked - and never a claim
     about the design: the wording names the snapshot, because a topology-only command
@@ -180,6 +187,7 @@ def no_op_warning(command: str, deltas: dict) -> str | None:
         f"nothing changed in the snapshot: body_count {count_before} -> "
         f"{count_after}, mass_g "
         f"{mass_before:.3f} -> {mass_after:.3f}, and the bounding box is identical. "
-        "The call succeeded, but every measure came back the same - check that the "
-        "script, profile, target or name reached a body."
+        "The call succeeded, but every measure came back the same - a script that "
+        "touched nothing, a profile outside every body, a count that copies nothing, "
+        "or a name that matched nothing all look like this."
     )

@@ -49,13 +49,14 @@ def _deltas(**overrides):
 # ── the judgement ─────────────────────────────────────────────────────
 
 
-def test_an_unchanged_snapshot_warns_and_names_the_two_deltas():
+def test_an_unchanged_snapshot_warns_and_names_all_three_measures():
     warning = no_op_warning("execute_code", _deltas())
 
     assert warning is not None
     assert warning.startswith("nothing changed in the snapshot: ")
     assert "body_count 3 -> 3" in warning
     assert "mass_g 7850.000 -> 7850.000" in warning
+    assert "bounding box is identical" in warning
 
 
 def test_a_body_appearing_does_not_warn():
@@ -79,8 +80,9 @@ def test_a_mass_change_does_not_warn():
 
 
 def test_a_bounding_box_change_alone_does_not_warn():
-    """``unfold`` and ``flat_pattern`` change neither count nor mass, so a two-delta
-    rule would call a real unfold a no-op - the bbox is the only measure that moves."""
+    """The box is judged because a real change can leave count and mass at zero -
+    measured on a 2 cm ``move_body`` (``docs/ROADMAP.md`` item 10).  The command name
+    here is any non-exempt mutation; what the test pins is the box comparison."""
     deltas = _deltas(
         bbox_after={"min": [5.0, 0.0, 0.0], "max": [6.0, 1.0, 1.0]},
     )
@@ -181,16 +183,27 @@ def test_an_exempt_command_never_warns(command):
     assert no_op_warning(command, _deltas()) is None
 
 
-@pytest.mark.parametrize("doc", ["docs/TOOLS.md", "docs/ROADMAP.md"])
-def test_every_exemption_is_named_in_the_docs(doc):
-    """The two prose lists are hand-copied, so membership is checked rather than their
-    wording: an exemption added in code alone leaves the caller-facing docs claiming
-    every mutation is judged.  Rewording is free; dropping a name is not."""
+#: The two prose lists of exemptions, and the heading each one opens with.  The slice
+#: matters: every exempt command is also a tool name in the catalogue further down, so a
+#: whole-file search passes however the list itself is edited.
+_DOC_LISTS = {
+    "docs/TOOLS.md": "Commands whose success the",
+    "docs/ROADMAP.md": "commands are exempt",
+}
+
+
+@pytest.mark.parametrize("doc", sorted(_DOC_LISTS))
+def test_every_exemption_is_named_in_the_doc_paragraph(doc):
+    """An exemption added in code alone leaves the caller-facing docs claiming every
+    mutation is judged, so the paragraph is checked for every name.  Rewording is free;
+    dropping a name is not."""
     text = (pathlib.Path(__file__).resolve().parents[1] / doc).read_text(
         encoding="utf-8"
     )
+    start = text.index(_DOC_LISTS[doc])
+    paragraph = text[start:].split("\n\n")[0]
 
-    missing = [name for name in NO_OP_EXEMPT if f"`{name}`" not in text]
+    missing = [name for name in NO_OP_EXEMPT if f"`{name}`" not in paragraph]
     assert not missing, (doc, missing)
 
 
@@ -222,7 +235,7 @@ class _MeasuredRoot(FakeRoot):
 
 
 class _UnreadableMassRoot(_MeasuredRoot):
-    """A design whose mass cannot be read, as a closed one's does not."""
+    """A design whose mass cannot be read, as one with a closed document cannot."""
 
     @property
     def physicalProperties(self):
@@ -252,10 +265,7 @@ def test_a_script_that_changes_nothing_carries_the_warning(bound_handler):
     assert result["ok"] is True
     assert result["deltas"]["body_count_delta"] == 0
     assert result["deltas"]["mass_g_delta"] == 0.0
-    assert "nothing changed" in result["warning"]
-    assert "script" in result["warning"], (
-        "the advice has to fit the call that most often produces this warning"
-    )
+    assert result["warning"].startswith("nothing changed in the snapshot: ")
 
 
 def test_a_mutation_that_adds_a_body_carries_no_warning(bound_handler):
@@ -324,6 +334,22 @@ def test_delete_all_does_not_claim_nothing_changed_on_a_body_less_design(bound_h
     assert result["ok"] is True
     assert result["deltas"]["body_count_delta"] == 0
     assert "warning" not in result
+
+
+def test_a_handlers_own_warning_is_not_replaced_by_the_no_op_one(bound_handler):
+    """No shipped mutation sets its own ``warning`` today, so ``setdefault`` is
+    indistinguishable from assignment in production - which is why it is pinned here,
+    with a stub that answers one."""
+    handler = bound_handler(_measured_design())
+    handler._commands["execute_code"] = lambda **_: {
+        "executed": True,
+        "warning": "the operation half-finished",
+    }
+
+    result = _result(handler, "execute_code", code="count = 1")
+
+    assert result["deltas"]["body_count_delta"] == 0
+    assert result["warning"] == "the operation half-finished"
 
 
 def test_a_read_only_command_gets_no_deltas_and_no_warning(bound_handler):

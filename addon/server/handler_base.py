@@ -827,9 +827,10 @@ class HandlerBase:
     def _compute_deltas(before: dict, after: dict) -> dict:
         """Return a diff suitable for an agent: counts + masses + bboxes.
 
-        A mass that either snapshot could not read is ``None`` on both sides and in the
-        delta: the difference of an unknown is unknown, and a caller that reads
-        ``mass_g_delta: 0.0`` would be told that nothing moved.
+        A mass that either snapshot could not read answers ``None`` for the *delta*,
+        and the side that could not be read reports ``None`` too: the difference of an
+        unknown is unknown, and a caller that read ``mass_g_delta: 0.0`` would be told
+        that nothing moved.  The other side keeps its own number - it was measured.
         """
         mass_before = before.get("mass_g")
         mass_after = after.get("mass_g")

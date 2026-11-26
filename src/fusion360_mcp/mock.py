@@ -547,7 +547,21 @@ def _boolean_operation(p: dict) -> dict:
 
 
 def _delete_all(_p: dict) -> dict:
-    return {"deleted": True}
+    # Mock's scene is one body; sweeping it leaves nothing, which is the one command
+    # whose real effect the synthetic "a body appeared" would invert.
+    return {
+        "deleted": True,
+        "deltas": {
+            "body_count_before": 1,
+            "body_count_after": 0,
+            "body_count_delta": -1,
+            "mass_g_before": 10.0,
+            "mass_g_after": 0.0,
+            "mass_g_delta": -10.0,
+            "bbox_before": _MOCK_BOX,
+            "bbox_after": None,
+        },
+    }
 
 
 def _undo(_p: dict) -> dict:
