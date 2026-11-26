@@ -17,7 +17,7 @@ import math
 import os
 from typing import Any
 
-from ._mutation_commands import MUTATION_COMMANDS
+from ._mutation_commands import MUTATION_COMMANDS, no_op_warning
 from ._rules import (
     CAM_GEOMETRY_PARAMETERS,
     CAM_NO_TOOL_WARNING,
@@ -65,6 +65,20 @@ _MOCK_DELTAS = {
     "mass_g_delta": 10.0,
     "bbox_before": None,
     "bbox_after": {"min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 1.0]},
+}
+
+#: The deltas for a mutation mock *ran nothing* for.  ``execute_code`` is the one: mock
+#: executes no Python, so claiming the synthetic "a body appeared" would report a build
+#: that never happened - and the add-in's own judgement then says it: nothing changed.
+_NO_CHANGE_DELTAS = {
+    "body_count_before": 0,
+    "body_count_after": 0,
+    "body_count_delta": 0,
+    "mass_g_before": 0.0,
+    "mass_g_after": 0.0,
+    "mass_g_delta": 0.0,
+    "bbox_before": None,
+    "bbox_after": None,
 }
 
 
@@ -141,7 +155,15 @@ def mock_command(command_type: str, params: dict[str, Any] | None = None) -> dic
         and "deltas" not in result
         and command_type != "undo"
     ):
-        result["deltas"] = dict(_MOCK_DELTAS)
+        deltas = dict(
+            _NO_CHANGE_DELTAS if command_type == "execute_code" else _MOCK_DELTAS
+        )
+        result["deltas"] = deltas
+        # The same judgement the add-in makes, from the same table: a mock rehearsal
+        # that changed nothing must say so, or an agent rehearsing here learns the
+        # opposite of what real mode reports.
+        if (warning := no_op_warning(command_type, deltas)) is not None:
+            result.setdefault("warning", warning)
     result["mode"] = "mock"
     return result
 

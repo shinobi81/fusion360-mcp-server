@@ -247,6 +247,30 @@ class TestMockExecuteCode:
         assert result["code"] == "1 + 1"
         assert "result" in result
 
+    def test_execute_code_reports_that_mock_ran_nothing(self):
+        """Mock executes no code, so it changed nothing - and the fabricated "a body
+        appeared" deltas would claim a build mock never made. The add-in judges an
+        unchanged snapshot with the same function, so both modes say the same thing
+        about the same call."""
+        result = mock_command("execute_code", {"code": "count = 1"})
+
+        assert result["deltas"]["body_count_delta"] == 0
+        assert result["deltas"]["mass_g_delta"] == 0.0
+        assert result["warning"].startswith("nothing changed: ")
+
+    def test_a_building_mutation_carries_no_warning(self):
+        """The other half of the parity: mock's extrude really does add its body."""
+        result = mock_command("extrude", {"height": 3.0})
+
+        assert result["deltas"]["body_count_delta"] == 1
+        assert "warning" not in result
+
+    def test_an_exempt_command_carries_no_warning(self):
+        result = mock_command("set_color", {"body_name": "Body1", "red": 1})
+
+        assert "deltas" in result
+        assert "warning" not in result
+
 
 class TestMockNewGeometry:
     def test_sweep(self):

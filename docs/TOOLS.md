@@ -4,6 +4,14 @@ All 98 tools this server exposes, grouped by what they do. Every tool returns th
 envelope — `ok`, plus tool-specific fields, plus `deltas` for mutations — and failures come
 back as data (`error_kind`, `hints`, `traceback`) rather than exceptions.
 
+A mutation whose snapshot did not move — body count, mass and bounding box all
+identical — also carries `warning: "nothing changed: …"`, because `ok: true` alone reads
+as success to a caller that stops there. It is information, never a refusal: clipping
+nothing can be exactly what was asked. Commands whose success the snapshot cannot judge
+(`set_parameter`, `suppress_feature`, `unsuppress_feature`, `undo`, `set_color`,
+`create_ucs`, `auto_constrain`, `split_face`, `create_thread`) never carry it, each
+for a reason recorded beside it in `addon/server/mutation_commands.py`.
+
 Units are **centimetres** throughout: Fusion's internal unit, not millimetres. Tools
 marked **(2026+)** use APIs that need a Fusion build from 2026 or later; the rest were
 verified on **Fusion 2706.1.17**.

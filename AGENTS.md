@@ -254,7 +254,11 @@ Five measured behaviours, worth reading instead of guessing:
 
 Read the deltas before rendering. `body_count_delta: 0, mass_g_delta: 0` means the
 operation did nothing — check interference before retrying; with `keep_tool=True` the body
-count does not drop even when the cut worked, so read `mass_g_delta`. `render_view` costs
+count does not drop even when the cut worked, so read `mass_g_delta`. A mutation whose
+count, mass _and_ bbox all come back identical carries a `warning` saying so ("nothing
+changed: …"), so a no-op is visible without reading three numbers; a command exempt from
+that judgement (`set_parameter`, `undo`, `set_color`, `split_face` and four more, each for
+a recorded reason) never carries the key. `render_view` costs
 200KB–2MB of base64, so render at a checkpoint rather than after every mutation: deltas
 say whether a feature did _something_, a render whether it did the _right_ thing.
 

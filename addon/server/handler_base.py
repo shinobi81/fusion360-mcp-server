@@ -17,7 +17,7 @@ from . import fusion_api as adsk
 from . import get_logger
 from . import hints as _hints
 from . import rules as _rules
-from .mutation_commands import MUTATION_COMMANDS
+from .mutation_commands import MUTATION_COMMANDS, no_op_warning
 
 log = get_logger("handler")
 
@@ -253,7 +253,15 @@ class HandlerBase:
         if is_mutation and snap_before is not None:
             snap_after = self._snapshot()
             if snap_after is not None:
-                result["deltas"] = self._compute_deltas(snap_before, snap_after)
+                deltas = self._compute_deltas(snap_before, snap_after)
+                result["deltas"] = deltas
+                # A mutation whose snapshot did not move is a silent no-op: it answers
+                # ok: true, and an agent that stops there has learned nothing.  A
+                # refusal would be wrong - clipping nothing can be what was asked - so
+                # it is reported instead, from the one table that says which commands'
+                # success the snapshot cannot judge.
+                if (warning := no_op_warning(cmd_type or "", deltas)) is not None:
+                    result.setdefault("warning", warning)
 
         return {"status": "success", "result": result}
 
@@ -416,7 +424,9 @@ class HandlerBase:
         # mode had no way to answer a name Fusion is never shown.
         if refusal := _rules.construction_plane_name_refusal(plane):
             raise refusal
-        return m[plane.lower()]
+        # The rule above refused every value that is not one of the three names, so
+        # ``plane`` is set by here; ``or ""`` is only what lets a checker see that.
+        return m[(plane or "").lower()]
 
     def _construction_axis(self, axis: str):
         root = self._root()
