@@ -164,7 +164,7 @@ _SPECIAL_KEYS = {
 
 
 def _grams(value: object) -> str:
-    """A mass field for the text block: three decimals, or ``unknown`` for a null."""
+    """A mass field: three decimals, or ``unknown`` for a non-number."""
     return f"{value:.3f}" if isinstance(value, (int, float)) else "unknown"
 
 
@@ -193,7 +193,12 @@ def _format_deltas(deltas: dict) -> list[str]:
     mg_before = deltas.get("mass_g_before")
     mg_after = deltas.get("mass_g_after")
     mg_delta = deltas.get("mass_g_delta")
-    if mg_delta is not None and mg_before is not None and mg_after is not None:
+    # ``isinstance`` rather than a ``None`` test: a third-party envelope can spell a
+    # mass as a string, and ``:.3f`` raises on one.  ``_grams`` renders that as unknown.
+    measured = all(
+        isinstance(value, (int, float)) for value in (mg_before, mg_after, mg_delta)
+    )
+    if measured:
         lines.append(
             f"    mass_g:     {mg_before:.3f} → {mg_after:.3f} (Δ{mg_delta:+.3f})"
         )

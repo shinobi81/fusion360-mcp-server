@@ -20,6 +20,8 @@ overwritten.
 
 from __future__ import annotations
 
+import math
+
 # Commands that can change body mass / bbox / body count.  Only these
 # get before/after snapshots so agents can sanity-check without a render.
 MUTATION_COMMANDS: frozenset[str] = frozenset(
@@ -178,8 +180,15 @@ def no_op_warning(command: str, deltas: dict) -> str | None:
     ):
         # Unknown is not zero: a measure this snapshot does not carry cannot be judged.
         return None
+    if not math.isfinite(mass_delta):
+        # NaN compares False against every threshold, so it would pass the guard below
+        # and the reply would print "mass_g nan -> nan" as if nothing moved.
+        return None
     if count_delta != 0 or abs(mass_delta) > _MASS_TOLERANCE_G:
         return None
+    # The box is compared exactly where the mass is not: it is the extremes of
+    # coordinates that already exist, not a sum whose order Fusion is free to change,
+    # so a last-bit difference in it is real geometry rather than arithmetic.
     box_before = deltas.get("bbox_before")
     box_after = deltas.get("bbox_after")
     if count_before and box_before is None:
@@ -196,5 +205,5 @@ def no_op_warning(command: str, deltas: dict) -> str | None:
         f"{count_after}, mass_g "
         f"{mass_before:.3f} -> {mass_after:.3f}, and the bounding box is identical. "
         "The call succeeded, but every measure came back the same - a script that "
-        "touched nothing, or a count that copies nothing, both look like this."
+        "touched nothing, or a pattern whose counts copy no body, both look like this."
     )

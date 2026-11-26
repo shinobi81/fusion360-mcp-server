@@ -403,6 +403,34 @@ class TestFormatResult:
 
         assert "mass_g:     unknown → 500.000 (Δ unknown)" in _text_of(out)
 
+    def test_a_float_body_count_delta_renders_as_the_integer_it_is(self):
+        """A third-party envelope can spell a count as ``1.0``, and ``:+d`` raises on a
+        float - the renderer must not be the thing that breaks the call."""
+        result = {
+            "ok": True,
+            "deltas": {
+                "body_count_before": 1,
+                "body_count_after": 2,
+                "body_count_delta": 1.0,
+            },
+        }
+        out = _format_result("execute_code", result)
+
+        assert "body_count: 1 → 2 (Δ+1)" in _text_of(out)
+
+    def test_a_string_mass_renders_as_unknown_instead_of_raising(self):
+        result = {
+            "ok": True,
+            "deltas": {
+                "mass_g_before": "7.85",
+                "mass_g_after": 500.0,
+                "mass_g_delta": 1.0,
+            },
+        }
+        out = _format_result("execute_code", result)
+
+        assert "mass_g:     unknown → 500.000" in _text_of(out)
+
     def test_a_body_count_without_a_delta_renders_as_unknown(self):
         """``_compute_deltas`` always sends the three; a caller-supplied dict need not,
         and the renderer must not raise on the one field it prints signed."""

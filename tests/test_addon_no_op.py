@@ -99,6 +99,14 @@ def test_a_mass_delta_below_the_tolerance_still_warns():
     assert no_op_warning("execute_code", deltas) is not None
 
 
+def test_a_nan_mass_delta_is_not_a_zero_mass():
+    """NaN compares False against every threshold, so an unguarded rule would report
+    "nothing changed" and print ``mass_g nan -> nan`` for a mass nothing computed."""
+    deltas = _deltas(mass_g_after=float("nan"), mass_g_delta=float("nan"))
+
+    assert no_op_warning("execute_code", deltas) is None
+
+
 def test_an_unknown_mass_is_not_a_zero_mass():
     """``_snapshot`` is best-effort: a deltas dict without the key must not be read as
     "the mass did not move"."""
@@ -222,21 +230,37 @@ def _doc_between(doc: str, start: str, end: str) -> str:
 @pytest.mark.parametrize("doc", sorted(_DOC_LISTS))
 def test_every_exemption_is_named_in_the_doc_paragraph(doc):
     """An exemption added in code alone leaves the caller-facing docs claiming every
-    mutation is judged, so the list itself is checked for every name.  Rewording is
-    free; dropping a name from the list is not."""
+    mutation is judged, so the list itself is checked for every name.  Rewording the
+    list is free; dropping a name from it is not - and neither is rewording a marker
+    sentence, which ``text.index`` would turn into an error, not a clean failure."""
     listed = _doc_between(doc, *_DOC_LISTS[doc])
 
     missing = [name for name in NO_OP_EXEMPT if f"`{name}`" not in listed]
     assert not missing, (doc, missing)
 
 
-def test_the_count_agents_md_spells_out_matches_the_table():
-    """``AGENTS.md`` states the number in prose, which nothing else reads."""
-    spelled = _WORDS[len(NO_OP_EXEMPT)]
+#: The three docs that state the exempt count as a word, and the sentence each states it
+#: in.  ``docs/ROADMAP.md`` states it too, and its paragraph is already covered by the
+#: name test two lines above the word - these are the rest.
+_COUNT_DOCS = {
+    "AGENTS.md": ("command exempt from", "never carries the key"),
+    "ARCHITECTURE.md": ("the warning is the verdict", "reason:"),
+}
 
-    assert f"{spelled} today" in _doc_between(
-        "AGENTS.md", "command exempt from", "never carries the key"
-    )
+
+@pytest.mark.parametrize("doc", sorted(_COUNT_DOCS))
+def test_the_count_each_doc_spells_out_matches_the_table(doc):
+    """The number is prose, so it is checked as prose: the word has to be the size of
+    the table, in every file that states it."""
+    count = len(NO_OP_EXEMPT)
+    spelled = _WORDS[count] if count < len(_WORDS) else repr(count)
+
+    # A word rather than a substring, and case-insensitive: ``ARCHITECTURE.md`` opens a
+    # sentence with it and wraps the line after it, so ``split()`` is the comparison.
+    words = _doc_between(doc, *_COUNT_DOCS[doc]).lower().split()
+    # Strip the punctuation the prose wraps the word in: "judgement (eleven today" and
+    # "verdict. Eleven" are both the count.
+    assert spelled in [word.strip("(),.;:-") for word in words], (doc, spelled)
 
 
 # ── through the envelope ──────────────────────────────────────────────
