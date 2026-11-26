@@ -168,6 +168,11 @@ def _grams(value: object) -> str:
     return f"{value:.3f}" if isinstance(value, (int, float)) else "unknown"
 
 
+def _count(value: object) -> str:
+    """A body-count field: the number, or ``unknown`` - never Python's ``None``."""
+    return str(value) if value is not None else "unknown"
+
+
 def _format_deltas(deltas: dict) -> list[str]:
     """Render the deltas sub-dict as indented bullet lines."""
     lines = ["  deltas:"]
@@ -175,9 +180,16 @@ def _format_deltas(deltas: dict) -> list[str]:
     bc_after = deltas.get("body_count_after")
     bc_delta = deltas.get("body_count_delta")
     if (bc_before is not None or bc_after is not None) and bc_delta is not None:
-        lines.append(f"    body_count: {bc_before} → {bc_after} (Δ{bc_delta:+d})")
+        # ``int``: a third-party envelope can spell a count as 1.0, and ``:+d`` raises
+        # on a float.  A body count is an integer by nature, so the cast is the value.
+        lines.append(
+            f"    body_count: {_count(bc_before)} → {_count(bc_after)}"
+            f" (Δ{int(bc_delta):+d})"
+        )
     elif bc_before is not None or bc_after is not None:
-        lines.append(f"    body_count: {bc_before} → {bc_after} (Δ unknown)")
+        lines.append(
+            f"    body_count: {_count(bc_before)} → {_count(bc_after)} (Δ unknown)"
+        )
     mg_before = deltas.get("mass_g_before")
     mg_after = deltas.get("mass_g_after")
     mg_delta = deltas.get("mass_g_delta")

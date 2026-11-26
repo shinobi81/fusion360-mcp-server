@@ -254,9 +254,11 @@ Five measured behaviours, worth reading instead of guessing:
 
 Read the deltas before rendering. `body_count_delta: 0, mass_g_delta: 0` means the
 operation moved nothing **by those two measures** — read the bbox before concluding it did
-nothing, because `move_body` moves geometry with both at zero; check interference before
-retrying, and note that with `keep_tool=True` the body
-count does not drop even when the cut worked, so read `mass_g_delta`. A mutation whose
+nothing, because `move_body` moves geometry with both at zero. The box can also be
+identical: a body moved inside another's extents leaves the union untouched, which is why
+`move_body` carries no such warning at all. Check interference before retrying, and note
+that with `keep_tool=True` the body count does not drop even when the cut worked, so read
+`mass_g_delta`. A mutation whose
 count, mass _and_ bbox all come back identical carries a `warning` saying so ("nothing
 changed in the snapshot: …"), so a no-op is visible without reading three numbers; a
 command exempt from that judgement (eleven today — `docs/TOOLS.md` lists them and

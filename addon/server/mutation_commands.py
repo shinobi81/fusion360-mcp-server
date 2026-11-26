@@ -130,8 +130,9 @@ NO_OP_EXEMPT: dict[str, str] = {
 
 # Mass is compared with a tolerance: a no-op still re-evaluates the design, and Fusion's
 # two evaluations of the same body need not agree in the last bit.  1e-6 g is far below
-# anything the reply can show - it prints three decimals, so 1e-3 g is the smallest
-# change a caller could read - and far above the float noise Fusion can add.
+# anything the rendered text can show - it prints three decimals, so 1e-3 g is the
+# smallest change that reads as one - and far above the float noise Fusion can add.  The
+# wire carries the unrounded float, so a 1e-7 g difference is still visible there.
 _MASS_TOLERANCE_G = 1e-6
 
 
@@ -195,6 +196,5 @@ def no_op_warning(command: str, deltas: dict) -> str | None:
         f"{count_after}, mass_g "
         f"{mass_before:.3f} -> {mass_after:.3f}, and the bounding box is identical. "
         "The call succeeded, but every measure came back the same - a script that "
-        "touched nothing, a profile outside every body, a count that copies nothing, "
-        "or a name that matched nothing all look like this."
+        "touched nothing, or a count that copies nothing, both look like this."
     )

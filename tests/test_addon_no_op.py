@@ -183,28 +183,60 @@ def test_an_exempt_command_never_warns(command):
     assert no_op_warning(command, _deltas()) is None
 
 
-#: The two prose lists of exemptions, and the heading each one opens with.  The slice
-#: matters: every exempt command is also a tool name in the catalogue further down, so a
-#: whole-file search passes however the list itself is edited.
+#: Each prose list of exemptions, between the words that open its sentence and the words
+#: that close it.  Both bounds matter: every exempt command is also a tool name in the
+#: catalogue further down, so a whole-file search passes however the list is edited, and
+#: a one-sided slice would accept a name moved anywhere else in the paragraph.
 _DOC_LISTS = {
-    "docs/TOOLS.md": "Commands whose success the",
-    "docs/ROADMAP.md": "commands are exempt",
+    "docs/TOOLS.md": ("A mutation whose snapshot did not move", "never carry it"),
+    "docs/ROADMAP.md": ("commands are exempt", "the table is pinned"),
 }
+
+#: The count ``AGENTS.md`` spells out.  It is prose, so it is checked as prose: the word
+#: has to be the size of the table.
+_WORDS = [
+    "zero",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+]
+
+
+def _doc_between(doc: str, start: str, end: str) -> str:
+    """The slice of *doc* from *start* to the next *end* after it."""
+    text = (pathlib.Path(__file__).resolve().parents[1] / doc).read_text(
+        encoding="utf-8"
+    )
+    return text[text.index(start) : text.index(end, text.index(start))]
 
 
 @pytest.mark.parametrize("doc", sorted(_DOC_LISTS))
 def test_every_exemption_is_named_in_the_doc_paragraph(doc):
     """An exemption added in code alone leaves the caller-facing docs claiming every
-    mutation is judged, so the paragraph is checked for every name.  Rewording is free;
-    dropping a name is not."""
-    text = (pathlib.Path(__file__).resolve().parents[1] / doc).read_text(
-        encoding="utf-8"
-    )
-    start = text.index(_DOC_LISTS[doc])
-    paragraph = text[start:].split("\n\n")[0]
+    mutation is judged, so the list itself is checked for every name.  Rewording is
+    free; dropping a name from the list is not."""
+    listed = _doc_between(doc, *_DOC_LISTS[doc])
 
-    missing = [name for name in NO_OP_EXEMPT if f"`{name}`" not in paragraph]
+    missing = [name for name in NO_OP_EXEMPT if f"`{name}`" not in listed]
     assert not missing, (doc, missing)
+
+
+def test_the_count_agents_md_spells_out_matches_the_table():
+    """``AGENTS.md`` states the number in prose, which nothing else reads."""
+    spelled = _WORDS[len(NO_OP_EXEMPT)]
+
+    assert f"{spelled} today" in _doc_between(
+        "AGENTS.md", "command exempt from", "never carries the key"
+    )
 
 
 # ── through the envelope ──────────────────────────────────────────────
@@ -240,6 +272,22 @@ class _UnreadableMassRoot(_MeasuredRoot):
     @property
     def physicalProperties(self):
         raise RuntimeError("4 : An API Object refers to a deleted Object")
+
+
+class _MassLostAfterTheCallRoot(_MeasuredRoot):
+    """Readable before the call, unreadable after it - a document invalidated mid-call.
+
+    The reply must keep the number it did measure and blank only the delta.
+    """
+
+    reads = 0
+
+    @property
+    def physicalProperties(self):
+        self.reads += 1
+        if self.reads > 1:
+            raise RuntimeError("4 : An API Object refers to a deleted Object")
+        return SimpleNamespace(mass=self._mass_kg)
 
 
 _BOX = FakeBoundingBox(min_point=(0.0, 0.0, 0.0), max_point=(1.0, 1.0, 1.0))
@@ -322,6 +370,22 @@ def test_a_design_with_bodies_and_no_bounding_box_is_not_judged(bound_handler):
     assert "warning" not in result
 
 
+def test_a_mass_lost_between_the_snapshots_keeps_the_side_that_was_measured(
+    bound_handler,
+):
+    """Only the delta is unknown: ``mass_g_before`` is a number Fusion did answer, and
+    blanking it would throw away the one measurement there is."""
+    handler = bound_handler(_measured_design(root_class=_MassLostAfterTheCallRoot))
+
+    result = _result(handler, "execute_code", code="count = 1")
+
+    # 7.85 kg in the fake's own unit, reported as grams by the snapshot.
+    assert result["deltas"]["mass_g_before"] == 7850.0
+    assert result["deltas"]["mass_g_after"] is None
+    assert result["deltas"]["mass_g_delta"] is None
+    assert "warning" not in result
+
+
 def test_delete_all_does_not_claim_nothing_changed_on_a_body_less_design(bound_handler):
     """Measured on 2706.1.17: a sketch-only design answers ``ok: true`` with all three
     measures identical and the sketch gone - so the judgement has nothing to stand on,
@@ -349,6 +413,9 @@ def test_a_handlers_own_warning_is_not_replaced_by_the_no_op_one(bound_handler):
     result = _result(handler, "execute_code", code="count = 1")
 
     assert result["deltas"]["body_count_delta"] == 0
+    # The two warnings really do collide here: without the handler's own, this call
+    # would be told nothing changed.
+    assert no_op_warning("execute_code", result["deltas"]) is not None
     assert result["warning"] == "the operation half-finished"
 
 

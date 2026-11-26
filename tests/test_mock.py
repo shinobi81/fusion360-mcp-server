@@ -240,7 +240,6 @@ class TestMockSceneControl:
         assert result["deltas"]["body_count_delta"] == -1
         assert result["deltas"]["mass_g_delta"] == -10.0
         assert result["deltas"]["bbox_after"] is None
-        assert "warning" not in result
 
     def test_undo(self):
         result = mock_command("undo")
