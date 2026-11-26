@@ -13,6 +13,8 @@ overwritten.
 
 from __future__ import annotations
 
+import math
+
 # Commands that can change body mass / bbox / body count.  Only these
 # get before/after snapshots so agents can sanity-check without a render.
 MUTATION_COMMANDS: frozenset[str] = frozenset(
@@ -42,6 +44,7 @@ MUTATION_COMMANDS: frozenset[str] = frozenset(
         "boolean_operation",
         # primitives
         "create_box",
+        "create_box_parametric",
         "create_cylinder",
         "create_sphere",
         "create_torus",
@@ -68,3 +71,132 @@ MUTATION_COMMANDS: frozenset[str] = frozenset(
         "set_color",
     }
 )
+
+# Commands whose success the snapshot cannot judge, and the reason each is here.
+#
+# A mutation whose three measures all come back identical did nothing *measurable*, and
+# ``no_op_warning`` says so - except for these, where an unchanged snapshot is one of
+# three things: the normal outcome (a cosmetic thread), a change the snapshot has no
+# field for (a split face), or a change inside the numbers it does read (a body moved
+# within a union box).  One reason per entry: an exemption without one is
+# indistinguishable from a forgotten case.
+NO_OP_EXEMPT: dict[str, str] = {
+    "auto_constrain": (
+        "sketch constraints are not bodies: mass, count and bbox cannot see them"
+    ),
+    "create_thread": (
+        "a thread is cosmetic unless is_modeled=True, and a cosmetic one adds no mass"
+    ),
+    "create_ucs": (
+        "a user coordinate system is construction geometry, invisible to the snapshot"
+    ),
+    "delete_all": (
+        "it removes sketches, joints, construction geometry and timeline entries - a "
+        "design with no bodies has nothing left that the snapshot counts, so a sweep "
+        "of a sketch-only design measured nothing"
+    ),
+    "move_body": (
+        "a successful move always translates a body - Fusion refuses a zero "
+        "translation with '3 : invalid transform', measured on 2706.1.17 - while the "
+        "root box is a union, so a body moved inside another's extents changes none "
+        "of the three measures (measured: a 1 cm move that answered 'nothing changed')"
+    ),
+    "set_color": "an appearance changes no body's mass, count or bounding box",
+    "set_parameter": (
+        "a parameter's value is not one of the three measures, and the design can "
+        "regenerate identically - or the value can be the one it already held"
+    ),
+    "split_face": (
+        "splitting a face changes topology, not the body's mass, count or box"
+    ),
+    "suppress_feature": (
+        "suppression is timeline state, and a suppressed feature may already have "
+        "contributed nothing measurable"
+    ),
+    "undo": (
+        "a timeline step back is reported as undone/verified, and a suppressed feature "
+        "stays in the timeline, so the snapshot can be untouched"
+    ),
+    "unsuppress_feature": (
+        "the mirror of suppress_feature: the snapshot need not move for the feature to "
+        "return"
+    ),
+}
+
+# Mass is compared with a tolerance: a no-op still re-evaluates the design, and Fusion's
+# two evaluations of the same body need not agree in the last bit.  1e-6 g is far below
+# anything the rendered text can show - it prints three decimals, so 1e-3 g is the
+# smallest change that reads as one - and far above the float noise Fusion can add.  The
+# wire carries the unrounded float, so a 1e-7 g difference is still visible there.
+_MASS_TOLERANCE_G = 1e-6
+
+
+def no_op_warning(command: str, deltas: dict) -> str | None:
+    """The ``nothing changed`` warning for *command*'s deltas, or None.
+
+    A mutation whose body count, mass and bounding box all came back identical moved
+    nothing measurable, and ``ok: true`` alone reads as success to a caller that stops
+    there.  The box is part of the judgement because a real change can leave count and
+    mass at zero while it moves (measured: a 2 cm ``move_body``).  A command whose
+    change the box *cannot* show - it is a union, so a body moved inside another's
+    extents leaves it identical - is exempt instead, which is why ``move_body`` is in
+    the table below and never reaches this function.
+
+    Nothing unmeasured is read as unchanged.  A design with bodies whose mass could not
+    be read answers ``None`` for it (``_snapshot`` says why), and a box that was never
+    read is ``None`` too, so both refuse the judgement instead of supplying a zero -
+    "unknown is not zero" is the whole point of the key.  With no bodies on either side
+    there is no box to read, and two ``None`` boxes really are unchanged: that case is
+    judged.
+
+    Never a refusal - clipping nothing can be exactly what was asked - and never a claim
+    about the design: the wording names the snapshot, because a topology-only command
+    (``split_face``) changes the body without moving any of these three numbers.  The
+    arrow is ASCII on purpose: this string is built in the add-in and travels on the
+    wire, where only the MCP renderer's own prose uses a real arrow.
+    """
+    if command in NO_OP_EXEMPT:
+        return None
+    count_before = deltas.get("body_count_before")
+    count_after = deltas.get("body_count_after")
+    count_delta = deltas.get("body_count_delta")
+    mass_before = deltas.get("mass_g_before")
+    mass_after = deltas.get("mass_g_after")
+    mass_delta = deltas.get("mass_g_delta")
+    if (
+        count_before is None
+        or count_after is None
+        or count_delta is None
+        or mass_before is None
+        or mass_after is None
+        or mass_delta is None
+    ):
+        # Unknown is not zero: a measure this snapshot does not carry cannot be judged.
+        return None
+    if not math.isfinite(mass_delta):
+        # NaN compares False against every threshold, so it would pass the guard below
+        # and the reply would print "mass_g nan -> nan" as if nothing moved.
+        return None
+    if count_delta != 0 or abs(mass_delta) > _MASS_TOLERANCE_G:
+        return None
+    # The box is compared exactly where the mass is not: it is the extremes of
+    # coordinates that already exist, not a sum whose order Fusion is free to change,
+    # so a last-bit difference in it is real geometry rather than arithmetic.
+    box_before = deltas.get("bbox_before")
+    box_after = deltas.get("bbox_after")
+    if count_before and box_before is None:
+        # Bodies but no box: the read failed, so "identical" is unproven.  Measured on
+        # 2706.1.17: moving a body inside a component moved root.boundingBox with it,
+        # so the two measures agree there - but get_bounding_box unions occurrences by
+        # hand, so a *transformed* occurrence is one probe this does not cover, and the
+        # guard keeps that case silent rather than wrong.
+        return None
+    if box_before != box_after:
+        return None
+    return (
+        f"nothing changed in the snapshot: body_count {count_before} -> "
+        f"{count_after}, mass_g "
+        f"{mass_before:.3f} -> {mass_after:.3f}, and the bounding box is identical. "
+        "The call succeeded, but every measure came back the same - a script that "
+        "touched nothing, or a pattern whose counts copy no body, both look like this."
+    )

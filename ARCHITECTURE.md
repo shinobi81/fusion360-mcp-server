@@ -40,7 +40,7 @@ explains most of the system's design:
 | `src/fusion360_mcp/connection.py` | TCP client, newline-delimited JSON, per-command timeouts |
 | `src/fusion360_mcp/tools.py` | tool schemas — the contract agents read |
 | `src/fusion360_mcp/hints.py` | error-kind table (generated from the add-in's by `scripts/sync_mirrors.py`) |
-| `src/fusion360_mcp/_mutation_commands.py` | mutation-command set (generated the same way) |
+| `src/fusion360_mcp/_mutation_commands.py` | mutation set, the no-op exemptions and their judgement (generated the same way) |
 | `src/fusion360_mcp/_rules.py` | validation the add-in and mock mode share: refusals, and the sketch-plane `z` note (generated the same way) |
 | `src/fusion360_mcp/mock.py` | `--mode mock` responses, so the envelope is testable without Fusion |
 | `addon/server/socket_server.py` | listener, per-client threads, framing, malformed-input handling |
@@ -70,7 +70,10 @@ order — first match wins. Adding a failure mode means adding a rule to
 branch instead of parsing prose (`TIMEOUT`, `NOT_ENTITLED`, `DESIGN_TYPE_MISMATCH`).
 
 Mutations additionally carry `deltas` (body count, mass, bbox before/after) so a no-op
-is visible without a render.
+is visible without a render, and a mutation that left all three identical carries a
+`warning` saying so — the deltas are the evidence, the warning is the verdict. Eleven
+commands are exempt (`NO_OP_EXEMPT` in `addon/server/mutation_commands.py`), each for a
+reason: a cosmetic thread or a split face changes nothing those three numbers can see.
 
 ## Sketch, timeline and undo semantics
 

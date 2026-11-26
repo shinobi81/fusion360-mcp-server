@@ -206,6 +206,7 @@ _MUTATION_CONTRACT = {
     "circular_pattern",
     "create_bend",
     "create_box",
+    "create_box_parametric",
     "create_cylinder",
     "create_flange",
     "create_hole",

@@ -232,6 +232,15 @@ class TestMockSceneControl:
         result = mock_command("delete_all")
         assert result["deleted"] is True
 
+    def test_delete_all_sweeps_mocks_one_body(self):
+        """Mock's scene is one body; the synthetic "a body appeared" would invert the
+        one command whose real effect is emptying the design."""
+        result = mock_command("delete_all")
+
+        assert result["deltas"]["body_count_delta"] == -1
+        assert result["deltas"]["mass_g_delta"] == -10.0
+        assert result["deltas"]["bbox_after"] is None
+
     def test_undo(self):
         result = mock_command("undo")
         assert result["undone"] == "issued"
@@ -246,6 +255,27 @@ class TestMockExecuteCode:
         result = mock_command("execute_code", {"code": "1 + 1"})
         assert result["code"] == "1 + 1"
         assert "result" in result
+
+    def test_execute_code_reports_that_mock_ran_nothing(self):
+        """Mock executes no code, so it changed nothing - and the fabricated "a body
+        appeared" deltas would claim a build mock never made. The add-in judges an
+        unchanged snapshot with the same function, so both modes say the same thing
+        about the same call."""
+        result = mock_command("execute_code", {"code": "count = 1"})
+
+        assert result["deltas"]["body_count_delta"] == 0
+        assert result["deltas"]["mass_g_delta"] == 0.0
+        # Mock's scene already has its one body: the numbers say "unchanged from here",
+        # not "nothing exists".
+        assert result["deltas"]["body_count_before"] == 1
+        assert result["warning"].startswith("nothing changed in the snapshot: ")
+
+    def test_a_building_mutation_carries_no_warning(self):
+        """The other half of the parity: mock's extrude really does add its body."""
+        result = mock_command("extrude", {"height": 3.0})
+
+        assert result["deltas"]["body_count_delta"] == 1
+        assert "warning" not in result
 
 
 class TestMockNewGeometry:

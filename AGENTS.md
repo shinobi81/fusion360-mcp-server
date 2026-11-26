@@ -253,10 +253,22 @@ Five measured behaviours, worth reading instead of guessing:
   confirmed with `get_scene_info`.
 
 Read the deltas before rendering. `body_count_delta: 0, mass_g_delta: 0` means the
-operation did nothing — check interference before retrying; with `keep_tool=True` the body
-count does not drop even when the cut worked, so read `mass_g_delta`. `render_view` costs
-200KB–2MB of base64, so render at a checkpoint rather than after every mutation: deltas
-say whether a feature did _something_, a render whether it did the _right_ thing.
+operation moved nothing **by those two measures** — read the bbox before concluding it did
+nothing, because `move_body` moves geometry with both at zero. The box can also be
+identical: a body moved inside another's extents leaves the union untouched, which is why
+`move_body` carries no such warning at all. Check interference before retrying, and note
+that with `keep_tool=True` the body count does not drop even when the cut worked, so read
+`mass_g_delta`. A mutation whose
+count, mass _and_ bbox all come back identical carries a `warning` saying so ("nothing
+changed in the snapshot: …"), so a no-op is visible without reading three numbers; a
+command exempt from that judgement (eleven today — `docs/TOOLS.md` lists them and
+`addon/server/mutation_commands.py` records a reason for each) never carries the key.
+Each `mass_g_*` field is `null` when its own side's mass could not be read — the side
+that was read keeps its number, and the delta is `null` whenever either is. That is not
+the same as `0.0`: unknown is not zero, and a `null` never triggers the warning.
+`render_view` costs 200KB–2MB of base64, so render at a checkpoint rather than after
+every mutation: deltas say whether a feature did _something_, a render whether it did
+the _right_ thing.
 
 ## MCP protocol features
 

@@ -163,21 +163,51 @@ _SPECIAL_KEYS = {
 }
 
 
+def _grams(value: object) -> str:
+    """A mass field: three decimals, or ``unknown`` for a non-number."""
+    return f"{value:.3f}" if isinstance(value, (int, float)) else "unknown"
+
+
+def _count(value: object) -> str:
+    """A body-count field: the number, or ``unknown`` - never Python's ``None``."""
+    return str(value) if value is not None else "unknown"
+
+
 def _format_deltas(deltas: dict) -> list[str]:
     """Render the deltas sub-dict as indented bullet lines."""
     lines = ["  deltas:"]
     bc_before = deltas.get("body_count_before")
     bc_after = deltas.get("body_count_after")
     bc_delta = deltas.get("body_count_delta")
-    if bc_before is not None or bc_after is not None:
-        lines.append(f"    body_count: {bc_before} → {bc_after} (Δ{bc_delta:+d})")
+    if (bc_before is not None or bc_after is not None) and bc_delta is not None:
+        # ``int``: a third-party envelope can spell a count as 1.0, and ``:+d`` raises
+        # on a float.  A body count is an integer by nature, so the cast is the value.
+        lines.append(
+            f"    body_count: {_count(bc_before)} → {_count(bc_after)}"
+            f" (Δ{int(bc_delta):+d})"
+        )
+    elif bc_before is not None or bc_after is not None:
+        lines.append(
+            f"    body_count: {_count(bc_before)} → {_count(bc_after)} (Δ unknown)"
+        )
     mg_before = deltas.get("mass_g_before")
     mg_after = deltas.get("mass_g_after")
     mg_delta = deltas.get("mass_g_delta")
-    if mg_delta is not None:
+    # ``isinstance`` rather than a ``None`` test: a third-party envelope can spell a
+    # mass as a string, and ``:.3f`` raises on one.  ``_grams`` renders that as unknown.
+    measured = all(
+        isinstance(value, (int, float)) for value in (mg_before, mg_after, mg_delta)
+    )
+    if measured:
         lines.append(
             f"    mass_g:     {mg_before:.3f} → {mg_after:.3f} (Δ{mg_delta:+.3f})"
         )
+    elif any(key in deltas for key in ("mass_g_before", "mass_g_after")):
+        # A design whose mass could not be read answers null, and saying nothing would
+        # read as "no mass", which is a different fact.  The add-in blanks the delta
+        # whenever either side is null; this covers a caller-supplied dict too.
+        known = [_grams(value) for value in (mg_before, mg_after)]
+        lines.append(f"    mass_g:     {known[0]} → {known[1]} (Δ unknown)")
     if deltas.get("bbox_before") is not None:
         lines.append(f"    bbox_before: {deltas['bbox_before']}")
     if deltas.get("bbox_after") is not None:

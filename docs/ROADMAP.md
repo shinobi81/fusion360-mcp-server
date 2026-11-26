@@ -439,10 +439,57 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    description says so too. The first tests to name `stock_mode` at all cover the five
    ids, the refusal, and that the setup does not exist when the vocabulary is refused.
 
+10. ~~**A mutation that changed nothing says so**~~ - **closed (#157).**
+    `execute_command` computed `body_count_delta` and `mass_g_delta` for every mutation
+    (through `_compute_deltas`, from what `_snapshot` measured) and nothing read them
+    back as a judgement, so a mutation that moved nothing answered `ok: true` and an
+    agent working unattended stopped there. The three measures are now
+    judged together - count, mass and bbox - and a mutation that left all three identical
+    carries `warning: "nothing changed in the snapshot: …"`. Never a refusal: clipping
+    nothing can be exactly what was asked.
+
+    The bbox is load-bearing, not decoration. Measured on 2706.1.17: `move_body(x=2)`
+    reports `body_count_delta: 0` **and** `mass_g_delta: 0.0` while the box moves 2 cm,
+    so a rule built on the two numbers the brief named would have accused a real move of
+    being a no-op. The proof call is `execute_code` with a script that touches nothing -
+    the brief's own case, `extrude(operation="cut")` outside every body, is **refused**
+    by Fusion (`3 : No target body found to cut or intersect!`) and can never be the
+    evidence.
+
+    Eleven commands are exempt, each for a reason written beside it in
+    `addon/server/mutation_commands.py` - `set_parameter`, `suppress_feature`,
+    `unsuppress_feature`, `undo`, `move_body`, `delete_all`, `set_color`, `create_ucs`,
+    `auto_constrain`, `split_face`, `create_thread` - and the table is pinned by name in
+    `tests/test_addon_no_op.py`, so an exemption cannot be added - or kept through a
+    rename - without a listing and a reason. Mock mode judges its synthetic deltas with
+    the same function, and its `execute_code` reports mock's own scene unchanged because
+    mock runs nothing.
+
+    Two scope additions, both found by probing rather than by reading.
+
+    `move_body` and `delete_all` were *judged* until measurement showed the judgement
+    could not stand on those three numbers: a 1 cm move of a body inside a larger body's
+    extents leaves the root box identical, and `delete_all` sweeps sketches, joints and
+    timeline entries that the snapshot does not count - a sketch-only design answered
+    "nothing changed" while the sketch was gone. Both are exempt, and the warning now
+    says "nothing changed in the **snapshot**", because a script that only draws a sketch
+    changes the design without moving any of the three.
+
+    `create_box_parametric` was in neither table: a body-creating tool that reported no
+    `deltas` at all, so the one command family whose whole point is a new body was the
+    one whose body count nobody was told. It is a mutation now.
+
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.
 `setByThreePoints`, `setByTwoPoints` and `ScaleFeatures.createInput` all accept a
 `Point3D` on 2706.1.17. The documentation is advice, not enforcement.
+
+**Correction, measured 2026-11-26.** The third of those is only half true:
+`ScaleFeatures.createInput` accepts the `Point3D`, and `ScaleFeatures.add` then refuses
+the very same input with `3 : invalid ref point`. `scale_body` therefore answers
+`FUSION_REFUSED` for **every** call, `scale=1.0` and `scale=2.0` alike. The paragraph
+above is right that the documentation is advice; it was wrong to conclude the call site
+was fine, and the two are now recorded separately pending that fix.
 
 Not part of this: moving the 59 floor. Raising it to whatever the new figure becomes is
 a number chasing its own measurement; the reason to write these tests is the refusals

@@ -17,7 +17,7 @@ import math
 import os
 from typing import Any
 
-from ._mutation_commands import MUTATION_COMMANDS
+from ._mutation_commands import MUTATION_COMMANDS, no_op_warning
 from ._rules import (
     CAM_GEOMETRY_PARAMETERS,
     CAM_NO_TOOL_WARNING,
@@ -56,6 +56,10 @@ from .hints import classify as _classify
 # command real mode treats as read-only.
 _MUTATION_MOCKS = MUTATION_COMMANDS
 
+#: The box mock's one body occupies - ``_MOCK_DELTAS`` grows into it, and the unchanged
+#: deltas below sit on it.
+_MOCK_BOX = {"min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 1.0]}
+
 _MOCK_DELTAS = {
     "body_count_before": 0,
     "body_count_after": 1,
@@ -64,7 +68,25 @@ _MOCK_DELTAS = {
     "mass_g_after": 10.0,
     "mass_g_delta": 10.0,
     "bbox_before": None,
-    "bbox_after": {"min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 1.0]},
+    "bbox_after": _MOCK_BOX,
+}
+
+#: The deltas for a mutation mock *ran nothing* for.  ``execute_code`` is the one: mock
+#: executes no Python, so claiming the synthetic "a body appeared" would report a build
+#: that never happened.  The numbers are mock's own scene - one body, 10 g, that box -
+#: unchanged, which is why the judgement adds its warning, as the add-in does for a
+#: script that touched nothing.  What mock cannot know is what the script *would* have
+#: built; that is a divergence recorded in ``docs/ROADMAP.md``, not one this table can
+#: fix.
+_NO_CHANGE_DELTAS = {
+    "body_count_before": 1,
+    "body_count_after": 1,
+    "body_count_delta": 0,
+    "mass_g_before": 10.0,
+    "mass_g_after": 10.0,
+    "mass_g_delta": 0.0,
+    "bbox_before": _MOCK_BOX,
+    "bbox_after": _MOCK_BOX,
 }
 
 
@@ -141,7 +163,16 @@ def mock_command(command_type: str, params: dict[str, Any] | None = None) -> dic
         and "deltas" not in result
         and command_type != "undo"
     ):
-        result["deltas"] = dict(_MOCK_DELTAS)
+        deltas = dict(
+            _NO_CHANGE_DELTAS if command_type == "execute_code" else _MOCK_DELTAS
+        )
+        result["deltas"] = deltas
+        # The same judgement the add-in makes, from the same table: a mock rehearsal
+        # that changed nothing must say so, or an agent rehearsing here learns the
+        # opposite of what real mode reports.  ``setdefault`` for the same reason as
+        # there: a handler's own warning outranks this one.
+        if (warning := no_op_warning(command_type, deltas)) is not None:
+            result.setdefault("warning", warning)
     result["mode"] = "mock"
     return result
 
@@ -516,7 +547,21 @@ def _boolean_operation(p: dict) -> dict:
 
 
 def _delete_all(_p: dict) -> dict:
-    return {"deleted": True}
+    # Mock's scene is one body; sweeping it leaves nothing, which is the one command
+    # whose real effect the synthetic "a body appeared" would invert.
+    return {
+        "deleted": True,
+        "deltas": {
+            "body_count_before": 1,
+            "body_count_after": 0,
+            "body_count_delta": -1,
+            "mass_g_before": 10.0,
+            "mass_g_after": 0.0,
+            "mass_g_delta": -10.0,
+            "bbox_before": _MOCK_BOX,
+            "bbox_after": None,
+        },
+    }
 
 
 def _undo(_p: dict) -> dict:

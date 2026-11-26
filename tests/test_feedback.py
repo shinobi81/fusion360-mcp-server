@@ -364,6 +364,93 @@ class TestFormatResult:
         assert "+1" in text
         assert "7.85" in text
 
+    def test_an_unknown_mass_renders_as_unknown_not_as_nothing(self):
+        """``_snapshot`` answers ``null`` for a mass it could not read; a renderer that
+        skipped the line would leave the caller unable to tell that from a massless
+        design."""
+        result = {
+            "ok": True,
+            "deltas": {
+                "body_count_before": 1,
+                "body_count_after": 1,
+                "body_count_delta": 0,
+                "mass_g_before": None,
+                "mass_g_after": None,
+                "mass_g_delta": None,
+                "bbox_before": None,
+                "bbox_after": None,
+            },
+        }
+        out = _format_result("execute_code", result)
+
+        assert "mass_g:     unknown → unknown" in _text_of(out)
+
+    def test_a_half_readable_mass_keeps_the_side_that_was_measured(self):
+        """The delta is blank whenever either side is, but the side that was read is a
+        fact - and `unknown` for both would tell a caller more than is true."""
+        result = {
+            "ok": True,
+            "deltas": {
+                "body_count_before": 1,
+                "body_count_after": 1,
+                "body_count_delta": 0,
+                "mass_g_before": None,
+                "mass_g_after": 500.0,
+                "mass_g_delta": None,
+            },
+        }
+        out = _format_result("execute_code", result)
+
+        assert "mass_g:     unknown → 500.000 (Δ unknown)" in _text_of(out)
+
+    def test_a_float_body_count_delta_renders_as_the_integer_it_is(self):
+        """A third-party envelope can spell a count as ``1.0``, and ``:+d`` raises on a
+        float - the renderer must not be the thing that breaks the call."""
+        result = {
+            "ok": True,
+            "deltas": {
+                "body_count_before": 1,
+                "body_count_after": 2,
+                "body_count_delta": 1.0,
+            },
+        }
+        out = _format_result("execute_code", result)
+
+        assert "body_count: 1 → 2 (Δ+1)" in _text_of(out)
+
+    def test_a_string_mass_renders_as_unknown_instead_of_raising(self):
+        result = {
+            "ok": True,
+            "deltas": {
+                "mass_g_before": "7.85",
+                "mass_g_after": 500.0,
+                "mass_g_delta": 1.0,
+            },
+        }
+        out = _format_result("execute_code", result)
+
+        assert "mass_g:     unknown → 500.000" in _text_of(out)
+
+    def test_a_body_count_without_a_delta_renders_as_unknown(self):
+        """``_compute_deltas`` always sends the three; a caller-supplied dict need not,
+        and the renderer must not raise on the one field it prints signed."""
+        result = {
+            "ok": True,
+            "deltas": {"body_count_before": 1, "body_count_after": 2},
+        }
+        out = _format_result("execute_code", result)
+
+        assert "body_count: 1 → 2 (Δ unknown)" in _text_of(out)
+
+    def test_a_no_op_warning_reaches_the_rendered_text(self):
+        """What this pins is that the key is *not* in ``_SPECIAL_KEYS``: a render that
+        dropped the fields it does not know would leave an MCP caller with ``ok: true``
+        and nothing else.  The envelope is mock's, so it also pins that mock's deltas
+        meet the same judgement the add-in's do."""
+        out = _format_result("execute_code", mock_command("execute_code", {}))
+
+        assert "warning: nothing changed in the snapshot: " in _text_of(out)
+
     def test_render_view_returns_image_content(self):
         result = mock_command("render_view", {})
         out = _format_result("render_view", result)
