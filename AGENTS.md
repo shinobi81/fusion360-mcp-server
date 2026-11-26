@@ -152,6 +152,8 @@ too — fix each one, or record in the thread why it does not apply.
 Grouped by area; `docs/TOOLS.md` has the argument-level description of each tool and
 `src/fusion360_mcp/tools.py` is the schema. A name not in this table is not a tool:
 list_tools returns exactly these, and the add-in dispatches on the same strings.
+`docs/PROVEN.md` records which of them has answered a real Fusion and what it answered —
+date, `app.version` and PR per row, `unproven` with a reason where nobody has called it.
 
 | Area | Tools |
 | --- | --- |

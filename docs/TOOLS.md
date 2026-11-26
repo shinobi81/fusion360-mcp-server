@@ -21,6 +21,11 @@ Units are **centimetres** throughout: Fusion's internal unit, not millimetres. T
 marked **(2026+)** use APIs that need a Fusion build from 2026 or later; the rest were
 verified on **Fusion 2706.1.17**.
 
+Which of these has been *called* against a real Fusion — and what it answered — is
+`docs/PROVEN.md`, one row per tool. A row that says `unproven` is where the next defect
+nobody has looked for is; `uv run python scripts/check_proven.py --live` re-probes the
+read-only subset.
+
 ## Scene & Query
 
 | Tool               | Description                                                                                                 |
