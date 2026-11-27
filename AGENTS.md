@@ -22,6 +22,8 @@ per-item `threading.Event` until the main thread completes it. Details: `ARCHITE
 
 ```bash
 uv sync --locked               # install deps into .venv; refuses a stale lock
+uv run python scripts/check_proven.py      # docs/PROVEN.md against tools.py; --live
+                               # re-probes the twelve read-only tools it can call
 uv run python scripts/check_fusion_api.py  # every adsk name under addon/server,
                                # checked against the running Fusion. Exit 1 for four
                                # reasons: a name Fusion does not have, no connection,
@@ -71,6 +73,9 @@ and the atheris targets: `docs/TESTING.md`.
    guarded, the description is not
 7. A behavioural mock test (`tests/test_mock.py`); the tool count and each tool's argument
    count are pinned in `tests/test_tools.py`
+8. A row in `docs/PROVEN.md` — `unproven — <why>` wherever no call has succeeded: nobody
+   called it, or it was only ever refused — because `tests/test_proven.py` fails a tool
+   with no row, and the answer it gives is the record the next session starts from
 
 The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
 
@@ -152,6 +157,8 @@ too — fix each one, or record in the thread why it does not apply.
 Grouped by area; `docs/TOOLS.md` has the argument-level description of each tool and
 `src/fusion360_mcp/tools.py` is the schema. A name not in this table is not a tool:
 list_tools returns exactly these, and the add-in dispatches on the same strings.
+`docs/PROVEN.md` records which of them has answered a real Fusion and what it answered —
+date, `app.version` and PR per row, `unproven` with a reason where nothing has.
 
 | Area | Tools |
 | --- | --- |
