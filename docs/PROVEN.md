@@ -113,7 +113,7 @@ contradicts; tools it cannot call are reported as not probed, never as passing.
 | `cam_post_process` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
 | `cam_list_setups` | proven — 2026-11-26, `2706.1.17`, #158: answered `count: 0` on a design with no CAM setups |
 | `cam_list_operations` | unproven — only a refusal is exercised: `NAME_NOT_FOUND` with no setups |
-| `cam_get_operation_info` | unproven — read-only; not called against Fusion yet |
+| `cam_get_operation_info` | unproven — only a refusal is exercised: `NAME_NOT_FOUND` with no setups in the document |
 | `ping` | proven — 2026-11-26, `2706.1.17`, #158: answered `{status: pong}` on 2706.1.17 |
 | `get_design_type` | proven — 2026-11-26, `2706.1.17`, #158: answered `parametric` with `design_type_id` |
 | `set_design_type` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
