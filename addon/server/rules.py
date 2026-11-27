@@ -19,6 +19,7 @@ hand edit in the ``src`` copy is overwritten.
 from __future__ import annotations
 
 import json
+import math
 import os
 from collections.abc import Iterable, Mapping
 from typing import Any
@@ -181,11 +182,13 @@ def cam_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
 
 #: The divergences that change a *refusal* or a reply key, and why each is deliberate.
 #:
-#: Not every deliberate divergence is here: ``undo`` always answers the direct-design
-#: shape, and ``execute_code`` reports zero deltas because mock runs nothing - both say
-#: so in their own code.  What belongs here is a call mock answers *successfully* that
-#: the add-in refuses, which is what an unattended rehearsal would act on; the axis
-#: rehearsal this table replaced was exactly that, and it was not listed.
+#: A divergence belongs here when it is either a call mock answers *successfully* that
+#: the add-in refuses - what an unattended rehearsal would act on - or a reply key one
+#: side sends and the other does not.  The axis rehearsal the new rule replaced was the
+#: first kind and was not listed, which is why the table exists.  Two deliberate
+#: divergences live outside it and say so in their own code: ``undo`` always answers the
+#: direct-design shape, and ``execute_code`` reports zero deltas because mock runs
+#: nothing.
 MOCK_DIVERGENCES: dict[str, str] = {
     "parameters_failed": (
         "mock applies every parameter it is given; Fusion refuses some names, and only "
@@ -716,21 +719,37 @@ def construction_axis_name_refusal(axis: Any) -> _hints.Refusal | None:
 def construction_plane_angle_refusal(
     params: Mapping[str, Any],
 ) -> _hints.Refusal | None:
-    """The refusal an ``angle`` method with no angle earns, or None.
+    """The refusal an unusable ``angle`` earns, or None.
 
-    The handler built ``ValueInput.createByString(f"{angle} deg")`` unconditionally, so
-    a missing angle sent ``"None deg"`` to Fusion and came back as a refusal nobody
-    could act on.  Decided from the parameters alone, so mock mode refuses it too
-    rather than rehearsing ``created: true``.
+    Two faults, one rule.  The ``angle`` method requires a number: the handler used to
+    build ``ValueInput.createByString(f"{angle} deg")`` whatever it was given, so a
+    missing angle reached Fusion and came back as ``3 : invalid expression`` - a
+    refusal nobody could act on.  Any method that is given an angle at all gets it
+    judged, because the ``tangent`` branch interpolates that value too.
+
+    A numeric *string* is refused as well: Fusion would have parsed ``"45 deg"``, but
+    only Fusion can parse units, and a string here is a caller who meant a number.
     """
-    if params.get("method") != "angle":
-        return None
     angle = params.get("angle")
+    if angle is None:
+        if params.get("method") != "angle":
+            return None
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            "method='angle' needs an angle in degrees, not None",
+            hints=("Pass angle (degrees) with method='angle'.",),
+        )
     if isinstance(angle, bool) or not isinstance(angle, (int, float)):
         return _hints.Refusal(
             "INVALID_INPUT",
-            f"method='angle' needs an angle in degrees, not {angle!r}",
-            hints=("Pass angle (degrees) with method='angle'.",),
+            f"angle must be a number of degrees, not {angle!r}",
+            hints=("Pass a number; it is interpolated into a 'deg' expression.",),
+        )
+    if not math.isfinite(angle):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"angle must be finite, not {angle!r}",
+            hints=("Pass a finite number of degrees.",),
         )
     return None
 

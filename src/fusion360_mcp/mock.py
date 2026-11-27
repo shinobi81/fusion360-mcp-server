@@ -682,11 +682,12 @@ def _create_hole(p: dict) -> dict:
 def _rectangular_pattern(p: dict) -> dict:
     if refused := _body_name_required_error(p):
         return refused
+    # The handler answers `feature_name`, `x_count` and `y_count` - not the body name or
+    # a body count it never computes, which an agent would read back as a fact.
     return {
-        "body_name": p.get("body_name", "Body1"),
+        "feature_name": "RectangularPattern_mock",
         "x_count": p.get("x_count", 1),
         "y_count": p.get("y_count", 1),
-        "created_bodies": p.get("x_count", 1) * p.get("y_count", 1),
     }
 
 

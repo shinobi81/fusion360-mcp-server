@@ -348,52 +348,51 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         (
             "handler_assembly.py",
             181,
-            "raise refusal: kind comes from _rules.construction_plane_tangent_refusal",
+            "raise refusal: kind comes from _rules.construction_plane_angle_refusal",
         ),
         (
             "handler_assembly.py",
-            198,
-            "raise angle_refusal: kind comes from "
-            "_rules.construction_plane_angle_refusal",
+            188,
+            "raise refusal: kind comes from _rules.construction_plane_angle_refusal",
         ),
         (
             "handler_assembly.py",
-            306,
+            307,
             "raise refusal: kind comes from _rules.perpendicular_axis_refusal",
         ),
         (
             "handler_assembly.py",
-            466,
+            467,
             "raise selector_refusal: kind comes from _rules.joint_selector_refusal",
         ),
         (
             "handler_assembly.py",
-            482,
+            483,
             "raise component_refusal: kind comes from _rules.components_differ_refusal",
         ),
         (
             "handler_assembly.py",
-            487,
+            488,
             "raise geometry_refusal: kind comes from _rules.joint_geometry_refusal",
         ),
         (
             "handler_assembly.py",
-            753,
+            754,
             "raise selector_refusal: kind comes from _rules.joint_selector_refusal",
         ),
         (
             "handler_assembly.py",
-            768,
+            769,
             "raise component_refusal: kind comes from _rules.components_differ_refusal",
         ),
         (
             "handler_assembly.py",
-            779,
+            780,
             "raise geometry_refusal: kind comes from _rules.as_built_geometry_refusal",
         ),
         (
             "handler_assembly.py",
-            955,
+            956,
             "raise refusal: kind comes from _rules.rigid_group_size_refusal",
         ),
         (

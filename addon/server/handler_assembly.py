@@ -179,6 +179,13 @@ class AssemblyCommands(_Contract):
             }
         ):
             raise refusal
+        # The angle is judged here too, for the same reason: a bad value refuses without
+        # a design, and mock mode answers the same sentence.  The angle method's
+        # *missing* angle is the half mock used to rehearse as a created plane.
+        if refusal := _rules.construction_plane_angle_refusal(
+            {"method": method, "angle": angle}
+        ):
+            raise refusal
 
         root = self._root()
         planes = root.constructionPlanes
@@ -190,12 +197,6 @@ class AssemblyCommands(_Contract):
                 adsk.core.ValueInput.createByReal(offset),
             )
         elif method == "angle":
-            # Judged before the axis is resolved: the handler used to build "None deg"
-            # and let Fusion refuse it, which mock then rehearsed as a created plane.
-            if angle_refusal := _rules.construction_plane_angle_refusal(
-                {"method": method, "angle": angle}
-            ):
-                raise angle_refusal
             inp.setByAngle(
                 self._construction_axis(edge_name or "x"),
                 adsk.core.ValueInput.createByString(f"{angle} deg"),

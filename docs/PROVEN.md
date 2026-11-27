@@ -74,7 +74,7 @@ the camera for its capture and restores it before returning.
 | `add_constraint` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `auto_constrain` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `add_dimension` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
-| `create_construction_plane` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `create_construction_plane` | proven — 2026-11-27, `2706.1.17`, #160: built a plane (`Plane1`, then `Plane2` for `edge_name="Y"`); refused `edge_name="w"` with the axis sentence, and a missing angle with `3 : invalid expression` before this PR's rule (#160) |
 | `create_construction_axis` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `create_ucs` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `draw_spline` | unproven — mutation; no live call made — the suite covers its handler against fakes only |

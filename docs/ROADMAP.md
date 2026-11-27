@@ -514,9 +514,14 @@ and asks the running Fusion whether it exists - 190 references, none missing on
     in mock mode and `INVALID_INPUT` ("Unknown axis 'w'") in the add-in: the axis was
     resolved by a handler method mock never asked. `circular_pattern`'s `axis` is the
     same name through the same helper. The sentence now lives in
-    `rules.construction_axis_refusal`, which the handler raises and mock answers, so the
-    two sides cannot disagree - and a usable axis (`y`, `Y`) is refused by neither, which
-    is the half a parity test usually forgets.
+    `rules.construction_axis_name_refusal`, which the handler raises and mock answers, so
+    the two sides cannot disagree - and a usable axis (`y`, `Y`) is refused by neither,
+    which is the half a parity test usually forgets. The same branch rehearsed success
+    for a *missing* angle (the handler sent Fusion `"None deg"` and it answered
+    `3 : invalid expression`), so `rules.construction_plane_angle_refusal` decides that
+    from the parameters too - angle, then axis, then plane, the handler's own order,
+    because a call carrying two faults must get one sentence from both sides. A real
+    caller sees one change there: that call is `INVALID_INPUT` now, not Fusion's.
 
     What mock still cannot know is listed, one reason each, in
     `rules.MOCK_DIVERGENCES`, and pinned by name in `tests/test_rules.py`:

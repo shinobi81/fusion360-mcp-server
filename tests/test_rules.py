@@ -233,6 +233,15 @@ PARAMETER_REFUSALS = [
     ),
     (
         "create_construction_plane",
+        # The angle is judged before the axis and the plane, so a call missing it
+        # answers this sentence even when the other two are bad as well.
+        {"method": "angle", "edge_name": "w", "plane": "zz"},
+        "INVALID_INPUT",
+        "method='angle' needs an angle in degrees, not None",
+        ("Pass angle (degrees) with method='angle'.",),
+    ),
+    (
+        "create_construction_plane",
         # The tangent branches name a body, so an empty one is the shared refusal -
         # the same sentence every other body-naming tool answers.
         {"method": "tangent", "face_index": 0, "plane": "xy"},
@@ -408,6 +417,7 @@ PARAMETER_REFUSALS = [
         "joint_geometry",
         "as_built_geometry",
         "rigid_group_size",
+        "construction_plane_angle",
         "tangent_plane_body_name",
         "tangent_plane_face",
         "perpendicular_axis",
@@ -882,7 +892,9 @@ def test_the_advertised_strategies_split_between_aimable_and_not():
 def test_the_handler_and_the_mock_refuse_an_unknown_axis_alike(bound_handler):
     """The angle plane resolves an axis name, and mock used to rehearse
     ``created: true`` for one the add-in refuses. One rule, one sentence, both sides."""
-    call = {"method": "angle", "plane": "xy", "angle": 30, "edge_name": "w"}
+    # The plane is *invalid too*: a mock that judged the plane first would answer the
+    # plane sentence, so this case is what pins the order, not just the rules.
+    call = {"method": "angle", "plane": "zz", "angle": 30, "edge_name": "w"}
     handler = bound_handler(FakeDesign(bodies=[FakeBody("Body1")]))
 
     with pytest.raises(addon_hints.Refusal) as raised:

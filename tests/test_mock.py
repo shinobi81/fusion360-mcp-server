@@ -341,7 +341,11 @@ class TestMockNewGeometry:
         )
         assert result["x_count"] == 3
         assert result["y_count"] == 2
-        assert result["created_bodies"] == 6
+        # The handler's keys: `feature_name`, `x_count`, `y_count` - it never echoes the
+        # body name or counts created bodies.
+        assert result["feature_name"] == "RectangularPattern_mock"
+        assert "created_bodies" not in result
+        assert "body_name" not in result
 
     def test_circular_pattern(self):
         result = mock_command(
