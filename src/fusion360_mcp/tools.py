@@ -12,6 +12,7 @@ import mcp.types as types
 # joint selectors are read by ``tools.py`` twice each (both joint tools), so a local
 # copy would be a fourth place to drift.
 from ._rules import (
+    CAM_GEOMETRY_PARAMETERS,
     CAM_STOCK_MODES,
     CAM_STRATEGIES,
     EDGE_SELECTIONS,
@@ -2334,8 +2335,11 @@ TOOLS: list[dict] = [
                 "Machining strategy, in Fusion's own spelling. Measured against "
                 "Operations.compatibleStrategies on 2706.1.17: of the fifteen names "
                 "this schema carried, five were Fusion's (kept here) and ten were "
-                "invented and refused as 'Unknown strategy'; the five 2D/3D names "
-                "added here are the ones measured to expose a geometry parameter."
+                "invented and refused as 'Unknown strategy'. "
+                f"face_indices aims {', '.join(CAM_GEOMETRY_PARAMETERS)} - the "
+                "strategies measured to expose a selection. face is not one: it "
+                "machines the stock's top, takes no face selection, and needs none "
+                "to generate."
             ),
         },
         name={

@@ -491,6 +491,22 @@ and asks the running Fusion whether it exists - 190 references, none missing on
     `execute_code` arranging a script's own exception as `UNKNOWN`, recorded nowhere but
     the brief.
 
+12. **`face` is advertised and cannot complete** - **measured, and the brief was wrong.**
+    The brief expected a `face` operation without a face selection to never generate and
+    time out. Measured on 2706.1.17: it creates, and `cam_generate_toolpath` answers
+    `generated: true` with `has_toolpath: true` on the first call - it machines the
+    stock's top and needs no selection. What is true is that it cannot be *aimed*: of its
+    327 parameters, 26 are `CadObjectParameterValue` (view and heights) and its only
+    `CadContours2dParameterValue` is `stockContours`, a 2D boundary, so nothing takes a
+    BRep face. The control that makes that measurement worth anything is `contour2d`,
+    whose `contours` parameter is exactly the one the tool already writes to.
+
+    So the strategy keeps working and `face_indices` keeps being refused for it - now
+    with a sentence that says why (`rules.CAM_NO_FACE_SELECTION`, one measured entry per
+    strategy), and a schema description that names the five strategies a selection
+    applies to. The other four unaimable strategies keep the generic sentence until each
+    is probed; that is item 9.
+
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.
 `setByThreePoints`, `setByTwoPoints` and `ScaleFeatures.createInput` all accept a

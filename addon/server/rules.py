@@ -99,6 +99,22 @@ CAM_GEOMETRY_PARAMETERS = {
 #: The strategies ``face_indices`` can be given to: the map's keys, in one place.
 CAM_GEOMETRY_STRATEGIES = tuple(CAM_GEOMETRY_PARAMETERS)
 
+#: Strategies whose geometry the tool cannot pass, and why, one measured sentence each.
+#:
+#: ``face`` is measured (2706.1.17): it needs no selection to generate - it machines
+#: the stock's top and completed with ``has_toolpath: true`` on the first call - but
+#: nothing on the operation takes a *face*: of its 327 parameters, 26 are
+#: ``CadObjectParameterValue`` (view and heights) and one is
+#: ``CadContours2dParameterValue`` called ``stockContours``, a 2D boundary.  The other
+#: four unaimable strategies stay on the generic sentence until each is measured - one
+#: probe per strategy, which is its own item.
+CAM_NO_FACE_SELECTION: dict[str, str] = {
+    "face": (
+        "it machines the stock's top and takes no face selection - its only geometry "
+        "parameter is a 2D stock boundary"
+    ),
+}
+
 
 def cam_strategy_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal an unknown CAM strategy earns, or None when it is usable.
@@ -159,6 +175,17 @@ def cam_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
                 "0-based in the body's own order",
             )
     if strategy not in CAM_GEOMETRY_PARAMETERS:
+        measured = CAM_NO_FACE_SELECTION.get(str(strategy))
+        if measured is not None:
+            return _hints.Refusal(
+                "INVALID_INPUT",
+                f"face_indices cannot aim {strategy!r}: {measured} - it applies to: "
+                f"{', '.join(CAM_GEOMETRY_STRATEGIES)}",
+                hints=(
+                    f"{strategy!r} needs no selection to generate: create it and "
+                    "call cam_generate_toolpath.",
+                ),
+            )
         return _hints.Refusal(
             "INVALID_INPUT",
             f"Strategy {strategy!r} takes no geometry selection - use face_indices "

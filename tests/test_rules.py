@@ -819,6 +819,54 @@ def test_every_bad_face_selection_is_refused_on_both_sides(bare_handler, params)
     assert refused["error_message"] == str(raised.value)
 
 
+def test_the_handler_and_the_mock_refuse_aiming_the_face_strategy_alike(
+    bare_handler, handler_module
+):
+    """``face`` is measured: it takes no face selection, so ``face_indices`` is refused
+    with a sentence that says why - and mock answers the same one."""
+    params = {"strategy": "face", "body_name": "Body1", "face_indices": [0]}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_create_operation(**{"setup_name": "Setup1", **params})
+
+    refused = mock._cam_create_operation({"setup_name": "Setup1", **params})
+
+    assert refused["ok"] is False
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+
+
+def test_the_face_refusal_says_why_and_names_what_can_be_aimed():
+    """The generic sentence ("takes no geometry selection") is false of a strategy that
+    exposes a stock boundary, so the measured one replaces it for ``face``."""
+    refused = rules.cam_geometry_refusal(
+        {"strategy": "face", "body_name": "Body1", "face_indices": [0]}
+    )
+
+    assert refused is not None
+    assert "stock" in str(refused), "the reason Fusion's own parameters show"
+    assert "takes no face selection" in str(refused)
+    assert all(strategy in str(refused) for strategy in rules.CAM_GEOMETRY_STRATEGIES)
+    assert "takes no geometry selection" not in str(refused)
+    assert refused.hints == (
+        "'face' needs no selection to generate: create it and call "
+        "cam_generate_toolpath.",
+    )
+
+
+@pytest.mark.parametrize("strategy", ["bore", "slot", "trace", "engrave"])
+def test_a_strategy_nobody_has_measured_keeps_the_generic_sentence(strategy):
+    """One probe per strategy is its own item, so the other four must not inherit the
+    face sentence - a claim that they take no boundary would be unmeasured."""
+    refused = rules.cam_geometry_refusal(
+        {"strategy": strategy, "body_name": "Body1", "face_indices": [0]}
+    )
+
+    assert refused is not None
+    assert "takes no geometry selection" in str(refused)
+    assert strategy not in rules.CAM_NO_FACE_SELECTION
+
+
 def test_a_usable_strategy_and_selection_is_refused_by_neither_side():
     """Every advertised strategy passes; a selection passes where one exists."""
     assert (
