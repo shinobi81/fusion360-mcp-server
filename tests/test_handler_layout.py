@@ -54,7 +54,7 @@ def method_owners(handler_class) -> dict[str, list[str]]:
 
 
 def test_every_command_resolves_to_exactly_one_module(handler_module):
-    """Each of the 99 commands is declared once, and by a class the handler mixes in."""
+    """Each of the 100 commands is declared once, by a class the handler mixes in."""
     handler_class = handler_module.CommandHandler
     declared = method_owners(handler_class)
     # ``get``, not a filter: the MRO is what ``declared`` is keyed by, so a command

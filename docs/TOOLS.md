@@ -1,6 +1,6 @@
 # Tools
 
-All 99 tools this server exposes, grouped by what they do. Every tool returns the same
+All 100 tools this server exposes, grouped by what they do. Every tool returns the same
 envelope — `ok`, plus tool-specific fields, plus `deltas` for mutations — and failures come
 back as data (`error_kind`, `hints`, `traceback`) rather than exceptions.
 
@@ -48,6 +48,7 @@ camera for its capture and restores it before returning.
 | Tool              | Description                                                                            |
 | ----------------- | -------------------------------------------------------------------------------------- |
 | `new_document`    | Create a design document and make it active — the way in from a cold start             |
+| `save_document`   | Save the active document in place, or an untitled one by name into Fusion's active data folder (no local-file save exists in this API) |
 | `get_design_type` | Check if the design is parametric or direct                                            |
 | `set_design_type` | Switch design type (parametric/direct recovery)                                        |
 

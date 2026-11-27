@@ -347,3 +347,96 @@ def test_compare_meshes_that_yields_no_deviation_is_fusion_refused(bound_handler
         "FUSION_REFUSED",
         ["compareWith found no deviation; check both bodies are meshes."],
     )
+
+
+# ── save_document, and the checkpoint the risky tools take ────────────
+
+
+def _saving_handler(bound_handler, document, folder="MockFolder"):
+    """A handler whose app has *document* open and a data folder to save into."""
+    app = type(
+        "App",
+        (),
+        {
+            "activeDocument": document,
+            "data": type(
+                "Data", (), {"activeFolder": type("Folder", (), {"name": folder})()}
+            )(),
+        },
+    )()
+    return bound_handler(FakeDesign(bodies=[]), app=app)
+
+
+def test_a_saved_document_is_saved_in_place_with_an_empty_description(bound_handler):
+    """`save` requires a description; "" is what Fusion's own dialogs pass."""
+    document = FakeDocument("Plate", is_saved=True)
+    document.isModified = True
+    handler = _saving_handler(bound_handler, document)
+
+    reply = handler.save_document()
+
+    assert document.saved == [("save", "")]
+    assert reply["saved"] is True
+    assert reply["saved_as"] is False
+    assert reply["is_modified"] is False
+
+
+def test_an_untitled_document_with_no_name_is_refused_and_nothing_is_written(
+    bound_handler,
+):
+    """The brief's trap: the tool will not choose a name or a folder for the caller."""
+    document = FakeDocument("Untitled")
+    handler = _saving_handler(bound_handler, document)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.save_document()
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert "never been saved" in str(raised.value)
+    assert document.saved == [], "a refusal must write nothing"
+
+
+def test_an_untitled_document_is_saved_by_name_into_the_active_folder(bound_handler):
+    document = FakeDocument("Untitled")
+    handler = _saving_handler(bound_handler, document)
+
+    reply = handler.save_document(name="Plate")
+
+    (kind, name, folder, description, tag) = document.saved[0]
+    assert (kind, name, description, tag) == ("saveAs", "Plate", "", "")
+    assert folder.name == "MockFolder"
+    assert reply["saved_as"] is True
+    assert reply["name"] == "Plate"
+    assert reply["folder"] == "MockFolder"
+
+
+def test_a_checkpoint_saves_a_saved_document_and_says_so(bound_handler):
+    document = FakeDocument("Plate", is_saved=True)
+    handler = _saving_handler(bound_handler, document)
+
+    assert handler._checkpoint("execute_code") == {"saved_before": True}
+    assert document.saved == [("save", "checkpoint before execute_code")]
+
+
+def test_a_checkpoint_on_an_untitled_document_reports_why_not_refuses(bound_handler):
+    """A checkpoint that refused would be a new way for the risky call to fail."""
+    document = FakeDocument("Untitled")
+    handler = _saving_handler(bound_handler, document)
+
+    report = handler._checkpoint("execute_code")
+
+    assert report["saved_before"] is False
+    assert "save_document" in report["checkpoint_skipped"]
+    assert document.saved == []
+
+
+def test_execute_code_reports_the_checkpoint_only_when_asked(bound_handler):
+    document = FakeDocument("Plate", is_saved=True)
+    handler = _saving_handler(bound_handler, document)
+
+    without = handler.execute_code("1 + 1")
+    with_checkpoint = handler.execute_code("1 + 1", checkpoint=True)
+
+    assert "saved_before" not in without, "the default writes nothing"
+    assert with_checkpoint["saved_before"] is True
+    assert document.saved == [("save", "checkpoint before execute_code")]

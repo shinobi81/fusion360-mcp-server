@@ -2,7 +2,7 @@
 
 ## Overview
 
-An MCP server (99 tools) connecting AI coding agents to Autodesk Fusion 360 for CAD
+An MCP server (100 tools) connecting AI coding agents to Autodesk Fusion 360 for CAD
 automation. Two pieces:
 
 1. **MCP server** (this repo) — speaks MCP over stdio, forwards commands over TCP
@@ -155,7 +155,7 @@ red `threads` check is never "fine, merge anyway", and failing to _query_ thread
 failure too: an unchecked merge is not a clean merge. Bot findings are review threads
 too — fix each one, or record in the thread why it does not apply.
 
-## Available tools (99)
+## Available tools (100)
 
 Grouped by area; `docs/TOOLS.md` has the argument-level description of each tool and
 `src/fusion360_mcp/tools.py` is the schema. A name not in this table is not a tool:
@@ -165,7 +165,7 @@ date, `app.version` and PR per row, `unproven` with a reason where nothing has.
 
 | Area | Tools |
 | --- | --- |
-| Document | `new_document`, `get_design_type`, `set_design_type` |
+| Document | `new_document`, `save_document`, `get_design_type`, `set_design_type` |
 | Scene & Query | `ping`, `health`, `get_scene_info`, `get_object_info`, `list_edges`, `list_faces`, `list_components`, `get_bounding_box` |
 | Sketching | `create_sketch`, `draw_rectangle`, `draw_circle`, `draw_line`, `draw_arc`, `draw_spline`, `create_polygon`, `draw_circles`, `add_constraint`, `auto_constrain`, `add_dimension`, `offset_curve`, `trim_curve`, `extend_curve`, `project_geometry` |
 | Features | `extrude`, `revolve`, `sweep`, `loft`, `fillet`, `chamfer`, `shell`, `mirror`, `create_hole`, `rectangular_pattern`, `circular_pattern`, `create_thread`, `draft_faces`, `split_body`, `split_face`, `offset_faces`, `scale_body`, `suppress_feature`, `unsuppress_feature` |

@@ -9,7 +9,7 @@ import ast
 import io
 import math
 import traceback
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, suppress
 from typing import TYPE_CHECKING
 
 from . import fusion_api as adsk
@@ -728,6 +728,89 @@ class SceneCommands(_Contract):
             ),
         }
 
+    def save_document(self, name: str | None = None):
+        """Save the active document, in place or by naming an untitled one.
+
+        Measured on 2706.1.17 against the shipped binding: ``Document.save`` takes a
+        version *description*, and ``Document.saveAs`` takes a name and a ``DataFolder``
+        - there is no local-file overload, and this build exposes no ``activeFile`` or
+        ``pathName``.  So the unit of saving is a document in a data folder, and the
+        only folder a tool can reach without inventing one is ``app.data.activeFolder``.
+
+        An untitled document with no name is refused rather than saved somewhere the
+        caller did not choose: that is the one write this tool will not make on its own.
+        """
+        doc = self.app.activeDocument
+        if doc is None:
+            raise _hints.Refusal(
+                "NO_ACTIVE_DESIGN",
+                "No document to save — open or create one first",
+                hints=("new_document creates one.",),
+            )
+        saved_as = False
+        if not doc.isSaved:
+            if not name:
+                raise _hints.Refusal(
+                    "INVALID_INPUT",
+                    "This document has never been saved: pass name to save it into "
+                    "Fusion's active data folder, or save it in Fusion first",
+                    hints=(
+                        "The tool will not choose a name or a folder for you.",
+                        "Fusion's active data folder is the target; there is no "
+                        "local-file save in this API.",
+                    ),
+                )
+            folder = self.app.data.activeFolder
+            if folder is None:
+                raise _hints.Refusal(
+                    "WORKSPACE_UNAVAILABLE",
+                    "Fusion has no active data folder to save into",
+                    hints=("Open the Data Panel once, then retry.",),
+                )
+            doc.saveAs(name, folder, "", "")
+            saved_as = True
+        else:
+            # The description is required; "" is what Fusion's own dialogs pass for an
+            # unnamed version.
+            doc.save("")
+        folder_name = None
+        # `dataFile` is None on any document this server created; a saved one carries
+        # the folder it lives in, which is the closest thing to a location the API has.
+        if doc.dataFile is not None:
+            with suppress(Exception):
+                folder_name = doc.dataFile.parentFolder.name
+        return {
+            "saved": True,
+            "name": doc.name,
+            "folder": folder_name,
+            "saved_as": saved_as,
+            "is_modified": doc.isModified,
+        }
+
+    def _checkpoint(self, label: str) -> dict:
+        """Save before a risky call when asked to, and say what happened when not.
+
+        Opt-in per call: writing a file the caller did not ask for is worse than losing
+        work, so the default touches nothing.  A checkpoint on an untitled document does
+        not refuse - that would be a new way to fail - it reports why it could not save.
+        """
+        doc = self.app.activeDocument
+        if doc is None:
+            return {
+                "saved_before": False,
+                "checkpoint_skipped": "there is no active document to save",
+            }
+        if not doc.isSaved:
+            return {
+                "saved_before": False,
+                "checkpoint_skipped": (
+                    "the document has never been saved; call save_document(name=...) "
+                    "first"
+                ),
+            }
+        doc.save(f"checkpoint before {label}")
+        return {"saved_before": True}
+
     def get_design_type(self):
         """Return current design type: 'parametric' or 'direct'."""
         design = self._design()
@@ -784,7 +867,10 @@ class SceneCommands(_Contract):
             hints=("Pass design_type='parametric' or 'direct'.",),
         )
 
-    def execute_code(self, code: str):
+    def execute_code(self, code: str, checkpoint: bool = False):
+        # Before the design is read: a checkpoint that failed after the script ran would
+        # be a save of the damage.
+        checkpoint_report = self._checkpoint("execute_code") if checkpoint else {}
         design = self._design()
         type_before = design.designType
 
@@ -870,6 +956,9 @@ class SceneCommands(_Contract):
                 result = str(result)
 
         response = {"executed": True, "result": result, "output": output}
+        # Only when the caller asked: the keys are absent otherwise, so nothing claims a
+        # save that was never attempted.
+        response.update(checkpoint_report)
         if design_type_warning:
             response["design_type_warning"] = design_type_warning
         if document_closed:

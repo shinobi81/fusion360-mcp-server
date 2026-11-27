@@ -67,11 +67,38 @@ class FakeProducts:
 
 
 class FakeDocument:
-    """``adsk.core.Document``: a name and the products it holds."""
+    """``adsk.core.Document``: a name, the products it holds, and its save state.
 
-    def __init__(self, name: str, products=()):
+    Measured on 2706.1.17: ``save(description)`` takes a required description and
+    ``saveAs(name, dataFolder, description, tag)`` a name and a **data folder** - there
+    is no local-file overload.  A document made through the API starts with
+    ``dataFile: None, isSaved: False, isModified: True``, which is the untitled state
+    ``save_document`` refuses without a name.
+    """
+
+    def __init__(self, name: str, products=(), is_saved: bool = False):
         self.name = name
         self.products = FakeProducts(products)
+        self.isSaved = is_saved
+        self.isModified = not is_saved
+        #: The folder a saved document reports; ``None`` until ``saveAs`` names one.
+        self.dataFile = None
+        #: What the two save calls were given, in order - the reply is built from them.
+        self.saved: list[tuple] = []
+
+    def save(self, description: str) -> bool:
+        self.saved.append(("save", description))
+        self.isModified = False
+        return True
+
+    def saveAs(self, name: str, dataFolder, description: str, tag: str) -> bool:
+        self.saved.append(("saveAs", name, dataFolder, description, tag))
+        if name:
+            self.name = name
+        self.isSaved = True
+        self.isModified = False
+        self.dataFile = type("FakeDataFile", (), {"parentFolder": dataFolder})()
+        return True
 
 
 class FakeDocuments:

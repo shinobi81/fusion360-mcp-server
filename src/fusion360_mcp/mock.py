@@ -592,7 +592,51 @@ def _undo(_p: dict) -> dict:
 
 
 def _execute_code(p: dict) -> dict:
-    return {"executed": True, "code": p.get("code", ""), "result": "None", "output": ""}
+    result = {
+        "executed": True,
+        "code": p.get("code", ""),
+        "result": "None",
+        "output": "",
+    }
+    if p.get("checkpoint"):
+        # Mock has no document to save; the shape is the handler's, and the reason is
+        # mock's own rather than a fabricated "saved".
+        result.update(
+            {
+                "saved_before": False,
+                "checkpoint_skipped": "mock has no document to save",
+            }
+        )
+    return result
+
+
+def _save_document(p: dict) -> dict:
+    name = p.get("name")
+    if not name:
+        # The refusal the handler raises for an untitled document: choosing a name is a
+        # write the caller did not ask for, and mock must not rehearse it.
+        return {
+            "ok": False,
+            "error_kind": "INVALID_INPUT",
+            "error_message": (
+                "This document has never been saved: pass name to save it into "
+                "Fusion's active data folder, or save it in Fusion first"
+            ),
+            "hints": [
+                "The tool will not choose a name or a folder for you.",
+                "Fusion's active data folder is the target; there is no local-file "
+                "save in this API.",
+            ],
+            "traceback": "MockError: unsaved document",
+            "mode": "mock",
+        }
+    return {
+        "saved": True,
+        "name": name,
+        "folder": "MockFolder",
+        "saved_as": True,
+        "is_modified": False,
+    }
 
 
 # ── design type safety ───────────────────────────────────────────────
@@ -1719,6 +1763,13 @@ def _cam_create_operation(p: dict) -> dict:
         "setup": p.get("setup_name", "Setup1"),
         "strategy": p.get("strategy", "contour2d"),
     }
+    if p.get("checkpoint"):
+        result.update(
+            {
+                "saved_before": False,
+                "checkpoint_skipped": "mock has no document to save",
+            }
+        )
     if p.get("face_indices"):
         strategy = p.get("strategy")
         result["geometry"] = {
@@ -1925,6 +1976,7 @@ _DISPATCH: dict[str, Any] = {
     "delete_all": _delete_all,
     "undo": _undo,
     "execute_code": _execute_code,
+    "save_document": _save_document,
     "sweep": _sweep,
     "loft": _loft,
     "create_polygon": _create_polygon,

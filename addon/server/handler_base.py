@@ -82,6 +82,7 @@ class HandlerBase:
     _COMMAND_NAMES: ClassVar[frozenset[str]] = frozenset(
         {
             "new_document",
+            "save_document",
             "get_scene_info",
             "get_object_info",
             "list_edges",
