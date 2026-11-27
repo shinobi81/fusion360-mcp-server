@@ -59,6 +59,8 @@ _RECV_BUF = 65536
 # response arrives before the client gives up.
 _TIMEOUT = 45.0
 _PING_TIMEOUT = 5.0
+#: `health` waits on the main thread, so its own bound is what a supervisor can afford.
+_HEALTH_TIMEOUT = 5.0
 _MAX_RETRIES = 2
 _RETRY_DELAY = 1.0  # seconds between reconnect attempts
 
@@ -106,6 +108,16 @@ class Fusion360Connection:
             with suppress(Exception):
                 self._sock.close()
             self._sock = None
+
+    def health(self, timeout: float = _HEALTH_TIMEOUT) -> dict:
+        """Ask Fusion's *main thread* whether it is alive - fast, or not at all.
+
+        ``ping`` is answered by the socket thread before the command is queued, so it
+        says nothing about the thread that runs work.  ``health`` is queued like every
+        other command, so its reply proves the main thread executed something; its bound
+        is deliberately short, because a wedged main thread is the case it exists for.
+        """
+        return self.send_command("health", {}, retries=0, timeout=timeout)
 
     def reconnect(self) -> bool:
         """Drop the existing socket and open a fresh one."""

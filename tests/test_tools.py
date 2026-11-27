@@ -69,7 +69,7 @@ def test_the_tool_count_is_pinned():
     ``tests/test_mock.py::TestMockDispatchCoverage``.  A list that restates the
     registry can only ever fail when the registry changes, which is not a bug.
     """
-    assert len(TOOLS) == 98
+    assert len(TOOLS) == 99
 
 
 def test_all_tools_have_annotations():
@@ -262,6 +262,7 @@ _TOOL_ARGUMENT_COUNTS = {
     "cam_list_operations": 1,
     "cam_get_operation_info": 2,
     "ping": 0,
+    "health": 0,
     "get_design_type": 0,
     "set_design_type": 1,
     "render_view": 4,

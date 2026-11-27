@@ -1,6 +1,6 @@
 # Tools
 
-All 98 tools this server exposes, grouped by what they do. Every tool returns the same
+All 99 tools this server exposes, grouped by what they do. Every tool returns the same
 envelope — `ok`, plus tool-specific fields, plus `deltas` for mutations — and failures come
 back as data (`error_kind`, `hints`, `traceback`) rather than exceptions.
 
@@ -35,6 +35,7 @@ camera for its capture and restores it before returning.
 | Tool               | Description                                                                                                 |
 | ------------------ | ----------------------------------------------------------------------------------------------------------- |
 | `ping`             | Health check (instant, no Fusion API)                                                                       |
+| `health`           | Health check on Fusion's main thread: `app_version`, `active_document`, `queue_depth`; times out when the thread is wedged, where `ping` still answers |
 | `get_scene_info`   | Design name, bodies, sketches, features, camera                                                             |
 | `get_object_info`  | Detailed info about a named body or sketch                                                                  |
 | `list_edges`      | A body's edges: index, endpoints, midpoint, length, curve type                      |

@@ -156,6 +156,7 @@ class TestToolAnnotations:
         from fusion360_mcp.tools import TOOLS
 
         read_only_names = {
+            "health",
             "get_scene_info",
             "get_object_info",
             "list_edges",

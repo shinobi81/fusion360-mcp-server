@@ -150,6 +150,10 @@ class EventBridge:
     def __init__(self, app: _EventSource, command_handler):
         self._app = app
         self._handler = command_handler
+        #: The `health` command reports how many commands are waiting; the queue lives
+        #: here, so the handler is handed the bridge.  A handler built without one (a
+        #: unit test) answers `queue_depth: None` instead of failing.
+        self._handler.bridge = self
         self._queue: queue.Queue = queue.Queue()
 
         # Register a custom event on the main thread.  The base class is resolved first:
@@ -283,7 +287,12 @@ class EventBridge:
         self._handler = importlib.import_module(
             ".command_handler", __package__
         ).CommandHandler()
+        self._handler.bridge = self
         log.info("CommandHandler reloaded")
+
+    def queue_depth(self) -> int:
+        """How many commands are waiting for the main thread, this one included."""
+        return self._queue.qsize()
 
     # ------------------------------------------------------------------
     # Teardown

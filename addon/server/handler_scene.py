@@ -711,6 +711,22 @@ class SceneCommands(_Contract):
     def ping(self):
         return {"pong": True}
 
+    def health(self):
+        """Answer from the main thread: the app's version, the open document, the queue.
+
+        Runs only through the work queue, so a reply proves the main thread executed
+        something - unlike ``ping``, which the socket thread answers without touching
+        Fusion.  No document is not a failure: "answering, and nothing is open" is a
+        different fact from "wedged".
+        """
+        bridge = getattr(self, "bridge", None)
+        doc = self.app.activeDocument
+        return {
+            "app_version": self.app.version,
+            "active_document": doc.name if doc is not None else None,
+            "queue_depth": bridge.queue_depth() if bridge is not None else None,
+        }
+
     def get_design_type(self):
         """Return current design type: 'parametric' or 'direct'."""
         design = self._design()

@@ -186,6 +186,17 @@ def _ping(_p: dict) -> dict:
     return {"status": "pong"}
 
 
+def _health(_p: dict) -> dict:
+    # Mock has no Fusion to ask and no queue to measure, so the version is the one this
+    # repo measures against and the depth is null rather than a fabricated zero - the
+    # reply still says what it could not know.
+    return {
+        "app_version": "2706.1.17",
+        "active_document": "MockDesign",
+        "queue_depth": None,
+    }
+
+
 def _get_scene_info(_p: dict) -> dict:
     return {
         "design_name": "MockDesign",
@@ -1890,6 +1901,7 @@ def _new_document(p: dict) -> dict:
 
 _DISPATCH: dict[str, Any] = {
     "ping": _ping,
+    "health": _health,
     "new_document": _new_document,
     "get_scene_info": _get_scene_info,
     "get_object_info": _get_object_info,

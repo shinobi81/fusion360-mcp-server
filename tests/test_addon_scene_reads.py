@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import inspect
 import math
+from types import SimpleNamespace
 
 import pytest
 
@@ -519,3 +520,33 @@ def test_the_limit_contract_is_one_rule_on_both_sides(bound_handler, limit, expe
     # used to leave the suite green.
     assert len(handler.list_faces(body_name="Plate", limit=limit)["faces"]) == expected
     assert len(handler.list_edges(body_name="Plate", limit=limit)["edges"]) == expected
+
+
+def test_health_reports_the_version_the_document_and_the_queue(bound_handler):
+    """The read the command exists for: three facts, read on the main thread."""
+    app = SimpleNamespace(
+        version="2706.1.17", activeDocument=SimpleNamespace(name="Plate")
+    )
+    handler = bound_handler(FakeDesign(bodies=[FakeBody("Body1")]), app=app)
+    handler.bridge = SimpleNamespace(queue_depth=lambda: 3)
+
+    reply = handler.health()
+
+    assert reply == {
+        "app_version": "2706.1.17",
+        "active_document": "Plate",
+        "queue_depth": 3,
+    }
+
+
+def test_health_with_no_document_and_no_bridge_answers_with_nulls(bound_handler):
+    """No document is a successful answer, and a handler without a bridge must not
+    pretend the queue is empty."""
+    app = SimpleNamespace(version="2706.1.17", activeDocument=None)
+    handler = bound_handler(FakeDesign(bodies=[FakeBody("Body1")]), app=app)
+
+    reply = handler.health()
+
+    assert reply["active_document"] is None
+    assert reply["queue_depth"] is None
+    assert reply["app_version"] == "2706.1.17"
