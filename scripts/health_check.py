@@ -19,8 +19,8 @@ Exit codes are the contract, because a supervisor scripts against them:
        exits 2 on a usage error, so read the message, not only the code
     3  the add-in is running but has no `health` command: reload or restart it
 
-In watch mode (`--interval` with `-n`) the exit code is the *first* failure, not the
-last poll's: a run that saw a wedge did see it.
+In a multi-poll run (`-n` above 1) the exit code is the *first* failure, not the last
+poll's: a run that saw a wedge did see it.
 
 What this cannot do, and does not pretend to:
 
@@ -61,10 +61,13 @@ def poll(connection: Fusion360Connection, timeout: float) -> tuple[int, dict]:
         # thread busy enough to look like one from here.
         return 1, {"answered": False, "error_kind": "NO_ANSWER", "error": str(exc)}
     if reply.get("ok") is not True:
-        # The add-in answered with a *failure* inside its envelope; `send_command` only
-        # raises for transport-level errors, so this is the only place that sees it.
+        # The add-in answered with a *failure* inside its envelope; `send_command`
+        # only raises for transport-level errors, so this is the only place that sees
+        # it.  The thread did answer, which is why `answered` stays true: a supervisor
+        # must be able to tell this from a wedge.
         return 1, {
-            "answered": False,
+            "answered": True,
+            "ok": False,
             "error_kind": reply.get("error_kind"),
             "error": reply.get("error_message"),
         }
@@ -126,11 +129,17 @@ def main(argv: list[str] | None = None) -> int:
             code = code or poll_code  # the first failure is the answer to "is it alive"
             if args.json:
                 print(json.dumps(report))
-            elif report["answered"]:
+            elif report["answered"] and report.get("ok", True):
                 print(
                     f"ok  version={report['app_version']}  "
                     f"document={report['active_document']}  "
                     f"queue_depth={report['queue_depth']}"
+                )
+            elif report["answered"]:
+                # The main thread answered and the command failed - not a wedge.
+                print(
+                    f"FAILED ({report.get('error_kind')}): {report.get('error')}",
+                    file=sys.stderr,
                 )
             else:
                 print(

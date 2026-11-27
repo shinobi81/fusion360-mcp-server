@@ -150,11 +150,11 @@ class EventBridge:
     def __init__(self, app: _EventSource, command_handler):
         self._app = app
         self._handler = command_handler
-        #: The `health` command reports how many commands are waiting; the queue lives
-        #: here, so the handler is handed the bridge.  A handler built without one (a
-        #: unit test) answers `queue_depth: None` instead of failing.
-        self._handler.bridge = self
         self._queue: queue.Queue = queue.Queue()
+        #: The `health` command reports how many commands are waiting; the queue lives
+        #: here, so the handler is handed the bridge - after the queue it will read.  A
+        #: handler built without one (a unit test) answers `queue_depth: None`.
+        self._handler.bridge = self
 
         # Register a custom event on the main thread.  The base class is resolved first:
         # a failure here would otherwise leave an event registered with no handler, and

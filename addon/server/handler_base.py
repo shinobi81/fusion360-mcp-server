@@ -43,8 +43,8 @@ class HandlerBase:
         self.ui = self.app.userInterface
         #: Set by ``EventBridge``; ``health`` reports the queue's depth from it.  None
         #: when a handler is built without a bridge (a unit test), which the command
-        #: answers as an unknown depth rather than an error.  Annotated because an
-        #: untyped ``None`` lets a checker infer the type and skip the call sites.
+        #: answers as an unknown depth rather than an error.  Annotated for a reader:
+        #: no configured gate analyses ``addon/``, so nothing else would.
         self.bridge: Any = None
         self._commands: dict[str, Callable[..., Any]] = {
             name: getattr(self, name) for name in self._COMMAND_NAMES

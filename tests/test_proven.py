@@ -152,7 +152,7 @@ def test_the_live_subset_is_read_only_and_names_real_parameters():
     # mutating entry fails collection; the counts are what no test could see until here,
     # and three docs quote them.
     assert len(_READ_ONLY) == 19, "_READ_ONLY grew or shrank: update PROVEN.md/TOOLS.md"
-    assert len(live) == 12, "the 'twelve of the eighteen' in the docs is stale"
+    assert len(live) == 12, "the 'twelve of the nineteen' in the docs is stale"
     for tool, params in CHECKER.LIVE_CALLS.items():
         declared = (
             (get_tool_by_name(tool) or {}).get("inputSchema", {}).get("properties", {})

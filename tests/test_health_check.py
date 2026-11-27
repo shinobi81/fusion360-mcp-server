@@ -10,6 +10,7 @@ do.
 from __future__ import annotations
 
 import importlib.util
+import json
 import pathlib
 
 import pytest
@@ -151,3 +152,52 @@ def test_watch_mode_reports_the_first_failure_not_the_last(monkeypatch):
     monkeypatch.setattr(CHECK, "Fusion360Connection", lambda **_: _Flaky())
 
     assert CHECK.main(["--interval", "0", "-n", "2"]) == 1
+
+
+def test_the_timeout_flag_reaches_the_client(monkeypatch, connection_factory):
+    """`--timeout` is what bounds the wedge case; hard-coding 5.0 must fail this."""
+    seen: list[float] = []
+
+    class _Recording(FakeConnection):
+        def health(self, timeout: float):
+            seen.append(timeout)
+            return GOOD
+
+    monkeypatch.setattr(CHECK, "Fusion360Connection", lambda **_: _Recording())
+
+    assert CHECK.main(["--timeout", "3"]) == 0
+    assert seen == [3.0], seen
+
+
+def test_json_mode_prints_one_object_per_poll(connection_factory, capsys):
+    connection_factory()
+
+    assert CHECK.main(["--json"]) == 0
+    report = json.loads(capsys.readouterr().out.strip())
+    assert report == {
+        "answered": True,
+        "app_version": "2706.1.17",
+        "active_document": "Plate",
+        "queue_depth": 0,
+    }
+
+
+def test_a_refusal_that_is_not_a_missing_command_is_exit_one(connection_factory):
+    """Only UNKNOWN_COMMAND means "reload it"; TIME_LIMIT-shaped refusals are wedges."""
+    connection_factory(raises=FusionError("too slow", "TIMEOUT"))
+
+    assert CHECK.main([]) == 1
+
+
+def test_a_failed_command_is_reported_as_an_answer_not_a_wedge(
+    connection_factory, capsys
+):
+    """`answered` stays true when the add-in answered with a failure."""
+    connection_factory(
+        reply={"ok": False, "error_kind": "INTERNAL_ERROR", "error_message": "boom"}
+    )
+
+    assert CHECK.main(["--json"]) == 1
+    report = json.loads(capsys.readouterr().out.strip())
+    assert report["answered"] is True
+    assert report["ok"] is False

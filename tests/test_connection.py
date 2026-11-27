@@ -130,6 +130,21 @@ class TestFusion360Connection:
         assert conn.connect() is False
         assert conn.connected is False
 
+    def test_health_forwards_its_bound_and_no_retries(self, monkeypatch):
+        """`health` exists for a wedged main thread, so it must not inherit the generic
+        45 s bound or its two retries - both are longer than the answer is worth."""
+        conn = Fusion360Connection(host="127.0.0.1", port=9876)
+        seen: dict = {}
+
+        def spy(command_type, params=None, retries=2, timeout=45.0):
+            seen.update(command=command_type, retries=retries, timeout=timeout)
+            return {"ok": True}
+
+        monkeypatch.setattr(conn, "send_command", spy)
+
+        assert conn.health(timeout=2.5) == {"ok": True}
+        assert seen == {"command": "health", "retries": 0, "timeout": 2.5}
+
     def test_send_without_connection_raises(self):
         conn = Fusion360Connection(host="127.0.0.1", port=1)
         with pytest.raises(ConnectionError):
