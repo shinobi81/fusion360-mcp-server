@@ -25,10 +25,10 @@ checked against **Fusion 2706.1.17**'s API — whether each has been *called* is
 Which of these has been *called* against a real Fusion — and what it answered — is
 `docs/PROVEN.md`, one row per tool. A row that says `unproven` is where the next defect
 nobody has looked for is. `uv run python scripts/check_proven.py --live` re-probes the
-read-only tools it can call from the scene alone — twelve of the eighteen — and reports
-a row whose reply contradicts its state, in either direction. Two of those twelve touch
-the session: `cam_list_setups` activates the Manufacture workspace, `render_view` moves
-the camera.
+read-only tools it chooses to send — twelve of the eighteen — and reports a row whose
+reply contradicts its state, in either direction. Two of those twelve touch the session:
+`cam_list_setups` activates the Manufacture workspace, and `render_view` repositions the
+camera for its capture and restores it before returning.
 
 ## Scene & Query
 

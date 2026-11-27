@@ -58,6 +58,7 @@ def test_a_missing_row_is_reported(text):
     rows = parse_table(text)
     dropped = next(row for row in rows if row.proven)
     trimmed = text.replace(f"| `{dropped.tool}` | {dropped.evidence} |\n", "")
+    assert trimmed != text, "fixture must actually remove the row"
 
     problems = check(trimmed)
 
@@ -225,11 +226,44 @@ def test_a_bridge_failure_becomes_a_reply_not_a_traceback():
         _Raising(FusionError("x", error_kind="TIMEOUT")), "ping", {}
     )
     lost = CHECKER._send(_Raising(ConnectionError("lost")), "ping", {})
+    truncated = CHECKER._send(_Raising(ValueError("Expecting value")), "ping", {})
 
     assert refused == {"ok": False, "error_kind": "TIMEOUT", "error_message": "x"}
     assert lost["ok"] is False
     assert lost["error_kind"] == "CONNECTION_LOST"
     assert "lost" in lost["error_message"]
+    assert truncated["ok"] is False and truncated["error_kind"] == "CONNECTION_LOST"
+
+
+def test_a_row_indented_under_the_table_is_still_a_row():
+    """A row a formatter indented is a row: the reader strips the line, not the file."""
+    indented = "  | `ping` | unproven — nothing measured |\n"
+
+    assert [row.tool for row in parse_table(indented)] == ["ping"]
+    assert CHECKER.malformed_lines(indented) == []
+
+
+def test_an_aligned_separator_is_not_a_row():
+    """``| :--- | :--- |`` is what a formatter writes; it is not a tool named ':---'."""
+    aligned = "| Tool | Evidence |\n| :--- | :--- |\n"
+
+    assert parse_table(aligned) == []
+    assert CHECKER.malformed_lines(aligned) == []
+
+
+def test_a_live_run_with_no_add_in_still_prints_the_table_s_problems(
+    monkeypatch, tmp_path, text, capsys
+):
+    proven = next(row for row in parse_table(text) if row.proven)
+    broken = tmp_path / "PROVEN.md"
+    broken.write_text(
+        text.replace(proven.evidence, "unproven — not yet"), encoding="utf-8"
+    )
+    monkeypatch.setattr(CHECKER, "PROVEN", broken)
+    monkeypatch.setattr(CHECKER, "probe", lambda host, port: None)
+
+    assert CHECKER.main(["--live"]) == 1
+    assert "the table was checked alone" in capsys.readouterr().err
 
 
 def test_main_exits_non_zero_for_a_broken_table_and_zero_for_a_good_one(

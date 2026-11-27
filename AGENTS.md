@@ -73,9 +73,9 @@ and the atheris targets: `docs/TESTING.md`.
    guarded, the description is not
 7. A behavioural mock test (`tests/test_mock.py`); the tool count and each tool's argument
    count are pinned in `tests/test_tools.py`
-8. A row in `docs/PROVEN.md` — `unproven — <why>` if nobody has called it — because
-   `tests/test_proven.py` fails a tool with no row, and the answer it gives is the record
-   the next session starts from
+8. A row in `docs/PROVEN.md` — `unproven — <why>` wherever no call has succeeded: nobody
+   called it, or it was only ever refused — because `tests/test_proven.py` fails a tool
+   with no row, and the answer it gives is the record the next session starts from
 
 The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
 

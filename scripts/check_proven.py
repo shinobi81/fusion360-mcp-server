@@ -131,18 +131,34 @@ def _table_lines(text: str) -> list[tuple[int, str]]:
     ]
 
 
+def _cells(line: str) -> list[str]:
+    """The cells of a ``|``-line, stripped."""
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def _is_header_or_separator(cells: list[str]) -> bool:
+    """The two ``|``-lines that are not rows, judged the same way by both readers.
+
+    A separator is dashes or dashes with alignment colons (``| :--- | ---: |`` is what a
+    formatter writes), and an empty first cell is a stray ``| |`` line rather than a
+    row.
+    """
+    first = cells[0]
+    return first in ("Tool", "---") or not first or set(first) <= set("-:")
+
+
 def parse_table(text: str) -> list[Row]:
     """The rows of ``docs/PROVEN.md``, in file order.
 
-    Only the two-column table is read: a row is a line that starts with ``|`` and is not
-    the header or the separator.  A ``|``-line that is neither is reported by
+    Only the two-column table is read: a row is a ``|``-line - indented or not - that is
+    not the header or the separator.  A ``|``-line that is neither is reported by
     ``malformed_lines`` rather than dropped here - a row nobody can parse is exactly
     the row a reader would trust.
     """
     rows: list[Row] = []
     for _lineno, line in _table_lines(text):
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if len(cells) != 2 or cells[0] in ("Tool", "---") or set(cells[0]) == {"-"}:
+        cells = _cells(line)
+        if _is_header_or_separator(cells) or len(cells) != 2:
             continue
         rows.append(Row(cells[0].strip("`"), cells[1]))
     return rows
@@ -152,8 +168,8 @@ def malformed_lines(text: str) -> list[str]:
     """``|``-lines that are neither a header, a separator, nor a two-cell row."""
     problems: list[str] = []
     for lineno, line in _table_lines(text):
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if cells[0] in ("Tool", "---") or set(cells[0]) <= set("-:"):
+        cells = _cells(line)
+        if _is_header_or_separator(cells):
             continue
         if len(cells) != 2:
             problems.append(f"line {lineno}: a row needs exactly two cells: {line}")
@@ -182,10 +198,11 @@ def check(text: str, rows: list[Row] | None = None) -> list[str]:
 def _send(connection, tool: str, params: dict) -> dict:
     """One reply, with a bridge failure turned into a reply rather than a traceback.
 
-    Two exceptions, because the client raises both: ``FusionError`` for a structured
-    refusal, and ``ConnectionError`` when a *read-only* command's retries are exhausted
-    - a wedged main thread, which is exactly the case where the table's own problems
-    still deserve printing.
+    Three exceptions, because the client raises all three: ``FusionError`` for a
+    structured refusal, ``ConnectionError`` when a *read-only* command's retries are
+    exhausted - a wedged main thread, which is exactly the case where the table's own
+    problems still deserve printing - and ``ValueError`` when the reply line is not
+    JSON.
     """
     from fusion360_mcp.connection import FusionError
 
