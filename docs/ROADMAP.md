@@ -554,6 +554,16 @@ and asks the running Fusion whether it exists - 190 references, none missing on
     codes are documented in its docstring and in `docs/TESTING.md`. It detects and
     reports; it does not restart anything.
 
+15. **`save_document`, and a checkpoint before risky mutations** - **closed (this PR).**
+    The brief asked for `file_path`; measured on 2706.1.17, this API has no local-file
+    save. `Document.save(description)` takes a required description, `Document.saveAs`
+    takes a *DataFolder* and a name, and a document made through the API starts at
+    `dataFile: None, isSaved: False, isModified: True`. So the tool saves in place, saves
+    an untitled document by name into `app.data.activeFolder`, and refuses an untitled one
+    with no name rather than choosing a name or a folder for the caller. `checkpoint=True`
+    on `execute_code` and `cam_create_operation` saves first and reports `saved_before`,
+    and on an untitled document reports why it could not instead of refusing - 100 tools.
+
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.
 `setByThreePoints`, `setByTwoPoints` and `ScaleFeatures.createInput` all accept a
