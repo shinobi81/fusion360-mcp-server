@@ -466,8 +466,9 @@ class CamCommands(_Contract):
 
         The table is the measurement, so it is read first; the old discovery - the one
         CAD-contour value that is not the stock boundary - stays as the fallback for a
-        build that spells the parameter differently.  ``FaceContourSelection`` was
-        measured to be accepted by all six.
+        build that spells one of the five 2D/3D parameters differently (it skips the
+        stock boundary by name, so it cannot serve ``face``).  ``FaceContourSelection``
+        was measured to be accepted by all six.
 
         Reaching the discovery failure means the measurement moved under us, and the
         operation is removed again rather than left half-configured; the strategy is

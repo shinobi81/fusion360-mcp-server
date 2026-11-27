@@ -2431,9 +2431,10 @@ TOOLS: list[dict] = [
             "type": "string",
             "description": (
                 "Body whose faces carry the operation's geometry; required with "
-                "face_indices. Only the six strategies in CAM_GEOMETRY_PARAMETERS take "
-                "a selection, and face is one of them - through its stock boundary, "
-                "which aims the operation."
+                "face_indices. Only the "
+                f"{len(CAM_GEOMETRY_PARAMETERS)} strategies in CAM_GEOMETRY_PARAMETERS "
+                "take a selection, and face is one of them - through its stock "
+                "boundary, which aims the operation."
             ),
         },
         face_indices={

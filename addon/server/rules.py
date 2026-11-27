@@ -88,7 +88,8 @@ CAM_STRATEGIES = (
 #: at a time on 2706.1.17.  ``face`` has no selection of its own, so its entry is the
 #: stock boundary, which accepts a ``FaceContourSelection`` - see the note on its entry.
 #: The handler reads this table first and falls back to discovery only when a build
-#: spells the name differently; mock mode answers from it.
+#: spells one of the five 2D/3D parameters differently - the discovery skips the stock
+#: boundary by name, so it cannot serve ``face``.  Mock mode answers from this table.
 CAM_GEOMETRY_PARAMETERS = {
     "contour2d": "contours",
     "pocket2d": "pockets",
@@ -105,6 +106,7 @@ CAM_GEOMETRY_PARAMETERS = {
 
 #: The strategies ``face_indices`` can be given to: the map's keys, in one place.
 CAM_GEOMETRY_STRATEGIES = tuple(CAM_GEOMETRY_PARAMETERS)
+
 
 def cam_strategy_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal an unknown CAM strategy earns, or None when it is usable.

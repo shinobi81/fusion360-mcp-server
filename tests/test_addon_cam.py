@@ -831,6 +831,9 @@ def test_an_add_in_defect_in_the_seam_is_an_internal_error(handler_module):
 
     assert raised.value.error_kind == "INTERNAL_ERROR"
     assert "does not have" in str(raised.value)
+    assert "Strategy 'contour2d'" in str(raised.value), (
+        "the strategy is read before the operation is deleted"
+    )
     assert "The operation was removed" in str(raised.value)
     assert raised.value.hints == (
         "This is an add-in defect, not an input problem.",
@@ -986,6 +989,67 @@ def test_a_face_operation_is_aimed_through_its_stock_contours(handler_module):
         "parameter": "stockContours",
         "face_indices": [1],
     }
+
+
+def test_a_table_name_holding_a_plain_parameter_falls_through_to_discovery(
+    handler_module,
+):
+    """The mapped name is only used when its value can take a selection.
+
+    A build that exposes ``contours`` as a plain parameter must fall through to the
+    discovery, not raise out of ``getCurveSelections`` and be reported as an add-in
+    defect with the operation removed.
+    """
+    applied = {}
+
+    class _Selections:
+        def __init__(self):
+            self.cleared = 0
+            self.selectors = []
+
+        def clear(self):
+            self.cleared += 1
+
+        def createNewFaceContourSelection(self):
+            selection = SimpleNamespace(inputGeometry=None)
+            self.selectors.append(selection)
+            return selection
+
+    class _Value:
+        def __init__(self):
+            self.selections = _Selections()
+
+        def getCurveSelections(self):
+            return self.selections
+
+        def applyCurveSelections(self, selections):
+            applied["selections"] = selections
+
+    discovery = _Value()
+    operation = SimpleNamespace(
+        name=None,
+        strategy="contour2d",
+        parameters=[
+            SimpleNamespace(name="stockContours", value=_Value()),
+            # The table's name, holding a value with no selection API.
+            SimpleNamespace(name="contours", value=object()),
+            SimpleNamespace(name="contours2d", value=discovery),
+        ],
+        deleted=0,
+    )
+    operation.deleteMe = lambda: None
+    handler = _creation_handler(handler_module, operation, faces=2)
+
+    result = handler.cam_create_operation(
+        setup_name="Setup1",
+        strategy="contour2d",
+        body_name="Body1",
+        face_indices=[0],
+    )
+
+    assert applied["selections"] is discovery.selections
+    assert result["geometry"]["parameter"] == "contours2d"
+    assert operation.deleted == 0, "the fallback found a parameter; nothing to remove"
 
 
 def test_a_build_that_spells_the_parameter_differently_falls_back(handler_module):
