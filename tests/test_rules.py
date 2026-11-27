@@ -264,6 +264,23 @@ PARAMETER_REFUSALS = [
     ),
     (
         "create_construction_plane",
+        # An int too large for a float: `float()` raises, and `math.isfinite` would
+        # have let that escape as an untyped error.
+        {"method": "angle", "plane": "xy", "angle": 10**400},
+        "INVALID_INPUT",
+        "angle is outside the range Fusion can store",
+        ("Send a value in Fusion's numeric range.",),
+    ),
+    (
+        "create_construction_axis",
+        # `intersection` resolves two plane names, and mock used to rehearse success.
+        {"method": "intersection", "plane_one": "zz", "plane_two": "yz"},
+        "INVALID_INPUT",
+        "Unknown plane 'zz' — use xy, yz, or xz",
+        ("Pass xy, yz or xz; the plane is lowercased, so XZ works.",),
+    ),
+    (
+        "create_construction_plane",
         # The tangent branches name a body, so an empty one is the shared refusal -
         # the same sentence every other body-naming tool answers.
         {"method": "tangent", "face_index": 0, "plane": "xy"},
@@ -442,6 +459,8 @@ PARAMETER_REFUSALS = [
         "construction_plane_angle",
         "construction_plane_angle_finite",
         "construction_plane_angle_type",
+        "construction_plane_angle_range",
+        "intersection_plane",
         "tangent_plane_body_name",
         "tangent_plane_face",
         "perpendicular_axis",

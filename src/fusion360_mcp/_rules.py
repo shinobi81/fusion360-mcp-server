@@ -716,15 +716,16 @@ def construction_plane_angle_refusal(
 ) -> _hints.Refusal | None:
     """The refusal an unusable ``angle`` earns, or None.
 
-    Two faults, one rule.  The ``angle`` method requires a number: the handler used to
+    Four shapes of fault, one rule.  The ``angle`` method requires a number: the handler
     build ``ValueInput.createByString(f"{angle} deg")`` whatever it was given, so a
     missing angle reached Fusion and came back as ``3 : invalid expression`` - a
     refusal nobody could act on.  Any method that is given an angle at all gets it
     judged, because the ``tangent`` branch interpolates that value too.
 
-    A numeric *string* is refused as well.  It is not a units question: the value is
-    interpolated, so ``"45"`` would have reached Fusion as ``"45 deg deg"`` - a caller
-    who meant a number, and one the parameters can name.
+    A numeric *string* is refused as well, and it is not a units question: the value is
+    interpolated verbatim, so ``"45"`` would have reached Fusion as ``"45 deg"`` and
+    ``"45 deg"`` as ``"45 deg deg"``.  The schema types ``angle`` as a number, so a
+    string is a caller who meant one.
     """
     angle = params.get("angle")
     if angle is None:
@@ -744,9 +745,9 @@ def construction_plane_angle_refusal(
     try:
         magnitude = float(angle)
     except OverflowError:
-        # An int too large for a float: the same guard ``cam_tool_refusal`` carries,
-        # because the builder would otherwise reach a caller as ``UNKNOWN``.  The value
-        # is not echoed - a 400-digit integer is not advice.
+        # An int too large for a float: ``float()`` raises here, and it would otherwise
+        # escape ``math.isfinite`` as an untyped error.  The value is not echoed - a
+        # 400-digit integer is not advice.
         return _hints.Refusal(
             "INVALID_INPUT",
             "angle is outside the range Fusion can store",
