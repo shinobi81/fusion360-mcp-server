@@ -5,6 +5,7 @@ import re
 
 import pytest
 
+from fusion360_mcp import connection, server
 from fusion360_mcp.server import _send
 
 
@@ -38,6 +39,31 @@ def _minimal_args(tool: dict) -> dict:
 
 class TestSendRouting:
     """_send must route to mock when mode='mock' and to TCP otherwise."""
+
+    def test_the_health_command_gets_its_own_short_bound(self, monkeypatch):
+        """The generic 45 s with two retries is longer than a supervisor waits for the
+        thread that is supposed to answer, so `_send` routes `health` through the
+        client's own method."""
+        seen: dict = {}
+
+        class _Stub:
+            def __init__(self):
+                self.reply = {"ok": True, "app_version": "x", "queue_depth": None}
+
+            def health(self, timeout=5.0):
+                seen["health"] = timeout
+                return self.reply
+
+            def send_command(self, *args, **kwargs):
+                raise AssertionError("health must not go through send_command")
+
+        stub = _Stub()
+        monkeypatch.setattr(server, "get_connection", lambda **_: stub)
+
+        assert server._send("socket", "health", {}) is stub.reply
+        assert seen["health"] == connection._HEALTH_TIMEOUT, (
+            "health must use its own bound, not the generic 45 s"
+        )
 
     def test_mock_mode_returns_mock_result(self):
         result = _send("mock", "ping")
@@ -156,6 +182,7 @@ class TestToolAnnotations:
         from fusion360_mcp.tools import TOOLS
 
         read_only_names = {
+            "health",
             "get_scene_info",
             "get_object_info",
             "list_edges",

@@ -163,7 +163,7 @@ because a client may already branch on them.
 
 `tests/test_addon_refusals.py` makes it a ratchet rather than a one-off audit. It
 fails on a raise that would reach a caller `UNKNOWN`, on a baseline row that no longer
-matches a site, and on any change to the 35 unjudgeable rows - a computed message, a
+matches a site, and on any change to the 36 unjudgeable rows - a computed message, a
 `Protocol` body, or a kind that comes from a `rules.py` validator call, each with its
 reason written down. That count rose from 7 by design: the validators are what let mock
 mode answer the same sentence, and a kind returned from a function is not readable in the
@@ -482,8 +482,8 @@ and asks the running Fusion whether it exists - 190 references, none missing on
 11. **Which of the tools has a real Fusion ever answered** - **started (this PR).**
     `docs/PROVEN.md` is one row per tool: a `proven` row cites the date, the
     `app.version` and the PR that added it, whose body carries the envelope; an
-    `unproven` row says why. 30 of 98 were proven when #158 seeded the table, 34 after
-    #159; the rest name the reason, so the gap is a checklist rather than a guess. `scripts/check_proven.py`
+    `unproven` row says why. 30 of 98 were proven when #158 seeded it, 36 of 99 now;
+    the rest name the reason, so the gap is a checklist rather than a guess. `scripts/check_proven.py`
     validates the table against `tools.py` both ways, and `--live` re-probes the
     read-only subset and reports a row its reply contradicts. The live sweep that
     seeded the table also found two tool-surface defects, both queued in the brief:
@@ -535,6 +535,24 @@ and asks the running Fusion whether it exists - 190 references, none missing on
     A divergence that is *not* in that table is a defect - the axis rehearsal this item
     removed was one, and it stayed invisible because nothing compared the two sides for
     it.
+
+14. **A health check that runs on the main thread** - **closed (this PR).** `ping` is
+    answered by the socket thread before a command is queued, so a Fusion blocked on a
+    modal dialog still answered `pong`; every "is it alive?" signal an unattended agent
+    had was answered by the one thread that does not execute work. `health` is a normal
+    queued command, and its reply carries `app_version`, `active_document` and
+    `queue_depth`. Measured on 2706.1.17 with the main thread blocked by a 12 s
+    `execute_code`: `ping` answered in 0.0 s, `health` failed at the 3 s `--timeout`
+    it was given, and it
+    answered in 0.0 s once the block lifted. `queue_depth` is unit-proven rather than
+    live: the running `EventBridge` is the class Fusion loaded at start-up and the reload
+    does not cover that module, so the live reply says null until the add-in is
+    restarted - the table records that rather than rounding it to a pass.
+
+    Client side: `Fusion360Connection.health(timeout=5.0)` with no retries, because a
+    wedged thread is the case it exists for, and `scripts/health_check.py`, whose exit
+    codes are documented in its docstring and in `docs/TESTING.md`. It detects and
+    reports; it does not restart anything.
 
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.

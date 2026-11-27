@@ -34,6 +34,18 @@ class TestMockPing:
         assert result["mode"] == "mock"
 
 
+class TestMockHealth:
+    def test_health_answers_the_handler_s_keys(self):
+        """The add-in answers `app_version`, `active_document` and `queue_depth`; mock
+        has no queue to measure, so it says null rather than inventing a zero."""
+        result = mock_command("health")
+
+        assert result["app_version"] == "2706.1.17"
+        assert result["active_document"] == "MockDesign"
+        assert result["queue_depth"] is None
+        assert result["mode"] == "mock"
+
+
 class TestMockSceneQuery:
     def test_get_scene_info(self):
         result = mock_command("get_scene_info")

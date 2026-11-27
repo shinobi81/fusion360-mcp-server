@@ -135,6 +135,10 @@ def _send(
     if mode == "mock":
         return mock_command(command_type, params)
     conn = get_connection(host=host, port=port)
+    if command_type == "health":
+        # Its own bound and no retries: the generic 45 s x 3 is longer than a supervisor
+        # will wait for the thread that is supposed to answer.
+        return conn.health()
     return conn.send_command(command_type, params)
 
 
@@ -368,7 +372,10 @@ def _register_resources(app: Server, mode: str, host: str, port: int) -> None:
             types.Resource(
                 uri=AnyUrl("fusion360://status"),
                 name="Connection Status",
-                description="Check whether Fusion 360 is reachable",
+                description=(
+                    "Check whether Fusion 360's socket is reachable (answered by the "
+                    "add-in's socket thread). Use the health tool for the main thread."
+                ),
                 mimeType="application/json",
             ),
             types.Resource(

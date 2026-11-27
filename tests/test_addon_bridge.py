@@ -66,12 +66,43 @@ class StubBridge:
         self.drained += 1
 
 
+def test_health_is_queued_where_ping_is_answered_on_the_spot():
+    """The whole point of ``health``: it reaches the main thread, or it does not answer.
+
+    ``ping`` returns from the socket thread before the queue is touched, which is why a
+    wedged Fusion still says pong.  A queued ``health`` that nothing drains must *time
+    out* - and the item must still be in the queue afterwards, which is what proves the
+    command was not given the same fast path.
+    """
+    app = FakeApplication()
+    handler = Handler()
+    bridge = event_bridge.EventBridge(app, handler)
+    try:
+        assert bridge.submit({"type": "ping"})["result"] == {
+            "ok": True,
+            "status": "pong",
+        }
+        assert bridge.queue_depth() == 0
+
+        reply = bridge.submit({"type": "health"}, timeout=0.05)
+
+        assert reply["status"] == "error", reply
+        assert reply["error_kind"] == "TIMEOUT", reply
+        assert bridge.queue_depth() == 1, "health must be queued, not answered inline"
+        assert handler.commands == [], "nothing drained the queue"
+    finally:
+        bridge.stop()
+
+
 def test_the_event_handler_is_built_for_the_bridge_and_drains_its_queue():
     app = FakeApplication()
     handler = Handler()
     bridge = event_bridge.EventBridge(app, handler)
     try:
         (event_handler,) = app.events[0].handlers
+        assert bridge._handler.bridge is bridge, (
+            "the health command reads the queue through the handler's bridge"
+        )
         bridge._queue.put(event_bridge.WorkItem({"type": "queued"}))
 
         event_handler.notify(None)

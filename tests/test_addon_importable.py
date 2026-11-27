@@ -243,6 +243,9 @@ def test_a_reload_after_the_adapter_change_still_swaps_the_handler():
 
             assert bridge._handler is not before
             assert bridge._handler.app is app, "the reloaded handler shares the session"
+            assert bridge._handler.bridge is bridge, (
+                "a reloaded handler must be handed the bridge, or health answers null"
+            )
         finally:
             bridge.stop()
 

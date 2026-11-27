@@ -1,6 +1,6 @@
 # Tools
 
-All 98 tools this server exposes, grouped by what they do. Every tool returns the same
+All 99 tools this server exposes, grouped by what they do. Every tool returns the same
 envelope — `ok`, plus tool-specific fields, plus `deltas` for mutations — and failures come
 back as data (`error_kind`, `hints`, `traceback`) rather than exceptions.
 
@@ -25,7 +25,7 @@ checked against **Fusion 2706.1.17**'s API — whether each has been *called* is
 Which of these has been *called* against a real Fusion — and what it answered — is
 `docs/PROVEN.md`, one row per tool. A row that says `unproven` is where the next defect
 nobody has looked for is. `uv run python scripts/check_proven.py --live` re-probes the
-read-only tools it chooses to send — twelve of the eighteen — and reports a row whose
+read-only tools it chooses to send — twelve of the nineteen — and reports a row whose
 reply contradicts its state, in either direction. Two of those twelve touch the session:
 `cam_list_setups` activates the Manufacture workspace, and `render_view` repositions the
 camera for its capture and restores it before returning.
@@ -35,6 +35,7 @@ camera for its capture and restores it before returning.
 | Tool               | Description                                                                                                 |
 | ------------------ | ----------------------------------------------------------------------------------------------------------- |
 | `ping`             | Health check (instant, no Fusion API)                                                                       |
+| `health`           | Health check on Fusion's main thread: `app_version`, `active_document`, `queue_depth`; times out when the thread is wedged, where `ping` still answers |
 | `get_scene_info`   | Design name, bodies, sketches, features, camera                                                             |
 | `get_object_info`  | Detailed info about a named body or sketch                                                                  |
 | `list_edges`      | A body's edges: index, endpoints, midpoint, length, curve type                      |

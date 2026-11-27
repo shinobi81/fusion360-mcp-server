@@ -2,7 +2,7 @@
 
 ## Overview
 
-An MCP server (98 tools) connecting AI coding agents to Autodesk Fusion 360 for CAD
+An MCP server (99 tools) connecting AI coding agents to Autodesk Fusion 360 for CAD
 automation. Two pieces:
 
 1. **MCP server** (this repo) — speaks MCP over stdio, forwards commands over TCP
@@ -77,7 +77,10 @@ and the atheris targets: `docs/TESTING.md`.
    called it, or it was only ever refused — because `tests/test_proven.py` fails a tool
    with no row, and the answer it gives is the record the next session starts from
 
-The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
+The MCP server forwards tool calls 1:1 — there is no mapping layer to touch — with one
+documented exception: a tool with its own client-side bound (`health`) needs a method on
+`Fusion360Connection` and a branch in `server._send`, or an MCP caller gets the generic
+45 s and its retries.
 
 ## Conventions
 
@@ -152,7 +155,7 @@ red `threads` check is never "fine, merge anyway", and failing to _query_ thread
 failure too: an unchecked merge is not a clean merge. Bot findings are review threads
 too — fix each one, or record in the thread why it does not apply.
 
-## Available tools (98)
+## Available tools (99)
 
 Grouped by area; `docs/TOOLS.md` has the argument-level description of each tool and
 `src/fusion360_mcp/tools.py` is the schema. A name not in this table is not a tool:
@@ -163,7 +166,7 @@ date, `app.version` and PR per row, `unproven` with a reason where nothing has.
 | Area | Tools |
 | --- | --- |
 | Document | `new_document`, `get_design_type`, `set_design_type` |
-| Scene & Query | `ping`, `get_scene_info`, `get_object_info`, `list_edges`, `list_faces`, `list_components`, `get_bounding_box` |
+| Scene & Query | `ping`, `health`, `get_scene_info`, `get_object_info`, `list_edges`, `list_faces`, `list_components`, `get_bounding_box` |
 | Sketching | `create_sketch`, `draw_rectangle`, `draw_circle`, `draw_line`, `draw_arc`, `draw_spline`, `create_polygon`, `draw_circles`, `add_constraint`, `auto_constrain`, `add_dimension`, `offset_curve`, `trim_curve`, `extend_curve`, `project_geometry` |
 | Features | `extrude`, `revolve`, `sweep`, `loft`, `fillet`, `chamfer`, `shell`, `mirror`, `create_hole`, `rectangular_pattern`, `circular_pattern`, `create_thread`, `draft_faces`, `split_body`, `split_face`, `offset_faces`, `scale_body`, `suppress_feature`, `unsuppress_feature` |
 | Body Operations | `move_body`, `rename_body`, `boolean_operation`, `delete_all`, `undo` |

@@ -151,6 +151,10 @@ class EventBridge:
         self._app = app
         self._handler = command_handler
         self._queue: queue.Queue = queue.Queue()
+        #: The `health` command reports how many commands are waiting; the queue lives
+        #: here, so the handler is handed the bridge - after the queue it will read.  A
+        #: handler built without one (a unit test) answers `queue_depth: None`.
+        self._handler.bridge = self
 
         # Register a custom event on the main thread.  The base class is resolved first:
         # a failure here would otherwise leave an event registered with no handler, and
@@ -283,7 +287,16 @@ class EventBridge:
         self._handler = importlib.import_module(
             ".command_handler", __package__
         ).CommandHandler()
+        self._handler.bridge = self
         log.info("CommandHandler reloaded")
+
+    def queue_depth(self) -> int:
+        """How many commands are waiting *behind* this one for the main thread.
+
+        ``drain_queue`` pops an item before executing it, so a ``health`` call reporting
+        its own depth is never counting itself - which is the number a supervisor wants.
+        """
+        return self._queue.qsize()
 
     # ------------------------------------------------------------------
     # Teardown

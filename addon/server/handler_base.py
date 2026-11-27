@@ -41,6 +41,12 @@ class HandlerBase:
     def __init__(self):
         self.app = adsk.core.Application.get()
         self.ui = self.app.userInterface
+        #: Set by ``EventBridge`` (construction and reload); ``health`` reports the
+        #: queue's depth from it.  None
+        #: when a handler is built without a bridge (a unit test), which the command
+        #: answers as an unknown depth rather than an error.  Annotated for a reader:
+        #: no configured gate analyses ``addon/``, so nothing else would.
+        self.bridge: Any = None
         self._commands: dict[str, Callable[..., Any]] = {
             name: getattr(self, name) for name in self._COMMAND_NAMES
         }
@@ -184,6 +190,9 @@ class HandlerBase:
             "cam_post_process",
             # health
             "ping",
+            # Queued like every other command - never on the socket thread's fast path,
+            # which is the whole point: an answer here proves the main thread ran.
+            "health",
             # design type safety
             "get_design_type",
             "set_design_type",
