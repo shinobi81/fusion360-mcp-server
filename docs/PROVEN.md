@@ -114,13 +114,13 @@ the camera for its capture and restores it before returning.
 | `create_bend` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `flat_pattern` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `unfold` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
-| `cam_create_setup` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
-| `cam_create_operation` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
-| `cam_generate_toolpath` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `cam_create_setup` | proven — 2026-11-27, `2706.1.17`, #159: created `Setup1` over a body with relative-box stock offsets |
+| `cam_create_operation` | proven — 2026-11-27, `2706.1.17`, #159: aimed a `face` operation through its `stockContours` boundary (`useStockContours` measured `true`), then generated it |
+| `cam_generate_toolpath` | proven — 2026-11-27, `2706.1.17`, #159: answered `generated: true` for a `face` operation with no face selection |
 | `cam_post_process` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `cam_list_setups` | proven — 2026-11-26, `2706.1.17`, #158: answered `count: 0` on a design with no CAM setups |
 | `cam_list_operations` | unproven — only a refusal is exercised: `NAME_NOT_FOUND` with no setups |
-| `cam_get_operation_info` | unproven — only a refusal is exercised: `NAME_NOT_FOUND` with no setups in the document |
+| `cam_get_operation_info` | proven — 2026-11-27, `2706.1.17`, #159: answered `is_valid: true` and `has_toolpath: true` after generating the aimed operation |
 | `ping` | proven — 2026-11-26, `2706.1.17`, #158: answered `{status: pong}` — from the socket fast path, never from the handler |
 | `get_design_type` | proven — 2026-11-26, `2706.1.17`, #158: answered `parametric` with `design_type_id` |
 | `set_design_type` | unproven — mutation; no live call made — the suite covers its handler against fakes only |

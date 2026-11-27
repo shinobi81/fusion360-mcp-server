@@ -78,16 +78,24 @@ CAM_STRATEGIES = (
     "pocket_clearing",
 )
 
-#: The geometry parameter each strategy exposes, measured one operation at a time on
-#: 2706.1.17.  ``face`` has none - only the stock boundary - so a face selection cannot
-#: be given to it.  The handler discovers the same parameter at run time (only Fusion
-#: knows its name); this map is what mock mode answers from.
+#: The parameter ``face_indices`` is written into, per strategy, measured one operation
+#: at a time on 2706.1.17.  ``face`` has no selection of its own, so its entry is the
+#: stock boundary, which accepts a ``FaceContourSelection`` - see the note on its entry.
+#: The handler reads this table first and falls back to discovery only when a build
+#: spells one of the five 2D/3D parameters differently - the discovery skips the stock
+#: boundary by name, so it cannot serve ``face``.  Mock mode answers from this table.
 CAM_GEOMETRY_PARAMETERS = {
     "contour2d": "contours",
     "pocket2d": "pockets",
     "adaptive2d": "pockets",
     "adaptive": "machiningBoundarySel",
     "pocket_clearing": "machiningBoundarySel",
+    # `face` has no geometry parameter of its own: measured on 2706.1.17, its only
+    # CAD-contour value is the stock boundary, and a `FaceContourSelection` written into
+    # it is accepted (`isValid: true`, `hasError: false`) and the operation regenerates
+    # with `has_toolpath: true`.  So `face_indices` aims it through that boundary, which
+    # Fusion honours while `useStockContours` is true - its default.
+    "face": "stockContours",
 }
 
 #: The strategies ``face_indices`` can be given to: the map's keys, in one place.

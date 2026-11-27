@@ -163,7 +163,7 @@ because a client may already branch on them.
 
 `tests/test_addon_refusals.py` makes it a ratchet rather than a one-off audit. It
 fails on a raise that would reach a caller `UNKNOWN`, on a baseline row that no longer
-matches a site, and on any change to the 28 unjudgeable rows - a computed message, a
+matches a site, and on any change to the 34 unjudgeable rows - a computed message, a
 `Protocol` body, or a kind that comes from a `rules.py` validator call, each with its
 reason written down. That count rose from 7 by design: the validators are what let mock
 mode answer the same sentence, and a kind returned from a function is not readable in the
@@ -482,14 +482,32 @@ and asks the running Fusion whether it exists - 190 references, none missing on
 11. **Which of the tools has a real Fusion ever answered** - **started (this PR).**
     `docs/PROVEN.md` is one row per tool: a `proven` row cites the date, the
     `app.version` and the PR that added it, whose body carries the envelope; an
-    `unproven` row says why. 30 of 98 are proven as of this PR; the other 68 name the
-    reason, so the gap is a checklist rather than a guess. `scripts/check_proven.py`
+    `unproven` row says why. 30 of 98 were proven when #158 seeded the table, 34 after
+    #159; the rest name the reason, so the gap is a checklist rather than a guess. `scripts/check_proven.py`
     validates the table against `tools.py` both ways, and `--live` re-probes the
     read-only subset and reports a row its reply contradicts. The live sweep that
     seeded the table also found two tool-surface defects, both queued in the brief:
     `scale_body`'s `3 : invalid ref point`, recorded in the correction below, and
     `execute_code` arranging a script's own exception as `UNKNOWN`, recorded nowhere but
     the brief.
+
+12. **`face` is advertised and could not be aimed** - **closed, and both the brief and my
+    first reading of it were wrong.** The brief expected a `face` operation without a
+    face selection to never generate and time out. Measured on 2706.1.17: it creates and
+    `cam_generate_toolpath` answers `generated: true` on the first call - it machines the
+    stock's top. Then the first fix refused `face_indices` for it, on the reading that its
+    only CAD-contour parameter was the stock boundary and so nothing took a *face*. The
+    review pushed on that, and the probe settled it the other way: a `FaceContourSelection`
+    written into `stockContours` is accepted (`isValid: true`, `hasError: false`) and the
+    operation regenerates with `has_toolpath: true`. The boundary is how a face operation
+    is aimed, and `stockContours` is now `CAM_GEOMETRY_PARAMETERS["face"]`.
+
+    So the tool aims `face` like the other five: `_select_operation_geometry` looks the
+    parameter up in that table first, and keeps the old "not the stock boundary"
+    discovery only as a fallback for a build that spells it differently. Six of the ten
+    advertised strategies are aimable; the other four keep the refusal, and which of them
+    exposes a parameter of its own is unmeasured - one probe per strategy is the brief's
+    item 9.
 
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.

@@ -770,8 +770,14 @@ def test_the_handler_and_the_mock_refuse_a_non_positive_tool_alike(
 def test_face_indices_on_a_strategy_without_a_geometry_parameter_is_refused(
     bare_handler,
 ):
-    """``face`` exposes no machining parameter - only ``stockContours`` (measured)."""
-    call = {"setup_name": "Setup1", "strategy": "face", "face_indices": [0]}
+    """``bore`` exposes no selection this tool can write to - ``face`` used to be the
+    example here, until it was measured to be aimable through its stock boundary."""
+    call = {
+        "setup_name": "Setup1",
+        "strategy": "bore",
+        "body_name": "Body1",
+        "face_indices": [0],
+    }
 
     with pytest.raises(addon_hints.Refusal) as raised:
         bare_handler.cam_create_operation(**call)
@@ -782,11 +788,13 @@ def test_face_indices_on_a_strategy_without_a_geometry_parameter_is_refused(
     assert raised.value.error_kind == "INVALID_INPUT"
     assert refused["error_kind"] == raised.value.error_kind
     assert refused["error_message"] == str(raised.value)
+    assert "takes no geometry selection" in refused["error_message"], (
+        "the strategy branch, not the missing-name branch"
+    )
 
 
 #: Shapes a socket caller can send that must earn a sentence, not a ``TypeError``.
 BAD_FACE_SELECTIONS = [
-    {"strategy": "face", "body_name": "Body1", "face_indices": [0]},
     {"strategy": "contour2d", "face_indices": [0]},
     {"strategy": "contour2d", "body_name": "Body1"},
     {"strategy": "contour2d", "body_name": "", "face_indices": [0]},
@@ -817,6 +825,58 @@ def test_every_bad_face_selection_is_refused_on_both_sides(bare_handler, params)
     assert raised.value.error_kind == "INVALID_INPUT"
     assert refused["error_kind"] == raised.value.error_kind
     assert refused["error_message"] == str(raised.value)
+
+
+def test_a_face_operation_is_aimed_through_its_stock_boundary():
+    """``face`` has no selection of its own, and the stock boundary is how it is aimed.
+
+    Measured on 2706.1.17: a ``FaceContourSelection`` written into ``stockContours`` is
+    accepted (``isValid: true``) and the operation regenerates with a toolpath.
+    """
+    params = {"strategy": "face", "body_name": "Body1", "face_indices": [0]}
+
+    assert rules.cam_geometry_refusal(params) is None
+    assert rules.CAM_GEOMETRY_PARAMETERS["face"] == "stockContours"
+
+    operation = mock._cam_create_operation(params)
+
+    assert "error_kind" not in operation, operation
+    assert operation["geometry"] == {
+        "parameter": "stockContours",
+        "face_indices": [0],
+    }
+
+
+@pytest.mark.parametrize(
+    "strategy", sorted(set(rules.CAM_STRATEGIES) - set(rules.CAM_GEOMETRY_PARAMETERS))
+)
+def test_a_strategy_without_a_geometry_parameter_keeps_the_generic_refusal(strategy):
+    """Four strategies expose no selection this tool can write to; one probe each is its
+    own item, so they keep the sentence that names what does work."""
+    refused = rules.cam_geometry_refusal(
+        {"strategy": strategy, "body_name": "Body1", "face_indices": [0]}
+    )
+
+    assert refused is not None
+    assert "takes no geometry selection" in str(refused)
+    assert ", ".join(rules.CAM_GEOMETRY_STRATEGIES) in str(refused)
+
+
+def test_the_advertised_strategies_split_between_aimable_and_not():
+    """The partition is the point: every advertised strategy is one or the other."""
+    aimable = set(rules.CAM_GEOMETRY_PARAMETERS)
+    refused = set(rules.CAM_STRATEGIES) - aimable
+
+    assert aimable | refused == set(rules.CAM_STRATEGIES)
+    assert aimable == {
+        "contour2d",
+        "pocket2d",
+        "adaptive2d",
+        "adaptive",
+        "pocket_clearing",
+        "face",
+    }
+    assert refused == {"bore", "slot", "trace", "engrave"}
 
 
 def test_a_usable_strategy_and_selection_is_refused_by_neither_side():

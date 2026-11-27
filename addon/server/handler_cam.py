@@ -454,30 +454,53 @@ class CamCommands(_Contract):
         return operations
 
     def _select_operation_geometry(self, op, faces: list) -> str:
-        """Apply a face selection to the operation's own geometry parameter.
+        """Apply a face selection to the parameter that aims the operation.
 
-        The parameter name is strategy-dependent and only Fusion knows it - measured on
-        2706.1.17: ``contours`` for ``contour2d``, ``pockets`` for ``pocket2d`` and
-        ``adaptive2d``, ``machiningBoundarySel`` for ``adaptive`` and
-        ``pocket_clearing`` - so it is discovered rather than assumed: the one
-        CAD-contour value that is not the stock boundary.  ``FaceContourSelection`` was
-        measured to be accepted by all five of those parameters.
+        The parameter name is strategy-dependent and measured per strategy in
+        ``rules.CAM_GEOMETRY_PARAMETERS`` - ``contours`` for ``contour2d``, ``pockets``
+        for ``pocket2d`` and ``adaptive2d``, ``machiningBoundarySel`` for ``adaptive``
+        and ``pocket_clearing``, and ``stockContours`` for ``face``, which has no
+        selection of its own: measured on 2706.1.17, a ``FaceContourSelection`` written
+        into its stock boundary is accepted (``isValid: true``) and the operation
+        regenerates with a toolpath, so the boundary is how a face operation is aimed.
+
+        The table is the measurement, so it is read first; the old discovery - the one
+        CAD-contour value that is not the stock boundary - stays as the fallback for a
+        build that spells one of the five 2D/3D parameters differently (it skips the
+        stock boundary by name, so it cannot serve ``face``).  ``FaceContourSelection``
+        was measured to be accepted by all six.
 
         Reaching the discovery failure means the measurement moved under us, and the
         operation is removed again rather than left half-configured; the strategy is
         read *before* the delete, because a deleted Fusion object may refuse reads.
         """
-        parameter = next(
-            (
-                candidate
-                for candidate in op.parameters
-                if candidate.name != "stockContours"
-                and hasattr(candidate.value, "applyCurveSelections")
-            ),
-            None,
-        )
+        strategy = op.strategy
+        mapped = _rules.CAM_GEOMETRY_PARAMETERS.get(str(strategy))
+        parameter = None
+        if mapped is not None:
+            # The value check matters here too: a build that exposes the table's name
+            # as a plain parameter must fall through to the discovery below, not raise
+            # out of ``getCurveSelections`` and be reported as an add-in defect.
+            parameter = next(
+                (
+                    p
+                    for p in op.parameters
+                    if p.name == mapped
+                    and hasattr(p.value, "applyCurveSelections")
+                ),
+                None,
+            )
         if parameter is None:
-            strategy = op.strategy
+            parameter = next(
+                (
+                    candidate
+                    for candidate in op.parameters
+                    if candidate.name != "stockContours"
+                    and hasattr(candidate.value, "applyCurveSelections")
+                ),
+                None,
+            )
+        if parameter is None:
             op.deleteMe()
             raise _hints.Refusal(
                 "FUSION_REFUSED",
@@ -500,7 +523,6 @@ class CamCommands(_Contract):
             # reach a caller as ``UNKNOWN`` with no hints - the shape #138 removed - and
             # the generic branch below would blame the caller's faces.  The operation
             # goes for the same reason as there: the parameter may already be emptied.
-            strategy = op.strategy
             op.deleteMe()
             raise _hints.Refusal(
                 "INTERNAL_ERROR",
@@ -522,7 +544,6 @@ class CamCommands(_Contract):
             # here would leave the operation with geometry it no longer has.  Nothing
             # measured says these three calls refuse; the guard is what keeps the
             # "no refusal leaves a half-built operation" promise true either way.
-            strategy = op.strategy
             op.deleteMe()
             raise _hints.Refusal(
                 "FUSION_REFUSED",

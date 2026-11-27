@@ -12,6 +12,7 @@ import mcp.types as types
 # joint selectors are read by ``tools.py`` twice each (both joint tools), so a local
 # copy would be a fourth place to drift.
 from ._rules import (
+    CAM_GEOMETRY_PARAMETERS,
     CAM_STOCK_MODES,
     CAM_STRATEGIES,
     EDGE_SELECTIONS,
@@ -2334,8 +2335,12 @@ TOOLS: list[dict] = [
                 "Machining strategy, in Fusion's own spelling. Measured against "
                 "Operations.compatibleStrategies on 2706.1.17: of the fifteen names "
                 "this schema carried, five were Fusion's (kept here) and ten were "
-                "invented and refused as 'Unknown strategy'; the five 2D/3D names "
-                "added here are the ones measured to expose a geometry parameter."
+                "invented and refused as 'Unknown strategy'. "
+                "face_indices aims "
+                f"{', '.join(k for k in CAM_GEOMETRY_PARAMETERS if k != 'face')} and "
+                "face - the strategies measured to accept a selection. face has none "
+                "of its own, so it is aimed through its stock boundary "
+                "(stockContours), which Fusion honours while useStockContours is true."
             ),
         },
         name={
@@ -2426,8 +2431,10 @@ TOOLS: list[dict] = [
             "type": "string",
             "description": (
                 "Body whose faces carry the operation's geometry; required with "
-                "face_indices. Only the five strategies with a measured geometry "
-                "parameter take a selection, and face is not one of them."
+                "face_indices. Only the "
+                f"{len(CAM_GEOMETRY_PARAMETERS)} strategies in CAM_GEOMETRY_PARAMETERS "
+                "take a selection, and face is one of them - through its stock "
+                "boundary, which aims the operation."
             ),
         },
         face_indices={
@@ -2438,7 +2445,8 @@ TOOLS: list[dict] = [
                 "Faces to machine, by 0-based index in the body's own order "
                 "(list_faces reports them, with each face's surface_type). Applied "
                 "to the strategy's geometry parameter (contours/pockets/"
-                "machiningBoundarySel). Refused for any strategy without one."
+                "machiningBoundarySel/stockContours). Refused for any strategy "
+                "without one."
             ),
         },
     ),
