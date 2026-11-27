@@ -923,6 +923,66 @@ def test_create_operation_puts_a_face_selection_on_the_strategy_parameter(
     assert result["geometry"] == {"parameter": "contours", "face_indices": [2, 0]}
 
 
+def test_a_face_operation_is_aimed_through_its_stock_contours(handler_module):
+    """``face`` has no selection of its own, so the table names its stock boundary.
+
+    Measured on 2706.1.17: ``stockContours`` accepts a ``FaceContourSelection`` and the
+    operation regenerates with a toolpath, so the boundary is how a face operation is
+    aimed.  The parameter is looked up by the name ``rules.CAM_GEOMETRY_PARAMETERS``
+    records rather than by the old "not the stock boundary" discovery, which finds
+    nothing on a strategy whose only contour value *is* the stock boundary.
+    """
+    applied = {}
+
+    class _Selections:
+        def __init__(self):
+            self.cleared = 0
+            self.selectors = []
+
+        def clear(self):
+            self.cleared += 1
+
+        def createNewFaceContourSelection(self):
+            selection = SimpleNamespace(inputGeometry=None)
+            self.selectors.append(selection)
+            return selection
+
+    class _Value:
+        def __init__(self):
+            self.selections = _Selections()
+
+        def getCurveSelections(self):
+            return self.selections
+
+        def applyCurveSelections(self, selections):
+            applied["selections"] = selections
+
+    value = _Value()
+    operation = SimpleNamespace(
+        name=None,
+        strategy="face",
+        parameters=[SimpleNamespace(name="stockContours", value=value)],
+        deleted=0,
+    )
+    operation.deleteMe = lambda: None
+    handler = _creation_handler(handler_module, operation, faces=2)
+
+    result = handler.cam_create_operation(
+        setup_name="Setup1",
+        strategy="face",
+        body_name="Body1",
+        face_indices=[1],
+    )
+
+    assert value.selections.cleared == 1
+    assert len(value.selections.selectors) == 1
+    assert applied["selections"] is value.selections
+    assert result["geometry"] == {
+        "parameter": "stockContours",
+        "face_indices": [1],
+    }
+
+
 def test_create_operation_refuses_a_face_index_the_body_does_not_have(handler_module):
     """An index is judged against the body *before* the operation exists.
 

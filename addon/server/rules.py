@@ -94,27 +94,16 @@ CAM_GEOMETRY_PARAMETERS = {
     "adaptive2d": "pockets",
     "adaptive": "machiningBoundarySel",
     "pocket_clearing": "machiningBoundarySel",
+    # `face` has no geometry parameter of its own: measured on 2706.1.17, its only
+    # CAD-contour value is the stock boundary, and a `FaceContourSelection` written into
+    # it is accepted (`isValid: true`, `hasError: false`) and the operation regenerates
+    # with `has_toolpath: true`.  So `face_indices` aims it through that boundary, which
+    # Fusion honours while `useStockContours` is true - its default.
+    "face": "stockContours",
 }
 
 #: The strategies ``face_indices`` can be given to: the map's keys, in one place.
 CAM_GEOMETRY_STRATEGIES = tuple(CAM_GEOMETRY_PARAMETERS)
-
-#: Strategies whose geometry the tool cannot pass, and why, one measured sentence each.
-#:
-#: ``face`` is measured (2706.1.17): it needs no selection to generate - it machines
-#: the stock's top and completed with ``has_toolpath: true`` on the first call - but
-#: nothing on the operation takes a *face*: of its 327 parameters, 26 are
-#: ``CadObjectParameterValue`` (view and heights) and one is
-#: ``CadContours2dParameterValue`` called ``stockContours``, a 2D boundary.  The other
-#: four unaimable strategies stay on the generic sentence until each is measured - one
-#: probe per strategy, which is its own item.
-CAM_NO_FACE_SELECTION: dict[str, str] = {
-    "face": (
-        "the strategy machines the stock's top and takes no face selection - its only "
-        "geometry parameter is a 2D stock boundary"
-    ),
-}
-
 
 def cam_strategy_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal an unknown CAM strategy earns, or None when it is usable.
@@ -175,19 +164,6 @@ def cam_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
                 "0-based in the body's own order",
             )
     if strategy not in CAM_GEOMETRY_PARAMETERS:
-        reason = (
-            CAM_NO_FACE_SELECTION.get(strategy) if isinstance(strategy, str) else None
-        )
-        if reason is not None:
-            return _hints.Refusal(
-                "INVALID_INPUT",
-                f"face_indices cannot aim {strategy!r}: {reason} - it applies to: "
-                f"{', '.join(CAM_GEOMETRY_STRATEGIES)}",
-                hints=(
-                    f"{strategy!r} needs no selection to generate: create it, then "
-                    "call cam_generate_toolpath(operation_name=...).",
-                ),
-            )
         return _hints.Refusal(
             "INVALID_INPUT",
             f"Strategy {strategy!r} takes no geometry selection - use face_indices "

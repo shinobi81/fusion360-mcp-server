@@ -2337,9 +2337,9 @@ TOOLS: list[dict] = [
                 "this schema carried, five were Fusion's (kept here) and ten were "
                 "invented and refused as 'Unknown strategy'. "
                 f"face_indices aims {', '.join(CAM_GEOMETRY_PARAMETERS)} - the "
-                "strategies measured to expose a selection. face is not one: it "
-                "machines the stock's top, takes no face selection, and needs none "
-                "to generate."
+                "strategies measured to expose a selection. face has no selection of "
+                "its own, so it is aimed through its stock boundary (stockContours), "
+                "which Fusion honours while useStockContours is true."
             ),
         },
         name={

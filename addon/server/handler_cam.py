@@ -456,28 +456,39 @@ class CamCommands(_Contract):
     def _select_operation_geometry(self, op, faces: list) -> str:
         """Apply a face selection to the operation's own geometry parameter.
 
-        The parameter name is strategy-dependent and only Fusion knows it - measured on
-        2706.1.17: ``contours`` for ``contour2d``, ``pockets`` for ``pocket2d`` and
-        ``adaptive2d``, ``machiningBoundarySel`` for ``adaptive`` and
-        ``pocket_clearing`` - so it is discovered rather than assumed: the one
-        CAD-contour value that is not the stock boundary.  ``FaceContourSelection`` was
-        measured to be accepted by all five of those parameters.
+        The parameter name is strategy-dependent and measured per strategy in
+        ``rules.CAM_GEOMETRY_PARAMETERS`` - ``contours`` for ``contour2d``, ``pockets``
+        for ``pocket2d`` and ``adaptive2d``, ``machiningBoundarySel`` for ``adaptive``
+        and ``pocket_clearing``, and ``stockContours`` for ``face``, which has no
+        selection of its own: measured on 2706.1.17, a ``FaceContourSelection`` written
+        into its stock boundary is accepted (``isValid: true``) and the operation
+        regenerates with a toolpath, so the boundary is how a face operation is aimed.
+
+        The table is the measurement, so it is read first; the old discovery - the one
+        CAD-contour value that is not the stock boundary - stays as the fallback for a
+        build that spells the parameter differently.  ``FaceContourSelection`` was
+        measured to be accepted by all six.
 
         Reaching the discovery failure means the measurement moved under us, and the
         operation is removed again rather than left half-configured; the strategy is
         read *before* the delete, because a deleted Fusion object may refuse reads.
         """
-        parameter = next(
-            (
-                candidate
-                for candidate in op.parameters
-                if candidate.name != "stockContours"
-                and hasattr(candidate.value, "applyCurveSelections")
-            ),
-            None,
-        )
+        strategy = op.strategy
+        mapped = _rules.CAM_GEOMETRY_PARAMETERS.get(str(strategy))
+        parameter = None
+        if mapped is not None:
+            parameter = next((p for p in op.parameters if p.name == mapped), None)
         if parameter is None:
-            strategy = op.strategy
+            parameter = next(
+                (
+                    candidate
+                    for candidate in op.parameters
+                    if candidate.name != "stockContours"
+                    and hasattr(candidate.value, "applyCurveSelections")
+                ),
+                None,
+            )
+        if parameter is None:
             op.deleteMe()
             raise _hints.Refusal(
                 "FUSION_REFUSED",

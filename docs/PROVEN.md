@@ -115,7 +115,7 @@ the camera for its capture and restores it before returning.
 | `flat_pattern` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `unfold` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `cam_create_setup` | proven — 2026-11-27, `2706.1.17`, #159: created `Setup1` over a body with relative-box stock offsets |
-| `cam_create_operation` | proven — 2026-11-27, `2706.1.17`, #159: created a `face` operation with a tool attached, and refused `face_indices` for it with one sentence (#159) |
+| `cam_create_operation` | proven — 2026-11-27, `2706.1.17`, #159: aimed a `face` operation through its `stockContours` boundary, then generated it |
 | `cam_generate_toolpath` | proven — 2026-11-27, `2706.1.17`, #159: answered `generated: true` for a `face` operation with no face selection |
 | `cam_post_process` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `cam_list_setups` | proven — 2026-11-26, `2706.1.17`, #158: answered `count: 0` on a design with no CAM setups |
