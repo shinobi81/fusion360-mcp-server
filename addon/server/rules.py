@@ -693,8 +693,9 @@ def construction_plane_name_refusal(plane: Any) -> _hints.Refusal | None:
     )
 
 
-#: The construction axes by name, lowercased - the names ``_construction_axis``'s own
-#: map must hold.  The rule is the guard: the handler still resolves the object.
+#: The construction axes by name, lowercased.  The rule guards the *name*; the handler
+#: still resolves the object from its own map, which must hold exactly these keys - a
+#: name only here would index past that map and raise ``KeyError``.
 _CONSTRUCTION_AXES: frozenset[str] = frozenset({"x", "y", "z"})
 
 
@@ -702,16 +703,16 @@ def construction_axis_name_refusal(axis: Any) -> _hints.Refusal | None:
     """The refusal an unusable axis name earns, or None when it is one of the 3.
 
     ``_construction_axis`` refused a miss itself, so mock mode answered ``created:
-    true`` for ``create_construction_plane(method="angle", edge_name="w")`` - a value
-    the add-in refuses before Fusion is asked.  The axis is named by two callers
-    (``circular_pattern`` and the angle plane), so the sentence lives here and both
-    sides answer it.
+    true`` for ``create_construction_plane(method="angle", plane="xy", angle=30,
+    edge_name="w")`` - a value the add-in refuses before Fusion is asked.  The axis is
+    named by two callers (``circular_pattern`` and the angle plane), so the sentence
+    lives here and both sides answer it.
     """
     if str(axis or "").lower() in _CONSTRUCTION_AXES:
         return None
     return _hints.Refusal(
         "INVALID_INPUT",
-        f"Unknown axis '{axis}' — use x, y, or z",
+        f"Unknown axis {axis!r} — use x, y, or z",
         hints=("Pass x, y or z; the axis is lowercased, so Y works.",),
     )
 
@@ -727,8 +728,9 @@ def construction_plane_angle_refusal(
     refusal nobody could act on.  Any method that is given an angle at all gets it
     judged, because the ``tangent`` branch interpolates that value too.
 
-    A numeric *string* is refused as well: Fusion would have parsed ``"45 deg"``, but
-    only Fusion can parse units, and a string here is a caller who meant a number.
+    A numeric *string* is refused as well.  It is not a units question: the value is
+    interpolated, so ``"45"`` would have reached Fusion as ``"45 deg deg"`` - a caller
+    who meant a number, and one the parameters can name.
     """
     angle = params.get("angle")
     if angle is None:
@@ -745,7 +747,18 @@ def construction_plane_angle_refusal(
             f"angle must be a number of degrees, not {angle!r}",
             hints=("Pass a number; it is interpolated into a 'deg' expression.",),
         )
-    if not math.isfinite(angle):
+    try:
+        magnitude = float(angle)
+    except OverflowError:
+        # An int too large for a float: the same guard ``cam_tool_refusal`` carries,
+        # because the builder would otherwise reach a caller as ``UNKNOWN``.  The value
+        # is not echoed - a 400-digit integer is not advice.
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            "angle is outside the range Fusion can store",
+            hints=("Send a value in Fusion's numeric range.",),
+        )
+    if not math.isfinite(magnitude):
         return _hints.Refusal(
             "INVALID_INPUT",
             f"angle must be finite, not {angle!r}",

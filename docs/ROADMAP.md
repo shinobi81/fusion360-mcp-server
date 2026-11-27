@@ -510,10 +510,11 @@ and asks the running Fusion whether it exists - 190 references, none missing on
     item 9.
 
 13. **Mock rehearsed success for calls the add-in refuses** - **closed (this PR).**
-    `create_construction_plane(method="angle", edge_name="w")` answers `created: true`
-    in mock mode and `INVALID_INPUT` ("Unknown axis 'w'") in the add-in: the axis was
-    resolved by a handler method mock never asked. `circular_pattern`'s `axis` is the
-    same name through the same helper. The sentence now lives in
+    `create_construction_plane(method="angle", plane="xy", angle=30, edge_name="w")`
+    answers `created: true` in mock mode and `INVALID_INPUT` ("Unknown axis 'w'") in the
+    add-in: the axis was resolved by a handler method mock never asked.
+    `circular_pattern`'s `axis` is the same name through the same helper. The sentence
+    now lives in
     `rules.construction_axis_name_refusal`, which the handler raises and mock answers, so
     the two sides cannot disagree - and a usable axis (`y`, `Y`) is refused by neither,
     which is the half a parity test usually forgets. The same branch rehearsed success

@@ -1079,6 +1079,10 @@ def _add_dimension(p: dict) -> dict:
 
 def _create_construction_plane(p: dict) -> dict:
     refusal = construction_plane_tangent_refusal(p)
+    if refusal is None:
+        # Judged for every method, as the handler does: the angle and tangent branches
+        # both interpolate `angle` into a "deg" expression.
+        refusal = construction_plane_angle_refusal(p)
     if refusal is None and p.get("method") == "three_points":
         # The add-in builds a Point3D per point on this branch only, so the points an
         # offset or midplane call leaves unset are not judged.
@@ -1109,13 +1113,10 @@ def _create_construction_plane(p: dict) -> dict:
         "tangent": () if p.get("point_one") is not None else ("plane",),
     }
     if p.get("method") == "angle":
-        # The handler judges the same three names in this order: the angle (its own
-        # rule, before the API call), then the axis ``setByAngle`` resolves first, then
-        # the plane.  A call carrying two faults must get the *same* sentence from both
-        # sides - the order, not just the rules, is part of the contract.
-        angle_refusal = construction_plane_angle_refusal(p)
-        if angle_refusal is not None:
-            return _refusal_error(angle_refusal)
+        # The handler judges the same three names in this order: the angle (already
+        # judged above, for every method), then the axis ``setByAngle`` resolves first,
+        # then the plane.  A call carrying two faults must get the *same* sentence from
+        # both sides - the order, not just the rules, is part of the contract.
         # `or "x"` mirrors the handler's fallback (handler_assembly, the angle branch).
         axis_refusal = construction_axis_name_refusal(p.get("edge_name") or "x")
         if axis_refusal is not None:
@@ -1134,6 +1135,13 @@ def _create_construction_plane(p: dict) -> dict:
 
 
 def _create_construction_axis(p: dict) -> dict:
+    if p.get("method") == "intersection":
+        # The handler resolves both names through `_construction_plane`, so an unknown
+        # one is refused before anything is created.
+        for field in ("plane_one", "plane_two"):
+            name_refusal = construction_plane_name_refusal(p.get(field))
+            if name_refusal is not None:
+                return _refusal_error(name_refusal)
     refusal = perpendicular_axis_refusal(p)
     if refusal is None and p.get("method") == "two_points":
         refusal = point3d_refusal(

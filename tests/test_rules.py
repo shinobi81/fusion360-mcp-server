@@ -242,6 +242,28 @@ PARAMETER_REFUSALS = [
     ),
     (
         "create_construction_plane",
+        # Judged for any method that is given an angle: the tangent branch interpolates
+        # it too, so mock must ask the same rule outside method="angle".
+        {
+            "method": "tangent",
+            "body_name": "B",
+            "face_index": 0,
+            "plane": "xy",
+            "angle": float("nan"),
+        },
+        "INVALID_INPUT",
+        "angle must be finite, not nan",
+        ("Pass a finite number of degrees.",),
+    ),
+    (
+        "create_construction_plane",
+        {"method": "angle", "plane": "xy", "angle": "45"},
+        "INVALID_INPUT",
+        "angle must be a number of degrees, not '45'",
+        ("Pass a number; it is interpolated into a 'deg' expression.",),
+    ),
+    (
+        "create_construction_plane",
         # The tangent branches name a body, so an empty one is the shared refusal -
         # the same sentence every other body-naming tool answers.
         {"method": "tangent", "face_index": 0, "plane": "xy"},
@@ -418,6 +440,8 @@ PARAMETER_REFUSALS = [
         "as_built_geometry",
         "rigid_group_size",
         "construction_plane_angle",
+        "construction_plane_angle_finite",
+        "construction_plane_angle_type",
         "tangent_plane_body_name",
         "tangent_plane_face",
         "perpendicular_axis",
