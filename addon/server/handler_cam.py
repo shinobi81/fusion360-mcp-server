@@ -454,7 +454,7 @@ class CamCommands(_Contract):
         return operations
 
     def _select_operation_geometry(self, op, faces: list) -> str:
-        """Apply a face selection to the operation's own geometry parameter.
+        """Apply a face selection to the parameter that aims the operation.
 
         The parameter name is strategy-dependent and measured per strategy in
         ``rules.CAM_GEOMETRY_PARAMETERS`` - ``contours`` for ``contour2d``, ``pockets``
@@ -477,7 +477,18 @@ class CamCommands(_Contract):
         mapped = _rules.CAM_GEOMETRY_PARAMETERS.get(str(strategy))
         parameter = None
         if mapped is not None:
-            parameter = next((p for p in op.parameters if p.name == mapped), None)
+            # The value check matters here too: a build that exposes the table's name
+            # as a plain parameter must fall through to the discovery below, not raise
+            # out of ``getCurveSelections`` and be reported as an add-in defect.
+            parameter = next(
+                (
+                    p
+                    for p in op.parameters
+                    if p.name == mapped
+                    and hasattr(p.value, "applyCurveSelections")
+                ),
+                None,
+            )
         if parameter is None:
             parameter = next(
                 (
@@ -511,7 +522,6 @@ class CamCommands(_Contract):
             # reach a caller as ``UNKNOWN`` with no hints - the shape #138 removed - and
             # the generic branch below would blame the caller's faces.  The operation
             # goes for the same reason as there: the parameter may already be emptied.
-            strategy = op.strategy
             op.deleteMe()
             raise _hints.Refusal(
                 "INTERNAL_ERROR",
@@ -533,7 +543,6 @@ class CamCommands(_Contract):
             # here would leave the operation with geometry it no longer has.  Nothing
             # measured says these three calls refuse; the guard is what keeps the
             # "no refusal leaves a half-built operation" promise true either way.
-            strategy = op.strategy
             op.deleteMe()
             raise _hints.Refusal(
                 "FUSION_REFUSED",

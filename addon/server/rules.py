@@ -84,10 +84,11 @@ CAM_STRATEGIES = (
     "pocket_clearing",
 )
 
-#: The geometry parameter each strategy exposes, measured one operation at a time on
-#: 2706.1.17.  ``face`` has none - only the stock boundary - so a face selection cannot
-#: be given to it.  The handler discovers the same parameter at run time (only Fusion
-#: knows its name); this map is what mock mode answers from.
+#: The parameter ``face_indices`` is written into, per strategy, measured one operation
+#: at a time on 2706.1.17.  ``face`` has no selection of its own, so its entry is the
+#: stock boundary, which accepts a ``FaceContourSelection`` - see the note on its entry.
+#: The handler reads this table first and falls back to discovery only when a build
+#: spells the name differently; mock mode answers from it.
 CAM_GEOMETRY_PARAMETERS = {
     "contour2d": "contours",
     "pocket2d": "pockets",

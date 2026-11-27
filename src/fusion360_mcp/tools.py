@@ -2336,10 +2336,11 @@ TOOLS: list[dict] = [
                 "Operations.compatibleStrategies on 2706.1.17: of the fifteen names "
                 "this schema carried, five were Fusion's (kept here) and ten were "
                 "invented and refused as 'Unknown strategy'. "
-                f"face_indices aims {', '.join(CAM_GEOMETRY_PARAMETERS)} - the "
-                "strategies measured to expose a selection. face has no selection of "
-                "its own, so it is aimed through its stock boundary (stockContours), "
-                "which Fusion honours while useStockContours is true."
+                "face_indices aims "
+                f"{', '.join(k for k in CAM_GEOMETRY_PARAMETERS if k != 'face')} and "
+                "face - the strategies measured to accept a selection. face has none "
+                "of its own, so it is aimed through its stock boundary "
+                "(stockContours), which Fusion honours while useStockContours is true."
             ),
         },
         name={
@@ -2430,8 +2431,9 @@ TOOLS: list[dict] = [
             "type": "string",
             "description": (
                 "Body whose faces carry the operation's geometry; required with "
-                "face_indices. Only the five strategies with a measured geometry "
-                "parameter take a selection, and face is not one of them."
+                "face_indices. Only the six strategies in CAM_GEOMETRY_PARAMETERS take "
+                "a selection, and face is one of them - through its stock boundary, "
+                "which aims the operation."
             ),
         },
         face_indices={
@@ -2442,7 +2444,8 @@ TOOLS: list[dict] = [
                 "Faces to machine, by 0-based index in the body's own order "
                 "(list_faces reports them, with each face's surface_type). Applied "
                 "to the strategy's geometry parameter (contours/pockets/"
-                "machiningBoundarySel). Refused for any strategy without one."
+                "machiningBoundarySel/stockContours). Refused for any strategy "
+                "without one."
             ),
         },
     ),

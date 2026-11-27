@@ -976,11 +976,33 @@ def test_a_face_operation_is_aimed_through_its_stock_contours(handler_module):
 
     assert value.selections.cleared == 1
     assert len(value.selections.selectors) == 1
+    selection = value.selections.selectors[0]
+    faces = handler._body_by_name("Body1").faces
+    assert selection.inputGeometry == [faces.item(1)], (
+        "the faces the caller named, not the whole body"
+    )
     assert applied["selections"] is value.selections
     assert result["geometry"] == {
         "parameter": "stockContours",
         "face_indices": [1],
     }
+
+
+def test_a_build_that_spells_the_parameter_differently_falls_back(handler_module):
+    """The table names what was measured here; a build that spells it otherwise still
+    works through the old discovery - which is why it was kept."""
+    operation, value, applied = _contour_operation(parameter_name="contours2d")
+    handler = _creation_handler(handler_module, operation, faces=2)
+
+    result = handler.cam_create_operation(
+        setup_name="Setup1",
+        strategy="contour2d",
+        body_name="Body1",
+        face_indices=[0],
+    )
+
+    assert applied["selections"] is value.selections
+    assert result["geometry"]["parameter"] == "contours2d"
 
 
 def test_create_operation_refuses_a_face_index_the_body_does_not_have(handler_module):

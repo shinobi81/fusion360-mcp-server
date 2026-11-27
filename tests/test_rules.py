@@ -770,8 +770,14 @@ def test_the_handler_and_the_mock_refuse_a_non_positive_tool_alike(
 def test_face_indices_on_a_strategy_without_a_geometry_parameter_is_refused(
     bare_handler,
 ):
-    """``face`` exposes no machining parameter - only ``stockContours`` (measured)."""
-    call = {"setup_name": "Setup1", "strategy": "face", "face_indices": [0]}
+    """``bore`` exposes no selection this tool can write to - ``face`` used to be the
+    example here, until it was measured to be aimable through its stock boundary."""
+    call = {
+        "setup_name": "Setup1",
+        "strategy": "bore",
+        "body_name": "Body1",
+        "face_indices": [0],
+    }
 
     with pytest.raises(addon_hints.Refusal) as raised:
         bare_handler.cam_create_operation(**call)
@@ -782,6 +788,9 @@ def test_face_indices_on_a_strategy_without_a_geometry_parameter_is_refused(
     assert raised.value.error_kind == "INVALID_INPUT"
     assert refused["error_kind"] == raised.value.error_kind
     assert refused["error_message"] == str(raised.value)
+    assert "takes no geometry selection" in refused["error_message"], (
+        "the strategy branch, not the missing-name branch"
+    )
 
 
 #: Shapes a socket caller can send that must earn a sentence, not a ``TypeError``.

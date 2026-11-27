@@ -482,8 +482,8 @@ and asks the running Fusion whether it exists - 190 references, none missing on
 11. **Which of the tools has a real Fusion ever answered** - **started (this PR).**
     `docs/PROVEN.md` is one row per tool: a `proven` row cites the date, the
     `app.version` and the PR that added it, whose body carries the envelope; an
-    `unproven` row says why. 30 of 98 are proven as of this PR; the other 68 name the
-    reason, so the gap is a checklist rather than a guess. `scripts/check_proven.py`
+    `unproven` row says why. 30 of 98 were proven when #158 seeded the table, 34 after
+    #159; the rest name the reason, so the gap is a checklist rather than a guess. `scripts/check_proven.py`
     validates the table against `tools.py` both ways, and `--live` re-probes the
     read-only subset and reports a row its reply contradicts. The live sweep that
     seeded the table also found two tool-surface defects, both queued in the brief:

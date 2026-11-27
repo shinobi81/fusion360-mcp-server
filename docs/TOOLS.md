@@ -314,7 +314,7 @@ Every `add_joint` result carries the measurements behind that:
 | Tool                     | Description                                                                                                         |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
 | `cam_create_setup`       | Create a manufacturing setup (milling/turning/cutting); applies stock mode/offsets                                  |
-| `cam_create_operation`   | Add a machining operation (Fusion's strategy names only); applies stepdown/feed/speed/coolant, `face_indices` selects geometry for the five strategies that have a parameter, and `tool_diameter` (cm) attaches a flat end mill so the operation can generate — `tool_json` takes a complete tool object instead, and `tool_number` alone reuses one the document library already holds |
+| `cam_create_operation`   | Add a machining operation (Fusion's strategy names only); applies stepdown/feed/speed/coolant, `face_indices` selects geometry for the six strategies with a measured selection parameter, and `tool_diameter` (cm) attaches a flat end mill so the operation can generate — `tool_json` takes a complete tool object instead, and `tool_number` alone reuses one the document library already holds |
 | `cam_generate_toolpath`  | Generate toolpaths for operations                                                                                   |
 | `cam_post_process`       | Post-process to G-code — pass a full `.cps` path (cloud-post builds don't ship local posts)                         |
 | `cam_list_setups`        | List all manufacturing setups                                                                                       |
@@ -335,8 +335,10 @@ its own is unmeasured (one probe per strategy is its own item), so none is claim
 `CadContours2dParameterValue` is `stockContours`. That boundary *is* how a face operation
 is aimed — a `FaceContourSelection` written into it is accepted (`isValid: true`,
 `hasError: false`), and the operation regenerates with `has_toolpath: true`. Fusion
-honours it while `useStockContours` is true, which is its default. Without a selection
-the operation still generates: it machines the stock's top.
+honours it while `useStockContours` is true, which is its measured default; nothing in
+this tool sets that flag, and nothing checks it afterwards, so a document that turned it
+off would take the selection without acting on it. Without a selection the operation
+still generates: it machines the stock's top.
 
 ### How `cam_create_operation` gets a tool
 
