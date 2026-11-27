@@ -233,6 +233,54 @@ PARAMETER_REFUSALS = [
     ),
     (
         "create_construction_plane",
+        # The angle is judged before the axis and the plane, so a call missing it
+        # answers this sentence even when the other two are bad as well.
+        {"method": "angle", "edge_name": "w", "plane": "zz"},
+        "INVALID_INPUT",
+        "method='angle' needs an angle in degrees, not None",
+        ("Pass angle (degrees) with method='angle'.",),
+    ),
+    (
+        "create_construction_plane",
+        # Judged for any method that is given an angle: the tangent branch interpolates
+        # it too, so mock must ask the same rule outside method="angle".
+        {
+            "method": "tangent",
+            "body_name": "B",
+            "face_index": 0,
+            "plane": "xy",
+            "angle": float("nan"),
+        },
+        "INVALID_INPUT",
+        "angle must be finite, not nan",
+        ("Pass a finite number of degrees.",),
+    ),
+    (
+        "create_construction_plane",
+        {"method": "angle", "plane": "xy", "angle": "45"},
+        "INVALID_INPUT",
+        "angle must be a number of degrees, not '45'",
+        ("Pass a number; it is interpolated into a 'deg' expression.",),
+    ),
+    (
+        "create_construction_plane",
+        # An int too large for a float: `float()` raises, and `math.isfinite` would
+        # have let that escape as an untyped error.
+        {"method": "angle", "plane": "xy", "angle": 10**400},
+        "INVALID_INPUT",
+        "angle is outside the range Fusion can store",
+        ("Send a value in Fusion's numeric range.",),
+    ),
+    (
+        "create_construction_axis",
+        # `intersection` resolves two plane names, and mock used to rehearse success.
+        {"method": "intersection", "plane_one": "zz", "plane_two": "yz"},
+        "INVALID_INPUT",
+        "Unknown plane 'zz' — use xy, yz, or xz",
+        ("Pass xy, yz or xz; the plane is lowercased, so XZ works.",),
+    ),
+    (
+        "create_construction_plane",
         # The tangent branches name a body, so an empty one is the shared refusal -
         # the same sentence every other body-naming tool answers.
         {"method": "tangent", "face_index": 0, "plane": "xy"},
@@ -408,6 +456,11 @@ PARAMETER_REFUSALS = [
         "joint_geometry",
         "as_built_geometry",
         "rigid_group_size",
+        "construction_plane_angle",
+        "construction_plane_angle_finite",
+        "construction_plane_angle_type",
+        "construction_plane_angle_range",
+        "intersection_plane",
         "tangent_plane_body_name",
         "tangent_plane_face",
         "perpendicular_axis",
@@ -877,6 +930,94 @@ def test_the_advertised_strategies_split_between_aimable_and_not():
         "face",
     }
     assert refused == {"bore", "slot", "trace", "engrave"}
+
+
+def test_the_handler_and_the_mock_refuse_an_unknown_axis_alike(bound_handler):
+    """The angle plane resolves an axis name, and mock used to rehearse
+    ``created: true`` for one the add-in refuses. One rule, one sentence, both sides."""
+    # The plane is *invalid too*: a mock that judged the plane first would answer the
+    # plane sentence, so this case is what pins the order, not just the rules.
+    call = {"method": "angle", "plane": "zz", "angle": 30, "edge_name": "w"}
+    handler = bound_handler(FakeDesign(bodies=[FakeBody("Body1")]))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.create_construction_plane(**call)
+
+    refused = mock._create_construction_plane(call)
+
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+    assert "Unknown axis 'w'" in refused["error_message"]
+
+
+def test_the_handler_and_the_mock_refuse_an_unknown_pattern_axis_alike(bound_handler):
+    """``circular_pattern`` names the same axis, from the same rule."""
+    call = {"body_name": "Body1", "count": 3, "axis": "w"}
+    handler = bound_handler(FakeDesign(bodies=[FakeBody("Body1")]))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.circular_pattern(**call)
+
+    refused = mock._circular_pattern(call)
+
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+
+
+@pytest.mark.parametrize("axis", ["x", "Y", "Z"])
+def test_a_usable_axis_is_refused_by_neither_side(axis):
+    """The rule must not turn a call the add-in accepts into a refusal."""
+    assert rules.construction_axis_name_refusal(axis) is None
+    assert "error_kind" not in mock._create_construction_plane(
+        {"method": "angle", "plane": "xy", "angle": 30, "edge_name": axis}
+    )
+    assert "error_kind" not in mock._circular_pattern(
+        {"body_name": "Body1", "count": 3, "axis": axis}
+    )
+
+
+# ── the divergences mock keeps, on purpose ────────────────────────────
+
+#: Pinned by name: a divergence is deliberate only while it is listed here with a
+#: reason, and the axis rehearsal this item removed was the one that was not.
+_DIVERGENCES = {"parameters_failed", "no_design_model"}
+
+
+def test_the_mock_divergences_are_exactly_these():
+    assert set(rules.MOCK_DIVERGENCES) == _DIVERGENCES
+
+
+def test_every_divergence_carries_a_reason():
+    for name, reason in rules.MOCK_DIVERGENCES.items():
+        assert reason.strip(), f"{name} is listed with no reason"
+
+
+def test_mock_cannot_answer_the_parameters_failed_divergence():
+    """Fusion decides which parameter names it refuses; mock has no Fusion, so the key
+    never appears - the divergence is recorded rather than rehearsed."""
+    reply = mock.mock_command(
+        "cam_create_operation",
+        {
+            "setup_name": "Setup1",
+            "strategy": "face",
+            "tool_diameter": 0.6,
+            "stepdown": 0.1,
+        },
+    )
+
+    # What mock assumes: every parameter it is given lands.
+    assert reply["parameters_applied"]["maximumStepdown"] == 0.1
+    # What only Fusion can say: whether it refused a name.
+    assert "parameters_failed" not in reply
+
+
+def test_mock_echoes_a_name_it_never_resolved():
+    """The second divergence, demonstrated: a name that exists nowhere still answers."""
+    reply = mock.mock_command("get_object_info", {"name": "NoSuchBody"})
+
+    assert reply["ok"] is True
+    assert reply["name"] == "NoSuchBody"
+    assert "no_design_model" in rules.MOCK_DIVERGENCES
 
 
 def test_a_usable_strategy_and_selection_is_refused_by_neither_side():

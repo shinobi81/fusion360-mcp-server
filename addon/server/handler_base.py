@@ -438,15 +438,12 @@ class HandlerBase:
             "y": root.yConstructionAxis,
             "z": root.zConstructionAxis,
         }
+        # The name is judged by the rule table, so mock mode refuses the same call with
+        # the same sentence - it used to rehearse `created: true` for `edge_name="w"`.
+        if refusal := _rules.construction_axis_name_refusal(axis):
+            raise refusal
         # Lowercased like _construction_plane, so "X" and "x" name the same axis.
-        a = m.get((axis or "").lower())
-        if a is None:
-            raise _hints.Refusal(
-                "INVALID_INPUT",
-                f"Unknown axis '{axis}' — use x, y, or z",
-                hints=("Pass x, y or z; the axis is lowercased, so Y works.",),
-            )
-        return a
+        return m[(axis or "").lower()]
 
     @staticmethod
     def _timeline_count(design) -> int:

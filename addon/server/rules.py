@@ -19,6 +19,7 @@ hand edit in the ``src`` copy is overwritten.
 from __future__ import annotations
 
 import json
+import math
 import os
 from collections.abc import Iterable, Mapping
 from typing import Any
@@ -177,6 +178,27 @@ def cam_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
         # an empty name is not a name, and mock mode must answer what the add-in does.
         return body_name_required_refusal({"body_name": body_name})
     return None
+
+
+#: The divergences that change a *refusal* or a reply key, and why each is deliberate.
+#:
+#: A divergence belongs here when it is either a call mock answers *successfully* that
+#: the add-in refuses - what an unattended rehearsal would act on - or a reply key one
+#: side sends and the other does not.  The axis rehearsal the new rule replaced was the
+#: first kind and was not listed, which is why the table exists.  Two deliberate
+#: divergences live outside it and say so in their own code: ``undo`` always answers the
+#: direct-design shape, and ``execute_code`` reports zero deltas because mock runs
+#: nothing.
+MOCK_DIVERGENCES: dict[str, str] = {
+    "parameters_failed": (
+        "mock applies every parameter it is given; Fusion refuses some names, and only "
+        "Fusion can say which, so mock never answers that key"
+    ),
+    "no_design_model": (
+        "mock has no design, body, face or setup, so a name it is handed is echoed "
+        "rather than resolved - a name that exists nowhere still answers ok"
+    ),
+}
 
 
 #: What a reply says for an operation created without a tool.  Fusion's own sentence
@@ -669,6 +691,81 @@ def construction_plane_name_refusal(plane: Any) -> _hints.Refusal | None:
         f"Unknown plane {plane!r} — use xy, yz, or xz",
         hints=("Pass xy, yz or xz; the plane is lowercased, so XZ works.",),
     )
+
+
+#: The construction axes by name, lowercased.  The rule guards the *name*; the handler
+#: still resolves the object from its own map, which must hold exactly these keys - a
+#: name only here would index past that map and raise ``KeyError``.
+_CONSTRUCTION_AXES: frozenset[str] = frozenset({"x", "y", "z"})
+
+
+def construction_axis_name_refusal(axis: Any) -> _hints.Refusal | None:
+    """The refusal an unusable axis name earns, or None when it is one of the 3.
+
+    ``_construction_axis`` refused a miss itself, so mock mode answered ``created:
+    true`` for ``create_construction_plane(method="angle", plane="xy", angle=30,
+    edge_name="w")`` - a value the add-in refuses before Fusion is asked.  The axis is
+    named by two callers (``circular_pattern`` and the angle plane), so the sentence
+    lives here and both sides answer it.
+    """
+    if str(axis or "").lower() in _CONSTRUCTION_AXES:
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        f"Unknown axis {axis!r} — use x, y, or z",
+        hints=("Pass x, y or z; the axis is lowercased, so Y works.",),
+    )
+
+
+def construction_plane_angle_refusal(
+    params: Mapping[str, Any],
+) -> _hints.Refusal | None:
+    """The refusal an unusable ``angle`` earns, or None.
+
+    Four shapes of fault, one rule.  The ``angle`` method requires a number: the handler
+    build ``ValueInput.createByString(f"{angle} deg")`` whatever it was given, so a
+    missing angle reached Fusion and came back as ``3 : invalid expression`` - a
+    refusal nobody could act on.  Any method that is given an angle at all gets it
+    judged, because the ``tangent`` branch interpolates that value too.
+
+    A numeric *string* is refused as well, and it is not a units question: the value is
+    interpolated verbatim, so ``"45"`` would have reached Fusion as ``"45 deg"`` and
+    ``"45 deg"`` as ``"45 deg deg"``.  The schema types ``angle`` as a number, so a
+    string is a caller who meant one.
+    """
+    angle = params.get("angle")
+    if angle is None:
+        if params.get("method") != "angle":
+            return None
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            "method='angle' needs an angle in degrees, not None",
+            hints=("Pass angle (degrees) with method='angle'.",),
+        )
+    if isinstance(angle, bool) or not isinstance(angle, (int, float)):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"angle must be a number of degrees, not {angle!r}",
+            hints=("Pass a number; it is interpolated into a 'deg' expression.",),
+        )
+    try:
+        magnitude = float(angle)
+    except OverflowError:
+        # An int too large for a float: ``float()`` raises here, and it would otherwise
+        # escape ``math.isfinite`` as an untyped error.  The value is not echoed - a
+        # 400-digit integer is not advice.
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            "angle is outside the range Fusion can store",
+            hints=("Send a value in Fusion's numeric range.",),
+        )
+    if not math.isfinite(magnitude):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"angle must be finite, not {angle!r}",
+            hints=("Pass a finite number of degrees.",),
+        )
+    return None
 
 
 def construction_plane_tangent_refusal(

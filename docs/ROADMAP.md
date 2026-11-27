@@ -163,7 +163,7 @@ because a client may already branch on them.
 
 `tests/test_addon_refusals.py` makes it a ratchet rather than a one-off audit. It
 fails on a raise that would reach a caller `UNKNOWN`, on a baseline row that no longer
-matches a site, and on any change to the 34 unjudgeable rows - a computed message, a
+matches a site, and on any change to the 35 unjudgeable rows - a computed message, a
 `Protocol` body, or a kind that comes from a `rules.py` validator call, each with its
 reason written down. That count rose from 7 by design: the validators are what let mock
 mode answer the same sentence, and a kind returned from a function is not readable in the
@@ -508,6 +508,33 @@ and asks the running Fusion whether it exists - 190 references, none missing on
     advertised strategies are aimable; the other four keep the refusal, and which of them
     exposes a parameter of its own is unmeasured - one probe per strategy is the brief's
     item 9.
+
+13. **Mock rehearsed success for calls the add-in refuses** - **closed (this PR).**
+    `create_construction_plane(method="angle", plane="xy", angle=30, edge_name="w")`
+    answers `created: true` in mock mode and `INVALID_INPUT` ("Unknown axis 'w'") in the
+    add-in: the axis was resolved by a handler method mock never asked.
+    `circular_pattern`'s `axis` is the same name through the same helper. The sentence
+    now lives in
+    `rules.construction_axis_name_refusal`, which the handler raises and mock answers, so
+    the two sides cannot disagree - and a usable axis (`y`, `Y`) is refused by neither,
+    which is the half a parity test usually forgets. The same branch rehearsed success
+    for a *missing* angle (the handler sent Fusion `"None deg"` and it answered
+    `3 : invalid expression`), so `rules.construction_plane_angle_refusal` decides that
+    from the parameters too - angle, then axis, then plane, the handler's own order,
+    because a call carrying two faults must get one sentence from both sides. A real
+    caller sees one change there: that call is `INVALID_INPUT` now, not Fusion's.
+
+    What mock still cannot know is listed, one reason each, in
+    `rules.MOCK_DIVERGENCES`, and pinned by name in `tests/test_rules.py`:
+
+    | divergence | why it is deliberate |
+    | --- | --- |
+    | `parameters_failed` | mock applies every parameter it is given; Fusion refuses some names, and only Fusion can say which, so mock never answers that key |
+    | `no_design_model` | mock has no design, body, face or setup, so a name it is handed is echoed rather than resolved - a name that exists nowhere still answers ok |
+
+    A divergence that is *not* in that table is a defect - the axis rehearsal this item
+    removed was one, and it stayed invisible because nothing compared the two sides for
+    it.
 
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.

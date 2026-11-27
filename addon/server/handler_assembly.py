@@ -179,6 +179,13 @@ class AssemblyCommands(_Contract):
             }
         ):
             raise refusal
+        # The angle is judged here too, for the same reason: a bad value refuses without
+        # a design, and mock mode answers the same sentence.  The angle method's
+        # *missing* angle is the half mock used to rehearse as a created plane.
+        if refusal := _rules.construction_plane_angle_refusal(
+            {"method": method, "angle": angle}
+        ):
+            raise refusal
 
         root = self._root()
         planes = root.constructionPlanes

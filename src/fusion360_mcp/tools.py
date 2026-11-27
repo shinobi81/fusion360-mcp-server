@@ -1251,7 +1251,7 @@ TOOLS: list[dict] = [
         },
         edge_name={
             "type": "string",
-            "description": ("Edge or axis to rotate around (for angle method)"),
+            "description": ("Axis to rotate around: x, y or z (for angle method)"),
         },
         plane_one={
             "type": "string",

@@ -31,6 +31,8 @@ from ._rules import (
     cam_target_refusal,
     cam_tool_refusal,
     components_differ_refusal,
+    construction_axis_name_refusal,
+    construction_plane_angle_refusal,
     construction_plane_name_refusal,
     construction_plane_tangent_refusal,
     edge_selector_refusal,
@@ -680,21 +682,27 @@ def _create_hole(p: dict) -> dict:
 def _rectangular_pattern(p: dict) -> dict:
     if refused := _body_name_required_error(p):
         return refused
+    # The handler answers `feature_name`, `x_count` and `y_count` - not the body name or
+    # a body count it never computes, which an agent would read back as a fact.
     return {
-        "body_name": p.get("body_name", "Body1"),
+        "feature_name": "RectangularPattern_mock",
         "x_count": p.get("x_count", 1),
         "y_count": p.get("y_count", 1),
-        "created_bodies": p.get("x_count", 1) * p.get("y_count", 1),
     }
 
 
 def _circular_pattern(p: dict) -> dict:
     if refused := _body_name_required_error(p):
         return refused
+    # "z" mirrors circular_pattern's own default in handler_features.
+    axis_refusal = construction_axis_name_refusal(p.get("axis", "z"))
+    if axis_refusal is not None:
+        return _refusal_error(axis_refusal)
+    # The handler answers `feature_name`, `count` and `total_angle` - not the body name
+    # or the axis it was given, which an agent would then read back as a fact.
     return {
-        "body_name": p.get("body_name", "Body1"),
+        "feature_name": "CircularPattern_mock",
         "count": p.get("count", 3),
-        "axis": p.get("axis", "z"),
         "total_angle": p.get("total_angle", 360),
     }
 
@@ -1071,6 +1079,10 @@ def _add_dimension(p: dict) -> dict:
 
 def _create_construction_plane(p: dict) -> dict:
     refusal = construction_plane_tangent_refusal(p)
+    if refusal is None:
+        # Judged for every method, as the handler does: the angle and tangent branches
+        # both interpolate `angle` into a "deg" expression.
+        refusal = construction_plane_angle_refusal(p)
     if refusal is None and p.get("method") == "three_points":
         # The add-in builds a Point3D per point on this branch only, so the points an
         # offset or midplane call leaves unset are not judged.
@@ -1100,6 +1112,15 @@ def _create_construction_plane(p: dict) -> dict:
         "midplane": ("plane_one", "plane_two"),
         "tangent": () if p.get("point_one") is not None else ("plane",),
     }
+    if p.get("method") == "angle":
+        # The handler judges the same three names in this order: the angle (already
+        # judged above, for every method), then the axis ``setByAngle`` resolves first,
+        # then the plane.  A call carrying two faults must get the *same* sentence from
+        # both sides - the order, not just the rules, is part of the contract.
+        # `or "x"` mirrors the handler's fallback (handler_assembly, the angle branch).
+        axis_refusal = construction_axis_name_refusal(p.get("edge_name") or "x")
+        if axis_refusal is not None:
+            return _refusal_error(axis_refusal)
     resolved = by_method.get(str(p.get("method")), ())
     for field in resolved:
         name_refusal = construction_plane_name_refusal(p.get(field))
@@ -1114,6 +1135,13 @@ def _create_construction_plane(p: dict) -> dict:
 
 
 def _create_construction_axis(p: dict) -> dict:
+    if p.get("method") == "intersection":
+        # The handler resolves both names through `_construction_plane`, so an unknown
+        # one is refused before anything is created.
+        for field in ("plane_one", "plane_two"):
+            name_refusal = construction_plane_name_refusal(p.get(field))
+            if name_refusal is not None:
+                return _refusal_error(name_refusal)
     refusal = perpendicular_axis_refusal(p)
     if refusal is None and p.get("method") == "two_points":
         refusal = point3d_refusal(
