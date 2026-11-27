@@ -173,6 +173,23 @@ def cam_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     return None
 
 
+#: The ways mock mode is known to differ from the add-in, and why each is deliberate.
+#:
+#: Pinned by ``tests/test_rules.py``: a divergence added here without a reason, or a new
+#: one appearing without this list growing, is the failure the table exists to prevent.
+#: A divergence *not* here is a defect - the axis rehearsal this table replaced was one.
+MOCK_DIVERGENCES: dict[str, str] = {
+    "parameters_failed": (
+        "mock applies every parameter it is given; Fusion refuses some names, and only "
+        "Fusion can say which, so mock never answers that key"
+    ),
+    "no_design_model": (
+        "mock has no design, body, face or setup, so a name it is handed is echoed "
+        "rather than resolved - a name that exists nowhere still answers ok"
+    ),
+}
+
+
 #: What a reply says for an operation created without a tool.  Fusion's own sentence
 #: (measured on 2706.1.17) is quoted rather than paraphrased, because it is what the
 #: caller's *next* call answers - and one string, mirrored into ``src``, is what keeps
@@ -662,6 +679,28 @@ def construction_plane_name_refusal(plane: Any) -> _hints.Refusal | None:
         "INVALID_INPUT",
         f"Unknown plane {plane!r} — use xy, yz, or xz",
         hints=("Pass xy, yz or xz; the plane is lowercased, so XZ works.",),
+    )
+
+
+#: The construction axes by name, lowercased - what ``_construction_axis`` resolves.
+_CONSTRUCTION_AXES: frozenset[str] = frozenset({"x", "y", "z"})
+
+
+def construction_axis_refusal(axis: Any) -> _hints.Refusal | None:
+    """The refusal an unusable axis name earns, or None when it is one of the 3.
+
+    ``_construction_axis`` refused a miss itself, so mock mode answered ``created:
+    true`` for ``create_construction_plane(method="angle", edge_name="w")`` - a value
+    the add-in refuses before Fusion is asked.  The axis is named by two callers
+    (``circular_pattern`` and the angle plane), so the sentence lives here and both
+    sides answer it.
+    """
+    if str(axis or "").lower() in _CONSTRUCTION_AXES:
+        return None
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        f"Unknown axis '{axis}' — use x, y, or z",
+        hints=("Pass x, y or z; the axis is lowercased, so Y works.",),
     )
 
 

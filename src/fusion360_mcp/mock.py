@@ -31,6 +31,7 @@ from ._rules import (
     cam_target_refusal,
     cam_tool_refusal,
     components_differ_refusal,
+    construction_axis_refusal,
     construction_plane_name_refusal,
     construction_plane_tangent_refusal,
     edge_selector_refusal,
@@ -691,6 +692,9 @@ def _rectangular_pattern(p: dict) -> dict:
 def _circular_pattern(p: dict) -> dict:
     if refused := _body_name_required_error(p):
         return refused
+    axis_refusal = construction_axis_refusal(p.get("axis", "z"))
+    if axis_refusal is not None:
+        return _refusal_error(axis_refusal)
     return {
         "body_name": p.get("body_name", "Body1"),
         "count": p.get("count", 3),
@@ -1105,6 +1109,13 @@ def _create_construction_plane(p: dict) -> dict:
         name_refusal = construction_plane_name_refusal(p.get(field))
         if name_refusal is not None:
             return _refusal_error(name_refusal)
+    if p.get("method") == "angle":
+        # The angle branch resolves an axis name too - `edge_name or "x"`, exactly as
+        # the handler does - so an unknown one is refused here rather than rehearsed as
+        # a created plane.
+        axis_refusal = construction_axis_refusal(p.get("edge_name") or "x")
+        if axis_refusal is not None:
+            return _refusal_error(axis_refusal)
     # The handler's keys, as for the axis: `plane_name` was never one of them.
     return {
         "created": True,

@@ -509,6 +509,27 @@ and asks the running Fusion whether it exists - 190 references, none missing on
     exposes a parameter of its own is unmeasured - one probe per strategy is the brief's
     item 9.
 
+13. **Mock rehearsed success for calls the add-in refuses** - **closed (this PR).**
+    `create_construction_plane(method="angle", edge_name="w")` answers `created: true`
+    in mock mode and `INVALID_INPUT` ("Unknown axis 'w'") in the add-in: the axis was
+    resolved by a handler method mock never asked. `circular_pattern`'s `axis` is the
+    same name through the same helper. The sentence now lives in
+    `rules.construction_axis_refusal`, which the handler raises and mock answers, so the
+    two sides cannot disagree - and a usable axis (`y`, `Y`) is refused by neither, which
+    is the half a parity test usually forgets.
+
+    What mock still cannot know is listed, one reason each, in
+    `rules.MOCK_DIVERGENCES`, and pinned by name in `tests/test_rules.py`:
+
+    | divergence | why it is deliberate |
+    | --- | --- |
+    | `parameters_failed` | mock applies every parameter it is given; Fusion refuses some names, and only Fusion can say which, so mock never answers that key |
+    | `no_design_model` | mock has no design, body, face or setup, so a name it is handed is echoed rather than resolved |
+
+    A divergence that is *not* in that table is a defect - the axis rehearsal this item
+    removed was one, and it stayed invisible because nothing compared the two sides for
+    it.
+
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.
 `setByThreePoints`, `setByTwoPoints` and `ScaleFeatures.createInput` all accept a

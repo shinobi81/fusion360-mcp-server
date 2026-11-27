@@ -879,6 +879,85 @@ def test_the_advertised_strategies_split_between_aimable_and_not():
     assert refused == {"bore", "slot", "trace", "engrave"}
 
 
+def test_the_handler_and_the_mock_refuse_an_unknown_axis_alike(bound_handler):
+    """The angle plane resolves an axis name, and mock used to rehearse
+    ``created: true`` for one the add-in refuses. One rule, one sentence, both sides."""
+    call = {"method": "angle", "plane": "xy", "angle": 30, "edge_name": "w"}
+    handler = bound_handler(FakeDesign(bodies=[FakeBody("Body1")]))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.create_construction_plane(**call)
+
+    refused = mock._create_construction_plane(call)
+
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+    assert "Unknown axis 'w'" in refused["error_message"]
+
+
+def test_the_handler_and_the_mock_refuse_an_unknown_pattern_axis_alike(bound_handler):
+    """``circular_pattern`` names the same axis, from the same rule."""
+    call = {"body_name": "Body1", "count": 3, "axis": "w"}
+    handler = bound_handler(FakeDesign(bodies=[FakeBody("Body1")]))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.circular_pattern(**call)
+
+    refused = mock._circular_pattern(call)
+
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+
+
+@pytest.mark.parametrize("axis", ["x", "Y", "Z"])
+def test_a_usable_axis_is_refused_by_neither_side(bound_handler, axis):
+    """The rule must not turn a call the add-in accepts into a refusal."""
+    assert rules.construction_axis_refusal(axis) is None
+    assert "error_kind" not in mock._create_construction_plane(
+        {"method": "angle", "plane": "xy", "angle": 30, "edge_name": axis}
+    )
+    assert "error_kind" not in mock._circular_pattern(
+        {"body_name": "Body1", "count": 3, "axis": axis}
+    )
+
+
+# ── the divergences mock keeps, on purpose ────────────────────────────
+
+#: Pinned by name: a divergence is deliberate only while it is listed here with a
+#: reason, and the axis rehearsal this item removed was the one that was not.
+_DIVERGENCES = {"parameters_failed", "no_design_model"}
+
+
+def test_the_mock_divergences_are_exactly_these():
+    assert set(rules.MOCK_DIVERGENCES) == _DIVERGENCES
+
+
+def test_every_divergence_carries_a_reason():
+    for name, reason in rules.MOCK_DIVERGENCES.items():
+        assert reason.strip(), f"{name} is listed with no reason"
+
+
+def test_mock_cannot_answer_the_parameters_failed_divergence():
+    """Fusion decides which parameter names it refuses; mock has no Fusion, so the key
+    never appears - the divergence is recorded rather than rehearsed."""
+    reply = mock.mock_command(
+        "cam_create_operation",
+        {"setup_name": "Setup1", "strategy": "face", "tool_diameter": 0.6},
+    )
+
+    assert "parameters_failed" not in reply
+    assert "parameters_failed" in rules.MOCK_DIVERGENCES
+
+
+def test_mock_echoes_a_name_it_never_resolved():
+    """The second divergence, demonstrated: a name that exists nowhere still answers."""
+    reply = mock.mock_command("get_object_info", {"name": "NoSuchBody"})
+
+    assert reply["ok"] is True
+    assert reply["name"] == "NoSuchBody"
+    assert "no_design_model" in rules.MOCK_DIVERGENCES
+
+
 def test_a_usable_strategy_and_selection_is_refused_by_neither_side():
     """Every advertised strategy passes; a selection passes where one exists."""
     assert (
