@@ -77,7 +77,10 @@ and the atheris targets: `docs/TESTING.md`.
    called it, or it was only ever refused — because `tests/test_proven.py` fails a tool
    with no row, and the answer it gives is the record the next session starts from
 
-The MCP server forwards tool calls 1:1 — there is no mapping layer to touch.
+The MCP server forwards tool calls 1:1 — there is no mapping layer to touch — with one
+documented exception: a tool with its own client-side bound (`health`) needs a method on
+`Fusion360Connection` and a branch in `server._send`, or an MCP caller gets the generic
+45 s and its retries.
 
 ## Conventions
 

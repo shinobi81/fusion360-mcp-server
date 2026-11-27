@@ -29,7 +29,7 @@ What this cannot do, and does not pretend to:
   that kills Fusion takes the user's unsaved document with it.
 * **Tell a busy thread from a dead one.**  A long CAM run looks exactly like a wedge
   from here.  ``queue_depth`` rising over several polls is the hint that it is working
-  through a backlog rather than stuck, which is why the watch mode prints it.
+  through a backlog rather than stuck, which is why every poll prints it.
 """
 
 from __future__ import annotations
@@ -56,9 +56,12 @@ def poll(connection: Fusion360Connection, timeout: float) -> tuple[int, dict]:
                 "error": "the running add-in has no `health`: reload or restart it",
             }
         return 1, {"answered": False, "error_kind": exc.error_kind, "error": str(exc)}
+    except ValueError as exc:
+        # A reply line that is not JSON (`_recv_json` lets the decoder's error out).
+        return 1, {"answered": False, "error_kind": "BAD_REPLY", "error": str(exc)}
     except ConnectionError as exc:
-        # The socket's bound expired before the main thread answered: a wedge, or a
-        # thread busy enough to look like one from here.
+        # The socket timed out before the main thread answered, or it closed under us -
+        # a wedge, a thread busy enough to look like one, or a lost connection.
         return 1, {"answered": False, "error_kind": "NO_ANSWER", "error": str(exc)}
     if reply.get("ok") is not True:
         # The add-in answered with a *failure* inside its envelope; `send_command`
@@ -73,6 +76,7 @@ def poll(connection: Fusion360Connection, timeout: float) -> tuple[int, dict]:
         }
     return 0, {
         "answered": True,
+        "ok": True,
         "app_version": reply.get("app_version"),
         "active_document": reply.get("active_document"),
         "queue_depth": reply.get("queue_depth"),
@@ -102,6 +106,10 @@ def main(argv: list[str] | None = None) -> int:
         "--json", action="store_true", help="one JSON object per poll, for a supervisor"
     )
     args = parser.parse_args(argv)
+    if args.interval < 0:
+        parser.error("--interval must be zero or more seconds")
+    if args.count < 1:
+        parser.error("--count must be at least 1")
 
     # The package's own defaults apply only when the key is absent: a `None` reaches
     # `s.connect((None, None))` and swallows the TypeError into "not connected".
@@ -146,6 +154,7 @@ def main(argv: list[str] | None = None) -> int:
                     f"NO ANSWER ({report.get('error_kind')}): {report.get('error')}",
                     file=sys.stderr,
                 )
+            if not report["answered"] and report.get("error_kind") == "NO_ANSWER":
                 print(
                     f"ping is answered by the socket thread, so it may still reply; "
                     f"the main thread did not answer within {args.timeout}s.",

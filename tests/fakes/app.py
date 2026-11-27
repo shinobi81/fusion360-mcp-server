@@ -54,6 +54,10 @@ class FakeApplication:
 
     def __init__(self):
         self.userInterface = types.SimpleNamespace()
+        #: `health` reads both: the version Fusion is running, and whether a document is
+        #: open.  ``None`` is the state a bare session is in, not a guess.
+        self.version = "2706.1.17"
+        self.activeDocument = None
         #: ``None`` on purpose — ``_snapshot`` then reports no deltas, which is what
         #: every existing handler test already sees.
         self.activeProduct = None

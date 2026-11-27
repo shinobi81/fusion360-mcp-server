@@ -52,6 +52,7 @@ class FakeConnection:
         # The script's "nothing listening" message names them.
         self.host = kwargs.get("host", "127.0.0.1")
         self.port = kwargs.get("port", 9876)
+        self.disconnected = False
         if record is not None:
             record.append(kwargs)
 
@@ -64,7 +65,7 @@ class FakeConnection:
         return self.reply
 
     def disconnect(self) -> None:
-        pass
+        self.disconnected = True
 
 
 @pytest.fixture
@@ -100,10 +101,16 @@ def test_an_add_in_side_failure_is_not_success(connection_factory, capsys):
     assert "boom" in capsys.readouterr().err
 
 
-def test_a_wedged_thread_is_exit_one(connection_factory):
+def test_a_wedged_thread_is_exit_one(connection_factory, capsys):
     connection_factory(raises=ConnectionError("timed out"))
 
-    assert CHECK.main([]) == 1
+    assert CHECK.main(["--json"]) == 1
+    report = json.loads(capsys.readouterr().out.strip())
+    assert report == {
+        "answered": False,
+        "error_kind": "NO_ANSWER",
+        "error": "timed out",
+    }
 
 
 def test_a_missing_command_says_to_reload(connection_factory, capsys):
@@ -111,7 +118,11 @@ def test_a_missing_command_says_to_reload(connection_factory, capsys):
     connection_factory(raises=FusionError("Unknown command: health", "UNKNOWN_COMMAND"))
 
     assert CHECK.main([]) == 3
-    assert "reload" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "reload" in err
+    assert "did not answer" not in err, (
+        "UNKNOWN_COMMAND was answered by the main thread; a wedge hint here is false"
+    )
 
 
 def test_nothing_listening_is_exit_two(connection_factory):
@@ -154,7 +165,7 @@ def test_watch_mode_reports_the_first_failure_not_the_last(monkeypatch):
     assert CHECK.main(["--interval", "0", "-n", "2"]) == 1
 
 
-def test_the_timeout_flag_reaches_the_client(monkeypatch, connection_factory):
+def test_the_timeout_flag_reaches_the_client(monkeypatch):
     """`--timeout` is what bounds the wedge case; hard-coding 5.0 must fail this."""
     seen: list[float] = []
 
@@ -176,6 +187,7 @@ def test_json_mode_prints_one_object_per_poll(connection_factory, capsys):
     report = json.loads(capsys.readouterr().out.strip())
     assert report == {
         "answered": True,
+        "ok": True,
         "app_version": "2706.1.17",
         "active_document": "Plate",
         "queue_depth": 0,
@@ -183,7 +195,7 @@ def test_json_mode_prints_one_object_per_poll(connection_factory, capsys):
 
 
 def test_a_refusal_that_is_not_a_missing_command_is_exit_one(connection_factory):
-    """Only UNKNOWN_COMMAND means "reload it"; TIME_LIMIT-shaped refusals are wedges."""
+    """Only UNKNOWN_COMMAND means "reload it"; a TIMEOUT-shaped refusal is not."""
     connection_factory(raises=FusionError("too slow", "TIMEOUT"))
 
     assert CHECK.main([]) == 1
@@ -201,3 +213,18 @@ def test_a_failed_command_is_reported_as_an_answer_not_a_wedge(
     report = json.loads(capsys.readouterr().out.strip())
     assert report["answered"] is True
     assert report["ok"] is False
+
+
+def test_the_socket_is_released_after_the_poll(monkeypatch):
+    """A poll that leaves its socket open leaks one per supervisor run."""
+    made: list = []
+
+    def factory(**kwargs):
+        connection = FakeConnection(**kwargs)
+        made.append(connection)
+        return connection
+
+    monkeypatch.setattr(CHECK, "Fusion360Connection", factory)
+
+    assert CHECK.main([]) == 0
+    assert made and all(c.disconnected for c in made)

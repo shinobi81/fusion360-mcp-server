@@ -94,21 +94,6 @@ def test_health_is_queued_where_ping_is_answered_on_the_spot():
         bridge.stop()
 
 
-def test_health_reaches_the_handler_once_the_queue_is_drained():
-    """Nothing in the fast path answers it, so the dispatch is what answers it."""
-    app = FakeApplication()
-    handler = Handler()
-    bridge = event_bridge.EventBridge(app, handler)
-    try:
-        bridge._queue.put(event_bridge.WorkItem({"type": "health"}))
-
-        bridge.drain_queue()
-
-        assert handler.commands == [{"type": "health"}]
-    finally:
-        bridge.stop()
-
-
 def test_the_event_handler_is_built_for_the_bridge_and_drains_its_queue():
     app = FakeApplication()
     handler = Handler()

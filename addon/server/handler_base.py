@@ -41,7 +41,8 @@ class HandlerBase:
     def __init__(self):
         self.app = adsk.core.Application.get()
         self.ui = self.app.userInterface
-        #: Set by ``EventBridge``; ``health`` reports the queue's depth from it.  None
+        #: Set by ``EventBridge`` (construction and reload); ``health`` reports the
+        #: queue's depth from it.  None
         #: when a handler is built without a bridge (a unit test), which the command
         #: answers as an unknown depth rather than an error.  Annotated for a reader:
         #: no configured gate analyses ``addon/``, so nothing else would.

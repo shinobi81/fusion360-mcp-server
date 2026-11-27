@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from fusion360_mcp import server
+from fusion360_mcp import connection, server
 from fusion360_mcp.server import _send
 
 
@@ -61,7 +61,9 @@ class TestSendRouting:
         monkeypatch.setattr(server, "get_connection", lambda **_: stub)
 
         assert server._send("socket", "health", {}) is stub.reply
-        assert "health" in seen, seen
+        assert seen["health"] == connection._HEALTH_TIMEOUT, (
+            "health must use its own bound, not the generic 45 s"
+        )
 
     def test_mock_mode_returns_mock_result(self):
         result = _send("mock", "ping")
