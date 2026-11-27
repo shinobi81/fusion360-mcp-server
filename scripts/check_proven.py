@@ -15,12 +15,13 @@ The default run needs no Fusion and no network: it checks that every tool in
 ``src/fusion360_mcp/tools.py`` has exactly one row, that no row names a tool that does
 not exist, and that every ``proven`` row cites a date, an ``app.version`` and a PR.
 
-``--live`` sends the read-only tools in ``LIVE_CALLS`` to the running add-in and reports
-a mismatch when a row claims a probe and the call does not answer ``ok: true``.  It is a
-subset on purpose: most mutations cannot be smoke-called without arguments, and a
-mutation's evidence is a measured envelope in a PR body, not something this script can
-reproduce.  A tool without an entry in ``LIVE_CALLS`` is reported as not probed, never
-as passing.
+``--live`` sends the read-only tools in ``LIVE_CALLS``/``LIVE_BODY_CALLS`` to the
+running add-in and reports a mismatch **in either direction**: a row that claims a
+probe and gets a refusal, and a row that says ``unproven`` for a tool that answers
+``ok`` (the table is then out of date, not wrong). It is a subset on purpose: most
+mutations cannot be smoke-called without arguments, and a mutation's evidence is a
+measured envelope in a PR body, not something this script can reproduce. A tool it
+sends no call to is reported as not probed, never as passing.
 """
 
 from __future__ import annotations
@@ -31,12 +32,12 @@ import re
 import sys
 from pathlib import Path
 
-from fusion360_mcp.tools import TOOLS
+from fusion360_mcp.tools import _READ_ONLY, TOOLS
 
 ROOT = Path(__file__).resolve().parents[1]
 PROVEN = ROOT / "docs" / "PROVEN.md"
 
-#: `proven — 2026-11-26, `2706.1.17`, #157: what was measured`.  The three fields are
+#: `proven — 2026-11-26, `2706.1.17`, #158: what was measured`.  The three fields are
 #: mandatory so a row cannot claim a probe without saying when, against which build, and
 #: where the envelope is recorded.
 _PROVEN_RE = re.compile(
@@ -47,6 +48,12 @@ _PROVEN_RE = re.compile(
 
 #: `unproven — why`.  One line, so the table stays a table.
 _UNPROVEN_RE = re.compile(r"^unproven — (?P<why>.+)$")
+
+#: Words that fill the "why" slot without saying anything.  The preamble says "not yet"
+#: is not a reason, and a rule that only checks for *something* would accept it.
+_PLACEHOLDER_RE = re.compile(
+    r"^(not yet|todo|tbd|n/?a|unknown|none|nothing|-+)\.?$", re.IGNORECASE
+)
 
 #: The read-only calls `--live` can make with no document state at all, keyed by tool
 #: name.  A tool absent from here is reported as not probed.
@@ -72,6 +79,13 @@ LIVE_BODY_CALLS: dict[str, str] = {
 }
 
 
+#: The table's honesty depends on `--live` never mutating the caller's document, so the
+#: subset is checked against the tool annotation that says which tools are read-only -
+#: a mutating tool added here would otherwise be executed silently.
+_LIVE_TOOLS = frozenset(LIVE_CALLS) | frozenset(LIVE_BODY_CALLS)
+assert _LIVE_TOOLS <= _READ_ONLY, f"not read-only: {sorted(_LIVE_TOOLS - _READ_ONLY)}"
+
+
 class Row:
     """One table row: the tool, its state, and the text after the state word."""
 
@@ -89,6 +103,8 @@ class Row:
 
     def problem(self) -> str | None:
         """Why this row is malformed, or None when it is well formed."""
+        if self.state not in ("proven", "unproven"):
+            return f"unknown state {self.state!r}: a row is `proven` or `unproven`"
         if self.proven:
             match = _PROVEN_RE.match(self.evidence)
             if match is None:
@@ -102,21 +118,31 @@ class Row:
         match = _UNPROVEN_RE.match(self.evidence)
         if match is None:
             return "an unproven row must read `unproven — <why>`"
-        if not match.group("why").strip():
-            return "an unproven row must say why"
+        why = match.group("why").strip()
+        if _PLACEHOLDER_RE.search(why):
+            return f"``{why}`` is a placeholder, not a reason: say what is missing"
         return None
+
+
+def _table_lines(text: str) -> list[tuple[int, str]]:
+    """Every ``|``-line with its line number, header and separator included."""
+    return [
+        (lineno, line)
+        for lineno, line in enumerate(text.splitlines(), 1)
+        if line.startswith("|")
+    ]
 
 
 def parse_table(text: str) -> list[Row]:
     """The rows of ``docs/PROVEN.md``, in file order.
 
     Only the two-column table is read: a row is a line that starts with ``|`` and is not
-    the header or the separator.
+    the header or the separator.  A ``|``-line that is neither is reported by
+    :func:`malformed_lines` rather than dropped here - a row nobody can parse is exactly
+    the row a reader would trust.
     """
     rows: list[Row] = []
-    for line in text.splitlines():
-        if not line.startswith("|"):
-            continue
+    for _lineno, line in _table_lines(text):
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
         if len(cells) != 2 or cells[0] in ("Tool", "---") or set(cells[0]) == {"-"}:
             continue
@@ -124,9 +150,21 @@ def parse_table(text: str) -> list[Row]:
     return rows
 
 
+def malformed_lines(text: str) -> list[str]:
+    """``|``-lines that are neither a header, a separator, nor a two-cell row."""
+    problems: list[str] = []
+    for lineno, line in _table_lines(text):
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if cells[0] in ("Tool", "---") or set(cells[0]) == {"-"}:
+            continue
+        if len(cells) != 2:
+            problems.append(f"line {lineno}: a row needs exactly two cells: {line}")
+    return problems
+
+
 def check(text: str) -> list[str]:
     """Every problem with the table, as messages a caller can act on."""
-    problems: list[str] = []
+    problems: list[str] = malformed_lines(text)
     rows = parse_table(text)
     names = [row.tool for row in rows]
 
@@ -143,6 +181,24 @@ def check(text: str) -> list[str]:
     return problems
 
 
+def _send(connection, tool: str, params: dict) -> dict:
+    """One reply, with a bridge failure turned into a reply rather than a traceback.
+
+    ``send_command`` raises on ``status: error``: a timeout or a wedged main thread
+    would otherwise end ``--live`` before the table's own problems were printed.
+    """
+    from fusion360_mcp.connection import FusionError
+
+    try:
+        return connection.send_command(tool, params)
+    except FusionError as exc:
+        return {
+            "ok": False,
+            "error_kind": exc.error_kind,
+            "error_message": str(exc),
+        }
+
+
 def probe(host: str | None, port: int | None) -> dict[str, dict]:
     """Send the read-only calls to Fusion; return tool -> its reply."""
     from fusion360_mcp.connection import Fusion360Connection
@@ -156,7 +212,11 @@ def probe(host: str | None, port: int | None) -> dict[str, dict]:
     else:
         connection = Fusion360Connection()
     if not connection.connect():
-        raise SystemExit("not connected: is the Fusion360MCP add-in running?")
+        print(
+            "not connected: is the Fusion360MCP add-in running?",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
 
     replies: dict[str, dict] = {}
     try:
@@ -165,10 +225,10 @@ def probe(host: str | None, port: int | None) -> dict[str, dict]:
         body_name = bodies[0].get("name") if bodies else None
 
         for tool, params in LIVE_CALLS.items():
-            replies[tool] = connection.send_command(tool, params)
+            replies[tool] = _send(connection, tool, params)
         if body_name is not None:
             for tool, parameter in LIVE_BODY_CALLS.items():
-                replies[tool] = connection.send_command(tool, {parameter: body_name})
+                replies[tool] = _send(connection, tool, {parameter: body_name})
     finally:
         connection.disconnect()
     return replies
@@ -201,7 +261,8 @@ def not_probed(replies: dict[str, dict], rows: list[Row]) -> list[str]:
     """
     by_tool = {row.tool: row for row in rows}
     return [
-        f"{tool}: proven, but --live has no call for it (unverified here)"
+        f"{tool}: proven, but --live sent it no call here (no body in the document, "
+        "or no LIVE_CALLS entry)"
         for tool in sorted(set(by_tool) - set(replies))
         if by_tool[tool].proven
     ]

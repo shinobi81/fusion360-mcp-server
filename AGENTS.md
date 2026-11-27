@@ -22,6 +22,8 @@ per-item `threading.Event` until the main thread completes it. Details: `ARCHITE
 
 ```bash
 uv sync --locked               # install deps into .venv; refuses a stale lock
+uv run python scripts/check_proven.py      # docs/PROVEN.md against tools.py; --live
+                               # re-probes the read-only tools against the running Fusion
 uv run python scripts/check_fusion_api.py  # every adsk name under addon/server,
                                # checked against the running Fusion. Exit 1 for four
                                # reasons: a name Fusion does not have, no connection,

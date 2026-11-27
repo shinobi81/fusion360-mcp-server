@@ -10,15 +10,31 @@ that should point at the table stops doing so.
 
 from __future__ import annotations
 
+import importlib.util
 import pathlib
 
 import pytest
 
-from fusion360_mcp.tools import TOOLS
-from scripts.check_proven import check, parse_table
+from fusion360_mcp.tools import _READ_ONLY, TOOLS, get_tool_by_name
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PROVEN = ROOT / "docs" / "PROVEN.md"
+
+
+def _load_checker():
+    """Load ``scripts/check_proven.py`` by path: ``scripts/`` is not a package, and a
+    ``sys.path`` insertion is what the sibling script test avoids."""
+    path = ROOT / "scripts" / "check_proven.py"
+    spec = importlib.util.spec_from_file_location("check_proven", path)
+    assert spec is not None and spec.loader is not None, f"cannot load {path}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CHECKER = _load_checker()
+check = CHECKER.check
+parse_table = CHECKER.parse_table
 
 
 @pytest.fixture(scope="module")
@@ -26,16 +42,12 @@ def text() -> str:
     return PROVEN.read_text(encoding="utf-8")
 
 
-def _rows(text: str):
-    return parse_table(text)
-
-
 def test_the_table_is_well_formed(text):
     assert check(text) == []
 
 
 def test_every_tool_has_exactly_one_row(text):
-    names = [row.tool for row in _rows(text)]
+    names = [row.tool for row in parse_table(text)]
 
     assert sorted(names) == sorted(tool["name"] for tool in TOOLS)
     assert len(names) == len(set(names)) == len(TOOLS)
@@ -43,7 +55,7 @@ def test_every_tool_has_exactly_one_row(text):
 
 def test_a_missing_row_is_reported(text):
     """The direction that matters when a tool is added: silence would be the defect."""
-    rows = _rows(text)
+    rows = parse_table(text)
     dropped = next(row for row in rows if row.proven)
     trimmed = text.replace(f"| `{dropped.tool}` | {dropped.evidence} |\n", "")
 
@@ -61,44 +73,97 @@ def test_a_row_naming_no_tool_is_reported(text):
     )
 
 
-def test_a_proven_row_must_cite_a_date_a_build_and_a_pr(text):
-    rows = _rows(text)
-    proven = next(row for row in rows if row.proven)
-    without_pr = proven.evidence.replace(
-        f"#{proven.evidence.split('#')[1].split(':')[0]}", "#0"
-    )
-    assert without_pr != proven.evidence, "fixture must actually change the row"
-    broken = text.replace(proven.evidence, "proven — 2026-11-26, no build, no PR")
+@pytest.mark.parametrize(
+    "mutant",
+    [
+        "proven — `2706.1.17`, #1: no date",
+        "proven — 2026-11-26, 2706.1.17, #1: version not in backticks",
+        "proven — 2026-11-26, `2706.1.17`: no PR number",
+        "proven — 2026-11-26, `2706.1.17`, #1:",
+    ],
+)
+def test_a_proven_row_must_cite_a_date_a_build_a_pr_and_what(text, mutant):
+    """One mutant per field, so relaxing any one of them fails this test."""
+    proven = next(row for row in parse_table(text) if row.proven)
+    broken = text.replace(proven.evidence, mutant)
+    assert broken != text, "fixture must actually change the row"
 
-    assert any(proven.tool in problem for problem in check(broken))
+    assert any(proven.tool in problem for problem in check(broken)), mutant
 
 
 def test_an_unproven_row_must_say_why(text):
-    rows = _rows(text)
-    unproven = next(row for row in rows if not row.proven)
+    """``scale_body``'s reason is unique in the table, so this breaks one row."""
+    unproven = next(row for row in parse_table(text) if row.tool == "scale_body")
     broken = text.replace(unproven.evidence, "unproven — ")
+    assert broken != text
 
     assert any(unproven.tool in problem for problem in check(broken))
 
 
+@pytest.mark.parametrize("placeholder", ["not yet", "todo", "N/A", "unknown"])
+def test_a_placeholder_is_not_a_reason(text, placeholder):
+    """The preamble says "not yet" is not a reason, so a rule that accepts anything
+    non-empty is not the rule it describes."""
+    unproven = next(row for row in parse_table(text) if row.tool == "scale_body")
+    broken = text.replace(unproven.evidence, f"unproven — {placeholder}")
+    assert broken != text
+
+    assert any("placeholder" in problem for problem in check(broken)), placeholder
+
+
+def test_a_row_that_does_not_parse_is_reported_not_dropped(text):
+    """A stray or mis-piped line used to vanish, and the reader trusts what is left."""
+    broken = text + "\n| `ping` | unproven — x | extra cell |\n"
+
+    assert any("exactly two cells" in problem for problem in check(broken))
+
+
+def test_a_duplicate_row_is_reported(text):
+    row = parse_table(text)[0]
+    broken = text + f"\n| `{row.tool}` | {row.evidence} |\n"
+
+    assert any("more than once" in problem for problem in check(broken))
+
+
 def test_a_state_word_nothing_defines_is_reported(text):
-    rows = _rows(text)
-    row = rows[0]
+    row = parse_table(text)[0]
     broken = text.replace(row.evidence, "probably fine — nothing measured")
 
-    assert any(row.tool in problem for problem in check(broken))
+    assert any("unknown state" in problem for problem in check(broken))
+
+
+def test_the_live_subset_is_read_only_and_names_real_parameters():
+    """``--live`` executes whatever is in ``LIVE_CALLS``/``LIVE_BODY_CALLS`` against the
+    caller's document.  Both facts it rests on are asserted: the tools are read-only,
+    and each parameter name exists in that tool's schema - a mutating tool or a renamed
+    argument would otherwise be found by whoever runs it."""
+    live = set(CHECKER.LIVE_CALLS) | set(CHECKER.LIVE_BODY_CALLS)
+
+    assert live == set(CHECKER.LIVE_CALLS) | set(CHECKER.LIVE_BODY_CALLS)
+    assert live <= _READ_ONLY, sorted(live - _READ_ONLY)
+    for tool, params in CHECKER.LIVE_CALLS.items():
+        declared = (
+            (get_tool_by_name(tool) or {}).get("inputSchema", {}).get("properties", {})
+        )
+        assert set(params) <= set(declared), (tool, sorted(set(params) - set(declared)))
+    for tool, parameter in CHECKER.LIVE_BODY_CALLS.items():
+        declared = (
+            (get_tool_by_name(tool) or {}).get("inputSchema", {}).get("properties", {})
+        )
+        assert parameter in declared, (tool, parameter)
 
 
 @pytest.mark.parametrize("doc", ["docs/TOOLS.md", "AGENTS.md"])
 def test_the_docs_point_at_the_table(doc):
-    """A record nobody is sent to is a record nobody reads."""
-    assert "PROVEN.md" in (ROOT / doc).read_text(encoding="utf-8")
+    """A record nobody is sent to is a record nobody reads - and the path, not the word,
+    is what a reader can follow."""
+    assert "`docs/PROVEN.md`" in (ROOT / doc).read_text(encoding="utf-8")
 
 
 def test_every_proven_row_cites_this_repository_s_pr_convention(text):
     """``#157``-style numbers, not links: the evidence lives in the PR body, and a bare
     number is what ``check_proven.py`` can parse."""
-    for row in _rows(text):
+    for row in parse_table(text):
         if not row.proven:
             continue
         assert "#" in row.evidence, row.tool

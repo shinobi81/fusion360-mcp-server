@@ -8,15 +8,17 @@ row is where the next unknown defect lives.
 The convention, checked by `scripts/check_proven.py` and `tests/test_proven.py`:
 
 - `proven — YYYY-MM-DD, version, #pr: what was measured`, where the version is the
-  running `app.version` in backticks and the PR is the merged one whose body carries the
-  envelope.
+  running `app.version` in backticks and the PR is the one that added the row, whose body
+  carries the envelope.
 - `unproven — <why>`, one line. "Only a refusal is exercised" is a reason; "not yet" is
   not.
 
 `uv run python scripts/check_proven.py` validates this table against
 `src/fusion360_mcp/tools.py` without needing Fusion. `--live` sends the read-only tools
-with a safe call to a running add-in and reports a row that claims a probe its reply
-contradicts; tools it cannot call are reported as not probed, never as passing.
+it can call with no arguments — twelve of the eighteen — and reports a row whose reply
+contradicts its claim, in either direction; tools it cannot call are reported as not
+probed, never as passing. Two of those twelve touch the session: `cam_list_setups`
+activates the Manufacture workspace and `render_view` moves the camera.
 
 | Tool | Evidence |
 | --- | --- |
@@ -25,96 +27,96 @@ contradicts; tools it cannot call are reported as not probed, never as passing.
 | `get_bounding_box` | proven — 2026-11-26, `2706.1.17`, #158: answered a box's min/max/size/center |
 | `create_sketch` | proven — 2026-11-26, `2706.1.17`, #158: created `Sketch1` on xy with a z offset |
 | `draw_rectangle` | proven — 2026-11-26, `2706.1.17`, #158: reported `model_origin` for a 10x10 rectangle |
-| `draw_circle` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `draw_line` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `extrude` | proven — 2026-11-26, `2706.1.17`, #158: cut a 15.7 g void from a box; refused `cut` with no target body |
-| `revolve` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `fillet` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `chamfer` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `shell` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `mirror` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
+| `draw_circle` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `draw_line` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `extrude` | proven — 2026-11-26, `2706.1.17`, #158: cut a 15.7 g void from a box; a cut whose profile reached nothing was refused by Fusion (`3 : No target body found to cut or intersect!`) |
+| `revolve` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `fillet` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `chamfer` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `shell` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `mirror` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `rename_body` | proven — 2026-11-26, `2706.1.17`, #158: renamed a body, reporting `old_name` and `new_name` (#157) |
 | `move_body` | proven — 2026-11-26, `2706.1.17`, #158: moved a body and the root bbox followed, measured (#157) |
-| `export_stl` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `boolean_operation` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
+| `export_stl` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `boolean_operation` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `delete_all` | proven — 2026-11-26, `2706.1.17`, #158: swept a sketch-only design and reported what it removed (#157) |
 | `undo` | proven — 2026-11-26, `2706.1.17`, #158: stepped a parametric timeline back, `verified: true` (#157) |
 | `execute_code` | proven — 2026-11-26, `2706.1.17`, #158: ran a script; a no-op script carries the snapshot warning (#157) |
-| `sweep` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `loft` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `create_polygon` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `draw_arc` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `create_hole` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `rectangular_pattern` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `circular_pattern` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
+| `sweep` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `loft` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `create_polygon` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `draw_arc` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `create_hole` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `rectangular_pattern` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `circular_pattern` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `new_document` | proven — 2026-11-26, `2706.1.17`, #158: created an active parametric design document |
 | `create_component` | proven — 2026-11-26, `2706.1.17`, #158: created `C1`; a body added to it is counted in the snapshot |
-| `add_joint` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `set_joint_value` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
+| `add_joint` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `set_joint_value` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `list_edges` | proven — 2026-11-26, `2706.1.17`, #158: answered a box's twelve edges with index and midpoint |
 | `list_faces` | proven — 2026-11-26, `2706.1.17`, #158: answered a box's six faces with index, surface_type and normal (#147) |
 | `list_components` | proven — 2026-11-26, `2706.1.17`, #158: answered `Component1` with `count` |
-| `export_step` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `export_f3d` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `export_view_sheet` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `export` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `import_mesh` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
+| `export_step` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `export_f3d` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `export_view_sheet` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `export` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `import_mesh` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `get_parameters` | proven — 2026-11-26, `2706.1.17`, #158: answered `count: 0` and an empty parameter list |
-| `create_parameter` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `set_parameter` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `delete_parameter` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `draw_circles` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `add_constraint` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `auto_constrain` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `add_dimension` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `create_construction_plane` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `create_construction_axis` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `create_ucs` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `draw_spline` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `offset_curve` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `trim_curve` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `extend_curve` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `create_thread` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `draft_faces` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `split_body` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `split_face` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `offset_faces` | proven — 2026-11-26, `2706.1.17`, #158: ran with distance 0 and reported the surface body it created |
+| `create_parameter` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `set_parameter` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `delete_parameter` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `draw_circles` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `add_constraint` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `auto_constrain` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `add_dimension` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `create_construction_plane` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `create_construction_axis` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `create_ucs` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `draw_spline` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `offset_curve` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `trim_curve` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `extend_curve` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `create_thread` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `draft_faces` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `split_body` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `split_face` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `offset_faces` | proven — 2026-11-26, `2706.1.17`, #158: ran with distance 0 and its `deltas` counted the surface body it created |
 | `scale_body` | unproven — only a refusal is exercised: `3 : invalid ref point` on every call (#157) |
 | `create_box` | proven — 2026-11-26, `2706.1.17`, #158: reported `deltas` body_count 0 -> 1 and 502.4 g |
 | `create_box_parametric` | proven — 2026-11-26, `2706.1.17`, #158: reported `deltas` body_count 0 -> 1 and 62.8 g (#157) |
-| `create_cylinder` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `create_sphere` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `create_torus` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `create_as_built_joint` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `create_rigid_group` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
+| `create_cylinder` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `create_sphere` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `create_torus` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `create_as_built_joint` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `create_rigid_group` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `measure_distance` | proven — 2026-11-26, `2706.1.17`, #158: measured 1.0 cm between two points given as `x,y,z` strings |
-| `measure_angle` | proven — 2026-11-26, `2706.1.17`, #158: answered an angle in degrees for one body against itself |
-| `get_physical_properties` | proven — 2026-11-26, `2706.1.17`, #158: answered mass, volume, area, density and centre of mass |
-| `create_section_analysis` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
+| `measure_angle` | proven — 2026-11-26, `2706.1.17`, #158: answered `angle_degrees` for one body's face 0 against itself — the call shape, not two distinct entities |
+| `get_physical_properties` | proven — 2026-11-26, `2706.1.17`, #158: answered mass, volume, area, density and center of mass |
+| `create_section_analysis` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `check_interference` | unproven — only a refusal is exercised: `GEOMETRY_UNSUPPORTED` with one component |
-| `compare_meshes` | unproven — only a schema refusal is exercised; no test builds a mesh pair |
-| `set_appearance` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
+| `compare_meshes` | unproven — only a live refusal was observed; the comparison itself is exercised against fakes (`tests/test_addon_document.py`) |
+| `set_appearance` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `set_color` | proven — 2026-11-26, `2706.1.17`, #158: answered `ok` with identical deltas and no no-op warning (#157) |
-| `project_geometry` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `suppress_feature` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `unsuppress_feature` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
+| `project_geometry` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `suppress_feature` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `unsuppress_feature` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `patch_surface` | proven — 2026-11-26, `2706.1.17`, #158: created a surface body, body_count +1 (#157) |
-| `stitch_surfaces` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `thicken_surface` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `ruled_surface` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
+| `stitch_surfaces` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `thicken_surface` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `ruled_surface` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `trim_surface` | proven — 2026-11-26, `2706.1.17`, #158: trimmed a surface with a plane and shrank the bbox (#157) |
-| `create_flange` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `create_bend` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `flat_pattern` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `unfold` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `cam_create_setup` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `cam_create_operation` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `cam_generate_toolpath` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
-| `cam_post_process` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
+| `create_flange` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `create_bend` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `flat_pattern` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `unfold` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `cam_create_setup` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `cam_create_operation` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `cam_generate_toolpath` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
+| `cam_post_process` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `cam_list_setups` | proven — 2026-11-26, `2706.1.17`, #158: answered `count: 0` on a design with no CAM setups |
 | `cam_list_operations` | unproven — only a refusal is exercised: `NAME_NOT_FOUND` with no setups |
 | `cam_get_operation_info` | unproven — only a refusal is exercised: `NAME_NOT_FOUND` with no setups in the document |
-| `ping` | proven — 2026-11-26, `2706.1.17`, #158: answered `{status: pong}` on 2706.1.17 |
+| `ping` | proven — 2026-11-26, `2706.1.17`, #158: answered `{status: pong}` — from the socket fast path, never from the handler |
 | `get_design_type` | proven — 2026-11-26, `2706.1.17`, #158: answered `parametric` with `design_type_id` |
-| `set_design_type` | unproven — mutation; no live call made - the suite covers its handler against fakes only |
+| `set_design_type` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `render_view` | proven — 2026-11-26, `2706.1.17`, #158: returned a PNG: `bytes`, `width`, `height`, `image_format` |
