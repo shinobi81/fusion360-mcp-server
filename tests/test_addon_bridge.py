@@ -115,6 +115,9 @@ def test_the_event_handler_is_built_for_the_bridge_and_drains_its_queue():
     bridge = event_bridge.EventBridge(app, handler)
     try:
         (event_handler,) = app.events[0].handlers
+        assert bridge._handler.bridge is bridge, (
+            "the health command reads the queue through the handler's bridge"
+        )
         bridge._queue.put(event_bridge.WorkItem({"type": "queued"}))
 
         event_handler.notify(None)

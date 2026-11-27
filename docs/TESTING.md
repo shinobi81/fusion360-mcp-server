@@ -9,7 +9,9 @@ pull request merges. Why the fakes exist and what they model is in
 `scripts/health_check.py` polls the add-in's `health` command, which runs on the main
 thread: `ping` is answered by the socket thread before a command is queued, so a Fusion
 blocked on a modal dialog still says `pong`. The script's exit codes are its contract —
-`0` answered, `1` did not answer inside `--timeout`, `2` nothing is listening — and its
+`0` answered, `1` did not answer inside `--timeout` or answered with a failure, `2`
+nothing is listening (`argparse` uses 2 for a usage error too), `3` the add-in has
+no `health` command and needs reloading — and its
 docstring says what it cannot do: reload the add-in (itself a main-thread command), kill
 Fusion (that takes the unsaved document), or tell a busy thread from a dead one.
 

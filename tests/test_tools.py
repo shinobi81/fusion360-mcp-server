@@ -60,7 +60,7 @@ def test_get_tool_by_name_missing():
 
 
 def test_the_tool_count_is_pinned():
-    """98 tools, and the number is the only thing this file pins by hand.
+    """99 tools, and the number is the only thing this file pins by hand.
 
     The set of names used to be copied here - a 136-line literal that had to be
     edited whenever a tool was added, and whose only real invariant (every tool

@@ -719,12 +719,13 @@ class SceneCommands(_Contract):
         Fusion.  No document is not a failure: "answering, and nothing is open" is a
         different fact from "wedged".
         """
-        bridge = getattr(self, "bridge", None)
         doc = self.app.activeDocument
         return {
             "app_version": self.app.version,
             "active_document": doc.name if doc is not None else None,
-            "queue_depth": bridge.queue_depth() if bridge is not None else None,
+            "queue_depth": (
+                self.bridge.queue_depth() if self.bridge is not None else None
+            ),
         }
 
     def get_design_type(self):

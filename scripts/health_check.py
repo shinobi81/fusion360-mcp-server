@@ -13,8 +13,14 @@ version, the open document and how many commands are waiting behind the poll.
 Exit codes are the contract, because a supervisor scripts against them:
 
     0  the main thread answered
-    1  it did not answer inside the bound (wedged, or a modal dialog is up front)
-    2  there is no add-in to ask (nothing listening on the port)
+    1  it did not answer inside the bound (wedged, or a modal dialog is up front), or it
+       answered with a failure (`error_kind` says which)
+    2  there is no add-in to ask (nothing listening on the port) - `argparse` also
+       exits 2 on a usage error, so read the message, not only the code
+    3  the add-in is running but has no `health` command: reload or restart it
+
+In watch mode (`--interval` with `-n`) the exit code is the *first* failure, not the
+last poll's: a run that saw a wedge did see it.
 
 What this cannot do, and does not pretend to:
 
@@ -41,12 +47,27 @@ def poll(connection: Fusion360Connection, timeout: float) -> tuple[int, dict]:
     try:
         reply = connection.health(timeout=timeout)
     except FusionError as exc:
-        # A structured refusal from the add-in (the command itself failed).
+        # A structured refusal from the add-in.  The common one in the field is an
+        # add-in loaded before this command existed: a "reload it", not a wedge.
+        if exc.error_kind == "UNKNOWN_COMMAND":
+            return 3, {
+                "answered": False,
+                "error_kind": exc.error_kind,
+                "error": "the running add-in has no `health`: reload or restart it",
+            }
         return 1, {"answered": False, "error_kind": exc.error_kind, "error": str(exc)}
     except ConnectionError as exc:
-        # The socket's bound expired: the main thread never answered.  `health()` sends
-        # with retries=0, so this is the wedge case rather than a transient drop.
+        # The socket's bound expired before the main thread answered: a wedge, or a
+        # thread busy enough to look like one from here.
         return 1, {"answered": False, "error_kind": "NO_ANSWER", "error": str(exc)}
+    if reply.get("ok") is not True:
+        # The add-in answered with a *failure* inside its envelope; `send_command` only
+        # raises for transport-level errors, so this is the only place that sees it.
+        return 1, {
+            "answered": False,
+            "error_kind": reply.get("error_kind"),
+            "error": reply.get("error_message"),
+        }
     return 0, {
         "answered": True,
         "app_version": reply.get("app_version"),
@@ -79,7 +100,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    connection = Fusion360Connection(host=args.host, port=args.port)
+    # The package's own defaults apply only when the key is absent: a `None` reaches
+    # `s.connect((None, None))` and swallows the TypeError into "not connected".
+    connection = Fusion360Connection(
+        **{
+            key: value
+            for key, value in (("host", args.host), ("port", args.port))
+            if value is not None
+        }
+    )
     if not connection.connect():
         print(
             f"no add-in listening on {connection.host}:{connection.port}",
@@ -93,7 +122,8 @@ def main(argv: list[str] | None = None) -> int:
         for index in range(max(1, args.count)):
             if index:
                 time.sleep(args.interval)
-            code, report = poll(connection, args.timeout)
+            poll_code, report = poll(connection, args.timeout)
+            code = code or poll_code  # the first failure is the answer to "is it alive"
             if args.json:
                 print(json.dumps(report))
             elif report["answered"]:

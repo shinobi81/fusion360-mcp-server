@@ -291,7 +291,11 @@ class EventBridge:
         log.info("CommandHandler reloaded")
 
     def queue_depth(self) -> int:
-        """How many commands are waiting for the main thread, this one included."""
+        """How many commands are waiting *behind* this one for the main thread.
+
+        ``drain_queue`` pops an item before executing it, so a ``health`` call reporting
+        its own depth is never counting itself - which is the number a supervisor wants.
+        """
         return self._queue.qsize()
 
     # ------------------------------------------------------------------

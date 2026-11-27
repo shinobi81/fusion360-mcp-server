@@ -542,7 +542,8 @@ and asks the running Fusion whether it exists - 190 references, none missing on
     had was answered by the one thread that does not execute work. `health` is a normal
     queued command, and its reply carries `app_version`, `active_document` and
     `queue_depth`. Measured on 2706.1.17 with the main thread blocked by a 12 s
-    `execute_code`: `ping` answered in 0.0 s, `health` failed at its 3 s bound, and it
+    `execute_code`: `ping` answered in 0.0 s, `health` failed at the 3 s `--timeout`
+    it was given, and it
     answered in 0.0 s once the block lifted. `queue_depth` is unit-proven rather than
     live: the running `EventBridge` is the class Fusion loaded at start-up and the reload
     does not cover that module, so the live reply says null until Fusion restarts - the
