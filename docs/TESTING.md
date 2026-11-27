@@ -4,6 +4,15 @@ How the suite runs, what it deliberately cannot run, and what has to be green be
 pull request merges. Why the fakes exist and what they model is in
 [ARCHITECTURE.md](../ARCHITECTURE.md#testing-strategy); this page is the operator's view.
 
+## Checking that Fusion is actually alive
+
+`scripts/health_check.py` polls the add-in's `health` command, which runs on the main
+thread: `ping` is answered by the socket thread before a command is queued, so a Fusion
+blocked on a modal dialog still says `pong`. The script's exit codes are its contract —
+`0` answered, `1` did not answer inside `--timeout`, `2` nothing is listening — and its
+docstring says what it cannot do: reload the add-in (itself a main-thread command), kill
+Fusion (that takes the unsaved document), or tell a busy thread from a dead one.
+
 ## Running it
 
 ```bash

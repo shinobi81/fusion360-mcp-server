@@ -41,7 +41,12 @@ def poll(connection: Fusion360Connection, timeout: float) -> tuple[int, dict]:
     try:
         reply = connection.health(timeout=timeout)
     except FusionError as exc:
+        # A structured refusal from the add-in (the command itself failed).
         return 1, {"answered": False, "error_kind": exc.error_kind, "error": str(exc)}
+    except ConnectionError as exc:
+        # The socket's bound expired: the main thread never answered.  `health()` sends
+        # with retries=0, so this is the wedge case rather than a transient drop.
+        return 1, {"answered": False, "error_kind": "NO_ANSWER", "error": str(exc)}
     return 0, {
         "answered": True,
         "app_version": reply.get("app_version"),

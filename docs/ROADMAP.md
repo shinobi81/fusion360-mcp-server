@@ -536,6 +536,23 @@ and asks the running Fusion whether it exists - 190 references, none missing on
     removed was one, and it stayed invisible because nothing compared the two sides for
     it.
 
+14. **A health check that runs on the main thread** - **closed (this PR).** `ping` is
+    answered by the socket thread before a command is queued, so a Fusion blocked on a
+    modal dialog still answered `pong`; every "is it alive?" signal an unattended agent
+    had was answered by the one thread that does not execute work. `health` is a normal
+    queued command, and its reply carries `app_version`, `active_document` and
+    `queue_depth`. Measured on 2706.1.17 with the main thread blocked by a 12 s
+    `execute_code`: `ping` answered in 0.0 s, `health` failed at its 3 s bound, and it
+    answered in 0.0 s once the block lifted. `queue_depth` is unit-proven rather than
+    live: the running `EventBridge` is the class Fusion loaded at start-up and the reload
+    does not cover that module, so the live reply says null until Fusion restarts - the
+    table records that rather than rounding it to a pass.
+
+    Client side: `Fusion360Connection.health(timeout=5.0)` with no retries, because a
+    wedged thread is the case it exists for, and `scripts/health_check.py`, whose exit
+    codes are documented in its docstring and in `docs/TESTING.md`. It detects and
+    reports; it does not restart anything.
+
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.
 `setByThreePoints`, `setByTwoPoints` and `ScaleFeatures.createInput` all accept a

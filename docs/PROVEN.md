@@ -121,7 +121,7 @@ the camera for its capture and restores it before returning.
 | `cam_list_setups` | proven — 2026-11-26, `2706.1.17`, #158: answered `count: 0` on a design with no CAM setups |
 | `cam_list_operations` | unproven — only a refusal is exercised: `NAME_NOT_FOUND` with no setups |
 | `cam_get_operation_info` | proven — 2026-11-27, `2706.1.17`, #159: answered `is_valid: true` and `has_toolpath: true` after generating the aimed operation |
-| `health` | proven — 2026-11-27, `2706.1.17`, #161: answered `app_version`, `active_document` and `queue_depth` from the main thread (#161) |
+| `health` | proven — 2026-11-27, `2706.1.17`, #161: answered `app_version` `2706.1.17` and `active_document` from the main thread, and failed at its 3 s bound while the thread was blocked; `queue_depth` is null live because the running `EventBridge` predates this change (the reload does not cover that module) and is pinned by `tests/test_addon_bridge.py` instead |
 | `ping` | proven — 2026-11-26, `2706.1.17`, #158: answered `{status: pong}` — from the socket fast path, never from the handler |
 | `get_design_type` | proven — 2026-11-26, `2706.1.17`, #158: answered `parametric` with `design_type_id` |
 | `set_design_type` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
