@@ -353,7 +353,11 @@ class TestMockNewGeometry:
             },
         )
         assert result["count"] == 4
-        assert result["axis"] == "z"
+        # The handler's keys: it answers `feature_name`, `count` and `total_angle`, and
+        # never echoes the body name or the axis it was given.
+        assert result["feature_name"] == "CircularPattern_mock"
+        assert "axis" not in result
+        assert "body_name" not in result
 
 
 class TestMockAssembly:

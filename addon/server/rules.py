@@ -179,11 +179,13 @@ def cam_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     return None
 
 
-#: The ways mock mode is known to differ from the add-in, and why each is deliberate.
+#: The divergences that change a *refusal* or a reply key, and why each is deliberate.
 #:
-#: Pinned by ``tests/test_rules.py``: a divergence added here without a reason, or a new
-#: one appearing without this list growing, is the failure the table exists to prevent.
-#: A divergence *not* here is a defect - the axis rehearsal this table replaced was one.
+#: Not every deliberate divergence is here: ``undo`` always answers the direct-design
+#: shape, and ``execute_code`` reports zero deltas because mock runs nothing - both say
+#: so in their own code.  What belongs here is a call mock answers *successfully* that
+#: the add-in refuses, which is what an unattended rehearsal would act on; the axis
+#: rehearsal this table replaced was exactly that, and it was not listed.
 MOCK_DIVERGENCES: dict[str, str] = {
     "parameters_failed": (
         "mock applies every parameter it is given; Fusion refuses some names, and only "
@@ -688,11 +690,12 @@ def construction_plane_name_refusal(plane: Any) -> _hints.Refusal | None:
     )
 
 
-#: The construction axes by name, lowercased - what ``_construction_axis`` resolves.
+#: The construction axes by name, lowercased - the names ``_construction_axis``'s own
+#: map must hold.  The rule is the guard: the handler still resolves the object.
 _CONSTRUCTION_AXES: frozenset[str] = frozenset({"x", "y", "z"})
 
 
-def construction_axis_refusal(axis: Any) -> _hints.Refusal | None:
+def construction_axis_name_refusal(axis: Any) -> _hints.Refusal | None:
     """The refusal an unusable axis name earns, or None when it is one of the 3.
 
     ``_construction_axis`` refused a miss itself, so mock mode answered ``created:
@@ -708,6 +711,28 @@ def construction_axis_refusal(axis: Any) -> _hints.Refusal | None:
         f"Unknown axis '{axis}' — use x, y, or z",
         hints=("Pass x, y or z; the axis is lowercased, so Y works.",),
     )
+
+
+def construction_plane_angle_refusal(
+    params: Mapping[str, Any],
+) -> _hints.Refusal | None:
+    """The refusal an ``angle`` method with no angle earns, or None.
+
+    The handler built ``ValueInput.createByString(f"{angle} deg")`` unconditionally, so
+    a missing angle sent ``"None deg"`` to Fusion and came back as a refusal nobody
+    could act on.  Decided from the parameters alone, so mock mode refuses it too
+    rather than rehearsing ``created: true``.
+    """
+    if params.get("method") != "angle":
+        return None
+    angle = params.get("angle")
+    if isinstance(angle, bool) or not isinstance(angle, (int, float)):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"method='angle' needs an angle in degrees, not {angle!r}",
+            hints=("Pass angle (degrees) with method='angle'.",),
+        )
+    return None
 
 
 def construction_plane_tangent_refusal(

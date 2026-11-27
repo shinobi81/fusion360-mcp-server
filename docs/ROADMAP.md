@@ -163,7 +163,7 @@ because a client may already branch on them.
 
 `tests/test_addon_refusals.py` makes it a ratchet rather than a one-off audit. It
 fails on a raise that would reach a caller `UNKNOWN`, on a baseline row that no longer
-matches a site, and on any change to the 34 unjudgeable rows - a computed message, a
+matches a site, and on any change to the 35 unjudgeable rows - a computed message, a
 `Protocol` body, or a kind that comes from a `rules.py` validator call, each with its
 reason written down. That count rose from 7 by design: the validators are what let mock
 mode answer the same sentence, and a kind returned from a function is not readable in the
@@ -524,7 +524,7 @@ and asks the running Fusion whether it exists - 190 references, none missing on
     | divergence | why it is deliberate |
     | --- | --- |
     | `parameters_failed` | mock applies every parameter it is given; Fusion refuses some names, and only Fusion can say which, so mock never answers that key |
-    | `no_design_model` | mock has no design, body, face or setup, so a name it is handed is echoed rather than resolved |
+    | `no_design_model` | mock has no design, body, face or setup, so a name it is handed is echoed rather than resolved - a name that exists nowhere still answers ok |
 
     A divergence that is *not* in that table is a defect - the axis rehearsal this item
     removed was one, and it stayed invisible because nothing compared the two sides for

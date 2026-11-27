@@ -31,7 +31,8 @@ from ._rules import (
     cam_target_refusal,
     cam_tool_refusal,
     components_differ_refusal,
-    construction_axis_refusal,
+    construction_axis_name_refusal,
+    construction_plane_angle_refusal,
     construction_plane_name_refusal,
     construction_plane_tangent_refusal,
     edge_selector_refusal,
@@ -692,13 +693,15 @@ def _rectangular_pattern(p: dict) -> dict:
 def _circular_pattern(p: dict) -> dict:
     if refused := _body_name_required_error(p):
         return refused
-    axis_refusal = construction_axis_refusal(p.get("axis", "z"))
+    # "z" mirrors circular_pattern's own default in handler_features.
+    axis_refusal = construction_axis_name_refusal(p.get("axis", "z"))
     if axis_refusal is not None:
         return _refusal_error(axis_refusal)
+    # The handler answers `feature_name`, `count` and `total_angle` - not the body name
+    # or the axis it was given, which an agent would then read back as a fact.
     return {
-        "body_name": p.get("body_name", "Body1"),
+        "feature_name": "CircularPattern_mock",
         "count": p.get("count", 3),
-        "axis": p.get("axis", "z"),
         "total_angle": p.get("total_angle", 360),
     }
 
@@ -1104,18 +1107,23 @@ def _create_construction_plane(p: dict) -> dict:
         "midplane": ("plane_one", "plane_two"),
         "tangent": () if p.get("point_one") is not None else ("plane",),
     }
+    if p.get("method") == "angle":
+        # The handler judges the same three names in this order: the angle (its own
+        # rule, before the API call), then the axis ``setByAngle`` resolves first, then
+        # the plane.  A call carrying two faults must get the *same* sentence from both
+        # sides - the order, not just the rules, is part of the contract.
+        angle_refusal = construction_plane_angle_refusal(p)
+        if angle_refusal is not None:
+            return _refusal_error(angle_refusal)
+        # `or "x"` mirrors the handler's fallback (handler_assembly, the angle branch).
+        axis_refusal = construction_axis_name_refusal(p.get("edge_name") or "x")
+        if axis_refusal is not None:
+            return _refusal_error(axis_refusal)
     resolved = by_method.get(str(p.get("method")), ())
     for field in resolved:
         name_refusal = construction_plane_name_refusal(p.get(field))
         if name_refusal is not None:
             return _refusal_error(name_refusal)
-    if p.get("method") == "angle":
-        # The angle branch resolves an axis name too - `edge_name or "x"`, exactly as
-        # the handler does - so an unknown one is refused here rather than rehearsed as
-        # a created plane.
-        axis_refusal = construction_axis_refusal(p.get("edge_name") or "x")
-        if axis_refusal is not None:
-            return _refusal_error(axis_refusal)
     # The handler's keys, as for the axis: `plane_name` was never one of them.
     return {
         "created": True,

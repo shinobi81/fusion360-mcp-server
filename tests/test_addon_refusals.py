@@ -352,42 +352,48 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_assembly.py",
-            300,
+            198,
+            "raise angle_refusal: kind comes from "
+            "_rules.construction_plane_angle_refusal",
+        ),
+        (
+            "handler_assembly.py",
+            306,
             "raise refusal: kind comes from _rules.perpendicular_axis_refusal",
         ),
         (
             "handler_assembly.py",
-            460,
+            466,
             "raise selector_refusal: kind comes from _rules.joint_selector_refusal",
         ),
         (
             "handler_assembly.py",
-            476,
+            482,
             "raise component_refusal: kind comes from _rules.components_differ_refusal",
         ),
         (
             "handler_assembly.py",
-            481,
+            487,
             "raise geometry_refusal: kind comes from _rules.joint_geometry_refusal",
         ),
         (
             "handler_assembly.py",
-            747,
+            753,
             "raise selector_refusal: kind comes from _rules.joint_selector_refusal",
         ),
         (
             "handler_assembly.py",
-            762,
+            768,
             "raise component_refusal: kind comes from _rules.components_differ_refusal",
         ),
         (
             "handler_assembly.py",
-            773,
+            779,
             "raise geometry_refusal: kind comes from _rules.as_built_geometry_refusal",
         ),
         (
             "handler_assembly.py",
-            949,
+            955,
             "raise refusal: kind comes from _rules.rigid_group_size_refusal",
         ),
         (
@@ -408,7 +414,7 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         (
             "handler_base.py",
             444,
-            "raise refusal: kind comes from _rules.construction_axis_refusal",
+            "raise refusal: kind comes from _rules.construction_axis_name_refusal",
         ),
         (
             "handler_base.py",

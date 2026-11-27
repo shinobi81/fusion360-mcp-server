@@ -910,9 +910,9 @@ def test_the_handler_and_the_mock_refuse_an_unknown_pattern_axis_alike(bound_han
 
 
 @pytest.mark.parametrize("axis", ["x", "Y", "Z"])
-def test_a_usable_axis_is_refused_by_neither_side(bound_handler, axis):
+def test_a_usable_axis_is_refused_by_neither_side(axis):
     """The rule must not turn a call the add-in accepts into a refusal."""
-    assert rules.construction_axis_refusal(axis) is None
+    assert rules.construction_axis_name_refusal(axis) is None
     assert "error_kind" not in mock._create_construction_plane(
         {"method": "angle", "plane": "xy", "angle": 30, "edge_name": axis}
     )
@@ -942,11 +942,18 @@ def test_mock_cannot_answer_the_parameters_failed_divergence():
     never appears - the divergence is recorded rather than rehearsed."""
     reply = mock.mock_command(
         "cam_create_operation",
-        {"setup_name": "Setup1", "strategy": "face", "tool_diameter": 0.6},
+        {
+            "setup_name": "Setup1",
+            "strategy": "face",
+            "tool_diameter": 0.6,
+            "stepdown": 0.1,
+        },
     )
 
+    # What mock assumes: every parameter it is given lands.
+    assert reply["parameters_applied"]["maximumStepdown"] == 0.1
+    # What only Fusion can say: whether it refused a name.
     assert "parameters_failed" not in reply
-    assert "parameters_failed" in rules.MOCK_DIVERGENCES
 
 
 def test_mock_echoes_a_name_it_never_resolved():

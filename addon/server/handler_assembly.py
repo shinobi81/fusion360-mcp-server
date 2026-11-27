@@ -190,6 +190,12 @@ class AssemblyCommands(_Contract):
                 adsk.core.ValueInput.createByReal(offset),
             )
         elif method == "angle":
+            # Judged before the axis is resolved: the handler used to build "None deg"
+            # and let Fusion refuse it, which mock then rehearsed as a created plane.
+            if angle_refusal := _rules.construction_plane_angle_refusal(
+                {"method": method, "angle": angle}
+            ):
+                raise angle_refusal
             inp.setByAngle(
                 self._construction_axis(edge_name or "x"),
                 adsk.core.ValueInput.createByString(f"{angle} deg"),

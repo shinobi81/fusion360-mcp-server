@@ -440,7 +440,7 @@ class HandlerBase:
         }
         # The name is judged by the rule table, so mock mode refuses the same call with
         # the same sentence - it used to rehearse `created: true` for `edge_name="w"`.
-        if refusal := _rules.construction_axis_refusal(axis):
+        if refusal := _rules.construction_axis_name_refusal(axis):
             raise refusal
         # Lowercased like _construction_plane, so "X" and "x" name the same axis.
         return m[(axis or "").lower()]
