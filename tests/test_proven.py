@@ -93,13 +93,16 @@ def test_a_proven_row_must_cite_a_date_a_build_a_pr_and_what(text, mutant):
     assert any(proven.tool in problem for problem in check(broken)), mutant
 
 
-def test_an_unproven_row_must_say_why(text):
-    """``scale_body``'s reason is unique in the table, so this breaks one row."""
+def test_an_unproven_row_must_read_unproven(text):
+    """A row missing the state word is reported as malformed, not as an unknown state.
+
+    ``"unproven — "`` would strip to ``"unproven —"`` and trip the *state* branch, so
+    the mutant keeps the word and drops the separator."""
     unproven = next(row for row in parse_table(text) if row.tool == "scale_body")
-    broken = text.replace(unproven.evidence, "unproven — ")
+    broken = text.replace(unproven.evidence, "unproven")
     assert broken != text
 
-    assert any(unproven.tool in problem for problem in check(broken))
+    assert any("must read" in problem for problem in check(broken)), check(broken)
 
 
 @pytest.mark.parametrize(
@@ -144,7 +147,11 @@ def test_the_live_subset_is_read_only_and_names_real_parameters():
     argument would otherwise be found by whoever runs it."""
     live = set(CHECKER.LIVE_CALLS) | set(CHECKER.LIVE_BODY_CALLS)
 
-    assert live <= _READ_ONLY, sorted(live - _READ_ONLY)
+    # The subset relation is asserted at import (`_LIVE_TOOLS <= _READ_ONLY`), so a
+    # mutating entry fails collection; the counts are what no test could see until here,
+    # and three docs quote them.
+    assert len(_READ_ONLY) == 18, "_READ_ONLY grew or shrank: update PROVEN.md/TOOLS.md"
+    assert len(live) == 12, "the 'twelve of the eighteen' in the docs is stale"
     for tool, params in CHECKER.LIVE_CALLS.items():
         declared = (
             (get_tool_by_name(tool) or {}).get("inputSchema", {}).get("properties", {})
@@ -196,7 +203,7 @@ def test_a_proven_tool_the_probe_skipped_is_a_note_not_a_failure():
 
     assert CHECKER.live_mismatches({}, rows) == []
     assert CHECKER.not_probed({}, rows) == [
-        "ping: proven, but --live sent it no call here (no body in the document, "
+        "ping: proven, but --live sent it no call here (no root body to name, "
         "or no LIVE_CALLS entry)"
     ]
 

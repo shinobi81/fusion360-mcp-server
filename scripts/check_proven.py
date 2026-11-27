@@ -55,8 +55,8 @@ _PLACEHOLDER_RE = re.compile(
     r"^(not yet|todo|tbd|n/?a|unknown|none|nothing|-+)\.?$", re.IGNORECASE
 )
 
-#: The read-only calls `--live` can make with no document state at all, keyed by tool
-#: name.  A tool absent from here is reported as not probed.
+#: The read-only calls that need no name from the document, keyed by tool name.  A
+#: *proven* row for a tool absent from both dicts is reported by ``not_probed``.
 LIVE_CALLS: dict[str, dict] = {
     "ping": {},
     "get_scene_info": {},
@@ -118,7 +118,7 @@ class Row:
             return "an unproven row must read `unproven — <why>`"
         why = match.group("why").strip()
         if _PLACEHOLDER_RE.fullmatch(why):
-            return f"``{why}`` is a placeholder, not a reason: say what is missing"
+            return f"{why!r} is a placeholder, not a reason: say what is missing"
         return None
 
 
@@ -127,7 +127,7 @@ def _table_lines(text: str) -> list[tuple[int, str]]:
     return [
         (lineno, line)
         for lineno, line in enumerate(text.splitlines(), 1)
-        if line.startswith("|")
+        if line.lstrip().startswith("|")
     ]
 
 
@@ -136,7 +136,7 @@ def parse_table(text: str) -> list[Row]:
 
     Only the two-column table is read: a row is a line that starts with ``|`` and is not
     the header or the separator.  A ``|``-line that is neither is reported by
-    :func:`malformed_lines` rather than dropped here - a row nobody can parse is exactly
+    ``malformed_lines`` rather than dropped here - a row nobody can parse is exactly
     the row a reader would trust.
     """
     rows: list[Row] = []
@@ -153,7 +153,7 @@ def malformed_lines(text: str) -> list[str]:
     problems: list[str] = []
     for lineno, line in _table_lines(text):
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if cells[0] in ("Tool", "---") or set(cells[0]) == {"-"}:
+        if cells[0] in ("Tool", "---") or set(cells[0]) <= set("-:"):
             continue
         if len(cells) != 2:
             problems.append(f"line {lineno}: a row needs exactly two cells: {line}")
@@ -191,16 +191,19 @@ def _send(connection, tool: str, params: dict) -> dict:
 
     try:
         return connection.send_command(tool, params)
-    except (FusionError, ConnectionError) as exc:
+    except (FusionError, ConnectionError, ValueError) as exc:
         return {
             "ok": False,
+            # `CONNECTION_LOST` is this script's own tag for a client-side failure; the
+            # wire's kinds are the ones `_hints` documents.
             "error_kind": getattr(exc, "error_kind", "CONNECTION_LOST"),
             "error_message": str(exc),
         }
 
 
-def probe(host: str | None, port: int | None) -> dict[str, dict]:
-    """Send the read-only calls to Fusion; return tool -> its reply."""
+def probe(host: str | None, port: int | None) -> dict[str, dict] | None:
+    """Send the read-only calls to Fusion; return tool -> its reply, or None if there is
+    no add-in to ask.  ``main`` prints the table's own problems either way."""
     from fusion360_mcp.connection import Fusion360Connection
 
     if host is not None and port is not None:
@@ -213,7 +216,7 @@ def probe(host: str | None, port: int | None) -> dict[str, dict]:
         connection = Fusion360Connection()
     if not connection.connect():
         print("not connected: is the Fusion360MCP add-in running?", file=sys.stderr)
-        raise SystemExit(1)
+        return None
 
     replies: dict[str, dict] = {}
     try:
@@ -234,7 +237,7 @@ def probe(host: str | None, port: int | None) -> dict[str, dict]:
 
 
 def live_mismatches(replies: dict[str, dict], rows: list[Row]) -> list[str]:
-    """Rows that claim a probe their reply contradicts, or tools nobody probed."""
+    """Rows whose reply contradicts their state, in either direction."""
     by_tool = {row.tool: row for row in rows}
     problems: list[str] = []
     for tool, reply in sorted(replies.items()):
@@ -260,7 +263,7 @@ def not_probed(replies: dict[str, dict], rows: list[Row]) -> list[str]:
     """
     by_tool = {row.tool: row for row in rows}
     return [
-        f"{tool}: proven, but --live sent it no call here (no body in the document, "
+        f"{tool}: proven, but --live sent it no call here (no root body to name, "
         "or no LIVE_CALLS entry)"
         for tool in sorted(set(by_tool) - set(replies))
         if by_tool[tool].proven
@@ -274,8 +277,15 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also probe the read-only tools against a running Fusion",
     )
-    parser.add_argument("--host", default=None, help="default 127.0.0.1")
-    parser.add_argument("--port", default=None, type=int, help="default 9876")
+    parser.add_argument(
+        "--host", default=None, help="default: the package's (FUSION_MCP_HOST)"
+    )
+    parser.add_argument(
+        "--port",
+        default=None,
+        type=int,
+        help="default: the package's (FUSION_MCP_PORT)",
+    )
     args = parser.parse_args(argv)
 
     text = PROVEN.read_text(encoding="utf-8")
@@ -289,10 +299,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.live:
         replies = probe(args.host, args.port)
-        problems.extend(live_mismatches(replies, rows))
-        print(f"probed {len(replies)} read-only tool(s) live")
-        for note in not_probed(replies, rows):
-            print(note)
+        if replies is not None:
+            problems.extend(live_mismatches(replies, rows))
+            print(f"probed {len(replies)} read-only tool(s) live")
+            for note in not_probed(replies, rows):
+                print(note)
+        else:
+            problems.append(
+                "--live could not reach Fusion; the table was checked alone"
+            )
 
     for problem in problems:
         print(problem, file=sys.stderr)
