@@ -153,6 +153,67 @@ def test_the_live_subset_is_read_only_and_names_real_parameters():
         assert parameter in declared, (tool, parameter)
 
 
+# ── the live half, offline ────────────────────────────────────────────
+#
+# `probe()` needs a running add-in, but everything it feeds is pure, so the judgement
+# and the exit codes are pinned without one.
+
+_PROVEN_ROW = "proven — 2026-11-26, `2706.1.17`, #158: answered"
+
+
+def test_a_proven_row_whose_call_fails_is_a_mismatch():
+    rows = [CHECKER.Row("ping", _PROVEN_ROW)]
+    replies = {"ping": {"ok": False, "error_kind": "TIMEOUT", "error_message": "x"}}
+
+    problems = CHECKER.live_mismatches(replies, rows)
+
+    assert len(problems) == 1
+    assert "ping" in problems[0] and "TIMEOUT" in problems[0]
+
+
+def test_an_unproven_row_whose_call_answers_is_a_mismatch():
+    """The table being out of date is the other half of the check."""
+    rows = [CHECKER.Row("ping", "unproven — nothing measured")]
+    problems = CHECKER.live_mismatches({"ping": {"ok": True}}, rows)
+
+    assert len(problems) == 1
+    assert "record it" in problems[0]
+
+
+def test_an_agreeing_reply_is_not_a_mismatch():
+    rows = [CHECKER.Row("ping", _PROVEN_ROW)]
+
+    assert CHECKER.live_mismatches({"ping": {"ok": True}}, rows) == []
+
+
+def test_a_proven_tool_the_probe_skipped_is_a_note_not_a_failure():
+    """Two proven tools --live has no call for must not make the check red."""
+    rows = [CHECKER.Row("ping", _PROVEN_ROW)]
+
+    assert CHECKER.live_mismatches({}, rows) == []
+    assert CHECKER.not_probed({}, rows) == [
+        "ping: proven, but --live sent it no call here (no body in the document, "
+        "or no LIVE_CALLS entry)"
+    ]
+
+
+def test_main_exits_non_zero_for_a_broken_table_and_zero_for_a_good_one(
+    monkeypatch, tmp_path, text
+):
+    proven = next(row for row in parse_table(text) if row.proven)
+    good = tmp_path / "good.md"
+    good.write_text(text, encoding="utf-8")
+    bad = tmp_path / "bad.md"
+    bad.write_text(
+        text.replace(proven.evidence, "unproven — not yet"), encoding="utf-8"
+    )
+
+    monkeypatch.setattr(CHECKER, "PROVEN", good)
+    assert CHECKER.main([]) == 0
+    monkeypatch.setattr(CHECKER, "PROVEN", bad)
+    assert CHECKER.main([]) == 1
+
+
 @pytest.mark.parametrize("doc", ["docs/TOOLS.md", "AGENTS.md"])
 def test_the_docs_point_at_the_table(doc):
     """A record nobody is sent to is a record nobody reads - and the path, not the word,
