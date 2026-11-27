@@ -325,18 +325,19 @@ Every `add_joint` result carries the measurements behind that:
 
 Five: `contour2d`, `pocket2d`, `adaptive2d`, `adaptive` and `pocket_clearing`, each with
 the selection parameter `addon/server/rules.py` names for it. The other five strategies
-the schema advertises take no face selection, and `face_indices` is refused for them
-before an operation is created — real and mock mode answering one sentence.
+the schema advertises are refused for `face_indices` before an operation is created:
+`face` because it was measured to have no face selection, the other four because no
+probe has been made yet.
 
 `face` is the one measured so far (2706.1.17), and it is **not** broken: it machines the
-stock's top and generates with no selection at all (`generated: true`,
-`has_toolpath: true` on the first call). What it cannot do is be *aimed*: of its 327
-parameters, 26 are `CadObjectParameterValue` (view and heights) and the only
-`CadContours2dParameterValue` is `stockContours`, a 2D boundary rather than a face. So
-the refusal says that, instead of the generic "takes no geometry selection" — which
-would be false of a strategy that does expose a boundary. `bore`, `slot`, `trace` and
-`engrave` keep the generic sentence until each is measured (one probe per strategy, and
-that is its own item).
+stock's top and generates with no selection at all — `cam_generate_toolpath` answers
+`generated: true`, and `cam_get_operation_info` then reports `has_toolpath: true`. What
+it cannot do is be *aimed*: of its 327 parameters, 26 are `CadObjectParameterValue`
+(view and heights) and the only `CadContours2dParameterValue` is `stockContours`, a 2D
+boundary rather than a face. So the refusal says that, instead of the generic "takes no
+geometry selection" — which would be false of a strategy that does expose a boundary.
+`bore`, `slot`, `trace` and `engrave` keep the generic sentence until each is measured
+(one probe per strategy, and that is its own item).
 
 ### How `cam_create_operation` gets a tool
 

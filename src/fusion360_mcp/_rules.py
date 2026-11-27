@@ -104,8 +104,8 @@ CAM_GEOMETRY_STRATEGIES = tuple(CAM_GEOMETRY_PARAMETERS)
 #: probe per strategy, which is its own item.
 CAM_NO_FACE_SELECTION: dict[str, str] = {
     "face": (
-        "it machines the stock's top and takes no face selection - its only geometry "
-        "parameter is a 2D stock boundary"
+        "the strategy machines the stock's top and takes no face selection - its only "
+        "geometry parameter is a 2D stock boundary"
     ),
 }
 
@@ -169,15 +169,17 @@ def cam_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
                 "0-based in the body's own order",
             )
     if strategy not in CAM_GEOMETRY_PARAMETERS:
-        measured = CAM_NO_FACE_SELECTION.get(str(strategy))
-        if measured is not None:
+        reason = (
+            CAM_NO_FACE_SELECTION.get(strategy) if isinstance(strategy, str) else None
+        )
+        if reason is not None:
             return _hints.Refusal(
                 "INVALID_INPUT",
-                f"face_indices cannot aim {strategy!r}: {measured} - it applies to: "
+                f"face_indices cannot aim {strategy!r}: {reason} - it applies to: "
                 f"{', '.join(CAM_GEOMETRY_STRATEGIES)}",
                 hints=(
-                    f"{strategy!r} needs no selection to generate: create it and "
-                    "call cam_generate_toolpath.",
+                    f"{strategy!r} needs no selection to generate: create it, then "
+                    "call cam_generate_toolpath(operation_name=...).",
                 ),
             )
         return _hints.Refusal(

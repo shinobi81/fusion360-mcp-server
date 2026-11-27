@@ -819,52 +819,62 @@ def test_every_bad_face_selection_is_refused_on_both_sides(bare_handler, params)
     assert refused["error_message"] == str(raised.value)
 
 
-def test_the_handler_and_the_mock_refuse_aiming_the_face_strategy_alike(
-    bare_handler, handler_module
+def test_the_face_refusal_says_why_names_what_can_be_aimed_and_is_one_sentence(
+    bare_handler,
 ):
-    """``face`` is measured: it takes no face selection, so ``face_indices`` is refused
-    with a sentence that says why - and mock answers the same one."""
+    """The generic "takes no geometry selection" is false of a strategy that exposes a
+    stock boundary, so ``face`` gets the measured sentence - and mock answers it too."""
     params = {"strategy": "face", "body_name": "Body1", "face_indices": [0]}
 
     with pytest.raises(addon_hints.Refusal) as raised:
         bare_handler.cam_create_operation(**{"setup_name": "Setup1", **params})
-
     refused = mock._cam_create_operation({"setup_name": "Setup1", **params})
 
     assert refused["ok"] is False
     assert refused["error_kind"] == raised.value.error_kind
     assert refused["error_message"] == str(raised.value)
 
-
-def test_the_face_refusal_says_why_and_names_what_can_be_aimed():
-    """The generic sentence ("takes no geometry selection") is false of a strategy that
-    exposes a stock boundary, so the measured one replaces it for ``face``."""
-    refused = rules.cam_geometry_refusal(
-        {"strategy": "face", "body_name": "Body1", "face_indices": [0]}
+    message = str(raised.value)
+    assert "the strategy machines the stock's top" in message, (
+        "the reason Fusion's own parameters show"
     )
-
-    assert refused is not None
-    assert "stock" in str(refused), "the reason Fusion's own parameters show"
-    assert "takes no face selection" in str(refused)
-    assert all(strategy in str(refused) for strategy in rules.CAM_GEOMETRY_STRATEGIES)
-    assert "takes no geometry selection" not in str(refused)
-    assert refused.hints == (
-        "'face' needs no selection to generate: create it and call "
-        "cam_generate_toolpath.",
+    assert "takes no face selection" in message
+    assert "takes no geometry selection" not in message
+    # The whole rendered list, in order: "in" would let `adaptive` hide inside
+    # `adaptive2d`.
+    assert message.endswith(", ".join(rules.CAM_GEOMETRY_STRATEGIES))
+    assert raised.value.hints == (
+        "'face' needs no selection to generate: create it, then call "
+        "cam_generate_toolpath(operation_name=...).",
     )
 
 
-@pytest.mark.parametrize("strategy", ["bore", "slot", "trace", "engrave"])
+@pytest.mark.parametrize(
+    "strategy", sorted(set(rules.CAM_STRATEGIES) - set(rules.CAM_GEOMETRY_PARAMETERS))
+)
 def test_a_strategy_nobody_has_measured_keeps_the_generic_sentence(strategy):
-    """One probe per strategy is its own item, so the other four must not inherit the
-    face sentence - a claim that they take no boundary would be unmeasured."""
+    """One probe per strategy is its own item, so a strategy nobody has measured must
+    not inherit the face sentence - that would be an unmeasured claim."""
+    if strategy in rules.CAM_NO_FACE_SELECTION:
+        pytest.skip("measured; the face test covers it")
+
     refused = rules.cam_geometry_refusal(
         {"strategy": strategy, "body_name": "Body1", "face_indices": [0]}
     )
 
     assert refused is not None
     assert "takes no geometry selection" in str(refused)
-    assert strategy not in rules.CAM_NO_FACE_SELECTION
+
+
+def test_only_a_measured_strategy_leaves_the_generic_sentence():
+    """The partition is the point: each entry is a probe somebody made."""
+    assert set(rules.CAM_NO_FACE_SELECTION) == {"face"}
+
+
+def test_every_measured_strategy_is_one_the_schema_advertises():
+    """A key outside ``CAM_STRATEGIES`` is refused one rule earlier, so it could never
+    be reached - the same argument the parameter map already carries."""
+    assert set(rules.CAM_NO_FACE_SELECTION) <= set(rules.CAM_STRATEGIES)
 
 
 def test_a_usable_strategy_and_selection_is_refused_by_neither_side():
