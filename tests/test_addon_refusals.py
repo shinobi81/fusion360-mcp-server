@@ -491,6 +491,11 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
             "message is not a literal",
         ),
         (
+            "handler_scene.py",
+            757,
+            "message is not a literal",
+        ),
+        (
             "handler_sketch.py",
             317,
             "raise refusal: kind comes from _rules.symmetry_line_refusal",

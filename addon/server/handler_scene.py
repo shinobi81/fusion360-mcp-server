@@ -16,6 +16,7 @@ from . import fusion_api as adsk
 from . import get_logger
 from . import hints as _hints
 from . import parameter_units as _param_units
+from . import rules as _rules
 
 log = get_logger("handler")
 
@@ -749,17 +750,11 @@ class SceneCommands(_Contract):
             )
         saved_as = False
         if not doc.isSaved:
-            if not name:
-                raise _hints.Refusal(
-                    "INVALID_INPUT",
-                    "This document has never been saved: pass name to save it into "
-                    "Fusion's active data folder, or save it in Fusion first",
-                    hints=(
-                        "The tool will not choose a name or a folder for you.",
-                        "Fusion's active data folder is the target; there is no "
-                        "local-file save in this API.",
-                    ),
-                )
+            # The shipped docstring: "Property that indicates if this document has been
+            # saved or not. The initial save of a document requires that the name and
+            # location be specified and requires the saveAs method to be used."
+            if not (name or "").strip():
+                raise _rules.document_untitled_refusal()
             folder = self.app.data.activeFolder
             if folder is None:
                 raise _hints.Refusal(
@@ -767,25 +762,39 @@ class SceneCommands(_Contract):
                     "Fusion has no active data folder to save into",
                     hints=("Open the Data Panel once, then retry.",),
                 )
-            doc.saveAs(name, folder, "", "")
+            saved = doc.saveAs(name, folder, "", "")
             saved_as = True
         else:
-            # The description is required; "" is what Fusion's own dialogs pass for an
-            # unnamed version.
-            doc.save("")
+            # The description is required; "" is the value Fusion accepted in the probe.
+            saved = doc.save("")
+        if not saved:
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
+                "Fusion did not save the document",
+                hints=(
+                    "Check the Data Panel for a read-only folder or a lost "
+                    "connection.",
+                    "is_modified says whether the document still has unsaved changes.",
+                ),
+            )
         folder_name = None
         # `dataFile` is None on any document this server created; a saved one carries
         # the folder it lives in, which is the closest thing to a location the API has.
         if doc.dataFile is not None:
             with suppress(Exception):
                 folder_name = doc.dataFile.parentFolder.name
-        return {
+        reply = {
             "saved": True,
             "name": doc.name,
             "folder": folder_name,
             "saved_as": saved_as,
             "is_modified": doc.isModified,
         }
+        if name and not saved_as:
+            # The argument did nothing; saying so beats a reply that reports the old
+            # name as though the caller's were applied.
+            reply["name_ignored"] = name
+        return reply
 
     def _checkpoint(self, label: str) -> dict:
         """Save before a risky call when asked to, and say what happened when not.
@@ -808,7 +817,18 @@ class SceneCommands(_Contract):
                     "first"
                 ),
             }
-        doc.save(f"checkpoint before {label}")
+        try:
+            saved = doc.save(f"checkpoint before {label}")
+        except Exception as exc:
+            return {
+                "saved_before": False,
+                "checkpoint_skipped": f"the save failed: {exc}",
+            }
+        if not saved:
+            return {
+                "saved_before": False,
+                "checkpoint_skipped": "Fusion refused to save the document",
+            }
         return {"saved_before": True}
 
     def get_design_type(self):

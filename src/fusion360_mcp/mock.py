@@ -35,6 +35,7 @@ from ._rules import (
     construction_plane_angle_refusal,
     construction_plane_name_refusal,
     construction_plane_tangent_refusal,
+    document_untitled_refusal,
     edge_selector_refusal,
     export_body_refusal,
     export_target_refusal,
@@ -612,24 +613,11 @@ def _execute_code(p: dict) -> dict:
 
 def _save_document(p: dict) -> dict:
     name = p.get("name")
-    if not name:
-        # The refusal the handler raises for an untitled document: choosing a name is a
-        # write the caller did not ask for, and mock must not rehearse it.
-        return {
-            "ok": False,
-            "error_kind": "INVALID_INPUT",
-            "error_message": (
-                "This document has never been saved: pass name to save it into "
-                "Fusion's active data folder, or save it in Fusion first"
-            ),
-            "hints": [
-                "The tool will not choose a name or a folder for you.",
-                "Fusion's active data folder is the target; there is no local-file "
-                "save in this API.",
-            ],
-            "traceback": "MockError: unsaved document",
-            "mode": "mock",
-        }
+    if not (name or "").strip():
+        # One factory, shared with the handler: a caller rehearsing this reads the same
+        # sentence as one that calls Fusion.  Mock has no document to save, so an
+        # already-saved one is the divergence `MOCK_DIVERGENCES` records.
+        return _refusal_error(document_untitled_refusal())
     return {
         "saved": True,
         "name": name,
