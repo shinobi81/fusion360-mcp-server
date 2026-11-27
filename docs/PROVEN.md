@@ -1,24 +1,26 @@
 # Proven against Fusion
 
 One row per tool, and the evidence behind it. A tool whose row says **proven** has been
-called against a real Fusion and answered what the row claims; a tool whose row says
-**unproven** has not, and the row says why. Nothing here is aspirational: an `unproven`
-row is where the next unknown defect lives.
+called against a real Fusion and answered what the row claims. **Unproven** means no
+successful answer exists — nobody called it, or it was only ever refused — and the row
+says which. Nothing here is aspirational: an `unproven` row is where the next unknown
+defect lives.
 
 The convention, checked by `scripts/check_proven.py` and `tests/test_proven.py`:
 
 - `proven — YYYY-MM-DD, version, #pr: what was measured`, where the version is the
-  running `app.version` in backticks and the PR is the one that added the row, whose body
-  carries the envelope.
+  running `app.version` in backticks and the PR is the one that added the row, whose
+  body carries the envelope.
 - `unproven — <why>`, one line. "Only a refusal is exercised" is a reason; "not yet" is
   not.
 
 `uv run python scripts/check_proven.py` validates this table against
 `src/fusion360_mcp/tools.py` without needing Fusion. `--live` sends the read-only tools
-it can call with no arguments — twelve of the eighteen — and reports a row whose reply
-contradicts its claim, in either direction; tools it cannot call are reported as not
-probed, never as passing. Two of those twelve touch the session: `cam_list_setups`
-activates the Manufacture workspace and `render_view` moves the camera.
+it can call from the scene alone — twelve of the eighteen — and reports a row whose
+reply contradicts its state, in either direction; a *proven* row it sends no call to is
+reported as not probed, never as passing. Two of those twelve touch the session:
+`cam_list_setups` activates the Manufacture workspace and `render_view` moves the
+camera.
 
 | Tool | Evidence |
 | --- | --- |

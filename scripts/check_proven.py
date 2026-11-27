@@ -20,8 +20,8 @@ running add-in and reports a mismatch **in either direction**: a row that claims
 probe and gets a refusal, and a row that says ``unproven`` for a tool that answers
 ``ok`` (the table is then out of date, not wrong). It is a subset on purpose: most
 mutations cannot be smoke-called without arguments, and a mutation's evidence is a
-measured envelope in a PR body, not something this script can reproduce. A tool it
-sends no call to is reported as not probed, never as passing.
+measured envelope in a PR body, not something this script can reproduce. A *proven*
+row it sends no call to is reported as not probed, never as passing.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ PROVEN = ROOT / "docs" / "PROVEN.md"
 #: where the envelope is recorded.
 _PROVEN_RE = re.compile(
     r"^proven — (?P<date>\d{4}-\d{2}-\d{2}), "
-    r"`(?P<version>\d+\.\d+\.\d+)`, "
+    r"`(?P<version>\d+(?:\.\d+)+)`, "
     r"#(?P<pr>\d+): (?P<what>.+)$"
 )
 
@@ -112,14 +112,12 @@ class Row:
                     "a proven row must read "
                     "`proven — YYYY-MM-DD, `<version>`, #<pr>: <what was measured>`"
                 )
-            if not match.group("what").strip():
-                return "a proven row must say what was measured"
             return None
         match = _UNPROVEN_RE.match(self.evidence)
         if match is None:
             return "an unproven row must read `unproven — <why>`"
         why = match.group("why").strip()
-        if _PLACEHOLDER_RE.search(why):
+        if _PLACEHOLDER_RE.fullmatch(why):
             return f"``{why}`` is a placeholder, not a reason: say what is missing"
         return None
 
@@ -162,10 +160,10 @@ def malformed_lines(text: str) -> list[str]:
     return problems
 
 
-def check(text: str) -> list[str]:
+def check(text: str, rows: list[Row] | None = None) -> list[str]:
     """Every problem with the table, as messages a caller can act on."""
     problems: list[str] = malformed_lines(text)
-    rows = parse_table(text)
+    rows = parse_table(text) if rows is None else rows
     names = [row.tool for row in rows]
 
     declared = {tool["name"] for tool in TOOLS}
@@ -184,17 +182,19 @@ def check(text: str) -> list[str]:
 def _send(connection, tool: str, params: dict) -> dict:
     """One reply, with a bridge failure turned into a reply rather than a traceback.
 
-    ``send_command`` raises on ``status: error``: a timeout or a wedged main thread
-    would otherwise end ``--live`` before the table's own problems were printed.
+    Two exceptions, because the client raises both: ``FusionError`` for a structured
+    refusal, and ``ConnectionError`` when a *read-only* command's retries are exhausted
+    - a wedged main thread, which is exactly the case where the table's own problems
+    still deserve printing.
     """
     from fusion360_mcp.connection import FusionError
 
     try:
         return connection.send_command(tool, params)
-    except FusionError as exc:
+    except (FusionError, ConnectionError) as exc:
         return {
             "ok": False,
-            "error_kind": exc.error_kind,
+            "error_kind": getattr(exc, "error_kind", "CONNECTION_LOST"),
             "error_message": str(exc),
         }
 
@@ -212,19 +212,18 @@ def probe(host: str | None, port: int | None) -> dict[str, dict]:
     else:
         connection = Fusion360Connection()
     if not connection.connect():
-        print(
-            "not connected: is the Fusion360MCP add-in running?",
-            file=sys.stderr,
-        )
+        print("not connected: is the Fusion360MCP add-in running?", file=sys.stderr)
         raise SystemExit(1)
 
     replies: dict[str, dict] = {}
     try:
-        replies["get_scene_info"] = connection.send_command("get_scene_info", {})
+        replies["get_scene_info"] = _send(connection, "get_scene_info", {})
         bodies = replies["get_scene_info"].get("bodies") or []
         body_name = bodies[0].get("name") if bodies else None
 
         for tool, params in LIVE_CALLS.items():
+            if tool == "get_scene_info":
+                continue  # already answered above, for the body name
             replies[tool] = _send(connection, tool, params)
         if body_name is not None:
             for tool, parameter in LIVE_BODY_CALLS.items():
@@ -280,8 +279,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     text = PROVEN.read_text(encoding="utf-8")
-    problems = check(text)
     rows = parse_table(text)
+    problems = check(text, rows)
     proven = sum(1 for row in rows if row.proven)
     print(
         f"docs/PROVEN.md: {len(rows)} rows, {proven} proven, "

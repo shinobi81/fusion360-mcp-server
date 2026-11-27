@@ -80,6 +80,8 @@ def test_a_row_naming_no_tool_is_reported(text):
         "proven — 2026-11-26, 2706.1.17, #1: version not in backticks",
         "proven — 2026-11-26, `2706.1.17`: no PR number",
         "proven — 2026-11-26, `2706.1.17`, #1:",
+        "proven — 26-11-2026, `2706.1.17`, #1: the date is not a date",
+        "proven — 2026-11-26, `2706`, #1: a one-part build number",
     ],
 )
 def test_a_proven_row_must_cite_a_date_a_build_a_pr_and_what(text, mutant):
@@ -100,7 +102,10 @@ def test_an_unproven_row_must_say_why(text):
     assert any(unproven.tool in problem for problem in check(broken))
 
 
-@pytest.mark.parametrize("placeholder", ["not yet", "todo", "N/A", "unknown"])
+@pytest.mark.parametrize(
+    "placeholder",
+    ["not yet", "todo", "tbd", "N/A", "n/a", "unknown", "none", "nothing", "-"],
+)
 def test_a_placeholder_is_not_a_reason(text, placeholder):
     """The preamble says "not yet" is not a reason, so a rule that accepts anything
     non-empty is not the rule it describes."""
@@ -139,7 +144,6 @@ def test_the_live_subset_is_read_only_and_names_real_parameters():
     argument would otherwise be found by whoever runs it."""
     live = set(CHECKER.LIVE_CALLS) | set(CHECKER.LIVE_BODY_CALLS)
 
-    assert live == set(CHECKER.LIVE_CALLS) | set(CHECKER.LIVE_BODY_CALLS)
     assert live <= _READ_ONLY, sorted(live - _READ_ONLY)
     for tool, params in CHECKER.LIVE_CALLS.items():
         declared = (
@@ -187,7 +191,7 @@ def test_an_agreeing_reply_is_not_a_mismatch():
 
 
 def test_a_proven_tool_the_probe_skipped_is_a_note_not_a_failure():
-    """Two proven tools --live has no call for must not make the check red."""
+    """A proven tool `--live` has no call for must not make the check red."""
     rows = [CHECKER.Row("ping", _PROVEN_ROW)]
 
     assert CHECKER.live_mismatches({}, rows) == []
@@ -195,6 +199,30 @@ def test_a_proven_tool_the_probe_skipped_is_a_note_not_a_failure():
         "ping: proven, but --live sent it no call here (no body in the document, "
         "or no LIVE_CALLS entry)"
     ]
+
+
+def test_a_bridge_failure_becomes_a_reply_not_a_traceback():
+    """`send_command` raises for a refusal and for an exhausted read-only timeout; both
+    must reach `live_mismatches` as a reply, or `--live` dies before printing what it
+    already found."""
+    from fusion360_mcp.connection import FusionError
+
+    class _Raising:
+        def __init__(self, exc):
+            self.exc = exc
+
+        def send_command(self, tool, params):
+            raise self.exc
+
+    refused = CHECKER._send(
+        _Raising(FusionError("x", error_kind="TIMEOUT")), "ping", {}
+    )
+    lost = CHECKER._send(_Raising(ConnectionError("lost")), "ping", {})
+
+    assert refused == {"ok": False, "error_kind": "TIMEOUT", "error_message": "x"}
+    assert lost["ok"] is False
+    assert lost["error_kind"] == "CONNECTION_LOST"
+    assert "lost" in lost["error_message"]
 
 
 def test_main_exits_non_zero_for_a_broken_table_and_zero_for_a_good_one(
@@ -219,14 +247,3 @@ def test_the_docs_point_at_the_table(doc):
     """A record nobody is sent to is a record nobody reads - and the path, not the word,
     is what a reader can follow."""
     assert "`docs/PROVEN.md`" in (ROOT / doc).read_text(encoding="utf-8")
-
-
-def test_every_proven_row_cites_this_repository_s_pr_convention(text):
-    """``#157``-style numbers, not links: the evidence lives in the PR body, and a bare
-    number is what ``check_proven.py`` can parse."""
-    for row in parse_table(text):
-        if not row.proven:
-            continue
-        assert "#" in row.evidence, row.tool
-        number = row.evidence.split("#")[1].split(":")[0]
-        assert number.isdigit(), (row.tool, number)
