@@ -116,7 +116,7 @@ at all is refused instead — `INVALID_INPUT`, where Fusion's own message is
 | `split_body`          | Split a body using a plane            |
 | `split_face`          | Split faces of a body                 |
 | `offset_faces`        | Push/pull faces by a distance         |
-| `scale_body`          | Scale uniformly or non-uniformly      |
+| `scale_body`          | Scale uniformly or non-uniformly about `anchor_*`. The anchor is a *reference*: it becomes a sketch point in a hidden reference sketch (named in the reply), because Fusion refuses a bare coordinate with `3 : invalid ref point` |
 | `suppress_feature`    | Suppress a timeline feature           |
 | `unsuppress_feature`  | Re-enable a suppressed feature        |
 
@@ -179,8 +179,8 @@ what a selection returns.
 | --------------- | -------------------------- |
 | `create_flange` | Create an edge flange. `distance` is the flange length; `bend_radius_override` applies to this flange only |
 | `create_bend`   | Fold along a sketch line. `stationary_face_index` is the face that stays fixed - a wrong one bends the part the wrong way; `line_position` is where the line sits in the flat state |
-| `flat_pattern`  | Create flat pattern        |
-| `unfold`        | Unfold specific bends      |
+| `flat_pattern`  | Create flat pattern, pinned on the body's largest planar face (its top or bottom) |
+| `unfold`        | Unfold specific bends, or every one; pinned on the same largest planar face |
 
 ## Construction Geometry
 

@@ -401,15 +401,18 @@ class SceneCommands(_Contract):
         }
 
     def create_section_analysis(self, plane: str = "yz", offset: float = 0):
-        root = self._root()
-        analyses = root.analyses
+        # ``design.analyses``, never ``rootComponent.analyses``: measured on
+        # 2706.1.17, a Component has no ``analyses`` at all - the old call raised
+        # ``'Component' object has no attribute 'analyses'`` - and the section
+        # collection hangs off the design.  Its builder takes the plane and the
+        # distance together, ``createInput(cutPlaneEntity, distance)``, so neither
+        # is assigned to the input afterwards.
+        design = self._design()
+        sections = design.analyses.sectionAnalyses
 
-        inp = analyses.createInput()
-        inp.plane = self._construction_plane(plane)
-        if offset != 0:
-            inp.distance = adsk.core.ValueInput.createByReal(offset)
-
-        analysis = analyses.add(inp)
+        analysis = sections.add(
+            sections.createInput(self._construction_plane(plane), offset)
+        )
         return {
             "created": True,
             # Named so the agent can reference it: every other builder reports a

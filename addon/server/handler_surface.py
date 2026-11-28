@@ -307,17 +307,29 @@ class SurfaceCommands(_Contract):
         }
 
     def _stationary_face(self, body):
-        """The face a flat pattern or an unfold stays fixed to: the first planar one.
+        """The face a flat pattern or an unfold stays fixed to: the largest planar one.
 
         Both commands need it and Fusion's rules are the same for both - a flat
         pattern wants "a planar face in the sheet metal body that is on the top or
         bottom of the part" (``Component.h:351-352``), and the unfold's stationary
         face is what ``createInput`` takes (``UnfoldFeatures.h:63``).  A body with
         no planar face has nothing to fix, so the refusal is shared too.
+
+        The *first* planar face is not that face: measured on 2706.1.17, a
+        10x10x0.25 cm base flange's first planar face is a 0.37 cm2 side wall, and
+        ``createFlatPattern`` refused it with "stationaryFace is not valid, a side
+        face may have been selected".  The top and bottom of a sheet metal part are
+        its largest planar faces - here 100 cm2 - so area is the rule, and a tie
+        keeps the first (a flat sheet whose two faces are equal).
         """
+        best = None
         for face in body.faces:
-            if face.geometry.surfaceType == adsk.core.SurfaceTypes.PlaneSurfaceType:
-                return face
+            if face.geometry.surfaceType != adsk.core.SurfaceTypes.PlaneSurfaceType:
+                continue
+            if best is None or face.area > best.area:
+                best = face
+        if best is not None:
+            return best
         raise _hints.Refusal(
             "GEOMETRY_UNSUPPORTED",
             "No planar face found for stationary face",

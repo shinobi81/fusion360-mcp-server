@@ -55,13 +55,22 @@ def test_the_snapshot_still_returns_nothing_when_there_is_no_design(handler_modu
 
 
 def test_a_section_analysis_reports_the_name_it_created(bound_handler):
+    """The analysis is built where Fusion builds it: on the **design**.
+
+    Measured on 2706.1.17: a Component has no ``analyses`` at all - the live call
+    raised ``'Component' object has no attribute 'analyses'`` - and the collection's
+    builder takes the plane and the offset together, ``createInput(cutPlaneEntity,
+    distance)``, with no ``plane`` property to assign afterwards.
+    """
     design = FakeDesign(bodies=[FakeBody("Body1")])
     handler = bound_handler(design)
 
     out = handler.create_section_analysis(plane="xz", offset=2.0)
 
-    created = design.rootComponent.analyses.added[0]
+    created = design.analyses.sectionAnalyses.added[0]
     assert out["analysis_name"] == created.name
     analysis_input = created.input
     assert analysis_input is not None, "the analysis was added with no input"
-    assert analysis_input.distance is not None
+    assert analysis_input.cutPlaneEntity is design.rootComponent.xZConstructionPlane
+    assert analysis_input.distance == 2.0
+    assert not hasattr(design.rootComponent, "analyses"), "a Component has none live"

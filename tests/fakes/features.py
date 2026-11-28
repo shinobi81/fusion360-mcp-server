@@ -869,8 +869,9 @@ class FakeScaleInput:
     Fusion's ``createInput`` takes the bodies, the point and one uniform factor;
     a per-axis scale is that same input with ``setToNonUniform(x, y, z)`` called
     on it, which fills ``xScale``/``yScale``/``zScale`` and flips ``isUniform``
-    to ``False``.  ``point`` is whatever the handler built from ``anchor_x``/
-    ``anchor_y``/``anchor_z``.
+    to ``False``.  ``point`` is the *reference* the handler built from
+    ``anchor_x``/``anchor_y``/``anchor_z`` - a sketch point, because a Point3D is
+    refused (measured on 2706.1.17).
     """
 
     def __init__(self, input_entities, point, scale_factor):
@@ -907,6 +908,12 @@ class FakeScaleFeatures:
         self.created: list[FakeFeature] = []
 
     def createInput(self, input_entities, point, scale_factor) -> FakeScaleInput:
+        # The binding's own docstring: "This can be a BRepVertex, a SketchPoint or a
+        # ConstructionPoint."  Measured on 2706.1.17, a raw Point3D is refused with
+        # "3 : invalid ref point", so the fake refuses one too rather than recording
+        # a call Fusion never accepts.
+        if isinstance(point, FakePoint3D):
+            raise RuntimeError("3 : invalid ref point")
         created = FakeScaleInput(input_entities, point, scale_factor)
         self.inputs.append(created)
         return created
@@ -1027,9 +1034,17 @@ class FakeUnfoldFeatures:
 
 
 class FakeSectionAnalysisInput:
-    def __init__(self):
-        self.plane = None
-        self.distance = None
+    """``SectionAnalyses.createInput(cutPlaneEntity, distance)``.
+
+    Both values go in at creation - ``Fusion/SectionAnalysis/SectionAnalyses.h``
+    ships ``createInput(cutPlaneEntity, distance)``, and the input has no ``plane``
+    or ``distance`` property to assign afterwards.  A handler written against
+    ``createInput()`` therefore raises ``TypeError`` here, as it does live.
+    """
+
+    def __init__(self, cut_plane_entity, distance):
+        self.cutPlaneEntity = cut_plane_entity
+        self.distance = distance
 
 
 class FakeSectionAnalysis:
@@ -1042,20 +1057,39 @@ class FakeSectionAnalysis:
         self.input: FakeSectionAnalysisInput | None = None
 
 
-class FakeAnalyses:
-    """``root.analyses``: ``createInput()`` then ``add()`` returns the analysis."""
+class FakeSectionAnalyses(FakeCollection):
+    """``analyse.sectionAnalyses``: the collection that builds analyses."""
 
     def __init__(self):
+        super().__init__()
+        self.inputs: list[FakeSectionAnalysisInput] = []
         self.added: list[FakeSectionAnalysis] = []
 
-    def createInput(self) -> FakeSectionAnalysisInput:
-        return FakeSectionAnalysisInput()
+    def createInput(self, cut_plane_entity, distance) -> FakeSectionAnalysisInput:
+        created = FakeSectionAnalysisInput(cut_plane_entity, distance)
+        self.inputs.append(created)
+        return created
 
     def add(self, inp: FakeSectionAnalysisInput) -> FakeSectionAnalysis:
+        if not isinstance(inp, FakeSectionAnalysisInput):
+            raise TypeError("sectionAnalyses.add takes the input createInput made")
         analysis = FakeSectionAnalysis(f"Section Analysis{len(self.added) + 1}")
         analysis.input = inp
         self.added.append(analysis)
+        super().add(analysis)
         return analysis
+
+
+class FakeAnalyses:
+    """``design.analyses``: the typed sub-collections, not a builder itself.
+
+    Measured on 2706.1.17, a **Component** has no ``analyses`` at all; the
+    collection lives on the design and each analysis kind hangs off it, so a
+    handler that reached ``root.analyses`` raised ``AttributeError`` live.
+    """
+
+    def __init__(self):
+        self.sectionAnalyses = FakeSectionAnalyses()
 
 
 class FakeExportOptions:
