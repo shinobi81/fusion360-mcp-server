@@ -113,9 +113,9 @@ and a tag for a range that only touched those publishes a version a reader canno
 
 | the diff touches | bump |
 | --- | --- |
-| a tool added, renamed or removed; an argument that is now required, removed, or means something else; a reply key renamed or removed; an `error_kind` that was already classified, renamed or repurposed; or a call that answers differently **by design** | **minor** — a caller has to change, or asks one question and gets a different answer |
-| a defect fixed with no contract change — the same arguments, the same keys, the right answer — including an add-in fix, an optional argument added, a reply key *added*, and a refusal that used to arrive as `UNKNOWN` now carrying its kind | **patch** |
-| only `tests/`, `docs/`, `fuzz/`, `scripts/`, `.github/` or comments | **none** — no tag; the merges accumulate |
+| a tool added, renamed or removed; an argument that is now required, removed, or means something else; a reply key renamed or removed; an `error_kind` that was already classified, renamed or repurposed; `requires-python` raised; or a **successful** call whose answer changes by design | **minor** — a caller has to change, or asks one question and gets a different answer |
+| a defect fixed with no contract change — the same arguments, the same keys, the right answer — including an add-in fix, an optional argument added, a reply key *added*, a dependency floor or cap moved, a refusal that used to arrive as `UNKNOWN` now carrying its kind, and a refusal that replaces a wrong success | **patch** |
+| only documentation (any tracked `*.md` page), `tests/`, `fuzz/`, `scripts/`, `.github/` or comments | **none** — no tag; the merges accumulate |
 
 A range that straddles two rows takes the higher of them (`none` < `patch` < `minor`): a
 patch that should have been a minor is a caller who never upgraded, while a minor that
@@ -157,7 +157,7 @@ and this rule replaces them.
    change is still in hand; that is the practice `CHANGELOG.md`'s 0.7.3 entry records.
 4. PR it (`chore(release): x.y.z`), merge as usual.
 5. Start from the merged `main` (`git checkout main && git pull`), so the tree you tag is
-   the tree you built, then check that the artifacts ship the add-in, unpiped -
+   the tree you built, then check that the artifacts ship the add-in, unpiped —
    `release.yml` runs this before it publishes, so a build that loses `addon/` fails
    here rather than in a user's install. It reads both the wheel and the sdist back
    and compares them with `git ls-files addon`:
@@ -177,10 +177,10 @@ and this rule replaces them.
 
    **The push publishes the release.** `release.yml` triggers on `v*`, and its publish
    step is `gh release create` with the wheel, the sdist, `sbom.cdx.json` and
-   `provenance.sigstore.json` - the four assets a tag is meant to carry. Do not run
+   `provenance.sigstore.json` — the four assets a tag is meant to carry. Do not run
    `gh release create` yourself: a release that already exists makes that step fail with
    `a release with the same tag name already exists`, and what is left behind is a
-   release with **no assets** - the attestation was produced, since
+   release with **no assets** — the attestation was produced, since
    `attest-build-provenance` ran, but its bundle never became an asset. The recovery is
    at the end of this section.
 7. Verify the tag actually installs:
