@@ -466,13 +466,18 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
             "message is not a literal",
         ),
         (
+            "handler_cam.py",
+            906,
+            "raise number_refusal: kind comes from _rules.cam_program_number_refusal",
+        ),
+        (
             "handler_export.py",
-            333,
+            358,
             "raise target_refusal: kind comes from _rules.export_target_refusal",
         ),
         (
             "handler_export.py",
-            341,
+            366,
             "raise body_refusal: kind comes from _rules.export_body_refusal",
         ),
         (

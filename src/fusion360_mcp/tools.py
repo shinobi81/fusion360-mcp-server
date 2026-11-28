@@ -2524,6 +2524,16 @@ TOOLS: list[dict] = [
             "enum": ["mm", "in"],
             "default": "mm",
         },
+        program_number={
+            "type": "integer",
+            "minimum": 1,
+            "default": 1001,
+            "description": (
+                "Program number written as the NC file's program name. "
+                "A post that sets programNameIsInteger reads this as a "
+                "number, so it cannot be the setup's name"
+            ),
+        },
     ),
     _tool(
         "cam_list_setups",

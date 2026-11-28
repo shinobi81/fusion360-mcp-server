@@ -604,6 +604,11 @@ def test_post_process_hands_the_post_input_the_four_arguments_it_recorded(
     ``PostProcessInput.create`` takes ``programName``, ``postConfiguration``,
     ``outputFolder`` and ``outputUnits`` in that order; a fake that accepts four
     values of any kind proves the arity and nothing about the order.
+
+    ``programName`` is the program **number**, not the setup's name: measured on
+    2706.1.17, ``fanuc.cps`` sets ``programNameIsInteger`` and reading ``"Setup1"``
+    as one answers ``3 : Program number 'NaN' is out of range`` - the whole post
+    fails, which is why ``cam_post_process`` could never be proved before.
     """
     operation = _operation("Rough1")
     cam = _cam(_setup_with_operations("Setup1", operation), generic_post=str(tmp_path))
@@ -619,7 +624,7 @@ def test_post_process_hands_the_post_input_the_four_arguments_it_recorded(
     assert len(posted) == 1
     posted_operation, post_input = posted[0]
     assert posted_operation is operation
-    assert post_input.programName == "Setup1"
+    assert post_input.programName == "1001"
     assert post_input.postConfiguration == str(tmp_path / "fanuc.cps")
     assert post_input.outputFolder == str(tmp_path)
     assert post_input.isOpenInEditor is False
@@ -628,6 +633,25 @@ def test_post_process_hands_the_post_input_the_four_arguments_it_recorded(
     # for the member - they pin the value, not the identity.
     assert post_input.outputUnits == adsk.cam.PostOutputUnitOptions.MillimetersOutput
     assert post_input.outputUnits == 2
+
+
+def test_a_program_number_the_caller_names_reaches_the_post(handler_module, tmp_path):
+    """The number the caller names is what the post reads, as a string."""
+    cam = _cam(
+        _setup_with_operations("Setup1", _operation("Rough1")),
+        generic_post=str(tmp_path),
+    )
+    posted = []
+    cam.postProcess = lambda *args: posted.append(args)
+    handler = _generating_handler(handler_module, cam)
+    handler._resolve_post = lambda _name: str(tmp_path / "fanuc.cps")
+
+    reply = handler.cam_post_process(
+        "Setup1", output_folder=str(tmp_path), program_number=2048
+    )
+
+    assert posted[0][1].programName == "2048"
+    assert reply["program_number"] == 2048
 
 
 def test_operation_info_describes_the_one_operation_named(handler_module):

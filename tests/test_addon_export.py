@@ -74,9 +74,17 @@ class TestRootBody:
 
         assert design.exportManager.executed[0].meshRefinement == "medium"
 
-    def test_step_creates_options_with_the_path_then_the_body(
+    def test_step_creates_options_with_the_path_then_the_component(
         self, bound_handler, tmp_path
     ):
+        """STEP takes a **Component**, not a body, and says so in the reply.
+
+        ``ExportManager.createSTEPExportOptions`` documents "Valid geometry for this
+        is currently a Component object", and measured on 2706.1.17 a ``BRepBody``
+        answers ``3 : invlid argument geometry``.  So the unit this export writes is
+        the component that owns the body, and the reply names it rather than
+        pretending one body went out.
+        """
         design = _design_with(_root_body())
         target = str(tmp_path / "out.step")
 
@@ -84,9 +92,34 @@ class TestRootBody:
 
         options = design.exportManager.executed[0]
         assert options.kind == "step"
-        assert options.entity is design.rootComponent.bRepBodies.item(0)
+        assert options.entity is design.rootComponent
+        assert options.entity is not design.rootComponent.bRepBodies.item(0)
         assert options.path == target
-        assert out == {"exported": True, "body": "Body1", "file_path": target}
+        assert out == {
+            "exported": True,
+            "body": "Body1",
+            "file_path": target,
+            "scope": "component",
+            "component": design.rootComponent.name,
+            "bodies_in_component": 1,
+        }
+
+    def test_step_warns_when_the_component_holds_more_than_the_named_body(
+        self, bound_handler, tmp_path
+    ):
+        """A second body in the same component rides along, and the note says so.
+
+        Fusion cannot write one body to STEP through this factory, so a caller that
+        needs one body out has to isolate it first; a silent wider export would be
+        the defect this note exists to prevent.
+        """
+        design = FakeDesign(bodies=[FakeBody("Body1"), FakeBody("Body2")])
+
+        out = bound_handler(design).export_step("Body1", str(tmp_path / "out.step"))
+
+        assert out["bodies_in_component"] == 2
+        assert "Step exports a component" in out["note"]
+        assert "Body1" not in out["note"]
 
     def test_a_bare_filename_needs_no_directory_created(self, bound_handler):
         """``os.makedirs(os.path.dirname("out.stl"))`` used to raise.
@@ -207,17 +240,28 @@ class TestComponentBody:
 
         assert same_name.isVisible is True
 
-    def test_step_exports_the_occurrence_and_reports_the_body(
+    def test_step_exports_the_component_that_owns_a_nested_body(
         self, bound_handler, tmp_path
     ):
+        """A nested body's STEP is its own component, never the occurrence.
+
+        ``createSTEPExportOptions`` takes a ``Component``; measured on 2706.1.17 an
+        occurrence is not what that argument means, and the sibling sweep STL needs is
+        pointless here - a component export writes all three bodies, which the reply
+        counts instead of claiming one.
+        """
         design, _target, _same_name, _hidden, occurrence = self._design()
         target_path = str(tmp_path / "out.step")
 
         out = bound_handler(design).export_step("Body1", target_path)
 
         options = design.exportManager.executed[0]
-        assert (options.kind, options.entity) == ("step", occurrence)
-        assert out == {"exported": True, "body": "Body1", "file_path": target_path}
+        assert (options.kind, options.entity) == ("step", occurrence.component)
+        assert options.entity is not occurrence
+        assert out["scope"] == "component"
+        assert out["component"] == "Comp1"
+        assert out["bodies_in_component"] == 3
+        assert "3 bodies" in out["note"]
 
 
 class _EmptyImport(FakeMeshBodies):
@@ -480,7 +524,9 @@ class TestExportTargetRefusals:
 
         out = bound_handler(design).export(body_name="Body1", file_path=target)
 
-        assert out == {"exported": True, "body": "Body1", "file_path": target}
+        assert out["exported"] is True
+        assert out["scope"] == "component"
+        assert out["component"] == design.rootComponent.name
         assert design.exportManager.executed[0].kind == "step"
 
     @pytest.mark.parametrize("by_extension", [False, True])

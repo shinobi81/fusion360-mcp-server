@@ -1157,6 +1157,10 @@ class FakeExportManager:
                 "Wrong number or type of arguments for overloaded function "
                 "'ExportManager_createSTEPExportOptions'"
             )
+        # The binding: "Valid geometry for this is currently a Component object."
+        # Measured on 2706.1.17, a BRepBody answers this - Fusion's own spelling.
+        if isinstance(entity, FakeBody):
+            raise RuntimeError("3 : invlid argument geometry")
         return FakeExportOptions("step", entity, path)
 
     def createFusionArchiveExportOptions(self, path: str) -> FakeExportOptions:

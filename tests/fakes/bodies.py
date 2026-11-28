@@ -492,6 +492,10 @@ class FakeBody(FakeDeletable):
         self.entityToken = f"token-{next(_BODY_TOKENS)}"
         #: ``None`` when the body sits directly in the root component.
         self.assemblyContext: object | None = None
+        #: ``BRepBody.parentComponent``: the component that owns the body.  A fixture
+        #: body belongs to the root, which ``FakeRoot`` wires up; STEP is exported per
+        #: component, so a ``None`` here would be an ``AttributeError`` at the call.
+        self.parentComponent: object | None = None
 
     def getPhysicalProperties(self, accuracy) -> FakePhysicalProperties:
         """Fusion's one-argument call: the properties, and the accuracy asked for."""

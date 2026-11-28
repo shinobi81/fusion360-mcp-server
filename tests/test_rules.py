@@ -1437,3 +1437,23 @@ def test_a_tangent_call_with_two_faults_orders_them_alike_on_both_sides(
 def test_a_plane_name_the_lookup_accepts_is_refused_by_neither_side(plane):
     """The lookup lowercases, and the schema's enum is advisory for a socket caller."""
     assert rules.construction_plane_name_refusal(plane) is None
+
+
+def test_a_program_number_below_one_is_refused_on_both_sides(bare_handler):
+    """A program number is judged from the parameter alone, like the stock mode.
+
+    Measured on 2706.1.17: a post that wants an integer program name parses what it
+    is given, so ``"Setup1"`` became ``NaN`` and every post of the setup failed with
+    "Program number 'NaN' is out of range". The number is the caller's now, and a
+    value no program number can be refuses before the CAM product is touched.
+    """
+    call = {"setup_name": "Setup1", "program_number": 0}
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        bare_handler.cam_post_process(**call)
+
+    refused = mock._cam_post_process(call)
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert "program_number" in str(raised.value)
+    assert refused["error_message"] == str(raised.value)

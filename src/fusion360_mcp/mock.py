@@ -22,10 +22,12 @@ from ._rules import (
     CAM_GEOMETRY_PARAMETERS,
     CAM_NO_TOOL_WARNING,
     CAM_STOCK_MODES,
+    DEFAULT_PROGRAM_NUMBER,
     as_built_geometry_refusal,
     body_name_required_refusal,
     cam_geometry_refusal,
     cam_library_tool_refusal,
+    cam_program_number_refusal,
     cam_stock_mode_refusal,
     cam_strategy_refusal,
     cam_target_refusal,
@@ -1837,17 +1839,23 @@ def _cam_generate_toolpath(p: dict) -> dict:
 
 
 def _cam_post_process(p: dict) -> dict:
+    # Judged before the setup is named, as the handler judges it: a number no program
+    # can carry is a pure parameter, and the post is never reached.
+    if number_refusal := cam_program_number_refusal(p):
+        return _refusal_error(number_refusal)
     setup = p.get("setup_name", "Setup1")
     post = p.get("post_processor", "fanuc")
-    # The handler answers the folder (`output_folder`) and the unit word (`units`);
-    # `output_file`/`output_units` were keys no call ever returned. The default folder
-    # is resolved the way the handler resolves it, so a rehearsal prints a real path.
+    # The handler answers the folder (`output_folder`), the unit word (`units`) and the
+    # program number the post will read; `output_file`/`output_units` were keys no call
+    # ever returned. The default folder is resolved the way the handler resolves it, so
+    # a rehearsal prints a real path.
     return {
         "setup": setup,
         "post_processor": post,
         "output_folder": p.get("output_folder")
         or os.path.join(os.path.expanduser("~"), "Desktop"),
         "units": p.get("output_units", "mm"),
+        "program_number": p.get("program_number", DEFAULT_PROGRAM_NUMBER),
     }
 
 

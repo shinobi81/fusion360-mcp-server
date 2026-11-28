@@ -306,7 +306,7 @@ Every `add_joint` result carries the measurements behind that:
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `import_mesh`       | Import STL/OBJ/3MF as mesh body via `MeshBodies.add()`. Unit-aware (`mm`/`cm`/`m`/`in`/`ft`). Returns the mesh name and bounding box |
 | `export_stl`        | Export body as STL (supports bodies inside components)                                                                               |
-| `export_step`       | Export body as STEP (supports bodies inside components)                                                                              |
+| `export_step`       | Export as STEP. Fusion's factory takes a **Component**, not a body (`3 : invlid argument geometry`), so this writes the component that owns the named body and the reply says `scope: component`, names it and counts `bodies_in_component`; a component holding more than one body carries a `note`. Use `export_stl` for one body |
 | `export_f3d`        | Export design as Fusion archive                                                                                                      |
 | `export_view_sheet` | Export multi-view PNG sheet (iso/front/top/right) for visual inspection, plus a shareable HTML sheet |
 | `export`            | Unified dispatcher — routes to `export_stl`/`export_step`/`export_f3d` based on explicit `format` or file-extension inference        |
@@ -318,7 +318,7 @@ Every `add_joint` result carries the measurements behind that:
 | `cam_create_setup`       | Create a manufacturing setup (milling/turning/cutting); applies stock mode/offsets                                  |
 | `cam_create_operation`   | Add a machining operation (Fusion's strategy names only); applies stepdown/feed/speed/coolant, `face_indices` selects geometry for the six strategies a selection can be applied to, and `tool_diameter` (cm) attaches a flat end mill so the operation can generate — `tool_json` takes a complete tool object instead, and `tool_number` alone reuses one the document library already holds; `checkpoint=True` saves the document first where it can and reports `saved_before` (`checkpoint_skipped` says why not) |
 | `cam_generate_toolpath`  | Generate toolpaths for operations                                                                                   |
-| `cam_post_process`       | Post-process to G-code — pass a full `.cps` path (cloud-post builds don't ship local posts)                         |
+| `cam_post_process`       | Post-process to G-code — pass a full `.cps` path (cloud-post builds don't ship local posts). `program_number` (default 1001) is what the post reads as its program name: a post that sets `programNameIsInteger` parses it, and the setup's name parsed to `NaN`, failing every post of the setup |
 | `cam_list_setups`        | List all manufacturing setups                                                                                       |
 | `cam_list_operations`    | List operations in a setup                                                                                          |
 | `cam_get_operation_info` | Get operation details (strategy, tool, parameters)                                                                  |
