@@ -105,21 +105,55 @@ error that motivated it.
 
 ## Releasing
 
-1. Bump `version` in `pyproject.toml`, `addon/Fusion360MCP.manifest` and the install
-   snippets in `README.md`, then `uv lock`. They ship together, and
-   `tests/test_packaging.py` fails if any of them disagree. On a **minor** bump it also
-   fails until **both** rows of `SECURITY.md`'s supported-versions table move with it -
-   the new `<major>.<minor>.x` Yes row and its `< major.minor` No row beneath it.
-2. Write the `CHANGELOG.md` entry in the same change, not after the tag: the note records
-   what a release changed, and it is written while the change is in hand. It goes in the
-   release PR, as 0.7.0, 0.7.1, 0.7.2 and 0.7.3 all did.
+### When to bump
+
+A bump is classified from the **diff**, never counted from closed issues. An issue is
+not a unit of release: half the queue is tests, docs and fakes, and a tag for those
+publishes a version a reader cannot distinguish from the one before it.
+
+| the diff touches | bump |
+| --- | --- |
+| `src/fusion360_mcp/tools.py` (the published schema), a reply key, an `error_kind`, a tool name or count, add-in behaviour | **minor** — a caller has to be able to see it |
+| a defect fixed with no contract change | **patch** |
+| only `tests/`, `docs/`, `fuzz/`, `scripts/` or comments | **none** — it rides the next release |
+
+Cut a release when **any** of these comes first:
+
+- an issue closes that changed what a tool answers;
+- three merges have accumulated since the last tag;
+- the next item would touch a call a released fix already touched.
+
+The first trigger is the one that matters: `README.md` pins a tag, so a fix nobody tags
+is invisible to every reader who installs from that pin. The second stops a batch growing
+past what one verification covers.
+
+### The note is drafted in the change PR
+
+Add a `## [Unreleased]` heading at the top of `CHANGELOG.md` with your entry while the
+change is in hand, not in the release PR, where the reason for it has been forgotten. The
+release PR renames that heading to the version it cuts and leaves the body alone: it was
+written against the change it describes.
+
+### Cutting the tag
+
+1. Read the range since the last tag against the table above, and decide the bump. When
+   it is genuinely between two rows, take the higher one: a patch that should have been
+   a minor is a caller who did not upgrade, and a minor that should have been a patch is
+   one line in the changelog.
+2. Move `version` in `pyproject.toml`, `addon/Fusion360MCP.manifest` and the install
+   snippets in `README.md`, and on a **minor** both rows of `SECURITY.md`'s
+   supported-versions table — the new `<major>.<minor>.x` Yes row and its `< major.minor`
+   No row beneath it. Then `uv lock`. They ship together, and `tests/test_packaging.py`
+   fails naming whichever one you missed: the manifest guard, the pin guard and the
+   supported-versions guard each print the file, the line and the fix.
+3. Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` in `CHANGELOG.md`.
 
    A published entry that states something false is corrected by annotating it in place
    on `main`, named as a post-release correction, citing the PR and — where a later change
    made the corrected claim true — that change. The tag's tree is never rewritten, so the
    tag's copy keeps the original sentence.
-3. PR it (`chore(release): x.y.z`), merge as usual.
-4. Check that the artifacts ship the add-in, unpiped, in the same tree you tag —
+4. PR it (`chore(release): x.y.z`), merge as usual.
+5. Check that the artifacts ship the add-in, unpiped, in the same tree you tag —
    `release.yml` runs this before it publishes, so a build that loses `addon/` fails
    here rather than in a user's install. It reads both the wheel and the sdist back
    and compares them with `git ls-files addon`:
@@ -134,7 +168,7 @@ error that motivated it.
    output and has to hold both artifacts — one alone is a cannot-check failure, not a
    pass over the half that was built. Unpiped on purpose: a status read through a pipe
    is the pipe's, not the check's.
-5. Annotated tag on the merge commit: `git tag -a vX.Y.Z -m "…"`, then
+6. Annotated tag on the merge commit: `git tag -a vX.Y.Z -m "…"`, then
    `git push origin vX.Y.Z`.
 
    **The push publishes the release.** `release.yml` triggers on `v*`, and its publish
@@ -145,7 +179,7 @@ error that motivated it.
    release with **no assets** - the attestation was produced, since
    `attest-build-provenance` ran, but its bundle never became an asset. 0.10.0 hit
    exactly this.
-6. Verify the tag actually installs:
+7. Verify the tag actually installs:
 
    ```bash
    uvx --from 'git+https://github.com/shinobi81/fusion360-mcp-server@vX.Y.Z' \
@@ -153,7 +187,7 @@ error that motivated it.
    ```
 
    Then confirm the **release** published, not only the tag: this is the one step that
-   can see step 5's failure mode, because installing from a tag works whether or not a
+   can see step 6's failure mode, because installing from a tag works whether or not a
    release exists or carries anything.
 
    ```bash

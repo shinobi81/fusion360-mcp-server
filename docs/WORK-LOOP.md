@@ -58,6 +58,18 @@ Decide, record the decision where a reader will find it, and keep going:
 
 After each merge, say which item closed, and start the next in rank order.
 
+## When a merge becomes a release
+
+The queue carries issues, not version numbers: a bump is classified from the diff
+(`CONTRIBUTING.md`, Releasing). Cut a release when any of these comes first — an issue
+closed that changed what a tool answers, three merges have accumulated since the last
+tag, or the next item would touch a call a released fix already touched. A range that
+touched only tests, docs, fuzz or scripts earns **no bump** and rides the next release.
+
+The release is its own PR (`chore(release): x.y.z`), and it closes nothing: an item is
+closed by the PR that changes it. When the tag is pushed, say which released fixes are
+now installable, because that is the change a reader of the README can act on.
+
 ## The gates
 
 The five a PR must pass, and the command that proves each:
