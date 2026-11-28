@@ -179,8 +179,9 @@ def document_untitled_refusal() -> _hints.Refusal:
 
     One factory rather than a literal at each site: the handler raises it and mock
     mode returns it, so a caller rehearsing ``save_document()`` reads the same sentence
-    as one that calls Fusion.  Mock's own scene has a document, so it can *only* answer
-    this - which is the divergence ``MOCK_DIVERGENCES["save_document_state"]`` records.
+    as one that calls Fusion.  Mock has no saveable document, so it answers this for a
+    nameless call and a fabricated folder for a named one - the divergence
+    ``MOCK_DIVERGENCES["save_document_state"]`` records.
     """
     return _hints.Refusal(
         "INVALID_INPUT",

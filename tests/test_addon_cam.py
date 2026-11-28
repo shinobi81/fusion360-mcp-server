@@ -1073,9 +1073,9 @@ def test_a_build_that_spells_the_parameter_differently_falls_back(handler_module
 def test_a_checkpoint_saves_before_the_cam_product_is_touched(handler_module):
     """The brief's criterion for this tool: `saved_before: true`, and the save happens.
 
-    The document is saved *after* every refusal the parameters alone can earn, so a
-    refused call does not write a version for nothing - which is why the checkpoint
-    sits where it does rather than at the top.
+    The document is saved after every refusal the parameters alone can earn, so a call
+    refused for a *parameter value* writes nothing - one refused for a name only the
+    design can resolve still does, because it needs the design to find out.
     """
     operation, _value, _applied = _contour_operation()
     handler = _creation_handler(handler_module, operation, faces=2)
@@ -1092,6 +1092,25 @@ def test_a_checkpoint_saves_before_the_cam_product_is_touched(handler_module):
 
     assert result["saved_before"] is True
     assert document.saved == [("save", "checkpoint before cam_create_operation")]
+
+
+def test_a_parameter_refusal_saves_nothing_even_with_a_checkpoint(handler_module):
+    """Refused before Fusion is touched, so there is nothing worth a version."""
+    operation, _value, _applied = _contour_operation()
+    handler = _creation_handler(handler_module, operation, faces=2)
+    document = FakeDocument("Plate", is_saved=True)
+    handler.app = SimpleNamespace(activeDocument=document)
+
+    with pytest.raises(addon_hints.Refusal):
+        handler.cam_create_operation(
+            setup_name="Setup1",
+            strategy="bogus",
+            body_name="Body1",
+            face_indices=[0],
+            checkpoint=True,
+        )
+
+    assert document.saved == []
 
 
 def test_a_checkpoint_is_absent_when_not_asked_for(handler_module):

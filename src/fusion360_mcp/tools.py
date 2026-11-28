@@ -590,7 +590,9 @@ TOOLS: list[dict] = [
             "default": False,
             "description": (
                 "Save the document before running the script, so a crash cannot take "
-                "the unsaved state. Opt-in: the default writes nothing."
+                "the changes since the checkpoint. Opt-in: the default writes nothing. "
+                "An untitled document answers `saved_before: false` with the reason "
+                "instead of refusing."
             ),
         },
     ),

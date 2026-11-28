@@ -104,8 +104,8 @@ class FakeDocument:
         if self.save_returns:
             self.isSaved = True
             self.isModified = False
-        self.dataFile = type("FakeDataFile", (), {"parentFolder": dataFolder})()
-        return True
+            self.dataFile = type("FakeDataFile", (), {"parentFolder": dataFolder})()
+        return self.save_returns
 
 
 class FakeDocuments:

@@ -1752,6 +1752,8 @@ def _cam_create_operation(p: dict) -> dict:
         "strategy": p.get("strategy", "contour2d"),
     }
     if p.get("checkpoint"):
+        # The handler's keys, with mock's own reason: it has no document to save, and
+        # a checkpoint that refused would be a new way for the call to fail.
         result.update(
             {
                 "saved_before": False,
