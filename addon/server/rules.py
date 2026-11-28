@@ -321,6 +321,37 @@ CAM_STOCK_MODES = {
 }
 
 
+#: The program number a post receives when the caller names none. Fusion's own post
+#: dialog offers 1001 for the first program, and a post that wants an integer parses
+#: this one - "Setup1" parsed to NaN and failed every post of the setup (measured on
+#: 2706.1.17: "3 : Program number 'NaN' is out of range").
+DEFAULT_PROGRAM_NUMBER = 1001
+
+
+def cam_program_number_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
+    """The refusal a ``program_number`` that is not a whole number earns.
+
+    Judged from the parameter alone, so mock mode refuses exactly what the handler
+    refuses and before the CAM product is touched. A bool is refused although
+    ``True == 1``: it is not a program number, and a post reading ``"True"`` is back
+    to the NaN this parameter exists to stop.
+    """
+    value = params.get("program_number", DEFAULT_PROGRAM_NUMBER)
+    if isinstance(value, bool) or not isinstance(value, int):
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"program_number must be a whole number, not {type(value).__name__}",
+            hints=("Pass a positive whole number, e.g. 1001.",),
+        )
+    if value < 1:
+        return _hints.Refusal(
+            "INVALID_INPUT",
+            f"program_number must be at least 1, not {value}",
+            hints=("Pass a positive whole number, e.g. 1001.",),
+        )
+    return None
+
+
 def cam_stock_mode_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     """The refusal an unknown ``stock_mode`` earns, or None when it is one of the five.
 

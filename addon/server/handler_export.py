@@ -36,13 +36,15 @@ else:  # pragma: no cover - unchanged runtime hierarchy: ``object``
 class ExportCommands(_Contract):
 
     def _export_body(self, kind: str, body_name: str, file_path: str | None) -> dict:
-        """Export one body as STL or STEP, hiding its siblings when it is nested.
+        """Export as STL or STEP: one body's mesh, or the component holding it.
 
-        The two APIs differ in more than the extension: STL's factory takes
-        ``(entity, path)`` and accepts a mesh refinement, STEP's takes
-        ``(path, entity)``.  Everything else - the Desktop default, the sibling
-        sweep keyed on ``entityToken``, the restore in a ``finally`` - is the same
-        for both, which is why this is one function and not two ~40-line twins.
+        The two APIs disagree about more than the extension.  STL's factory takes
+        ``(entity, path)``, accepts a body or its occurrence, and takes a mesh
+        refinement.  STEP's takes ``(path, entity)`` and accepts **only a
+        Component** - ``ExportManager.h`` says "Valid geometry for this is
+        currently a Component object", and measured on 2706.1.17 a ``BRepBody``
+        answers ``3 : invlid argument geometry``.  So STL is a body export and STEP
+        is a component export, and each reply says which it wrote.
         """
         body = self._body_by_name(body_name)
 
@@ -56,16 +58,39 @@ class ExportCommands(_Contract):
             os.makedirs(parent, exist_ok=True)
 
         export_mgr = self._design().exportManager
+
+        if kind == "step":
+            # The component that OWNS the body: there is no single-body STEP through
+            # this factory, so the reply counts what went out rather than claiming
+            # one body did.
+            component = body.parentComponent
+            step_options = export_mgr.createSTEPExportOptions(file_path, component)
+            export_mgr.execute(step_options)
+            written = component.bRepBodies.count
+            report = {
+                "exported": True,
+                "body": body_name,
+                "file_path": file_path,
+                "scope": "component",
+                "component": component.name,
+                "bodies_in_component": written,
+            }
+            if written > 1:
+                report["note"] = (
+                    f"Step exports a component, not a body: {written} bodies from "
+                    f"'{component.name}' were written. Isolate the body in its own "
+                    "component to export one."
+                )
+            return report
+
         occurrence = body.assemblyContext  # None if the body is at root
 
         def options_for(entity):
-            if kind == "stl":
-                created = export_mgr.createSTLExportOptions(entity, file_path)
-                created.meshRefinement = (
-                    adsk.fusion.MeshRefinementSettings.MeshRefinementMedium
-                )
-                return created
-            return export_mgr.createSTEPExportOptions(file_path, entity)
+            created = export_mgr.createSTLExportOptions(entity, file_path)
+            created.meshRefinement = (
+                adsk.fusion.MeshRefinementSettings.MeshRefinementMedium
+            )
+            return created
 
         if occurrence is None:
             export_mgr.execute(options_for(body))

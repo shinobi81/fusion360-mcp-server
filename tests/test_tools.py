@@ -258,7 +258,7 @@ _TOOL_ARGUMENT_COUNTS = {
     "cam_create_setup": 7,
     "cam_create_operation": 16,
     "cam_generate_toolpath": 3,
-    "cam_post_process": 5,
+    "cam_post_process": 6,
     "cam_list_setups": 0,
     "cam_list_operations": 1,
     "cam_get_operation_info": 2,

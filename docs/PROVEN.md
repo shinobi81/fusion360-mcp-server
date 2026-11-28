@@ -62,10 +62,10 @@ the camera for its capture and restores it before returning.
 | `list_edges` | proven — 2026-11-26, `2706.1.17`, #158: answered a box's twelve edges with index and midpoint |
 | `list_faces` | proven — 2026-11-26, `2706.1.17`, #158: answered a box's six faces with index, surface_type and normal (#147) |
 | `list_components` | proven — 2026-11-26, `2706.1.17`, #158: answered `Component1` with `count` |
-| `export_step` | unproven — only a refusal is exercised: `3 : invlid argument geometry` (2026-11-28, `2706.1.17`); Fusion's `createSTEPExportOptions` takes a Component and the handler passes a BRepBody |
+| `export_step` | proven — 2026-11-28, `2706.1.17`, #165: wrote `one.step` (8,941 bytes) for a single-body component and said so — `scope: component`, `bodies_in_component: 1`; with a second body it wrote both (14,479 bytes) and carried the note. Fusion's `createSTEPExportOptions` takes a Component, so the unit is the component that owns the body, never the body |
 | `export_f3d` | proven — 2026-11-28, `2706.1.17`, #164: wrote the design to `design.f3d`: `exported: true` |
 | `export_view_sheet` | proven — 2026-11-28, `2706.1.17`, #164: wrote an HTML sheet and the `iso`+`front` PNGs to the Desktop default: `html_path` returned |
-| `export` | proven — 2026-11-28, `2706.1.17`, #164: `format: stl` exported a body (`exported: true`, body and path echoed); `format: step` is refused as export_step is, `3 : invlid argument geometry` |
+| `export` | proven — 2026-11-28, `2706.1.17`, #165: `format: stl` exported a body (`exported: true`, body and path echoed) and `format: step` wrote the component that owns it (`scope: component`, `bodies_in_component: 2`, 14,486 bytes), as `export_step` alone does |
 | `import_mesh` | proven — 2026-11-28, `2706.1.17`, #164: imported `block.stl` twice as mesh bodies `block` and `block (1)`, each with a bounding box |
 | `get_parameters` | proven — 2026-11-26, `2706.1.17`, #158: answered `count: 0` and an empty parameter list |
 | `create_parameter` | proven — 2026-11-28, `2706.1.17`, #164: created `plate_width` at 42 mm: `unit` `mm`, `expression` `42 mm` |
@@ -118,7 +118,7 @@ the camera for its capture and restores it before returning.
 | `cam_create_setup` | proven — 2026-11-27, `2706.1.17`, #159: created `Setup1` over a body with relative-box stock offsets |
 | `cam_create_operation` | proven — 2026-11-27, `2706.1.17`, #159: aimed a `face` operation through its `stockContours` boundary (`useStockContours` measured `true`), then generated it |
 | `cam_generate_toolpath` | proven — 2026-11-27, `2706.1.17`, #159: answered `generated: true` for a `face` operation with no face selection |
-| `cam_post_process` | unproven — only a refusal is exercised: given a full `.cps` path the post answers `3 : Program number 'NaN' is out of range` (2026-11-28, `2706.1.17`) because `PostProcessInput.programName` is never set and no parameter reaches it; a short name is refused first, since posts are cloud-library based |
+| `cam_post_process` | proven — 2026-11-28, `2706.1.17`, #165: posted the `face` operation `Face1` through Fusion's own `fanuc.cps`, producing `1001.nc` whose first line is `O1001`, and again at `program_number` 2048 (`2048.nc`, `O2048`). The setup's name used to be passed as the program name, which a post that sets `programNameIsInteger` reads as `NaN` |
 | `cam_list_setups` | proven — 2026-11-26, `2706.1.17`, #158: answered `count: 0` on a design with no CAM setups |
 | `cam_list_operations` | proven — 2026-11-28, `2706.1.17`, #164: answered the one `Face1` operation with `has_toolpath: true` and `is_valid: true` |
 | `cam_get_operation_info` | proven — 2026-11-27, `2706.1.17`, #159: answered `is_valid: true` and `has_toolpath: true` after generating the aimed operation |

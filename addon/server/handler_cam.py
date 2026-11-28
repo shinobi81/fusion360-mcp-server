@@ -896,7 +896,15 @@ class CamCommands(_Contract):
         post_processor: str = "fanuc",
         output_folder: str | None = None,
         output_units: str = "mm",
+        program_number: int = _rules.DEFAULT_PROGRAM_NUMBER,
     ):
+        # Judged before the CAM product is read, like every other pure parameter: a
+        # number no program can carry is the caller's value, not the design's problem.
+        if number_refusal := _rules.cam_program_number_refusal(
+            {"program_number": program_number}
+        ):
+            raise number_refusal
+
         cam = self._get_cam()
         setup = self._find_setup(cam, setup_name)
 
@@ -911,8 +919,12 @@ class CamCommands(_Contract):
             else adsk.cam.PostOutputUnitOptions.InchesOutput
         )
 
+        # The first argument is the program NAME, and a post that sets
+        # ``programNameIsInteger`` parses it: measured on 2706.1.17, passing the
+        # setup's name made ``fanuc.cps`` read NaN and refuse every post of the setup
+        # with "Program number 'NaN' is out of range". The number is the caller's now.
         post_input = adsk.cam.PostProcessInput.create(
-            setup_name, post_config, output_folder, units
+            str(program_number), post_config, output_folder, units
         )
         post_input.isOpenInEditor = False
 
@@ -927,4 +939,5 @@ class CamCommands(_Contract):
             "post_processor": post_processor,
             "output_folder": output_folder,
             "units": output_units,
+            "program_number": program_number,
         }

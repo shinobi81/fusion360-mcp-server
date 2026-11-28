@@ -192,6 +192,11 @@ class FakeComponent:
     def __init__(self, name: str, bodies=()):
         self.name = name
         self.bRepBodies = FakeBRepBodies(list(bodies))
+        #: ``BRepBody.parentComponent`` for the bodies this component owns.  A nested
+        #: body's parent is its own component, not the root - which is what STEP
+        #: exports.
+        for body in self.bRepBodies:
+            body.parentComponent = self
         #: A Fusion component holds its own sketches and features - the root
         #: component is one, not a separate kind of thing - so a command that
         #: builds into a named component (``create_box_parametric``'s
@@ -1387,6 +1392,11 @@ class FakeRoot:
             list(bodies) if bodies is not None else _default_bodies(design),
             design=design,
         )
+        #: Fusion's ``BRepBody.parentComponent``.  Every fixture body is built by this
+        #: component, so it owns them all; a body that came from an occurrence would
+        #: have to say otherwise, and no fixture does.
+        for body in self.bRepBodies:
+            body.parentComponent = self
         self.sketches = FakeSketches(list(sketches))
         #: Fusion keeps mesh bodies apart from B-rep bodies; ``compare_meshes`` walks
         #: this collection by name. Empty until a fixture supplies one.
