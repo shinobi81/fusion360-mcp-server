@@ -22,8 +22,14 @@ marked **(2026+)** use APIs that need a Fusion build from 2026 or later; the res
 checked against **Fusion 2706.1.17**'s API — whether each has been *called* is
 `docs/PROVEN.md`, not this paragraph.
 
+The **Proven** column is the build each tool has answered a real Fusion on, or an em
+dash where nothing has succeeded yet. It is generated from the table below and never
+written by hand: `uv run python scripts/sync_proven_column.py` rewrites it, `--check`
+reports a stale one, and `tests/test_proven.py` fails while they disagree.
+
 Which of these has been *called* against a real Fusion — and what it answered — is
-`docs/PROVEN.md`, one row per tool. A row that says `unproven` is where the next defect
+`docs/PROVEN.md`, one row per tool, with the date, the PR holding the envelope and, for
+an unproven tool, why. A row that says `unproven` is where the next defect
 nobody has looked for is. `uv run python scripts/check_proven.py --live` re-probes the
 read-only tools it chooses to send — twelve of the nineteen — and reports a row whose
 reply contradicts its state, in either direction. Two of those twelve touch the session:
@@ -32,45 +38,45 @@ camera for its capture and restores it before returning.
 
 ## Scene & Query
 
-| Tool               | Description                                                                                                 |
-| ------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `ping`             | Health check (instant, no Fusion API)                                                                       |
-| `health`           | Health check on Fusion's main thread: `app_version`, `active_document`, `queue_depth`; times out when the thread is wedged, where `ping` still answers |
-| `get_scene_info`   | Design name, bodies, sketches, features, camera                                                             |
-| `get_object_info`  | Detailed info about a named body or sketch                                                                  |
-| `list_edges`      | A body's edges: index, endpoints, midpoint, length, curve type                      |
-| `list_faces`      | A body's faces: index, surface type, planarity, area, centroid, and normal when planar |
-| `get_bounding_box` | Axis-aligned bbox (min/max/size/center) for body or component; unions all bodies when called on a component |
-| `list_components`  | List all components in the design                                                                           |
+| Tool               | Proven      | Description                                                                                                                                            |
+| ------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ping`             | `2706.1.17` | Health check (instant, no Fusion API)                                                                                                                  |
+| `health`           | `2706.1.17` | Health check on Fusion's main thread: `app_version`, `active_document`, `queue_depth`; times out when the thread is wedged, where `ping` still answers |
+| `get_scene_info`   | `2706.1.17` | Design name, bodies, sketches, features, camera                                                                                                        |
+| `get_object_info`  | `2706.1.17` | Detailed info about a named body or sketch                                                                                                             |
+| `list_edges`       | `2706.1.17` | A body's edges: index, endpoints, midpoint, length, curve type                                                                                         |
+| `list_faces`       | `2706.1.17` | A body's faces: index, surface type, planarity, area, centroid, and normal when planar                                                                 |
+| `get_bounding_box` | `2706.1.17` | Axis-aligned bbox (min/max/size/center) for body or component; unions all bodies when called on a component                                            |
+| `list_components`  | `2706.1.17` | List all components in the design                                                                                                                      |
 
 ## Document
 
-| Tool              | Description                                                                            |
-| ----------------- | -------------------------------------------------------------------------------------- |
-| `new_document`    | Create a design document and make it active — the way in from a cold start             |
-| `save_document`   | Save the active document in place, or an untitled one by name into Fusion's active data folder (no local-file save exists in this API); answers `saved`, `name`, `folder`, `saved_as` and `is_modified`; a `name` passed for an already-saved document is ignored and echoed as `name_ignored` |
-| `get_design_type` | Check if the design is parametric or direct                                            |
-| `set_design_type` | Switch design type (parametric/direct recovery)                                        |
+| Tool              | Proven      | Description                                                                                                                                                                                                                                                                                    |
+| ----------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `new_document`    | `2706.1.17` | Create a design document and make it active — the way in from a cold start                                                                                                                                                                                                                     |
+| `save_document`   | `2706.1.17` | Save the active document in place, or an untitled one by name into Fusion's active data folder (no local-file save exists in this API); answers `saved`, `name`, `folder`, `saved_as` and `is_modified`; a `name` passed for an already-saved document is ignored and echoed as `name_ignored` |
+| `get_design_type` | `2706.1.17` | Check if the design is parametric or direct                                                                                                                                                                                                                                                    |
+| `set_design_type` | `2706.1.17` | Switch design type (parametric/direct recovery)                                                                                                                                                                                                                                                |
 
 ## Sketching
 
-| Tool               | Description                                                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `create_sketch`    | New sketch on xy/yz/xz plane, optional offset                                                                            |
-| `draw_rectangle`   | Rectangle in most recent sketch, or in `sketch_name`                                                                     |
-| `draw_circle`      | Circle in most recent sketch, or in `sketch_name`                                                                        |
-| `draw_line`        | Line in most recent sketch, or in `sketch_name`                                                                          |
-| `draw_arc`         | Arc (center + start + sweep angle)                                                                                       |
-| `draw_spline`      | Fit-point or control-point spline                                                                                        |
-| `create_polygon`   | Regular polygon (3–64 sides)                                                                                             |
-| `draw_circles`    | Several equally spaced circles in one solve — far faster than one call per circle         |
-| `add_constraint`   | Geometric constraint (coincident, parallel, tangent, etc.)                                                               |
-| `auto_constrain`   | **(2026+)** Auto-constrain a sketch via the AutoConstrain API — 3 result options (thorough / fast / tolerance-adjusting) |
-| `add_dimension`    | Driving dimension (distance, angle, radial, diameter)                                                                    |
-| `offset_curve`     | Offset connected sketch curves                                                                                           |
-| `trim_curve`       | Trim at intersections                                                                                                    |
-| `extend_curve`     | Extend to nearest intersection                                                                                           |
-| `project_geometry` | Project edges/bodies onto sketch plane                                                                                   |
+| Tool               | Proven      | Description                                                                                                              |
+| ------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `create_sketch`    | `2706.1.17` | New sketch on xy/yz/xz plane, optional offset                                                                            |
+| `draw_rectangle`   | `2706.1.17` | Rectangle in most recent sketch, or in `sketch_name`                                                                     |
+| `draw_circle`      | `2706.1.17` | Circle in most recent sketch, or in `sketch_name`                                                                        |
+| `draw_line`        | `2706.1.17` | Line in most recent sketch, or in `sketch_name`                                                                          |
+| `draw_arc`         | `2706.1.17` | Arc (center + start + sweep angle)                                                                                       |
+| `draw_spline`      | `2706.1.17` | Fit-point or control-point spline                                                                                        |
+| `create_polygon`   | `2706.1.17` | Regular polygon (3–64 sides)                                                                                             |
+| `draw_circles`     | `2706.1.17` | Several equally spaced circles in one solve — far faster than one call per circle                                        |
+| `add_constraint`   | `2706.1.17` | Geometric constraint (coincident, parallel, tangent, etc.)                                                               |
+| `auto_constrain`   | —           | **(2026+)** Auto-constrain a sketch via the AutoConstrain API — 3 result options (thorough / fast / tolerance-adjusting) |
+| `add_dimension`    | `2706.1.17` | Driving dimension (distance, angle, radial, diameter)                                                                    |
+| `offset_curve`     | `2706.1.17` | Offset connected sketch curves                                                                                           |
+| `trim_curve`       | `2706.1.17` | Trim at intersections                                                                                                    |
+| `extend_curve`     | `2706.1.17` | Extend to nearest intersection                                                                                           |
+| `project_geometry` | `2706.1.17` | Project edges/bodies onto sketch plane                                                                                   |
 
 The `draw_*` tools and `create_polygon` take an optional `sketch_name`; without it
 the geometry goes into the most recent sketch. Naming it lets you add to an older
@@ -98,27 +104,27 @@ at all is refused instead — `INVALID_INPUT`, where Fusion's own message is
 
 ## Features
 
-| Tool                  | Description                           |
-| --------------------- | ------------------------------------- |
-| `extrude`             | Extrude a sketch profile; `target_body` limits a cut/join/intersect |
-| `revolve`             | Revolve about a model-space axis (must be coplanar with the profile); `target_body` limits a cut/join/intersect |
-| `sweep`               | Sweep a profile along a path; `target_body` limits a cut/join/intersect |
-| `loft`                | Loft between two or more profiles; `target_body` limits a cut/join/intersect |
-| `fillet`              | Round edges: all/top/bottom/vertical, or `edge_indices` / `edge_points` |
-| `chamfer`             | Chamfer edges: same three selectors as `fillet` |
-| `shell`               | Hollow out a body; `face_selection` (top/bottom) is the face left **open** |
-| `mirror`              | Mirror a body across a plane          |
-| `create_hole`         | Hole feature on a body face           |
-| `rectangular_pattern` | Pattern in rows and columns           |
-| `circular_pattern`    | Pattern around an axis                |
-| `create_thread`       | Add threads (cosmetic or modeled). **Refuses** a designation that does not match the face - Fusion would resize the body to it (an `M6x1` thread on a 20 mm shaft leaves a 5.88 mm one) - and names the thread that fits; `allow_resize=true` accepts the resize. `thread_class` defaults to 6H internal / 6g external (ISO 965) |
-| `draft_faces`         | Draft/taper faces for mold release    |
-| `split_body`          | Split a body using a plane            |
-| `split_face`          | Split faces of a body                 |
-| `offset_faces`        | Push/pull faces by a distance         |
-| `scale_body`          | Scale uniformly or non-uniformly about `anchor_*`. The anchor is a *reference*: it becomes a sketch point in a hidden reference sketch (named in the reply), because Fusion refuses a bare coordinate with `3 : invalid ref point` |
-| `suppress_feature`    | Suppress a timeline feature           |
-| `unsuppress_feature`  | Re-enable a suppressed feature        |
+| Tool                  | Proven      | Description                                                                                                                                                                                                                                                                                                                      |
+| --------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `extrude`             | `2706.1.17` | Extrude a sketch profile; `target_body` limits a cut/join/intersect                                                                                                                                                                                                                                                              |
+| `revolve`             | `2706.1.17` | Revolve about a model-space axis (must be coplanar with the profile); `target_body` limits a cut/join/intersect                                                                                                                                                                                                                  |
+| `sweep`               | `2706.1.17` | Sweep a profile along a path; `target_body` limits a cut/join/intersect                                                                                                                                                                                                                                                          |
+| `loft`                | `2706.1.17` | Loft between two or more profiles; `target_body` limits a cut/join/intersect                                                                                                                                                                                                                                                     |
+| `fillet`              | `2706.1.17` | Round edges: all/top/bottom/vertical, or `edge_indices` / `edge_points`                                                                                                                                                                                                                                                          |
+| `chamfer`             | `2706.1.17` | Chamfer edges: same three selectors as `fillet`                                                                                                                                                                                                                                                                                  |
+| `shell`               | `2706.1.17` | Hollow out a body; `face_selection` (top/bottom) is the face left **open**                                                                                                                                                                                                                                                       |
+| `mirror`              | `2706.1.17` | Mirror a body across a plane                                                                                                                                                                                                                                                                                                     |
+| `create_hole`         | `2706.1.17` | Hole feature on a body face                                                                                                                                                                                                                                                                                                      |
+| `rectangular_pattern` | `2706.1.17` | Pattern in rows and columns                                                                                                                                                                                                                                                                                                      |
+| `circular_pattern`    | `2706.1.17` | Pattern around an axis                                                                                                                                                                                                                                                                                                           |
+| `create_thread`       | `2706.1.17` | Add threads (cosmetic or modeled). **Refuses** a designation that does not match the face - Fusion would resize the body to it (an `M6x1` thread on a 20 mm shaft leaves a 5.88 mm one) - and names the thread that fits; `allow_resize=true` accepts the resize. `thread_class` defaults to 6H internal / 6g external (ISO 965) |
+| `draft_faces`         | `2706.1.17` | Draft/taper faces for mold release                                                                                                                                                                                                                                                                                               |
+| `split_body`          | `2706.1.17` | Split a body using a plane                                                                                                                                                                                                                                                                                                       |
+| `split_face`          | `2706.1.17` | Split faces of a body                                                                                                                                                                                                                                                                                                            |
+| `offset_faces`        | `2706.1.17` | Push/pull faces by a distance                                                                                                                                                                                                                                                                                                    |
+| `scale_body`          | `2706.1.17` | Scale uniformly or non-uniformly about `anchor_*`. The anchor is a *reference*: it becomes a sketch point in a hidden reference sketch (named in the reply), because Fusion refuses a bare coordinate with `3 : invalid ref point`                                                                                               |
+| `suppress_feature`    | `2706.1.17` | Suppress a timeline feature                                                                                                                                                                                                                                                                                                      |
+| `unsuppress_feature`  | `2706.1.17` | Re-enable a suppressed feature                                                                                                                                                                                                                                                                                                   |
 
 ### Choosing edges
 
@@ -145,50 +151,50 @@ what a selection returns.
 
 ## Body Operations
 
-| Tool                | Description                                         |
-| ------------------- | --------------------------------------------------- |
-| `move_body`         | Translate a body by (x, y, z)                       |
-| `rename_body`       | Rename a body (searches root and all components)    |
-| `boolean_operation` | Join/cut/intersect two bodies; `keep_tool` keeps the tool |
-| `delete_all`        | Clear the design                                    |
-| `undo`              | Step back one timeline feature (verified; see note) |
+| Tool                | Proven      | Description                                               |
+| ------------------- | ----------- | --------------------------------------------------------- |
+| `move_body`         | `2706.1.17` | Translate a body by (x, y, z)                             |
+| `rename_body`       | `2706.1.17` | Rename a body (searches root and all components)          |
+| `boolean_operation` | `2706.1.17` | Join/cut/intersect two bodies; `keep_tool` keeps the tool |
+| `delete_all`        | `2706.1.17` | Clear the design                                          |
+| `undo`              | `2706.1.17` | Step back one timeline feature (verified; see note)       |
 
 ## Direct Primitives
 
-| Tool                    | Description                                                                                                                                                                                       |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `create_box`            | Box (via TemporaryBRepManager, history-less), centred on `center_x`/`center_y`/`center_z`: it spans half its size either side of that point on every axis |
-| `create_box_parametric` | History-based box: sketch rectangle + dimensions + extrude. `length`/`width`/`height` accept numbers (cm) or string expressions referencing User Parameters (e.g. `"boxL"`, `"outer - 2*wall_t"`) |
-| `create_cylinder`       | Cylinder                                                                                                                                                                                          |
-| `create_sphere`         | Sphere                                                                                                                                                                                            |
-| `create_torus`          | Torus                                                                                                                                                                                             |
+| Tool                    | Proven      | Description                                                                                                                                                                                       |
+| ----------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create_box`            | `2706.1.17` | Box (via TemporaryBRepManager, history-less), centred on `center_x`/`center_y`/`center_z`: it spans half its size either side of that point on every axis                                         |
+| `create_box_parametric` | `2706.1.17` | History-based box: sketch rectangle + dimensions + extrude. `length`/`width`/`height` accept numbers (cm) or string expressions referencing User Parameters (e.g. `"boxL"`, `"outer - 2*wall_t"`) |
+| `create_cylinder`       | `2706.1.17` | Cylinder                                                                                                                                                                                          |
+| `create_sphere`         | `2706.1.17` | Sphere                                                                                                                                                                                            |
+| `create_torus`          | `2706.1.17` | Torus                                                                                                                                                                                             |
 
 ## Surface Operations
 
-| Tool              | Description                                |
-| ----------------- | ------------------------------------------ |
-| `patch_surface`   | Create a patch surface from a sketch profile. `continuity` applies to B-Rep edge boundaries and is ignored for sketch curves, which is this tool's only accepted boundary |
-| `stitch_surfaces` | Stitch surface bodies into one             |
-| `thicken_surface` | Thicken a surface into a solid             |
-| `ruled_surface`   | Ruled surface from a **free** edge — a sheet body's boundary. A solid's edge is shared by two faces and Fusion refuses it (`invalid free edge`); patch or stitch to a surface body first |
-| `trim_surface`    | Trim a surface with a body or a base plane. `keep_cells` lists the cells that survive; every other cell is removed. Fusion offers no side to name - a trimmed patch's cells all report a zero centroid - so the indices are the caller's choice, and the refusal reports how many there are |
+| Tool              | Proven      | Description                                                                                                                                                                                                                                                                                 |
+| ----------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `patch_surface`   | `2706.1.17` | Create a patch surface from a sketch profile. `continuity` applies to B-Rep edge boundaries and is ignored for sketch curves, which is this tool's only accepted boundary                                                                                                                   |
+| `stitch_surfaces` | `2706.1.17` | Stitch surface bodies into one                                                                                                                                                                                                                                                              |
+| `thicken_surface` | `2706.1.17` | Thicken a surface into a solid                                                                                                                                                                                                                                                              |
+| `ruled_surface`   | `2706.1.17` | Ruled surface from a **free** edge — a sheet body's boundary. A solid's edge is shared by two faces and Fusion refuses it (`invalid free edge`); patch or stitch to a surface body first                                                                                                    |
+| `trim_surface`    | `2706.1.17` | Trim a surface with a body or a base plane. `keep_cells` lists the cells that survive; every other cell is removed. Fusion offers no side to name - a trimmed patch's cells all report a zero centroid - so the indices are the caller's choice, and the refusal reports how many there are |
 
 ## Sheet Metal
 
-| Tool            | Description                |
-| --------------- | -------------------------- |
-| `create_flange` | Create an edge flange. `distance` is the flange length; `bend_radius_override` applies to this flange only |
-| `create_bend`   | Fold along a sketch line. `stationary_face_index` is the face that stays fixed - a wrong one bends the part the wrong way; `line_position` is where the line sits in the flat state |
-| `flat_pattern`  | Create flat pattern, pinned on the body's largest planar face (its top or bottom) |
-| `unfold`        | Unfold specific bends, or every one; pinned on the same largest planar face |
+| Tool            | Proven      | Description                                                                                                                                                                         |
+| --------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create_flange` | `2706.1.17` | Create an edge flange. `distance` is the flange length; `bend_radius_override` applies to this flange only                                                                          |
+| `create_bend`   | `2706.1.17` | Fold along a sketch line. `stationary_face_index` is the face that stays fixed - a wrong one bends the part the wrong way; `line_position` is where the line sits in the flat state |
+| `flat_pattern`  | `2706.1.17` | Create flat pattern, pinned on the body's largest planar face (its top or bottom)                                                                                                   |
+| `unfold`        | `2706.1.17` | Unfold specific bends, or every one; pinned on the same largest planar face                                                                                                         |
 
 ## Construction Geometry
 
-| Tool                        | Description                                                                       |
-| --------------------------- | --------------------------------------------------------------------------------- |
-| `create_construction_plane` | Offset, angle, midplane, 3-point, tangent (`body_name` + `face_index`; `angle` + `plane`, or `point_one`) |
-| `create_construction_axis`  | Two-point, intersection, edge, perpendicular (`face_index` + `point_one`)          |
-| `create_ucs`                | **(2026+, preview API)** User Coordinate System at a point with optional rotation |
+| Tool                        | Proven      | Description                                                                                               |
+| --------------------------- | ----------- | --------------------------------------------------------------------------------------------------------- |
+| `create_construction_plane` | `2706.1.17` | Offset, angle, midplane, 3-point, tangent (`body_name` + `face_index`; `angle` + `plane`, or `point_one`) |
+| `create_construction_axis`  | `2706.1.17` | Two-point, intersection, edge, perpendicular (`face_index` + `point_one`)                                 |
+| `create_ucs`                | `2706.1.17` | **(2026+, preview API)** User Coordinate System at a point with optional rotation                         |
 
 ### What a `tangent` construction plane takes
 
@@ -216,13 +222,13 @@ Passing both is refused from the parameters alone, so real and mock mode answer 
 
 ## Assembly
 
-| Tool                    | Description                     |
-| ----------------------- | ------------------------------- |
-| `create_component`      | Create a sub-assembly component |
-| `add_joint`             | Joint between two components    |
-| `set_joint_value`       | Drive a joint and read the value back (angles in deg, slides in cm) |
-| `create_as_built_joint` | Joint from current positions    |
-| `create_rigid_group`    | Lock components together        |
+| Tool                    | Proven      | Description                                                         |
+| ----------------------- | ----------- | ------------------------------------------------------------------- |
+| `create_component`      | `2706.1.17` | Create a sub-assembly component                                     |
+| `add_joint`             | `2706.1.17` | Joint between two components                                        |
+| `set_joint_value`       | `2706.1.17` | Drive a joint and read the value back (angles in deg, slides in cm) |
+| `create_as_built_joint` | `2706.1.17` | Joint from current positions                                        |
+| `create_rigid_group`    | `2706.1.17` | Lock components together                                            |
 
 ### What `add_joint` reports, and what `axis` means
 
@@ -275,53 +281,53 @@ Every `add_joint` result carries the measurements behind that:
 
 ## Inspection & Analysis
 
-| Tool                      | Description                                                                                                             |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `measure_distance`        | Minimum distance between entities                                                                                       |
-| `measure_angle`           | Angle between entities                                                                                                  |
-| `get_physical_properties` | Mass, volume, area, center of mass                                                                                      |
-| `create_section_analysis` | Section plane through model                                                                                             |
-| `check_interference`      | Detect collisions between components                                                                                    |
-| `compare_meshes`          | **(2026+)** Deviation statistics between two mesh bodies (min/max/mean/RMS, cm) — e.g. validate against a reference STL |
+| Tool                      | Proven      | Description                                                                                                             |
+| ------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `measure_distance`        | `2706.1.17` | Minimum distance between entities                                                                                       |
+| `measure_angle`           | `2706.1.17` | Angle between entities                                                                                                  |
+| `get_physical_properties` | `2706.1.17` | Mass, volume, area, center of mass                                                                                      |
+| `create_section_analysis` | `2706.1.17` | Section plane through model                                                                                             |
+| `check_interference`      | `2706.1.17` | Detect collisions between components                                                                                    |
+| `compare_meshes`          | `2706.1.17` | **(2026+)** Deviation statistics between two mesh bodies (min/max/mean/RMS, cm) — e.g. validate against a reference STL |
 
 ## Appearance
 
-| Tool             | Description                                               |
-| ---------------- | --------------------------------------------------------- |
-| `set_appearance` | Assign material appearance from library                   |
-| `set_color`      | **(2026+)** Assign a flat RGB color (+ opacity) to a body |
+| Tool             | Proven      | Description                                               |
+| ---------------- | ----------- | --------------------------------------------------------- |
+| `set_appearance` | `2706.1.17` | Assign material appearance from library                   |
+| `set_color`      | `2706.1.17` | **(2026+)** Assign a flat RGB color (+ opacity) to a body |
 
 ## Parameters
 
-| Tool               | Description              |
-| ------------------ | ------------------------ |
-| `get_parameters`   | List all user parameters |
-| `create_parameter` | Create a new parameter   |
-| `set_parameter`    | Update a parameter value |
-| `delete_parameter` | Remove a parameter       |
+| Tool               | Proven      | Description              |
+| ------------------ | ----------- | ------------------------ |
+| `get_parameters`   | `2706.1.17` | List all user parameters |
+| `create_parameter` | `2706.1.17` | Create a new parameter   |
+| `set_parameter`    | `2706.1.17` | Update a parameter value |
+| `delete_parameter` | `2706.1.17` | Remove a parameter       |
 
 ## Import / Export
 
-| Tool                | Description                                                                                                                          |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `import_mesh`       | Import STL/OBJ/3MF as mesh body via `MeshBodies.add()`. Unit-aware (`mm`/`cm`/`m`/`in`/`ft`). Returns the mesh name and bounding box |
-| `export_stl`        | Export body as STL (supports bodies inside components)                                                                               |
-| `export_step`       | Export as STEP. Fusion's factory takes a **Component**, not a body (`3 : invlid argument geometry`), so this writes the component that owns the named body and the reply says `scope: component`, names it and counts `bodies_in_component`; a component holding more than one body carries a `note`. Use `export_stl` for one body |
-| `export_f3d`        | Export design as Fusion archive                                                                                                      |
-| `export_view_sheet` | Export multi-view PNG sheet (iso/front/top/right) for visual inspection, plus a shareable HTML sheet |
-| `export`            | Unified dispatcher — routes to `export_stl`/`export_step`/`export_f3d` based on explicit `format` or file-extension inference        |
+| Tool                | Proven      | Description                                                                                                                                                                                                                                                                                                                         |
+| ------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `import_mesh`       | `2706.1.17` | Import STL/OBJ/3MF as mesh body via `MeshBodies.add()`. Unit-aware (`mm`/`cm`/`m`/`in`/`ft`). Returns the mesh name and bounding box                                                                                                                                                                                                |
+| `export_stl`        | `2706.1.17` | Export body as STL (supports bodies inside components)                                                                                                                                                                                                                                                                              |
+| `export_step`       | `2706.1.17` | Export as STEP. Fusion's factory takes a **Component**, not a body (`3 : invlid argument geometry`), so this writes the component that owns the named body and the reply says `scope: component`, names it and counts `bodies_in_component`; a component holding more than one body carries a `note`. Use `export_stl` for one body |
+| `export_f3d`        | `2706.1.17` | Export design as Fusion archive                                                                                                                                                                                                                                                                                                     |
+| `export_view_sheet` | `2706.1.17` | Export multi-view PNG sheet (iso/front/top/right) for visual inspection, plus a shareable HTML sheet                                                                                                                                                                                                                                |
+| `export`            | `2706.1.17` | Unified dispatcher — routes to `export_stl`/`export_step`/`export_f3d` based on explicit `format` or file-extension inference                                                                                                                                                                                                       |
 
 ## CAM / Manufacturing
 
-| Tool                     | Description                                                                                                         |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `cam_create_setup`       | Create a manufacturing setup (milling/turning/cutting); applies stock mode/offsets                                  |
-| `cam_create_operation`   | Add a machining operation (Fusion's strategy names only); applies stepdown/feed/speed/coolant, `face_indices` selects geometry for the six strategies a selection can be applied to, and `tool_diameter` (cm) attaches a flat end mill so the operation can generate — `tool_json` takes a complete tool object instead, and `tool_number` alone reuses one the document library already holds; `checkpoint=True` saves the document first where it can and reports `saved_before` (`checkpoint_skipped` says why not) |
-| `cam_generate_toolpath`  | Generate toolpaths for operations                                                                                   |
-| `cam_post_process`       | Post-process to G-code — pass a full `.cps` path (cloud-post builds don't ship local posts). `program_number` (default 1001) is what the post reads as its program name: a post that sets `programNameIsInteger` parses it, and the setup's name parsed to `NaN`, failing every post of the setup |
-| `cam_list_setups`        | List all manufacturing setups                                                                                       |
-| `cam_list_operations`    | List operations in a setup                                                                                          |
-| `cam_get_operation_info` | Get operation details (strategy, tool, parameters)                                                                  |
+| Tool                     | Proven      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------ | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cam_create_setup`       | `2706.1.17` | Create a manufacturing setup (milling/turning/cutting); applies stock mode/offsets                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `cam_create_operation`   | `2706.1.17` | Add a machining operation (Fusion's strategy names only); applies stepdown/feed/speed/coolant, `face_indices` selects geometry for the six strategies a selection can be applied to, and `tool_diameter` (cm) attaches a flat end mill so the operation can generate — `tool_json` takes a complete tool object instead, and `tool_number` alone reuses one the document library already holds; `checkpoint=True` saves the document first where it can and reports `saved_before` (`checkpoint_skipped` says why not) |
+| `cam_generate_toolpath`  | `2706.1.17` | Generate toolpaths for operations                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `cam_post_process`       | `2706.1.17` | Post-process to G-code — pass a full `.cps` path (cloud-post builds don't ship local posts). `program_number` (default 1001) is what the post reads as its program name: a post that sets `programNameIsInteger` parses it, and the setup's name parsed to `NaN`, failing every post of the setup                                                                                                                                                                                                                      |
+| `cam_list_setups`        | `2706.1.17` | List all manufacturing setups                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `cam_list_operations`    | `2706.1.17` | List operations in a setup                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `cam_get_operation_info` | `2706.1.17` | Get operation details (strategy, tool, parameters)                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 ### Which strategies `face_indices` can aim
 
@@ -365,12 +371,12 @@ and `Operation.tool` takes the result without the library count changing.
 
 ## Code Execution
 
-| Tool           | Description                                 |
-| -------------- | ------------------------------------------- |
-| `execute_code` | Run arbitrary Python in Fusion (REPL-style); `checkpoint=True` saves the document first where it can and reports `saved_before` (`checkpoint_skipped` says why not) |
+| Tool           | Proven      | Description                                                                                                                                                         |
+| -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execute_code` | `2706.1.17` | Run arbitrary Python in Fusion (REPL-style); `checkpoint=True` saves the document first where it can and reports `saved_before` (`checkpoint_skipped` says why not) |
 
 ## Perception
 
-| Tool          | Description                                                                                                                    |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `render_view` | Capture the active viewport as PNG (optional camera preset: iso/front/top/...). Returns an image block for visual verification |
+| Tool          | Proven      | Description                                                                                                                    |
+| ------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `render_view` | `2706.1.17` | Capture the active viewport as PNG (optional camera preset: iso/front/top/...). Returns an image block for visual verification |

@@ -24,6 +24,8 @@ per-item `threading.Event` until the main thread completes it. Details: `ARCHITE
 uv sync --locked               # install deps into .venv; refuses a stale lock
 uv run python scripts/check_proven.py      # docs/PROVEN.md against tools.py; --live
                                # re-probes the twelve read-only tools it can call
+uv run python scripts/sync_proven_column.py  # the Proven column of docs/TOOLS.md,
+                               # from PROVEN.md; --check reports a stale one
 uv run python scripts/check_fusion_api.py  # every adsk name under addon/server,
                                # checked against the running Fusion. Exit 1 for four
                                # reasons: a name Fusion does not have, no connection,
@@ -70,7 +72,8 @@ and the atheris targets: `docs/TESTING.md`.
    and the connection read; `tests/test_addon_sync.py` fails while any mirror is stale
 5. Annotations: `readOnlyHint`, `destructiveHint`, `idempotentHint`
 6. A row in `docs/TOOLS.md` and the name in the index in this file — the index is
-   guarded, the description is not
+   guarded, the description is not — then `uv run python scripts/sync_proven_column.py`,
+   which fills the row's `Proven` cell from step 8's row
 7. A behavioural mock test (`tests/test_mock.py`); the tool count and each tool's argument
    count are pinned in `tests/test_tools.py`
 8. A row in `docs/PROVEN.md` — `unproven — <why>` wherever no call has succeeded: nobody

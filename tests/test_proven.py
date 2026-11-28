@@ -33,6 +33,8 @@ def _load_checker():
 
 
 CHECKER = _load_checker()
+#: The pattern a proven row's version lives in - the checker's own, never a copy.
+CELL_VERSION = CHECKER._PROVEN_RE
 check = CHECKER.check
 parse_table = CHECKER.parse_table
 
@@ -288,3 +290,64 @@ def test_the_docs_point_at_the_table(doc):
     """A record nobody is sent to is a record nobody reads - and the path, not the word,
     is what a reader can follow."""
     assert "`docs/PROVEN.md`" in (ROOT / doc).read_text(encoding="utf-8")
+
+
+def _load_sync():
+    """``scripts/sync_proven_column.py`` by path, the same way the checker is loaded."""
+    path = ROOT / "scripts" / "sync_proven_column.py"
+    spec = importlib.util.spec_from_file_location("sync_proven_column", path)
+    assert spec is not None and spec.loader is not None, f"cannot load {path}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+SYNC = _load_sync()
+TOOLS_DOC = ROOT / "docs" / "TOOLS.md"
+
+
+def test_the_tools_catalogue_carries_the_version_each_row_proved(text):
+    """The ``Proven`` column is generated from this table, so it cannot rot.
+
+    A reader of ``docs/TOOLS.md`` should not have to open a second file to learn
+    whether a tool has ever worked. The cell is the build its row cites, or an em dash
+    where nothing has answered; the date, the PR and the reason stay here, which is
+    where an audit goes. Rendering the file and comparing it byte for byte is what
+    makes a stale cell a red suite instead of a slowly wrong doc.
+    """
+    on_disk = TOOLS_DOC.read_text(encoding="utf-8")
+
+    assert SYNC.render(on_disk, text) == on_disk, (
+        "docs/TOOLS.md's Proven column is stale: "
+        "run uv run python scripts/sync_proven_column.py"
+    )
+
+
+def test_the_column_says_the_build_the_row_cites(text):
+    """The cells, read back: one per row, the row's own version, a dash where none."""
+    cells = SYNC.cells_by_tool(text)
+    rows = {row.tool: row for row in parse_table(text)}
+
+    assert set(cells) == set(rows)
+    for tool, row in rows.items():
+        version = CELL_VERSION.search(row.evidence)
+        assert cells[tool] == (f"`{version.group('version')}`" if version else "—")
+
+
+def test_a_stale_cell_is_reported(text):
+    """The direction that matters: a hand-edited cell must fail, not pass quietly."""
+    on_disk = TOOLS_DOC.read_text(encoding="utf-8")
+    proven_tool = next(row.tool for row in parse_table(text) if row.proven)
+    lines = on_disk.splitlines()
+    index = next(
+        number
+        for number, line in enumerate(lines)
+        if line.startswith(f"| `{proven_tool}`")
+    )
+    cells = [cell.strip() for cell in lines[index].strip().strip("|").split("|")]
+    assert cells[1] != "—", "the fixture picked an unproven tool"
+    lines[index] = lines[index].replace(cells[1], "`9999.0.0`", 1)
+    edited = "\n".join(lines) + "\n"
+
+    assert edited != on_disk, "the fixture did not change the file"
+    assert SYNC.render(edited, text) != edited
