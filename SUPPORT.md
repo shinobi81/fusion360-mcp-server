@@ -11,7 +11,7 @@ in it to act on.
 | How do I install it and connect a client? | [README](README.md) |
 | What does this tool do / what are its parameters? | [docs/TOOLS.md](docs/TOOLS.md) |
 | It is not connecting / every call times out | [README → Troubleshooting](README.md#troubleshooting) |
-| Is this a bug, or expected behaviour? | [ARCHITECTURE.md](ARCHITECTURE.md) — deliberate semantics |
+| Is this a bug, or expected behaviour? | [ARCHITECTURE.md](docs/ARCHITECTURE.md) — deliberate semantics |
 | I want to change something | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
 ## Asking a question

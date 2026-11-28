@@ -222,8 +222,10 @@ with
 **[CONTRIBUTING.md](CONTRIBUTING.md)**; architecture and tool conventions are in
 **[AGENTS.md](AGENTS.md)**.
 
-Deeper notes: **[docs/TESTING.md](docs/TESTING.md)** (how the suite and the fuzz targets
-run, what they deliberately cannot run) and the
+Deeper notes: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** (the main-thread boundary,
+the error envelope, and the semantics that are easy to get wrong),
+**[docs/TESTING.md](docs/TESTING.md)** (how the suite and the fuzz targets run, what they
+deliberately cannot run) and the
 **[issue tracker](https://github.com/shinobi81/fusion360-mcp-server/issues)** (what is
 still open, and why it is not here yet).
 
