@@ -1,11 +1,12 @@
-"""``docs/PROVEN.md`` is a claim per tool, so it is guarded both ways.
+"""``docs/TOOLS.md`` carries a claim per tool, so it is guarded both ways.
 
-The table exists because nothing recorded which of the tools had ever been called
+The catalogue exists because nothing recorded which of the tools had ever been called
 against a real Fusion: the repo's three invented ``adsk`` names were found by hand, and
 ``scripts/check_fusion_api.py`` proves *names*, never behaviour. This module fails the
-suite when the table and ``src/fusion360_mcp/tools.py`` disagree in either direction,
-when a row claims a probe without saying when/against which build/where, and when a doc
-that should point at the table stops doing so.
+suite when a row and ``src/fusion360_mcp/tools.py`` disagree in either direction, when a
+row claims a probe without saying when/against which build/where, when a row's derived
+``Proven`` cell drifts from its own evidence, and when a doc that should point at the
+record stops doing so.
 """
 
 from __future__ import annotations
@@ -18,21 +19,24 @@ import pytest
 from fusion360_mcp.tools import _READ_ONLY, TOOLS, get_tool_by_name
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-PROVEN = ROOT / "docs" / "PROVEN.md"
+CATALOGUE = ROOT / "docs" / "TOOLS.md"
+
+#: A whole tool table, four cells wide: the shape every fixture below starts from.
+_TABLE_HEAD = "| Tool | Proven | Description | Evidence |\n| --- | --- | --- | --- |\n"
 
 
-def _load_checker():
-    """Load ``scripts/check_proven.py`` by path: ``scripts/`` is not a package, and a
-    ``sys.path`` insertion is what the sibling script test avoids."""
-    path = ROOT / "scripts" / "check_proven.py"
-    spec = importlib.util.spec_from_file_location("check_proven", path)
+def _load(name: str, filename: str):
+    """Load a script by path: ``scripts/`` is not a package, and a ``sys.path``
+    insertion is what the sibling script test avoids."""
+    path = ROOT / "scripts" / filename
+    spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None, f"cannot load {path}"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-CHECKER = _load_checker()
+CHECKER = _load("check_proven", "check_proven.py")
 #: The pattern a proven row's version lives in - the checker's own, never a copy.
 CELL_VERSION = CHECKER._PROVEN_RE
 check = CHECKER.check
@@ -41,7 +45,11 @@ parse_table = CHECKER.parse_table
 
 @pytest.fixture(scope="module")
 def text() -> str:
-    return PROVEN.read_text(encoding="utf-8")
+    return CATALOGUE.read_text(encoding="utf-8")
+
+
+def _unproven_row(text: str):
+    return next(row for row in parse_table(text) if not row.proven)
 
 
 def test_the_table_is_well_formed(text):
@@ -55,11 +63,28 @@ def test_every_tool_has_exactly_one_row(text):
     assert len(names) == len(set(names)) == len(TOOLS)
 
 
+def test_only_tool_tables_are_read():
+    """The catalogue also carries a legend and argument breakdowns; neither is a row.
+
+    ``docs/TOOLS.md`` holds seventeen tool tables beside a table whose first cells are
+    ``x``, ``y`` and ``z``. A parser that read every ``|``-line would report three rows
+    naming no tool, so the header decides - and this is the test that says so.
+    """
+    legend = "| x | y | z |\n| --- | --- | --- |\n| `extrude` | `sweep` | `loft` |\n"
+    with_tool = _TABLE_HEAD + "| `ping` | `2706.1.17` | d | unproven — x |\n"
+
+    assert parse_table(legend) == []
+    assert [row.tool for row in parse_table(with_tool + "\n" + legend)] == ["ping"]
+
+
 def test_a_missing_row_is_reported(text):
     """The direction that matters when a tool is added: silence would be the defect."""
-    rows = parse_table(text)
-    dropped = next(row for row in rows if row.proven)
-    trimmed = text.replace(f"| `{dropped.tool}` | {dropped.evidence} |\n", "")
+    dropped = next(row for row in parse_table(text) if row.proven)
+    trimmed = "".join(
+        line
+        for line in text.splitlines(keepends=True)
+        if not line.startswith(f"| `{dropped.tool}`")
+    )
     assert trimmed != text, "fixture must actually remove the row"
 
     problems = check(trimmed)
@@ -68,7 +93,9 @@ def test_a_missing_row_is_reported(text):
 
 
 def test_a_row_naming_no_tool_is_reported(text):
-    problems = check(text + "\n| `no_such_tool` | unproven — invented by the test |\n")
+    invented = "| `no_such_tool` | — | invented by the test | unproven — x |\n"
+
+    problems = check(text + invented)
 
     assert any(
         "no_such_tool" in problem and "naming no tool" in problem
@@ -101,7 +128,7 @@ def test_an_unproven_row_must_read_unproven(text):
 
     ``"unproven — "`` would strip to ``"unproven —"`` and trip the *state* branch, so
     the mutant keeps the word and drops the separator."""
-    unproven = next(row for row in parse_table(text) if row.tool == "scale_body")
+    unproven = _unproven_row(text)
     broken = text.replace(unproven.evidence, "unproven")
     assert broken != text
 
@@ -115,7 +142,7 @@ def test_an_unproven_row_must_read_unproven(text):
 def test_a_placeholder_is_not_a_reason(text, placeholder):
     """The preamble says "not yet" is not a reason, so a rule that accepts anything
     non-empty is not the rule it describes."""
-    unproven = next(row for row in parse_table(text) if row.tool == "scale_body")
+    unproven = _unproven_row(text)
     broken = text.replace(unproven.evidence, f"unproven — {placeholder}")
     assert broken != text
 
@@ -124,14 +151,14 @@ def test_a_placeholder_is_not_a_reason(text, placeholder):
 
 def test_a_row_that_does_not_parse_is_reported_not_dropped(text):
     """A stray or mis-piped line used to vanish, and the reader trusts what is left."""
-    broken = text + "\n| `ping` | unproven — x | extra cell |\n"
+    broken = text + "| `ping` | — | unproven — x |\n"
 
-    assert any("exactly two cells" in problem for problem in check(broken))
+    assert any("four cells" in problem for problem in check(broken))
 
 
 def test_a_duplicate_row_is_reported(text):
     row = parse_table(text)[0]
-    broken = text + f"\n| `{row.tool}` | {row.evidence} |\n"
+    broken = text + f"| `{row.tool}` | — | duplicate | {row.evidence} |\n"
 
     assert any("more than once" in problem for problem in check(broken))
 
@@ -152,8 +179,8 @@ def test_the_live_subset_is_read_only_and_names_real_parameters():
 
     # The subset relation is asserted at import (`_LIVE_TOOLS <= _READ_ONLY`), so a
     # mutating entry fails collection; the counts are what no test could see until here,
-    # and three docs quote them.
-    assert len(_READ_ONLY) == 19, "_READ_ONLY grew or shrank: update PROVEN.md/TOOLS.md"
+    # and the catalogue's preamble quotes them.
+    assert len(_READ_ONLY) == 19, "_READ_ONLY grew or shrank: update docs/TOOLS.md"
     assert len(live) == 12, "the 'twelve of the nineteen' in the docs is stale"
     for tool, params in CHECKER.LIVE_CALLS.items():
         declared = (
@@ -239,15 +266,21 @@ def test_a_bridge_failure_becomes_a_reply_not_a_traceback():
 
 def test_a_row_indented_under_the_table_is_still_a_row():
     """A row a formatter indented is a row: the reader strips the line, not the file."""
-    indented = "  | `ping` | unproven — nothing measured |\n"
+    indented = (
+        "  | Tool | Proven | Description | Evidence |\n"
+        "  | --- | --- | --- | --- |\n"
+        "  | `ping` | — | d | unproven — nothing measured |\n"
+    )
 
     assert [row.tool for row in parse_table(indented)] == ["ping"]
     assert CHECKER.malformed_lines(indented) == []
 
 
 def test_an_aligned_separator_is_not_a_row():
-    """``| :--- | :--- |`` is what a formatter writes; it is not a tool named ':---'."""
-    aligned = "| Tool | Evidence |\n| :--- | :--- |\n"
+    """``| :--- | ---: |`` is what a formatter writes; it is not a tool named ':---'."""
+    aligned = (
+        "| Tool | Proven | Description | Evidence |\n| :--- | ---: | --- | --- |\n"
+    )
 
     assert parse_table(aligned) == []
     assert CHECKER.malformed_lines(aligned) == []
@@ -257,11 +290,11 @@ def test_a_live_run_with_no_add_in_still_prints_the_table_s_problems(
     monkeypatch, tmp_path, text, capsys
 ):
     proven = next(row for row in parse_table(text) if row.proven)
-    broken = tmp_path / "PROVEN.md"
+    broken = tmp_path / "TOOLS.md"
     broken.write_text(
         text.replace(proven.evidence, "unproven — not yet"), encoding="utf-8"
     )
-    monkeypatch.setattr(CHECKER, "PROVEN", broken)
+    monkeypatch.setattr(CHECKER, "CATALOGUE", broken)
     monkeypatch.setattr(CHECKER, "probe", lambda host, port: None)
 
     assert CHECKER.main(["--live"]) == 1
@@ -279,45 +312,34 @@ def test_main_exits_non_zero_for_a_broken_table_and_zero_for_a_good_one(
         text.replace(proven.evidence, "unproven — not yet"), encoding="utf-8"
     )
 
-    monkeypatch.setattr(CHECKER, "PROVEN", good)
+    monkeypatch.setattr(CHECKER, "CATALOGUE", good)
     assert CHECKER.main([]) == 0
-    monkeypatch.setattr(CHECKER, "PROVEN", bad)
+    monkeypatch.setattr(CHECKER, "CATALOGUE", bad)
     assert CHECKER.main([]) == 1
 
 
-@pytest.mark.parametrize("doc", ["docs/TOOLS.md", "AGENTS.md"])
-def test_the_docs_point_at_the_table(doc):
-    """A record nobody is sent to is a record nobody reads - and the path, not the word,
-    is what a reader can follow."""
-    assert "`docs/PROVEN.md`" in (ROOT / doc).read_text(encoding="utf-8")
+def test_the_docs_say_where_the_record_lives():
+    """A record nobody is sent to is a record nobody reads — and the path, not the
+    word, is what a reader can follow."""
+    catalogue = CATALOGUE.read_text(encoding="utf-8")
+
+    assert "``proven — YYYY-MM-DD" in catalogue, (
+        "docs/TOOLS.md must document the Evidence convention it is read by"
+    )
+    assert "`docs/TOOLS.md`" in (ROOT / "AGENTS.md").read_text(encoding="utf-8")
 
 
-def _load_sync():
-    """``scripts/sync_proven_column.py`` by path, the same way the checker is loaded."""
-    path = ROOT / "scripts" / "sync_proven_column.py"
-    spec = importlib.util.spec_from_file_location("sync_proven_column", path)
-    assert spec is not None and spec.loader is not None, f"cannot load {path}"
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+# ── the derived Proven column ─────────────────────────────────────────
+#
+# The version a reader scans is generated from the Evidence cell beside it, so the two
+# cannot drift: a hand-edited cell fails here, and the script is the only writer.
+
+SYNC = _load("sync_proven_column", "sync_proven_column.py")
 
 
-SYNC = _load_sync()
-TOOLS_DOC = ROOT / "docs" / "TOOLS.md"
-
-
-def test_the_tools_catalogue_carries_the_version_each_row_proved(text):
-    """The ``Proven`` column is generated from this table, so it cannot rot.
-
-    A reader of ``docs/TOOLS.md`` should not have to open a second file to learn
-    whether a tool has ever worked. The cell is the build its row cites, or an em dash
-    where nothing has answered; the date, the PR and the reason stay here, which is
-    where an audit goes. Rendering the file and comparing it byte for byte is what
-    makes a stale cell a red suite instead of a slowly wrong doc.
-    """
-    on_disk = TOOLS_DOC.read_text(encoding="utf-8")
-
-    assert SYNC.render(on_disk, text) == on_disk, (
+def test_the_proven_column_is_the_version_each_row_cites(text):
+    """Rendering the catalogue reproduces it byte for byte, cells included."""
+    assert SYNC.render(text) == text, (
         "docs/TOOLS.md's Proven column is stale: "
         "run uv run python scripts/sync_proven_column.py"
     )
@@ -330,15 +352,14 @@ def test_the_column_says_the_build_the_row_cites(text):
 
     assert set(cells) == set(rows)
     for tool, row in rows.items():
-        version = CELL_VERSION.search(row.evidence)
+        version = CELL_VERSION.match(row.evidence)
         assert cells[tool] == (f"`{version.group('version')}`" if version else "—")
 
 
 def test_a_stale_cell_is_reported(text):
     """The direction that matters: a hand-edited cell must fail, not pass quietly."""
-    on_disk = TOOLS_DOC.read_text(encoding="utf-8")
     proven_tool = next(row.tool for row in parse_table(text) if row.proven)
-    lines = on_disk.splitlines()
+    lines = text.splitlines(keepends=True)
     index = next(
         number
         for number, line in enumerate(lines)
@@ -347,7 +368,7 @@ def test_a_stale_cell_is_reported(text):
     cells = [cell.strip() for cell in lines[index].strip().strip("|").split("|")]
     assert cells[1] != "—", "the fixture picked an unproven tool"
     lines[index] = lines[index].replace(cells[1], "`9999.0.0`", 1)
-    edited = "\n".join(lines) + "\n"
+    edited = "".join(lines)
 
-    assert edited != on_disk, "the fixture did not change the file"
-    assert SYNC.render(edited, text) != edited
+    assert edited != text, "the fixture did not change the file"
+    assert SYNC.render(edited) != edited

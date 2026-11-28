@@ -486,9 +486,10 @@ and asks the running Fusion whether it exists - 190 references, none missing on
     one whose body count nobody was told. It is a mutation now.
 
 11. **Which of the tools has a real Fusion ever answered** - **started (this PR).**
-    `docs/PROVEN.md` is one row per tool: a `proven` row cites the date, the
-    `app.version` and the PR that added it, whose body carries the envelope; an
-    `unproven` row says why. 30 of 98 were proven when #158 seeded it, 38 of 100 now;
+    `docs/TOOLS.md` carries it in each row's `Evidence` cell: a `proven` row cites the
+    date, the `app.version` and the PR whose body carries the envelope; an `unproven`
+    row says why, and the `Proven` cell beside it is generated from that. 30 of 98 were
+    proven when #158 seeded it, 99 of 100 were after #164 and #165;
     the rest name the reason, so the gap is a checklist rather than a guess. `scripts/check_proven.py`
     validates the table against `tools.py` both ways, and `--live` re-probes the
     read-only subset and reports a row its reply contradicts. The live sweep that
