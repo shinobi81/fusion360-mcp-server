@@ -153,6 +153,9 @@ documented exception: a tool with its own client-side bound (`health`) needs a m
 
 ## Merging
 
+A ranked item is worked through the loop in `docs/WORK-LOOP.md` — design, implement, live
+proof, the review loop and its exit conditions, the gates, then the merge below.
+
 `main` takes PRs only, and merging needs an approving review a solo author cannot give
 themselves, so the merge is `gh pr merge <pr> --squash --admin --delete-branch`.
 **`--admin` bypasses the entire ruleset**, including
