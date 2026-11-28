@@ -16,7 +16,8 @@ MCP client ──stdio──> MCP Server ──TCP :9876──> Fusion Add-in �
 
 Fusion's API is not thread-safe, so the add-in dispatches every call to the main thread
 through a CustomEvent work queue: a socket thread submits a work item and blocks on a
-per-item `threading.Event` until the main thread completes it. Details: `ARCHITECTURE.md`.
+per-item `threading.Event` until the main thread completes it. Details:
+`docs/ARCHITECTURE.md`.
 
 ## Commands
 

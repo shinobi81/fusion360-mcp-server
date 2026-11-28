@@ -1,8 +1,7 @@
 # Architecture
 
 For contributors who need the shape of the system before touching it. Tool-level
-conventions live in [AGENTS.md](AGENTS.md); the catalogue is
-[docs/TOOLS.md](docs/TOOLS.md).
+conventions live in [AGENTS.md](../AGENTS.md); the catalogue is [TOOLS.md](TOOLS.md).
 
 ## Two processes, one thread boundary
 
@@ -27,10 +26,11 @@ thread hand-builds a work item, raises the event, and waits on a per-item
 `threading.Event` until the main thread has filled in the result. That single constraint
 explains most of the system's design:
 
-- **one operation per tool call** — the queue is drained one item per event; - **the
-  30 s bridge timeout** — a blocked main thread (modal dialog) cannot answer, so the
-  item is cancelled and the client gets a structured `TIMEOUT`; - **mutations are
-  never retried** — the client cannot know whether the cancelled item ran.
+- **one operation per tool call** — the queue is drained one item per event.
+- **the 30 s bridge timeout** — a blocked main thread (modal dialog) cannot answer, so
+  the item is cancelled and the client gets a structured `TIMEOUT`.
+- **mutations are never retried** — the client cannot know whether the cancelled item
+  ran.
 
 ## Where the pieces live
 
@@ -48,6 +48,7 @@ explains most of the system's design:
 | `addon/server/command_handler.py` | the composed `CommandHandler`: `HandlerBase` plus one class per domain, declaring no command itself |
 | `addon/server/handler_base.py` | dispatch (`__init__`, `execute_command`), the attribute tables, and every helper two domains call |
 | `addon/server/handler_*.py` | one module per domain — the list is `COMMAND_MODULES` in `event_bridge.py` — holding its commands and the helpers only they call |
+| `addon/server/{hints,rules,mutation_commands}.py` | the canonical error table, validation rules and mutation set; every `src/` copy above is generated from these |
 
 `addon/` and `src/` are separate installables: the add-in is copied into Fusion's AddIns
 directory and cannot import from the package, which is why the hint table, the mutation
@@ -63,8 +64,9 @@ Failures are data, not exceptions:
 { "ok": false, "error_kind": "NOT_ENTITLED", "error_message": "...", "hints": ["..."], "traceback": "..." }
 ```
 
-`error_kind` comes from `hints.py`, matched by regex against the exception text, in
-order — first match wins. Adding a failure mode means adding a rule to
+`error_kind` comes from `hints.py`: a raised `Refusal` carries its own kind and only
+asks the table for hints, while any other exception is matched by regex against its text,
+in order — first match wins. Adding a failure mode means adding a rule to
 `addon/server/hints.py` and running `uv run python scripts/sync_mirrors.py` to regenerate
 `src/fusion360_mcp/hints.py`, plus a test; several kinds exist purely so an agent can
 branch instead of parsing prose (`TIMEOUT`, `NOT_ENTITLED`, `DESIGN_TYPE_MISMATCH`).
@@ -99,5 +101,5 @@ Fusion's awkwardness on purpose: `design.timeline` raises in direct mode, and a 
 undo does not land until the next event pump.
 
 `src/` is tested directly, including `--mode mock`. The suite runs on Python 3.14–3.15
-and on Windows, because several behaviours (loopback resolution, the `.exe` handle) only
-differ there.
+on Ubuntu, Windows and macOS; Windows is where several behaviours (loopback resolution,
+the `.exe` handle) differ.

@@ -2,7 +2,7 @@
 
 How the suite runs, what it deliberately cannot run, and what has to be green before a
 pull request merges. Why the fakes exist and what they model is in
-[ARCHITECTURE.md](../ARCHITECTURE.md#testing-strategy); this page is the operator's view.
+[ARCHITECTURE.md](ARCHITECTURE.md#testing-strategy); this page is the operator's view.
 
 ## Checking that Fusion is actually alive
 

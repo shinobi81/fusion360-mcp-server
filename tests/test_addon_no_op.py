@@ -241,7 +241,7 @@ def test_every_exemption_is_named_in_the_doc_paragraph(doc):
 #: The docs that state the exempt count as a word, and the sentence each states it in.
 _COUNT_DOCS = {
     "AGENTS.md": ("command exempt from", "never carries the key"),
-    "ARCHITECTURE.md": ("the warning is the verdict", "reason:"),
+    "docs/ARCHITECTURE.md": ("the warning is the verdict", "reason:"),
 }
 
 
@@ -252,8 +252,8 @@ def test_the_count_each_doc_spells_out_matches_the_table(doc):
     count = len(NO_OP_EXEMPT)
     spelled = _WORDS[count] if count < len(_WORDS) else repr(count)
 
-    # A word rather than a substring, and case-insensitive: ``ARCHITECTURE.md`` opens a
-    # sentence with it and wraps the line after it, so ``split()`` is the comparison.
+    # A word rather than a substring, and case-insensitive: ``docs/ARCHITECTURE.md``
+    # opens a sentence with it and wraps the line after it, so ``split()`` compares.
     words = _doc_between(doc, *_COUNT_DOCS[doc]).lower().split()
     # Strip the punctuation the prose wraps the word in: "judgement (eleven today" and
     # "verdict. Eleven" are both the count.

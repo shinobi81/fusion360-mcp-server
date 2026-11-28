@@ -325,7 +325,7 @@ def test_a_curved_edge_without_an_explicit_box_refuses_to_guess(bound_handler):
 
     Fusion's ``Circle3D`` has one vertex, so an endpoint-derived box is a point,
     and a test that trusted it would pass on the exact falsehood the ``vertical``
-    fix removed.  ``ARCHITECTURE.md`` says the fakes model Fusion's awkwardness on
+    fix removed.  ``docs/ARCHITECTURE.md`` says the fakes model Fusion's awkwardness on
     purpose; this is that policy enforced.
     """
     ring = FakeEdge((0.0, 0.0, 1.0), (0.0, 0.0, 1.0), curve_type="Circle3D")
