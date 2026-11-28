@@ -7,6 +7,27 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.11.1] - 2026-11-28
+
+A dependency floor, and nothing else. No tool, parameter, response field or add-in file
+changes, so this is a patch.
+
+### Changed
+
+- **`mcp>=1.30.0,<2`** (was `>=1.27.2`). The comment above the dependency block says the
+  floors are *the first patched releases for known advisories*, and for the MCP SDK that
+  had stopped being true: five advisories are patched in 1.30.0, and `1.27.2` sits inside
+  all five ranges - unbounded session accumulation in the streamable HTTP transport,
+  cross-origin redirects carrying custom headers and bodies, bearer tokens accepted for
+  another resource server, a client fetching server-chosen `$ref` URLs while validating
+  output schemas, and an OAuth client sending credentials to an authorization server the
+  MCP server chose (**high**). `uv.lock` already resolved 1.30.0, which is why nothing
+  in the suite or CI saw it; a tag install resolves from `pyproject.toml`, which is the
+  population the floor exists for. This server is stdio-only and touches none of those
+  transports, so its own runtime was never exposed.
+- The `<2` cap stays: the 2.x line has its own vulnerable range below 2.2.0, and the code
+  builds on the low-level SDK surface a major version is allowed to move.
+
 ## [0.11.0] - 2026-11-28
 
 This release is about **what we know**, and about what only a running Fusion can tell
@@ -1188,6 +1209,7 @@ reporting a result it had only echoed back.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.11.1]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.5...v0.9.0

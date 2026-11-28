@@ -6,7 +6,7 @@
   "description": {
     "": "Fusion360 MCP Server"
   },
-  "version": "0.11.0",
+  "version": "0.11.1",
   "runOnStartup": false,
   "supportedOS": "windows|mac",
   "editEnabled": true
