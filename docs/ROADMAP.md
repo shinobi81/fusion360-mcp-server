@@ -291,6 +291,12 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    the range rather than raising out of the API with no advice - and `list_faces` is
    where a caller gets the indices.
 
+   **Live-proven on 2706.1.17 (#163).** `create_construction_axis(
+   method="perpendicular_at_point", body_name="Body2", face_index=0, point_one=[0, 0, 2])`
+   answered `created: true`, `name: "Axis1"`, and `rootComponent.constructionAxes` then
+   held exactly that one axis - which is where it has to be read, because `get_scene_info`
+   reports bodies, sketches and features and no construction geometry.
+
 5. ~~`_find_operation` still picks the first same-named operation~~ - **closed (#141)**.
    The first-match scan resolved `operation_name` inside one setup for
    `cam_post_process` and `cam_get_operation_info`, so a name the setup held twice
