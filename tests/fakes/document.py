@@ -76,11 +76,16 @@ class FakeDocument:
     ``save_document`` refuses without a name.
     """
 
-    def __init__(self, name: str, products=(), is_saved: bool = False):
+    def __init__(
+        self, name: str, products=(), is_saved: bool = False, save_returns: bool = True
+    ):
         self.name = name
         self.products = FakeProducts(products)
         self.isSaved = is_saved
         self.isModified = not is_saved
+        #: What ``save``/``saveAs`` answer.  The shipped signatures return a bool, and
+        #: the handler reads it - a fake that only ever said True could not see that.
+        self.save_returns = save_returns
         #: The folder a saved document reports; ``None`` until ``saveAs`` names one.
         self.dataFile = None
         #: What the two save calls were given, in order - the reply is built from them.
@@ -88,15 +93,17 @@ class FakeDocument:
 
     def save(self, description: str) -> bool:
         self.saved.append(("save", description))
-        self.isModified = False
-        return True
+        if self.save_returns:
+            self.isModified = False
+        return self.save_returns
 
     def saveAs(self, name: str, dataFolder, description: str, tag: str) -> bool:
         self.saved.append(("saveAs", name, dataFolder, description, tag))
         if name:
             self.name = name
-        self.isSaved = True
-        self.isModified = False
+        if self.save_returns:
+            self.isSaved = True
+            self.isModified = False
         self.dataFile = type("FakeDataFile", (), {"parentFolder": dataFolder})()
         return True
 

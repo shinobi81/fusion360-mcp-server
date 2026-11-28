@@ -208,7 +208,7 @@ Six of these say what the caller's next move is:
 - `FUSION_REFUSED` — Fusion did not do what was asked: check the state, then retry or
   change the call.
 - `WORKSPACE_UNAVAILABLE` — open the workspace (Manufacturing, a viewport, the appearance
-  library), once.
+  library, the Data Panel), once.
 - `SCRIPT_ERROR` — fix the script `execute_code` was handed.
 - `INTERNAL_ERROR` — a bug in the add-in; report it.
 

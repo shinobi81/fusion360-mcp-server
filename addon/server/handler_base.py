@@ -774,6 +774,41 @@ class HandlerBase:
             "max": [bbox.maxPoint.x, bbox.maxPoint.y, bbox.maxPoint.z],
         }
 
+    def _checkpoint(self, label: str) -> dict:
+        """Save before a risky call when asked to, and say what happened when not.
+
+        Opt-in per call: writing a file the caller did not ask for is worse than losing
+        work, so the default touches nothing.  A checkpoint on an untitled document does
+        not refuse - that would be a new way to fail - it reports why it could not save.
+        """
+        doc = self.app.activeDocument
+        if doc is None:
+            return {
+                "saved_before": False,
+                "checkpoint_skipped": "there is no active document to save",
+            }
+        if not doc.isSaved:
+            return {
+                "saved_before": False,
+                "checkpoint_skipped": (
+                    "the document has never been saved; call save_document(name=...) "
+                    "first"
+                ),
+            }
+        try:
+            saved = doc.save(f"checkpoint before {label}")
+        except Exception as exc:
+            return {
+                "saved_before": False,
+                "checkpoint_skipped": f"the save failed: {exc}",
+            }
+        if not saved:
+            return {
+                "saved_before": False,
+                "checkpoint_skipped": "Fusion refused to save the document",
+            }
+        return {"saved_before": True}
+
     def _snapshot(self) -> dict | None:
         """Capture body_count, overall bbox, and total mass of the design.
 

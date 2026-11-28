@@ -2463,7 +2463,8 @@ TOOLS: list[dict] = [
             "description": (
                 "Save the document first. A partial tool_json crashed Fusion 2706.1.17 "
                 "and took the document's unsaved state with it; this is the guard, "
-                "opt-in per call."
+                "opt-in per call. An untitled document answers `saved_before: false` "
+                "with the reason."
             ),
         },
     ),
@@ -2563,6 +2564,7 @@ TOOLS: list[dict] = [
             "so a wedged Fusion still replies to it."
         ),
     ),
+    # ── document ──────────────────────────────────────────────────────
     _tool(
         "save_document",
         "Save Document",

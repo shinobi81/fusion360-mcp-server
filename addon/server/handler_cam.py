@@ -572,11 +572,6 @@ class CamCommands(_Contract):
         face_indices: list[int] | None = None,
         checkpoint: bool = False,
     ):
-        # First, before the numeric guards and before any Fusion call: a partial
-        # tool_json crashed Fusion 2706.1.17 and took the unsaved state with it.
-        checkpoint_report = (
-            self._checkpoint("cam_create_operation") if checkpoint else {}
-        )
         # Judged before the operation is created, so a refusal's hint ("nothing
         # was written") stays true: a bad value is not an unavailable name.
         for _numeric in (
@@ -627,6 +622,13 @@ class CamCommands(_Contract):
                 ),
                 tool_number=tool_number if tool_number is not None else 1,
             )
+
+        # The last point before Fusion is touched, and after every refusal the
+        # parameters alone can earn: a partial tool_json crashed Fusion 2706.1.17 and
+        # took the unsaved state with it, and a call refused above has nothing to save.
+        checkpoint_report = (
+            self._checkpoint("cam_create_operation") if checkpoint else {}
+        )
 
         cam = self._get_cam()
 

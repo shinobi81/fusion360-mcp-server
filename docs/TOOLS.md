@@ -316,7 +316,7 @@ Every `add_joint` result carries the measurements behind that:
 | Tool                     | Description                                                                                                         |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
 | `cam_create_setup`       | Create a manufacturing setup (milling/turning/cutting); applies stock mode/offsets                                  |
-| `cam_create_operation`   | Add a machining operation (Fusion's strategy names only); applies stepdown/feed/speed/coolant, `face_indices` selects geometry for the six strategies a selection can be applied to, and `tool_diameter` (cm) attaches a flat end mill so the operation can generate — `tool_json` takes a complete tool object instead, and `tool_number` alone reuses one the document library already holds |
+| `cam_create_operation`   | Add a machining operation (Fusion's strategy names only); applies stepdown/feed/speed/coolant, `face_indices` selects geometry for the six strategies a selection can be applied to, and `tool_diameter` (cm) attaches a flat end mill so the operation can generate — `tool_json` takes a complete tool object instead, and `tool_number` alone reuses one the document library already holds; `checkpoint=True` saves the document first and reports `saved_before` |
 | `cam_generate_toolpath`  | Generate toolpaths for operations                                                                                   |
 | `cam_post_process`       | Post-process to G-code — pass a full `.cps` path (cloud-post builds don't ship local posts)                         |
 | `cam_list_setups`        | List all manufacturing setups                                                                                       |
@@ -367,7 +367,7 @@ and `Operation.tool` takes the result without the library count changing.
 
 | Tool           | Description                                 |
 | -------------- | ------------------------------------------- |
-| `execute_code` | Run arbitrary Python in Fusion (REPL-style) |
+| `execute_code` | Run arbitrary Python in Fusion (REPL-style); `checkpoint=True` saves the document first and reports `saved_before` |
 
 ## Perception
 

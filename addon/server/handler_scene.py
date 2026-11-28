@@ -736,7 +736,7 @@ class SceneCommands(_Contract):
         version *description*, and ``Document.saveAs`` takes a name and a ``DataFolder``
         - there is no local-file overload, and this build exposes no ``activeFile`` or
         ``pathName``.  So the unit of saving is a document in a data folder, and the
-        only folder a tool can reach without inventing one is ``app.data.activeFolder``.
+        one folder that needs no resolution is ``app.data.activeFolder``.
 
         An untitled document with no name is refused rather than saved somewhere the
         caller did not choose: that is the one write this tool will not make on its own.
@@ -795,41 +795,6 @@ class SceneCommands(_Contract):
             # name as though the caller's were applied.
             reply["name_ignored"] = name
         return reply
-
-    def _checkpoint(self, label: str) -> dict:
-        """Save before a risky call when asked to, and say what happened when not.
-
-        Opt-in per call: writing a file the caller did not ask for is worse than losing
-        work, so the default touches nothing.  A checkpoint on an untitled document does
-        not refuse - that would be a new way to fail - it reports why it could not save.
-        """
-        doc = self.app.activeDocument
-        if doc is None:
-            return {
-                "saved_before": False,
-                "checkpoint_skipped": "there is no active document to save",
-            }
-        if not doc.isSaved:
-            return {
-                "saved_before": False,
-                "checkpoint_skipped": (
-                    "the document has never been saved; call save_document(name=...) "
-                    "first"
-                ),
-            }
-        try:
-            saved = doc.save(f"checkpoint before {label}")
-        except Exception as exc:
-            return {
-                "saved_before": False,
-                "checkpoint_skipped": f"the save failed: {exc}",
-            }
-        if not saved:
-            return {
-                "saved_before": False,
-                "checkpoint_skipped": "Fusion refused to save the document",
-            }
-        return {"saved_before": True}
 
     def get_design_type(self):
         """Return current design type: 'parametric' or 'direct'."""
