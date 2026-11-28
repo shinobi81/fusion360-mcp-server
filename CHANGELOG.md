@@ -7,6 +7,78 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 Versions before 0.3.0 use the shared date 2026-11-01, the day this project was tagged
 and published; they are the fork history.
 
+## [0.11.0] - 2026-11-28
+
+This release is about **what we know**, and about what only a running Fusion can tell
+you. The catalogue reaches 100 tools, every row of `docs/TOOLS.md` now carries the
+evidence behind it - 99 of 100 proved live on Fusion `2706.1.17`, the exception refused
+for account reasons - and the campaign that produced those rows found five defects in
+code the suite had called green. Each fix below names the refusal it used to answer.
+
+Two tools are added, which is why this is a minor and not a patch.
+
+### Added
+
+- **`health`** - queued like any other command, answering `app_version`,
+  `active_document` and `queue_depth` from Fusion's main thread. `ping` is answered by
+  the socket thread *before* anything is queued, so a Fusion blocked on a modal dialog
+  still answered `pong`; this is the signal an unattended agent needed. Measured with
+  the main thread blocked: `ping` answered in 0.0 s, `health` failed at the 3 s
+  `--timeout` it was given, and it answered in 0.0 s once the block lifted. 99 tools.
+- **`save_document`**, and `checkpoint=True` on `execute_code` and
+  `cam_create_operation`. Fusion has no local-file save through this API:
+  `Document.save` takes a required description and `saveAs` a DataFolder and a name, so
+  the tool saves in place, saves an untitled document by name into the active data
+  folder, and refuses an untitled one with no name rather than choosing for the caller.
+  `checkpoint` saves first and reports `saved_before`, or why it could not. 100 tools.
+- **An `Evidence` cell on every tool row**, `proven — date, version, #pr: what was
+  measured` or `unproven — why`, with the build in a generated `Proven` column beside
+  it. The one unproven tool is `auto_constrain`, `NOT_ENTITLED` for this account.
+- **`docs/WORK-LOOP.md`** - the loop a ranked item is taken through: ordering, live
+  proof, the review rounds and their exit conditions, and the gates.
+
+### Changed
+
+- **A mutation that changed nothing says so.** A reply whose body count, mass and
+  bounding box all came back identical now carries a `warning`, because `ok: true`
+  alone reads as success to a caller that stops there. Eleven commands are exempt, each
+  with its reason in `addon/server/mutation_commands.py`.
+- **The combined coverage floor is 95**, not 59. The old number was set while the
+  add-in's Fusion-only paths were the bulk of the misses; the export family, the
+  viewport captures and the view sheet are covered offline now, and CI keeps its
+  separate 95 on `src/`.
+- **`cam_post_process` takes `program_number`** (default 1001), and the post receives
+  it as its program name.
+- **Docs, consolidated.** `docs/ROADMAP.md` is gone - its open items are issue #169 -
+  `docs/PROVEN.md` folded into `docs/TOOLS.md`, and `ARCHITECTURE.md` moved into
+  `docs/`. The merge recipe carries `--delete-branch`, since the admin merge path
+  leaves the head branch behind.
+
+### Fixed
+
+- **`export_step` answered `3 : invlid argument geometry` for every call.** Fusion's
+  `createSTEPExportOptions` takes a *Component*, and the handler passed a `BRepBody`.
+  The tool now writes the component that owns the named body and says so: `scope`,
+  `component`, `bodies_in_component`, and a `note` when more than one body went out.
+- **`cam_post_process` failed every post** with `3 : Program number 'NaN' is out of
+  range`: the setup's name was passed as the program name, which a post that sets
+  `programNameIsInteger` reads as NaN.
+- **`scale_body` answered `3 : invalid ref point` for every call.** `createInput`'s
+  point is a reference, not a coordinate; the anchor is now a sketch point in a hidden
+  reference sketch, and the reply names it.
+- **`create_section_analysis` raised `'Component' object has no attribute
+  'analyses'`.** The collection is `design.analyses.sectionAnalyses`, and its builder
+  takes the plane and the distance together.
+- **`flat_pattern` and `unfold` refused** with `stationaryFace is not valid, a side
+  face may have been selected`: the stationary face was the *first* planar face, which
+  on a sheet-metal part is a side wall. It is now the largest planar face.
+
+### Removed
+
+- `docs/PROVEN.md` (its rows live in `docs/TOOLS.md`), `docs/ROADMAP.md` (open items in
+  issue #169), and `tests/test_proven.py`; a tool is now added proven, which is the
+  rule in `AGENTS.md` that replaced the test.
+
 ## [0.10.0] - 2026-11-25
 
 This release is about what the tools can *do*. Eight changes since 0.9.0, and every one
@@ -1116,6 +1188,7 @@ reporting a result it had only echoed back.
 - First tagged release: the MCP server, the Fusion add-in, 90+ tools, mock mode, and
   the structured error envelope (`ok`, `error_kind`, `hints`, `traceback`).
 
+[0.11.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.5...v0.9.0
 [0.8.5]: https://github.com/shinobi81/fusion360-mcp-server/compare/v0.8.4...v0.8.5
