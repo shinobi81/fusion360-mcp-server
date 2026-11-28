@@ -60,7 +60,7 @@ def test_get_tool_by_name_missing():
 
 
 def test_the_tool_count_is_pinned():
-    """99 tools, and the number is the only thing this file pins by hand.
+    """100 tools, and the number is the only thing this file pins by hand.
 
     The set of names used to be copied here - a 136-line literal that had to be
     edited whenever a tool was added, and whose only real invariant (every tool
@@ -69,7 +69,7 @@ def test_the_tool_count_is_pinned():
     ``tests/test_mock.py::TestMockDispatchCoverage``.  A list that restates the
     registry can only ever fail when the registry changes, which is not a bug.
     """
-    assert len(TOOLS) == 99
+    assert len(TOOLS) == 100
 
 
 def test_all_tools_have_annotations():
@@ -186,7 +186,7 @@ _TOOL_ARGUMENT_COUNTS = {
     "boolean_operation": 4,
     "delete_all": 0,
     "undo": 0,
-    "execute_code": 1,
+    "execute_code": 2,
     "sweep": 6,
     "loft": 3,
     "create_polygon": 6,
@@ -195,6 +195,7 @@ _TOOL_ARGUMENT_COUNTS = {
     "rectangular_pattern": 5,
     "circular_pattern": 4,
     "new_document": 1,
+    "save_document": 1,
     "create_component": 2,
     "add_joint": 11,
     "set_joint_value": 6,
@@ -255,7 +256,7 @@ _TOOL_ARGUMENT_COUNTS = {
     "flat_pattern": 1,
     "unfold": 2,
     "cam_create_setup": 7,
-    "cam_create_operation": 15,
+    "cam_create_operation": 16,
     "cam_generate_toolpath": 3,
     "cam_post_process": 5,
     "cam_list_setups": 0,

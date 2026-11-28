@@ -570,6 +570,7 @@ class CamCommands(_Contract):
         coolant: str = "flood",
         body_name: str | None = None,
         face_indices: list[int] | None = None,
+        checkpoint: bool = False,
     ):
         # Judged before the operation is created, so a refusal's hint ("nothing
         # was written") stays true: a bad value is not an unavailable name.
@@ -621,6 +622,13 @@ class CamCommands(_Contract):
                 ),
                 tool_number=tool_number if tool_number is not None else 1,
             )
+
+        # The last point before Fusion is touched, and after every refusal the
+        # parameters alone can earn: a partial tool_json crashed Fusion 2706.1.17 and
+        # took the unsaved state with it, and a call refused above has nothing to save.
+        checkpoint_report = (
+            self._checkpoint("cam_create_operation") if checkpoint else {}
+        )
 
         cam = self._get_cam()
 
@@ -680,6 +688,9 @@ class CamCommands(_Contract):
                 failed[param_name] = value
 
         result = {"name": op.name, "setup": setup_name, "strategy": strategy}
+        # Only when the caller asked for it, as in `execute_code`: the keys are absent
+        # otherwise, so nothing claims a save that was never attempted.
+        result.update(checkpoint_report)
         # The geometry seam runs before the tool goes on, because it is the only step
         # here that removes the operation after it exists - and attaching a tool
         # registers it in ``documentToolLibrary`` (measured on 2706.1.17). The other

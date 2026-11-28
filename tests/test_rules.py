@@ -980,7 +980,7 @@ def test_a_usable_axis_is_refused_by_neither_side(axis):
 
 #: Pinned by name: a divergence is deliberate only while it is listed here with a
 #: reason, and the axis rehearsal this item removed was the one that was not.
-_DIVERGENCES = {"parameters_failed", "no_design_model"}
+_DIVERGENCES = {"parameters_failed", "no_design_model", "save_document_state"}
 
 
 def test_the_mock_divergences_are_exactly_these():

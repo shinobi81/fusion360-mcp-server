@@ -482,7 +482,7 @@ and asks the running Fusion whether it exists - 190 references, none missing on
 11. **Which of the tools has a real Fusion ever answered** - **started (this PR).**
     `docs/PROVEN.md` is one row per tool: a `proven` row cites the date, the
     `app.version` and the PR that added it, whose body carries the envelope; an
-    `unproven` row says why. 30 of 98 were proven when #158 seeded it, 36 of 99 now;
+    `unproven` row says why. 30 of 98 were proven when #158 seeded it, 37 of 100 now;
     the rest name the reason, so the gap is a checklist rather than a guess. `scripts/check_proven.py`
     validates the table against `tools.py` both ways, and `--live` re-probes the
     read-only subset and reports a row its reply contradicts. The live sweep that
@@ -553,6 +553,16 @@ and asks the running Fusion whether it exists - 190 references, none missing on
     wedged thread is the case it exists for, and `scripts/health_check.py`, whose exit
     codes are documented in its docstring and in `docs/TESTING.md`. It detects and
     reports; it does not restart anything.
+
+15. **`save_document`, and a checkpoint before risky mutations** - **closed (#162).**
+    The brief asked for `file_path`; measured on 2706.1.17, this API has no local-file
+    save. `Document.save(description)` takes a required description, `Document.saveAs`
+    takes a *DataFolder* and a name, and a document made through the API starts at
+    `dataFile: None, isSaved: False, isModified: True`. So the tool saves in place, saves
+    an untitled document by name into `app.data.activeFolder`, and refuses an untitled one
+    with no name rather than choosing a name or a folder for the caller. `checkpoint=True`
+    on `execute_code` and `cam_create_operation` saves first and reports `saved_before`,
+    and on an untitled document reports why it could not instead of refusing - 100 tools.
 
 Settled, so a later session does not re-open them: the four call sites that pass a raw
 `Point3D` where the headers say "a construction point, sketch point or vertex" are fine.

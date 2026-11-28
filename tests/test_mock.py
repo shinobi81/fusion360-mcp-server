@@ -34,6 +34,29 @@ class TestMockPing:
         assert result["mode"] == "mock"
 
 
+class TestMockCheckpoint:
+    def test_execute_code_reports_the_checkpoint_only_when_asked(self):
+        asked = mock_command("execute_code", {"code": "1 + 1", "checkpoint": True})
+        not_asked = mock_command("execute_code", {"code": "1 + 1"})
+
+        assert asked["saved_before"] is False
+        assert "no document to save" in asked["checkpoint_skipped"]
+        assert "saved_before" not in not_asked
+
+    def test_cam_create_operation_reports_the_checkpoint_only_when_asked(self):
+        asked = mock_command(
+            "cam_create_operation",
+            {"setup_name": "Setup1", "strategy": "face", "checkpoint": True},
+        )
+        not_asked = mock_command(
+            "cam_create_operation", {"setup_name": "Setup1", "strategy": "face"}
+        )
+
+        assert asked["saved_before"] is False
+        assert "no document to save" in asked["checkpoint_skipped"]
+        assert "saved_before" not in not_asked
+
+
 class TestMockHealth:
     def test_health_answers_the_handler_s_keys(self):
         """The add-in answers `app_version`, `active_document` and `queue_depth`; mock

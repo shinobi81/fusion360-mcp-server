@@ -397,32 +397,32 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_base.py",
-            337,
+            338,
             "raise refusal: kind comes from _rules.point3d_refusal",
         ),
         (
             "handler_base.py",
-            342,
+            343,
             "raise refusal: kind comes from _rules.body_name_required_refusal",
         ),
         (
             "handler_base.py",
-            438,
+            439,
             "raise refusal: kind comes from _rules.construction_plane_name_refusal",
         ),
         (
             "handler_base.py",
-            453,
+            454,
             "raise refusal: kind comes from _rules.construction_axis_name_refusal",
         ),
         (
             "handler_base.py",
-            726,
+            727,
             "message is not a literal",
         ),
         (
             "handler_base.py",
-            767,
+            768,
             "message is not a literal",
         ),
         (
@@ -437,32 +437,32 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_cam.py",
-            589,
+            590,
             "raise strategy_refusal: kind comes from _rules.cam_strategy_refusal",
         ),
         (
             "handler_cam.py",
-            597,
+            598,
             "raise geometry_refusal: kind comes from _rules.cam_geometry_refusal",
         ),
         (
             "handler_cam.py",
-            607,
+            608,
             "raise tool_refusal: kind comes from _rules.cam_tool_refusal",
         ),
         (
             "handler_cam.py",
-            637,
+            645,
             "raise library_refusal: kind comes from _rules.cam_library_tool_refusal",
         ),
         (
             "handler_cam.py",
-            737,
+            748,
             "raise refusal: kind comes from _rules.cam_target_refusal",
         ),
         (
             "handler_cam.py",
-            821,
+            832,
             "message is not a literal",
         ),
         (
@@ -488,6 +488,11 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         (
             "handler_features.py",
             994,
+            "message is not a literal",
+        ),
+        (
+            "handler_scene.py",
+            760,
             "message is not a literal",
         ),
         (

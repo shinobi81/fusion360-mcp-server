@@ -9,13 +9,14 @@ import ast
 import io
 import math
 import traceback
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, suppress
 from typing import TYPE_CHECKING
 
 from . import fusion_api as adsk
 from . import get_logger
 from . import hints as _hints
 from . import parameter_units as _param_units
+from . import rules as _rules
 
 log = get_logger("handler")
 
@@ -728,6 +729,77 @@ class SceneCommands(_Contract):
             ),
         }
 
+    def save_document(self, name: str | None = None):
+        """Save the active document, in place or by naming an untitled one.
+
+        Measured on 2706.1.17 against the shipped binding: ``Document.save`` takes a
+        version *description*, and ``Document.saveAs`` takes a name and a ``DataFolder``
+        - there is no local-file overload, and this build exposes no ``activeFile`` or
+        ``pathName``.  So the unit of saving is a document in a data folder, and the
+        one folder that needs no resolution is ``app.data.activeFolder``.
+
+        An untitled document with no name is refused rather than saved somewhere the
+        caller did not choose: that is the one write this tool will not make on its own.
+        """
+        doc = self.app.activeDocument
+        if doc is None:
+            raise _hints.Refusal(
+                "NO_ACTIVE_DESIGN",
+                "No document to save — open or create one first",
+                hints=("new_document creates one.",),
+            )
+        saved_as = False
+        if not doc.isSaved:
+            # The shipped docstring: "Property that indicates if this document has been
+            # saved or not. The initial save of a document requires that the name and
+            # location be specified and requires the saveAs method to be used."
+            # The stripped value is what is saved: the padding is not part of the name
+            # a caller meant, and the reply echoes what Fusion was given.
+            stripped = (name or "").strip()
+            if not stripped:
+                raise _rules.document_untitled_refusal()
+            name = stripped
+            folder = self.app.data.activeFolder
+            if folder is None:
+                raise _hints.Refusal(
+                    "WORKSPACE_UNAVAILABLE",
+                    "Fusion has no active data folder to save into",
+                    hints=("Open the Data Panel once, then retry.",),
+                )
+            saved = doc.saveAs(name, folder, "", "")
+            saved_as = True
+        else:
+            # The description is required; "" is the value Fusion accepted in the probe.
+            saved = doc.save("")
+        if not saved:
+            raise _hints.Refusal(
+                "FUSION_REFUSED",
+                "Fusion did not save the document",
+                hints=(
+                    "Check the Data Panel for a read-only folder or a lost "
+                    "connection.",
+                    "is_modified says whether the document still has unsaved changes.",
+                ),
+            )
+        folder_name = None
+        # `dataFile` is None until the document is saved; a saved one carries the
+        # folder it lives in, which is the closest thing to a location the API has.
+        if doc.dataFile is not None:
+            with suppress(Exception):
+                folder_name = doc.dataFile.parentFolder.name
+        reply = {
+            "saved": True,
+            "name": doc.name,
+            "folder": folder_name,
+            "saved_as": saved_as,
+            "is_modified": doc.isModified,
+        }
+        if name and not saved_as:
+            # The argument did nothing; saying so beats a reply that reports the old
+            # name as though the caller's were applied.
+            reply["name_ignored"] = name
+        return reply
+
     def get_design_type(self):
         """Return current design type: 'parametric' or 'direct'."""
         design = self._design()
@@ -784,7 +856,10 @@ class SceneCommands(_Contract):
             hints=("Pass design_type='parametric' or 'direct'.",),
         )
 
-    def execute_code(self, code: str):
+    def execute_code(self, code: str, checkpoint: bool = False):
+        # Before the design is read: a checkpoint that failed after the script ran would
+        # be a save of the damage.
+        checkpoint_report = self._checkpoint("execute_code") if checkpoint else {}
         design = self._design()
         type_before = design.designType
 
@@ -870,6 +945,9 @@ class SceneCommands(_Contract):
                 result = str(result)
 
         response = {"executed": True, "result": result, "output": output}
+        # Only when the caller asked: the keys are absent otherwise, so nothing claims a
+        # save that was never attempted.
+        response.update(checkpoint_report)
         if design_type_warning:
             response["design_type_warning"] = design_type_warning
         if document_closed:

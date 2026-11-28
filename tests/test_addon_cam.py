@@ -36,6 +36,7 @@ from tests.fakes.cam import (
     FakeNotStartedFuture,
     FakePostProcessInput,
 )
+from tests.fakes.document import FakeDocument
 
 
 def _items(*items):
@@ -1067,6 +1068,70 @@ def test_a_build_that_spells_the_parameter_differently_falls_back(handler_module
 
     assert applied["selections"] is value.selections
     assert result["geometry"]["parameter"] == "contours2d"
+
+
+def test_a_checkpoint_saves_before_the_cam_product_is_touched(handler_module):
+    """The brief's criterion for this tool: `saved_before: true`, and the save happens.
+
+    The document is saved after every refusal the parameters alone can earn, so a call
+    refused for a *parameter value* writes nothing - one refused for a name only the
+    design can resolve still does, because it needs the design to find out.
+    """
+    operation, _value, _applied = _contour_operation()
+    handler = _creation_handler(handler_module, operation, faces=2)
+    document = FakeDocument("Plate", is_saved=True)
+    handler.app = SimpleNamespace(activeDocument=document)
+
+    result = handler.cam_create_operation(
+        setup_name="Setup1",
+        strategy="contour2d",
+        body_name="Body1",
+        face_indices=[0],
+        checkpoint=True,
+    )
+
+    assert result["saved_before"] is True
+    assert document.saved == [("save", "checkpoint before cam_create_operation")]
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [{"strategy": "bogus"}, {"strategy": "face", "stepdown": float("nan")}],
+    ids=["unknown-strategy", "non-finite-value"],
+)
+def test_a_parameter_refusal_saves_nothing_even_with_a_checkpoint(
+    handler_module, fault
+):
+    """Refused before Fusion is touched, so there is nothing worth a version."""
+    operation, _value, _applied = _contour_operation()
+    handler = _creation_handler(handler_module, operation, faces=2)
+    document = FakeDocument("Plate", is_saved=True)
+    handler.app = SimpleNamespace(activeDocument=document)
+
+    with pytest.raises((addon_hints.Refusal, ValueError)):
+        handler.cam_create_operation(
+            setup_name="Setup1",
+            body_name="Body1",
+            face_indices=[0],
+            checkpoint=True,
+            **fault,
+        )
+
+    assert document.saved == []
+
+
+def test_a_checkpoint_is_absent_when_not_asked_for(handler_module):
+    operation, _value, _applied = _contour_operation()
+    handler = _creation_handler(handler_module, operation, faces=2)
+    document = FakeDocument("Plate", is_saved=True)
+    handler.app = SimpleNamespace(activeDocument=document)
+
+    result = handler.cam_create_operation(
+        setup_name="Setup1", strategy="contour2d", body_name="Body1", face_indices=[0]
+    )
+
+    assert "saved_before" not in result
+    assert document.saved == []
 
 
 def test_create_operation_refuses_a_face_index_the_body_does_not_have(handler_module):

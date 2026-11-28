@@ -31,6 +31,7 @@ import pytest
 
 from addon.server import fusion_api
 from addon.server import hints as addon_hints
+from fusion360_mcp import mock
 from tests.fakes.app import FakeApplication
 from tests.fakes.design import FakeDesign
 from tests.fakes.document import FakeDocument, FakeDocuments, FakeProduct
@@ -347,3 +348,232 @@ def test_compare_meshes_that_yields_no_deviation_is_fusion_refused(bound_handler
         "FUSION_REFUSED",
         ["compareWith found no deviation; check both bodies are meshes."],
     )
+
+
+# ── save_document, and the checkpoint the risky tools take ────────────
+
+
+def _saving_handler(bound_handler, document, folder="MockFolder"):
+    """A handler whose app has *document* open and a data folder to save into.
+
+    Two folders exist, so an assertion on the reply can tell ``activeFolder`` from any
+    other folder the fake holds.
+    """
+    other = type("Folder", (), {"name": "SomeOtherFolder"})()
+    active = type("Folder", (), {"name": folder})()
+    app = type(
+        "App",
+        (),
+        {
+            "activeDocument": document,
+            "data": type("Data", (), {"activeFolder": active, "otherFolder": other})(),
+        },
+    )()
+    return bound_handler(FakeDesign(bodies=[]), app=app)
+
+
+def test_a_saved_document_is_saved_in_place_with_an_empty_description(bound_handler):
+    """`save` requires a description; "" is the value Fusion accepted in the probe."""
+    document = FakeDocument("Plate", is_saved=True)
+    handler = _saving_handler(bound_handler, document)
+
+    reply = handler.save_document()
+
+    assert document.saved == [("save", "")]
+    assert reply["saved"] is True
+    assert reply["saved_as"] is False
+    assert reply["is_modified"] is False
+
+
+def test_the_reply_reports_the_documents_own_is_modified(bound_handler):
+    """A save that leaves the document modified must say so, not report a constant."""
+
+    class _StillModified(FakeDocument):
+        def save(self, description: str) -> bool:
+            self.saved.append(("save", description))
+            self.isModified = True  # what a partial save would look like
+            return True
+
+    handler = _saving_handler(bound_handler, _StillModified("Plate", is_saved=True))
+
+    assert handler.save_document()["is_modified"] is True
+
+
+@pytest.mark.parametrize("name", [None, "", "   "])
+def test_an_untitled_document_with_no_usable_name_is_refused(bound_handler, name):
+    """The brief's trap: the tool will not choose a name or a folder for the caller.
+
+    A whitespace-only name is the untitled case by any reading, and it must not reach
+    ``saveAs``.
+    """
+    document = FakeDocument("Untitled")
+    handler = _saving_handler(bound_handler, document)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.save_document(name=name)
+
+    assert raised.value.error_kind == "INVALID_INPUT"
+    assert "never been saved" in str(raised.value)
+    assert document.saved == [], "a refusal must write nothing"
+
+
+def test_a_checkpoint_with_no_active_document_says_so(bound_handler):
+    handler = _saving_handler(bound_handler, None)
+
+    assert handler._checkpoint("execute_code") == {
+        "saved_before": False,
+        "checkpoint_skipped": "there is no active document to save",
+    }
+
+
+def test_a_checkpoint_whose_save_raises_does_not_abort_the_call(bound_handler):
+    """A save Fusion errors on must not turn the risky call into an untyped failure."""
+
+    class _Raising(FakeDocument):
+        def save(self, description: str) -> bool:
+            raise RuntimeError("3 : the data folder is read-only")
+
+    handler = _saving_handler(bound_handler, _Raising("Plate", is_saved=True))
+
+    report = handler._checkpoint("execute_code")
+
+    assert report["saved_before"] is False
+    assert report["checkpoint_skipped"].startswith("the save failed:")
+
+
+def test_an_untitled_document_is_saved_by_name_into_the_active_folder(bound_handler):
+    document = FakeDocument("Untitled")
+    handler = _saving_handler(bound_handler, document)
+
+    reply = handler.save_document(name="Plate")
+
+    (kind, name, folder, description, tag) = document.saved[0]
+    assert (kind, name, description, tag) == ("saveAs", "Plate", "", "")
+    assert folder.name == "MockFolder"
+    assert reply["saved_as"] is True
+    assert reply["name"] == "Plate"
+    assert reply["folder"] == "MockFolder"
+
+
+def test_a_checkpoint_saves_a_saved_document_and_says_so(bound_handler):
+    document = FakeDocument("Plate", is_saved=True)
+    handler = _saving_handler(bound_handler, document)
+
+    assert handler._checkpoint("execute_code") == {"saved_before": True}
+    assert document.saved == [("save", "checkpoint before execute_code")]
+
+
+def test_a_checkpoint_on_an_untitled_document_reports_why_not_refuses(bound_handler):
+    """A checkpoint that refused would be a new way for the risky call to fail."""
+    document = FakeDocument("Untitled")
+    handler = _saving_handler(bound_handler, document)
+
+    report = handler._checkpoint("execute_code")
+
+    assert report["saved_before"] is False
+    assert "save_document" in report["checkpoint_skipped"]
+    assert document.saved == []
+
+
+def test_execute_code_reports_the_checkpoint_only_when_asked(bound_handler):
+    document = FakeDocument("Plate", is_saved=True)
+    handler = _saving_handler(bound_handler, document)
+
+    without = handler.execute_code("1 + 1")
+    with_checkpoint = handler.execute_code("1 + 1", checkpoint=True)
+
+    assert "saved_before" not in without, "the default writes nothing"
+    assert with_checkpoint["saved_before"] is True
+    assert document.saved == [("save", "checkpoint before execute_code")]
+
+
+def test_a_save_fusion_refuses_is_a_typed_refusal_not_a_success(bound_handler):
+    """`save` and `saveAs` return a bool; reporting True regardless would tell a caller
+    a save happened that Fusion refused."""
+    document = FakeDocument("Plate", is_saved=True, save_returns=False)
+    handler = _saving_handler(bound_handler, document)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.save_document()
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert "did not save" in str(raised.value)
+
+
+def test_a_checkpoint_fusion_refuses_reports_why_instead_of_aborting(bound_handler):
+    document = FakeDocument("Plate", is_saved=True, save_returns=False)
+    handler = _saving_handler(bound_handler, document)
+
+    assert handler._checkpoint("execute_code") == {
+        "saved_before": False,
+        "checkpoint_skipped": "Fusion refused to save the document",
+    }
+
+
+def test_the_by_name_save_uses_the_active_folder_not_another(bound_handler):
+    document = FakeDocument("Untitled")
+    handler = _saving_handler(bound_handler, document)
+
+    handler.save_document(name="Plate")
+
+    (_kind, _name, folder, _description, _tag) = document.saved[0]
+    assert folder is handler.app.data.activeFolder
+    assert folder.name != handler.app.data.otherFolder.name
+
+
+def test_an_untitled_document_with_no_data_folder_is_a_typed_refusal(bound_handler):
+    document = FakeDocument("Untitled")
+    handler = _saving_handler(bound_handler, document)
+    handler.app.data.activeFolder = None
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.save_document(name="Plate")
+
+    assert raised.value.error_kind == "WORKSPACE_UNAVAILABLE"
+    assert document.saved == []
+
+
+def test_no_active_document_is_a_typed_refusal(bound_handler):
+    handler = _saving_handler(bound_handler, None)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.save_document()
+
+    assert raised.value.error_kind == "NO_ACTIVE_DESIGN"
+
+
+def test_a_name_on_an_already_saved_document_is_reported_as_ignored(bound_handler):
+    document = FakeDocument("Plate", is_saved=True)
+    handler = _saving_handler(bound_handler, document)
+
+    reply = handler.save_document(name="Other")
+
+    assert reply["saved_as"] is False
+    assert reply["name_ignored"] == "Other"
+    assert document.name == "Plate"
+
+
+def test_an_untitled_save_fusion_refuses_is_a_typed_refusal(bound_handler):
+    """The path every document this server creates takes: `saveAs` can refuse too."""
+    document = FakeDocument("Untitled", save_returns=False)
+    handler = _saving_handler(bound_handler, document)
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.save_document(name="Plate")
+
+    assert raised.value.error_kind == "FUSION_REFUSED"
+    assert document.isSaved is False
+
+
+def test_mock_and_the_handler_refuse_an_untitled_save_with_one_sentence(bound_handler):
+    """Mock has no document to save; it must answer this refusal, not rehearse one."""
+    handler = _saving_handler(bound_handler, FakeDocument("Untitled"))
+
+    with pytest.raises(addon_hints.Refusal) as raised:
+        handler.save_document()
+
+    refused = mock.mock_command("save_document", {})
+
+    assert refused["error_kind"] == raised.value.error_kind
+    assert refused["error_message"] == str(raised.value)
+    assert mock.mock_command("save_document", {"name": "Plate"})["saved_as"] is True

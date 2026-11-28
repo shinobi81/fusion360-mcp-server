@@ -180,19 +180,48 @@ def cam_geometry_refusal(params: Mapping[str, Any]) -> _hints.Refusal | None:
     return None
 
 
+def document_untitled_refusal() -> _hints.Refusal:
+    """The refusal an untitled document with no name earns.
+
+    One factory rather than a literal at each site: the handler raises it and mock
+    mode returns it, so a caller rehearsing ``save_document()`` reads the same sentence
+    as one that calls Fusion.  Mock has no saveable document, so it answers this for a
+    nameless call and a fabricated folder for a named one - the divergence
+    ``MOCK_DIVERGENCES["save_document_state"]`` records.
+    """
+    return _hints.Refusal(
+        "INVALID_INPUT",
+        "This document has never been saved: pass name to save it into Fusion's active "
+        "data folder, or save it in Fusion first",
+        hints=(
+            "The tool will not choose a name or a folder for you.",
+            "Fusion's active data folder is the target; there is no local-file save in "
+            "this API.",
+        ),
+    )
+
+
 #: The divergences that change a *refusal* or a reply key, and why each is deliberate.
 #:
 #: A divergence belongs here when it is either a call mock answers *successfully* that
 #: the add-in refuses - what an unattended rehearsal would act on - or a reply key one
 #: side sends and the other does not.  The axis rehearsal the new rule replaced was the
-#: first kind and was not listed, which is why the table exists.  Two deliberate
-#: divergences live outside it and say so in their own code: ``undo`` always answers the
-#: direct-design shape, and ``execute_code`` reports zero deltas because mock runs
-#: nothing.
+#: first kind and was not listed, which is why the table exists.  Deliberate
+#: divergences that live outside it say so in their own code: ``undo`` always answers
+#: the direct-design shape, ``execute_code`` reports zero deltas because mock runs
+#: nothing,
+#: and the two checkpoint tools answer ``saved_before: false`` with
+#: ``checkpoint_skipped`` because mock has no document to save - the same root cause as
+#: ``save_document_state``.
 MOCK_DIVERGENCES: dict[str, str] = {
     "parameters_failed": (
         "mock applies every parameter it is given; Fusion refuses some names, and only "
         "Fusion can say which, so mock never answers that key"
+    ),
+    "save_document_state": (
+        "mock has no document to save, so it answers the untitled refusal for a call "
+        "without a name and a fabricated folder for one with - real mode knows whether "
+        "the document was already saved"
     ),
     "no_design_model": (
         "mock has no design, body, face or setup, so a name it is handed is echoed "

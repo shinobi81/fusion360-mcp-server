@@ -1,6 +1,6 @@
 # Tools
 
-All 99 tools this server exposes, grouped by what they do. Every tool returns the same
+All 100 tools this server exposes, grouped by what they do. Every tool returns the same
 envelope — `ok`, plus tool-specific fields, plus `deltas` for mutations — and failures come
 back as data (`error_kind`, `hints`, `traceback`) rather than exceptions.
 
@@ -48,6 +48,7 @@ camera for its capture and restores it before returning.
 | Tool              | Description                                                                            |
 | ----------------- | -------------------------------------------------------------------------------------- |
 | `new_document`    | Create a design document and make it active — the way in from a cold start             |
+| `save_document`   | Save the active document in place, or an untitled one by name into Fusion's active data folder (no local-file save exists in this API); answers `saved`, `name`, `folder`, `saved_as` and `is_modified`; a `name` passed for an already-saved document is ignored and echoed as `name_ignored` |
 | `get_design_type` | Check if the design is parametric or direct                                            |
 | `set_design_type` | Switch design type (parametric/direct recovery)                                        |
 
@@ -315,7 +316,7 @@ Every `add_joint` result carries the measurements behind that:
 | Tool                     | Description                                                                                                         |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
 | `cam_create_setup`       | Create a manufacturing setup (milling/turning/cutting); applies stock mode/offsets                                  |
-| `cam_create_operation`   | Add a machining operation (Fusion's strategy names only); applies stepdown/feed/speed/coolant, `face_indices` selects geometry for the six strategies a selection can be applied to, and `tool_diameter` (cm) attaches a flat end mill so the operation can generate — `tool_json` takes a complete tool object instead, and `tool_number` alone reuses one the document library already holds |
+| `cam_create_operation`   | Add a machining operation (Fusion's strategy names only); applies stepdown/feed/speed/coolant, `face_indices` selects geometry for the six strategies a selection can be applied to, and `tool_diameter` (cm) attaches a flat end mill so the operation can generate — `tool_json` takes a complete tool object instead, and `tool_number` alone reuses one the document library already holds; `checkpoint=True` saves the document first where it can and reports `saved_before` (`checkpoint_skipped` says why not) |
 | `cam_generate_toolpath`  | Generate toolpaths for operations                                                                                   |
 | `cam_post_process`       | Post-process to G-code — pass a full `.cps` path (cloud-post builds don't ship local posts)                         |
 | `cam_list_setups`        | List all manufacturing setups                                                                                       |
@@ -366,7 +367,7 @@ and `Operation.tool` takes the result without the library count changing.
 
 | Tool           | Description                                 |
 | -------------- | ------------------------------------------- |
-| `execute_code` | Run arbitrary Python in Fusion (REPL-style) |
+| `execute_code` | Run arbitrary Python in Fusion (REPL-style); `checkpoint=True` saves the document first where it can and reports `saved_before` (`checkpoint_skipped` says why not) |
 
 ## Perception
 

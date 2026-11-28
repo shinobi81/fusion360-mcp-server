@@ -236,7 +236,7 @@ def _target_body(reaches: str) -> dict:
 def _tool(
     _name: str, _title: str, _description: str, *, required=(), **properties
 ) -> dict:
-    """One tool entry: the wrapper all 99 of them share.
+    """One tool entry: the wrapper all 100 of them share.
 
     ``required`` and every property are keyword arguments, so a schema reads as
     the arguments it describes rather than as five levels of dict literal.  The
@@ -585,6 +585,16 @@ TOOLS: list[dict] = [
         ),
         required=["code"],
         code={"type": "string"},
+        checkpoint={
+            "type": "boolean",
+            "default": False,
+            "description": (
+                "Save the document before running the script, so a crash cannot take "
+                "the changes since the checkpoint. Opt-in: the default writes nothing. "
+                "An untitled document answers `saved_before: false` with "
+                "`checkpoint_skipped` saying why, instead of refusing."
+            ),
+        },
     ),
     # ── additional geometry ───────────────────────────────────────────
     _tool(
@@ -2449,6 +2459,16 @@ TOOLS: list[dict] = [
                 "without one."
             ),
         },
+        checkpoint={
+            "type": "boolean",
+            "default": False,
+            "description": (
+                "Save the document first. A partial tool_json crashed Fusion 2706.1.17 "
+                "and took the document's unsaved state with it; this is the guard, "
+                "opt-in per call. An untitled document answers `saved_before: false` "
+                "with `checkpoint_skipped` saying why."
+            ),
+        },
     ),
     _tool(
         "cam_generate_toolpath",
@@ -2545,6 +2565,27 @@ TOOLS: list[dict] = [
             "thread is actually executing work - ping answers from the socket thread, "
             "so a wedged Fusion still replies to it."
         ),
+    ),
+    # ── document ──────────────────────────────────────────────────────
+    _tool(
+        "save_document",
+        "Save Document",
+        (
+            "Save the active document in place, or save an untitled one by name into "
+            "Fusion's active data folder. Measured on 2706.1.17: this API has no "
+            "local-file save - saveAs takes a data folder and a name, not a path - and "
+            "an untitled document is refused unless a name is given, because choosing "
+            "a name or a folder for the caller is a write they did not ask for."
+        ),
+        name={
+            "type": "string",
+            "description": (
+                "Name to save an untitled document under, in Fusion's active data "
+                "folder. Omit for a document that already has one - a name given for "
+                "an already-saved document does nothing and is echoed as "
+                "`name_ignored`."
+            ),
+        },
     ),
     # ── design type safety ──────────────────────────────────────────────
     _tool(
@@ -2645,7 +2686,7 @@ _IDEMPOTENT = _READ_ONLY | {
 
 for _t in TOOLS:
     _name = _t["name"]
-    # One loop rather than 99 schema edits: the gate validates every tool against
+    # One loop rather than 100 schema edits: the gate validates every tool against
     # this dict, and a client that skips the gate to reach :9876 directly must not
     # be the only caller an undeclared argument slips past.  A tool's inputSchema
     # lists every argument it accepts, so anything else is refused by name.
