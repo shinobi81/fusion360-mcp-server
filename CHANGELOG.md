@@ -16,7 +16,7 @@ said and one took a live probe to discover at all. The exception is
 `create_construction_axis`'s `face_index`, whose two arguments come from the shipped stub:
 the tool builds through the documented call, but no live envelope proves it yet.
 
-*Correction, 2026-11-27 (#163).* It does now: on Fusion 2706.1.17,
+**Correction, 2026-11-27 (#163).** It does now: on Fusion 2706.1.17,
 `create_construction_axis(method="perpendicular_at_point", body_name="Body2",
 face_index=0, point_one=[0, 0, 2])` answered `created: true` with `name: "Axis1"`, and
 `rootComponent.constructionAxes` held that axis. Nothing in the shipped behaviour changed;

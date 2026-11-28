@@ -76,7 +76,7 @@ the camera for its capture and restores it before returning.
 | `auto_constrain` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `add_dimension` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `create_construction_plane` | proven — 2026-11-27, `2706.1.17`, #160: built a plane (`Plane1`, then `Plane2` for `edge_name="Y"`); refused `edge_name="w"` with the axis sentence, and a missing angle with `3 : invalid expression` before this PR's rule (#160) |
-| `create_construction_axis` | proven — 2026-11-27, `2706.1.17`, #163: `perpendicular_at_point` on face 0 of a box (a `Plane` per `list_faces`) answered `created: true`, `name: Axis1`; the axis was read back through `execute_code` from `rootComponent.constructionAxes` — `get_scene_info` reports bodies, sketches and counts, and no construction geometry |
+| `create_construction_axis` | proven — 2026-11-27, `2706.1.17`, #163: `perpendicular_at_point` on face 0 of a box answered `created: true`, `name: "Axis1"`; `list_faces` reported that face as `surface_type: "Plane"` before the call, and the axis was read back through `execute_code` from `rootComponent.constructionAxes` — `get_scene_info` reports bodies, sketches and counts, and no construction geometry |
 | `create_ucs` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `draw_spline` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `offset_curve` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
