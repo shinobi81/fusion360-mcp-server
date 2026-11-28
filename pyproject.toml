@@ -71,7 +71,7 @@ select = ["E", "F", "I", "RUF", "B", "SIM"]
 testpaths = ["tests"]
 # Floored just under the measured combined total: the number is printed by the test job,
 # never written down here.  A subset run needs `--no-cov`.
-addopts = "--cov --cov-report=term-missing --cov-fail-under=59"
+addopts = "--cov --cov-report=term-missing --cov-fail-under=95"
 
 # The add-in imports Fusion's `adsk`, which no static type checker can resolve, so
 # `addon/` is excluded (ruff and the suite still cover it).  This block is pyright's only

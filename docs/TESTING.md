@@ -39,24 +39,23 @@ only the WSL stub is found. The socket tests bind `127.0.0.1` and close immediat
 ## The coverage floor
 
 `addopts` in `pyproject.toml` measures coverage on every run and fails below the floor
-recorded there. The floor is **two gates**, because one number cannot hold two very
-different populations:
+recorded there: **95** for the whole suite, which measures `src/fusion360_mcp` **and**
+`addon/server`. CI adds a second gate at the same number for the package alone —
+`uv run coverage report --include="src/fusion360_mcp/*" --fail-under=95` — so an add-in
+regression cannot buy slack for what users install.
 
-- **59** for the whole suite, which now measures `src/fusion360_mcp` **and**
-  `addon/server`. The CAM paths still uncovered only run inside Fusion, and they
-  account for almost all of the statements left.
-  (The export family *is* covered offline, by `tests/test_addon_export.py`: body
-  STL/STEP and f3d against a fake export manager, both default output paths, and —
-  once the fake runtime gained `adsk.core.CameraTypes` and the test module grew a
-  viewport that writes bytes and hands the camera out as the *copy* Fusion documents —
-  `render_view`'s capture and decode, `export_view_sheet` end to end, `import_mesh`'s
-  two import paths and `export`'s stl dispatch. `handler_export` is at 93%; the floor
-  itself has not moved, because moving it is a separate decision.)
-- **95** for the server alone, enforced separately in CI:
-  `uv run coverage report --include="src/fusion360_mcp/*" --fail-under=95`. Without it,
-  an add-in regression would buy slack for `src/`.
+The combined floor was **59** for as long as the add-in's Fusion-only paths were the
+bulk of the misses: the CAM handlers run inside Fusion, and nothing offline reached
+them. That is no longer the shape of the tree. `tests/test_addon_export.py` covers the
+export family against a fake export manager — body STL/STEP and f3d, both default output
+paths, and, once the fake runtime gained `adsk.core.CameraTypes` and the module grew a
+viewport that writes bytes and hands the camera out as the *copy* Fusion documents,
+`render_view`'s capture and decode, `export_view_sheet` end to end, `import_mesh`'s two
+import paths and `export`'s STL dispatch. So the floor is the number the suite actually
+holds, with enough headroom that a branch no test can reach is marked `# pragma: no
+cover` and justified, rather than being paid for by moving the floor.
 
-Both live in `addopts`/CI rather than in one file's scope, so a subset is run with
+Both gates live in `addopts`/CI rather than in one file's scope, so a subset is run with
 `--no-cov`. The uncovered statements are all printed by `--cov-report=term-missing`; the
 four below are by design, named by symbol because line numbers drift on every edit and a
 stale one reads as a waiver for code that no longer exists:
