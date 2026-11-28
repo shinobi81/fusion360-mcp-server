@@ -58,6 +58,15 @@ Decide, record the decision where a reader will find it, and keep going:
 
 After each merge, say which item closed, and start the next in rank order.
 
+## When a merge becomes a release
+
+`CONTRIBUTING.md` (Releasing) owns the bump table and the triggers that say when a tag
+follows. What the loop adds:
+
+- A `none` merge: say so and carry on.
+- The release PR closes nothing — an item is closed by the PR that changes it. When the
+  tag is pushed, say which released fixes a reader of the README can now install.
+
 ## The gates
 
 The five a PR must pass, and the command that proves each:

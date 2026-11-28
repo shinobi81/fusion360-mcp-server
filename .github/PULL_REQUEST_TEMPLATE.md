@@ -21,7 +21,8 @@ Delete what does not apply — these are the places a change quietly breaks call
 - [ ] Tool added/renamed → `tools.py`, `mock.py`, annotations, `tests/test_tools.py`
 - [ ] New failure mode → a rule in `addon/server/hints.py`, then
       `uv run python scripts/sync_mirrors.py` (the `src/fusion360_mcp/` copy is generated)
-- [ ] Response shape changed → `AGENTS.md` and `CHANGELOG.md`
+- [ ] Response shape changed → `AGENTS.md`; the `CHANGELOG.md` entry is written in the
+      release PR (`CONTRIBUTING.md`, Releasing)
 - [ ] Design-type or undo behaviour touched → note the parametric **and**
       direct paths
 
