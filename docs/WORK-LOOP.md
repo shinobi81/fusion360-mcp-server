@@ -60,15 +60,16 @@ After each merge, say which item closed, and start the next in rank order.
 
 ## When a merge becomes a release
 
-The queue carries issues, not version numbers: a bump is classified from the diff
-(`CONTRIBUTING.md`, Releasing). Cut a release when any of these comes first — an issue
-closed that changed what a tool answers, three merges have accumulated since the last
-tag, or the next item would touch a call a released fix already touched. A range that
-touched only tests, docs, fuzz or scripts earns **no bump** and rides the next release.
+The queue carries issues, not version numbers: the diff decides the bump, and
+`CONTRIBUTING.md` (Releasing) owns both the table and the triggers that say when a tag
+follows. Two things belong here, because they are rules of the loop rather than of the
+release:
 
-The release is its own PR (`chore(release): x.y.z`), and it closes nothing: an item is
-closed by the PR that changes it. When the tag is pushed, say which released fixes are
-now installable, because that is the change a reader of the README can act on.
+- A range that touched only tests, docs, fuzz or scripts earns **no bump**. It is not a
+  release, and cutting one for it spends a version number a reader cannot act on.
+- The release is its own PR (`chore(release): x.y.z`) and it closes nothing: an item is
+  closed by the PR that changes it. When the tag is pushed, say which released fixes are
+  now installable, because that is the change a reader of the README can act on.
 
 ## The gates
 

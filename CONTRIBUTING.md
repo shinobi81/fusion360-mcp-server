@@ -107,53 +107,57 @@ error that motivated it.
 
 ### When to bump
 
-A bump is classified from the **diff**, never counted from closed issues. An issue is
-not a unit of release: half the queue is tests, docs and fakes, and a tag for those
-publishes a version a reader cannot distinguish from the one before it.
+A bump is classified from the **diff**, never counted by the number of closed issues. An
+issue is not a unit of release: much of the open queue is documentation, tests and fakes,
+and a tag for a range that only touched those publishes a version a reader cannot act on.
 
 | the diff touches | bump |
 | --- | --- |
-| `src/fusion360_mcp/tools.py` (the published schema), a reply key, an `error_kind`, a tool name or count, add-in behaviour | **minor** — a caller has to be able to see it |
-| a defect fixed with no contract change | **patch** |
-| only `tests/`, `docs/`, `fuzz/`, `scripts/` or comments | **none** — it rides the next release |
+| `src/fusion360_mcp/tools.py`'s schema, a tool added or renamed, a reply key renamed or removed, an `error_kind` changed, or a call that now answers differently | **minor** — a caller has to change, or reads a different answer |
+| a defect fixed with no contract change — same arguments, same keys, the right answer — including an add-in fix and a reply key *added* | **patch** |
+| only `tests/`, `docs/`, `fuzz/`, `scripts/` or comments | **none** — no tag; the merges accumulate |
 
-Cut a release when **any** of these comes first:
+A range that straddles two rows takes the higher of them (`none` < `patch` < `minor`): a
+patch that should have been a minor is a caller who never upgraded, while a minor that
+should have been a patch is one line in the changelog. A trigger below firing on a range
+the table gives **none** cuts nothing - two documentation merges are not a release, and
+the next bumping range carries them.
+
+Cut a release when either of these comes first:
 
 - an issue closes that changed what a tool answers;
-- three merges have accumulated since the last tag;
-- the next item would touch a call a released fix already touched.
+- three PRs have merged since the previous tag, not counting a release PR.
 
-The first trigger is the one that matters: `README.md` pins a tag, so a fix nobody tags
-is invisible to every reader who installs from that pin. The second stops a batch growing
-past what one verification covers.
+The first is the one that matters: `README.md` pins a tag, so a fix nobody tags is
+invisible to every reader who installs from that pin. The second bounds the wait - a
+released fix should not sit behind a batch bigger than one round of live proof
+(`docs/WORK-LOOP.md`, *Live proof*).
 
-### The note is drafted in the change PR
-
-Add a `## [Unreleased]` heading at the top of `CHANGELOG.md` with your entry while the
-change is in hand, not in the release PR, where the reason for it has been forgotten. The
-release PR renames that heading to the version it cuts and leaves the body alone: it was
-written against the change it describes.
+This is where the project's earlier practice changes. `0.8.2` cut a documentation-and-
+guards payload as a patch, and `0.7.3` shipped docs, tooling and a version bump; each
+publishes a wheel that behaves as the release before it did. Both were judgement calls,
+and this rule replaces them.
 
 ### Cutting the tag
 
-1. Read the range since the last tag against the table above, and decide the bump. When
-   it is genuinely between two rows, take the higher one: a patch that should have been
-   a minor is a caller who did not upgrade, and a minor that should have been a patch is
-   one line in the changelog.
+1. Classify the range since the last tag against the table above, and put the bump in the
+   PR body. A judgement that is not written down cannot be reviewed.
 2. Move `version` in `pyproject.toml`, `addon/Fusion360MCP.manifest` and the install
-   snippets in `README.md`, and on a **minor** both rows of `SECURITY.md`'s
-   supported-versions table — the new `<major>.<minor>.x` Yes row and its `< major.minor`
-   No row beneath it. Then `uv lock`. They ship together, and `tests/test_packaging.py`
-   fails naming whichever one you missed: the manifest guard, the pin guard and the
-   supported-versions guard each print the file, the line and the fix.
-3. Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` in `CHANGELOG.md`.
-
-   A published entry that states something false is corrected by annotating it in place
-   on `main`, named as a post-release correction, citing the PR and — where a later change
-   made the corrected claim true — that change. The tag's tree is never rewritten, so the
-   tag's copy keeps the original sentence.
+   snippets in `README.md`, and on a **minor or major** both rows of `SECURITY.md`'s
+   supported-versions table - the new `<major>.<minor>.x` Yes row and its
+   `< major.minor` No row beneath it, in the shape that file already uses. Then
+   `uv lock`. They ship together, and `tests/test_packaging.py` fails naming whichever
+   one you missed: the manifest, pin and supported-versions guards each name the file and
+   the fix, and the pin guard also gives the line.
+3. Write the `CHANGELOG.md` entry: the heading `## [X.Y.Z] - YYYY-MM-DD`, the sections
+   under it, and the compare link at the bottom of the file in the shape the others use,
+   `[X.Y.Z]: https://github.com/shinobi81/fusion360-mcp-server/compare/vX.Y.W...vX.Y.Z`.
+   Three guards read it - the opening heading, its date, and that link - and each names
+   what is missing. The entry is written **in this PR**, while the reason for every
+   change is still in hand; that is the practice `CHANGELOG.md`'s 0.8.2 entry records.
 4. PR it (`chore(release): x.y.z`), merge as usual.
-5. Check that the artifacts ship the add-in, unpiped, in the same tree you tag —
+5. Start from the merged `main` (`git checkout main && git pull`), so the tree you tag is
+   the tree you built, then check that the artifacts ship the add-in, unpiped -
    `release.yml` runs this before it publishes, so a build that loses `addon/` fails
    here rather than in a user's install. It reads both the wheel and the sdist back
    and compares them with `git ls-files addon`:
@@ -177,8 +181,8 @@ written against the change it describes.
    `gh release create` yourself: a release that already exists makes that step fail with
    `a release with the same tag name already exists`, and what is left behind is a
    release with **no assets** - the attestation was produced, since
-   `attest-build-provenance` ran, but its bundle never became an asset. 0.10.0 hit
-   exactly this.
+   `attest-build-provenance` ran, but its bundle never became an asset. The recovery is
+   at the end of this section.
 7. Verify the tag actually installs:
 
    ```bash
@@ -195,6 +199,13 @@ written against the change it describes.
    ```
 
    Four names, or `gh run list --workflow release.yml -L 1` green.
+
+### Correcting a published entry
+
+A published entry that states something false is corrected by annotating it in place, in
+a PR against `main`, named as a post-release correction, citing the PR and — where a
+later change made the corrected claim true — that change. The tag's tree is never
+rewritten, so the tag's copy keeps the original sentence.
 
 ### If the release workflow failed
 
