@@ -200,10 +200,13 @@ def document_untitled_refusal() -> _hints.Refusal:
 #: A divergence belongs here when it is either a call mock answers *successfully* that
 #: the add-in refuses - what an unattended rehearsal would act on - or a reply key one
 #: side sends and the other does not.  The axis rehearsal the new rule replaced was the
-#: first kind and was not listed, which is why the table exists.  Two deliberate
-#: divergences live outside it and say so in their own code: ``undo`` always answers the
-#: direct-design shape, and ``execute_code`` reports zero deltas because mock runs
-#: nothing.
+#: first kind and was not listed, which is why the table exists.  Deliberate
+#: divergences that live outside it say so in their own code: ``undo`` always answers
+#: the direct-design shape, ``execute_code`` reports zero deltas because mock runs
+#: nothing,
+#: and the two checkpoint tools answer ``saved_before: false`` with
+#: ``checkpoint_skipped`` because mock has no document to save - the same root cause as
+#: ``save_document_state``.
 MOCK_DIVERGENCES: dict[str, str] = {
     "parameters_failed": (
         "mock applies every parameter it is given; Fusion refuses some names, and only "

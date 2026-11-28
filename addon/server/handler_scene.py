@@ -753,8 +753,12 @@ class SceneCommands(_Contract):
             # The shipped docstring: "Property that indicates if this document has been
             # saved or not. The initial save of a document requires that the name and
             # location be specified and requires the saveAs method to be used."
-            if not (name or "").strip():
+            # The stripped value is what is saved: the padding is not part of the name
+            # a caller meant, and the reply echoes what Fusion was given.
+            stripped = (name or "").strip()
+            if not stripped:
                 raise _rules.document_untitled_refusal()
+            name = stripped
             folder = self.app.data.activeFolder
             if folder is None:
                 raise _hints.Refusal(
@@ -778,8 +782,8 @@ class SceneCommands(_Contract):
                 ),
             )
         folder_name = None
-        # `dataFile` is None on any document this server created; a saved one carries
-        # the folder it lives in, which is the closest thing to a location the API has.
+        # `dataFile` is None until the document is saved; a saved one carries the
+        # folder it lives in, which is the closest thing to a location the API has.
         if doc.dataFile is not None:
             with suppress(Exception):
                 folder_name = doc.dataFile.parentFolder.name

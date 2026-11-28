@@ -1094,20 +1094,27 @@ def test_a_checkpoint_saves_before_the_cam_product_is_touched(handler_module):
     assert document.saved == [("save", "checkpoint before cam_create_operation")]
 
 
-def test_a_parameter_refusal_saves_nothing_even_with_a_checkpoint(handler_module):
+@pytest.mark.parametrize(
+    "fault",
+    [{"strategy": "bogus"}, {"strategy": "face", "stepdown": float("nan")}],
+    ids=["unknown-strategy", "non-finite-value"],
+)
+def test_a_parameter_refusal_saves_nothing_even_with_a_checkpoint(
+    handler_module, fault
+):
     """Refused before Fusion is touched, so there is nothing worth a version."""
     operation, _value, _applied = _contour_operation()
     handler = _creation_handler(handler_module, operation, faces=2)
     document = FakeDocument("Plate", is_saved=True)
     handler.app = SimpleNamespace(activeDocument=document)
 
-    with pytest.raises(addon_hints.Refusal):
+    with pytest.raises((addon_hints.Refusal, ValueError)):
         handler.cam_create_operation(
             setup_name="Setup1",
-            strategy="bogus",
             body_name="Body1",
             face_indices=[0],
             checkpoint=True,
+            **fault,
         )
 
     assert document.saved == []

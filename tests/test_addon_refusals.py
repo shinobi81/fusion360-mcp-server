@@ -492,7 +492,7 @@ _UNJUDGEABLE: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "handler_scene.py",
-            757,
+            760,
             "message is not a literal",
         ),
         (

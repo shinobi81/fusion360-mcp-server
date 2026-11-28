@@ -591,8 +591,8 @@ TOOLS: list[dict] = [
             "description": (
                 "Save the document before running the script, so a crash cannot take "
                 "the changes since the checkpoint. Opt-in: the default writes nothing. "
-                "An untitled document answers `saved_before: false` with the reason "
-                "instead of refusing."
+                "An untitled document answers `saved_before: false` with "
+                "`checkpoint_skipped` saying why, instead of refusing."
             ),
         },
     ),
@@ -2466,7 +2466,7 @@ TOOLS: list[dict] = [
                 "Save the document first. A partial tool_json crashed Fusion 2706.1.17 "
                 "and took the document's unsaved state with it; this is the guard, "
                 "opt-in per call. An untitled document answers `saved_before: false` "
-                "with the reason."
+                "with `checkpoint_skipped` saying why."
             ),
         },
     ),
@@ -2581,7 +2581,9 @@ TOOLS: list[dict] = [
             "type": "string",
             "description": (
                 "Name to save an untitled document under, in Fusion's active data "
-                "folder. Omit for a document that already has one."
+                "folder. Omit for a document that already has one - a name given for "
+                "an already-saved document does nothing and is echoed as "
+                "`name_ignored`."
             ),
         },
     ),

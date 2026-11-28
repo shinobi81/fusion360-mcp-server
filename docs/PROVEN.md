@@ -54,7 +54,7 @@ the camera for its capture and restores it before returning.
 | `create_hole` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `rectangular_pattern` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
 | `circular_pattern` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
-| `save_document` | proven — 2026-11-27, `2706.1.17`, #162: refused an untitled document with no name (nothing written), saved it by name into the active data folder (`saved_as: true`, `is_modified: false`), then — after `create_box` modified it, `isSaved: True`/`isModified: True` — saved in place (`saved_as: false`, `is_modified: false`, read back as `True False`); `checkpoint=True` reported `saved_before: true` on `execute_code` and `cam_create_operation` |
+| `save_document` | proven — 2026-11-27, `2706.1.17`, #162: refused an untitled document with no name (nothing written), saved it by name into the active data folder (`saved_as: true`, `is_modified: false`), then — after `create_box` modified it, `isSaved: True`/`isModified: True` — saved in place (`saved_as: false`, `is_modified: false`, read back as `True False`); `checkpoint=True` reported `saved_before: true` on `execute_code` and `cam_create_operation`; saving an *unmodified* document twice answered `saved: true` both times with no version added |
 | `new_document` | proven — 2026-11-26, `2706.1.17`, #158: created an active parametric design document |
 | `create_component` | proven — 2026-11-26, `2706.1.17`, #158: created `C1`; a body added to it is counted in the snapshot |
 | `add_joint` | unproven — mutation; no live call made — the suite covers its handler against fakes only |
