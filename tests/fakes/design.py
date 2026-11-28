@@ -1403,6 +1403,9 @@ class FakeRoot:
         self.constructionAxes = FakeConstructionAxes()
         self.constructionPoints = FakeCollection()
         self.userCoordinateSystems = FakeUserCoordinateSystems()
+        # No `analyses` here: measured on 2706.1.17, a Component has none, and the
+        # handler that reached root.analyses raised AttributeError.  The collection
+        # hangs off the design, which is where `FakeDesign` puts it.
         axes = FakeAxes()
         self.xConstructionAxis = axes.xConstructionAxis
         self.yConstructionAxis = axes.yConstructionAxis
@@ -1411,7 +1414,6 @@ class FakeRoot:
         self.xYConstructionPlane = planes.xYConstructionPlane
         self.yZConstructionPlane = planes.yZConstructionPlane
         self.xZConstructionPlane = planes.xZConstructionPlane
-        self.analyses = FakeAnalyses()
         #: The ``FlatPattern`` objects ``createFlatPattern`` returned, in order.
         self.flat_patterns: list[FakeFeature] = []
         #: The stationary face of each of those calls, in the same order.  Fusion's
@@ -1508,6 +1510,9 @@ class FakeDesign:
         self._timeline = FakeTimeline(self)
         self.rootComponent = FakeRoot(self, sketches, bodies, mesh_bodies)
         self.undo_commands_executed = 0
+        #: ``design.analyses``: the typed sub-collections (section, zebra, draft...).
+        #: Measured on 2706.1.17, this is where they live - a Component has none.
+        self.analyses = FakeAnalyses()
         #: Fusion's design goes invalid when its document is closed, and its
         #: properties then raise "4 : An API Object refers to a deleted Object".
         self.isValid = True

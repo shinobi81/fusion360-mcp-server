@@ -26,6 +26,7 @@ from tests.fakes.bodies import FakeBody, FakeBoundingBox, FakeFace
 from tests.fakes.collection import FakeCollection
 from tests.fakes.design import FakeDesign
 from tests.fakes.runtime import FakeMatrix3D, FakeValueInput
+from tests.fakes.sketch import FakeSketchPoint
 
 
 @pytest.fixture
@@ -301,8 +302,16 @@ def test_offset_faces_with_no_face_in_the_top_plane_is_refused(bound_handler):
     assert handler._root().features.offsetFeatures.added == []
 
 
-def test_scale_body_scales_the_named_body_about_the_anchor(plate):
-    """One body, one uniform factor, the anchor the caller named."""
+def test_scale_body_anchors_on_a_sketch_point_not_a_bare_coordinate(plate):
+    """``ScaleFeatures.createInput``'s point is a *reference*, not a coordinate.
+
+    Measured on 2706.1.17: a raw ``Point3D`` answers ``3 : invalid ref point``, the
+    binding's own docstring lists a BRepVertex, a SketchPoint or a ConstructionPoint,
+    and ``ConstructionPointInput.setByPoint`` says a Point3D "will fail" in a
+    parametric design.  So the anchor becomes a sketch point in a hidden reference
+    sketch - the route ``create_ucs`` already takes for its own anchor - placed on an
+    offset plane when the anchor has a ``z``.
+    """
     root = plate._root()
 
     result = plate.scale_body(
@@ -311,10 +320,18 @@ def test_scale_body_scales_the_named_body_about_the_anchor(plate):
 
     inp = root.features.scaleFeatures.added[0]
     assert [body.name for body in inp.inputEntities] == ["Bracket"]
-    assert inp.point.coords() == (1.0, 2.0, 3.0)
+    assert isinstance(inp.point, FakeSketchPoint), "a bare Point3D is refused live"
+    # Sketch space: the z lives in the plane the sketch sits on, not in the point.
+    assert inp.point.geometry.coords() == (1.0, 2.0, 0.0)
+    plane_input = root.constructionPlanes.last_input
+    assert plane_input.setter == "setByOffset"
+    assert plane_input.args[1].value == 3.0
+    reference = root.sketches.item(root.sketches.count - 1)
+    assert reference.isVisible is False
     assert (inp.scaleFactor.value, inp.scaleFactor.kind) == (2.0, "real")
     assert inp.isUniform is True
     assert result["scale"] == 2.0
+    assert result["anchor"] == [1.0, 2.0, 3.0]
 
 
 def test_scale_body_takes_three_factors_only_when_all_three_are_given(plate):

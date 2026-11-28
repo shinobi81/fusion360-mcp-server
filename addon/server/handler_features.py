@@ -1235,14 +1235,38 @@ class FeatureCommands(_Contract):
         bodies = adsk.core.ObjectCollection.create()
         bodies.add(body)
 
-        anchor = adsk.core.Point3D.create(anchor_x, anchor_y, anchor_z)
+        # The point createInput takes is a REFERENCE, not a coordinate: measured on
+        # 2706.1.17 a raw Point3D answers "3 : invalid ref point", the binding's own
+        # docstring says "a BRepVertex, a SketchPoint or a ConstructionPoint", and
+        # ConstructionPointInput.setByPoint says a Point3D "will fail" in a parametric
+        # design.  A sketch point works in both modes, so the anchor becomes one - in
+        # a hidden reference sketch, exactly as create_ucs anchors itself, on an offset
+        # plane when the anchor has a z (a sketch point carries sketch-space
+        # coordinates; the plane carries the offset).
+        if anchor_z:
+            plane_input = root.constructionPlanes.createInput()
+            plane_input.setByOffset(
+                root.xYConstructionPlane,
+                adsk.core.ValueInput.createByReal(anchor_z),
+            )
+            anchor_plane = root.constructionPlanes.add(plane_input)
+        else:
+            anchor_plane = root.xYConstructionPlane
+
+        reference_sketch = root.sketches.add(anchor_plane)
+        anchor_point = reference_sketch.sketchPoints.add(
+            adsk.core.Point3D.create(anchor_x, anchor_y, 0)
+        )
+        # Hidden, and named by the reply: it is a live parameter of the feature, so
+        # deleting it would break the scale.
+        reference_sketch.isVisible = False
 
         scales = root.features.scaleFeatures
         # Shipped: createInput(inputEntities, point, scaleFactor) - three
         # arguments, the third the uniform factor.  A per-axis scale is that
         # same input with setToNonUniform() called on it afterwards.
         inp = scales.createInput(
-            bodies, anchor, adsk.core.ValueInput.createByReal(scale)
+            bodies, anchor_point, adsk.core.ValueInput.createByReal(scale)
         )
         non_uniform = (
             scale_x is not None and scale_y is not None and scale_z is not None
@@ -1254,14 +1278,22 @@ class FeatureCommands(_Contract):
                 adsk.core.ValueInput.createByReal(scale_z),
             )
         feat = scales.add(inp)
+        anchor = [anchor_x, anchor_y, anchor_z]
         if non_uniform:
             return {
                 "feature_name": feat.name,
                 "scale_x": scale_x,
                 "scale_y": scale_y,
                 "scale_z": scale_z,
+                "anchor": anchor,
+                "reference_sketch": reference_sketch.name,
             }
-        return {"feature_name": feat.name, "scale": scale}
+        return {
+            "feature_name": feat.name,
+            "scale": scale,
+            "anchor": anchor,
+            "reference_sketch": reference_sketch.name,
+        }
 
     def suppress_feature(self, feature_name: str):
         return self._set_suppressed(feature_name, True)

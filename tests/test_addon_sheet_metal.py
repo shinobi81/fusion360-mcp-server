@@ -46,12 +46,14 @@ def _sheet_metal_design() -> tuple[FakeDesign, FakeBody, list[FakeFace]]:
     return design, body, faces
 
 
-def test_an_unfold_takes_the_first_planar_face_as_stationary(bound_handler):
+def test_an_unfold_takes_the_largest_planar_face_as_stationary(bound_handler):
     """The stationary face is a flat face of the named body, not the leading wall.
 
     ``UnfoldFeatureInput`` keeps this face fixed while the sheet unfolds, and
     ``createInput`` takes it as its only argument, so handing over a bend's
     cylindrical wall would fold the part about something that is not a face of it.
+    The two flat faces here tie on area, so the tie rule - first among the largest -
+    is what picks ``faces[1]``.
     """
     design, _body, faces = _sheet_metal_design()
     handler = bound_handler(design)
@@ -115,7 +117,7 @@ def test_an_unfold_of_a_body_with_no_flat_face_builds_no_input(bound_handler):
     assert design.rootComponent.features.unfoldFeatures.inputs == []
 
 
-def test_a_flat_pattern_is_built_from_the_first_planar_face(bound_handler):
+def test_a_flat_pattern_is_built_from_a_flat_face_of_the_named_body(bound_handler):
     """The component is handed a flat face of the named body.
 
     The leading face is a bend wall and the decoy body comes first in the root, so
@@ -142,6 +144,27 @@ def test_a_flat_pattern_reports_the_name_of_the_flat_pattern_it_created(bound_ha
 
     assert len(root.flat_patterns) == 1
     assert out == {"feature_name": root.flat_patterns[0].name}
+
+
+def test_the_stationary_face_is_the_largest_flat_one_not_the_first(bound_handler):
+    """A side wall can be planar and still be the wrong face to pin.
+
+    Measured on 2706.1.17: a 10x10x0.25 cm base flange's first planar face is a
+    0.37 cm2 side wall, and ``createFlatPattern`` refused it with ``stationaryFace
+    is not valid, a side face may have been selected``. The faces that work are the
+    100 cm2 top and bottom, so the rule is the largest planar face.
+    """
+    side = FakeFace(planar=True, area=0.37)
+    top = FakeFace(planar=True, area=100.0)
+    bottom = FakeFace(planar=True, area=100.0)
+    body = FakeBody("Sheet", faces=FakeCollection([side, top, bottom]))
+    design = FakeDesign(bodies=[body])
+    handler = bound_handler(design)
+
+    handler.flat_pattern("Sheet")
+
+    assert design.rootComponent.flat_pattern_faces == [top]
+    assert design.rootComponent.flat_pattern_faces[0] is not side
 
 
 def test_a_flat_pattern_of_a_body_with_no_flat_face_creates_nothing(bound_handler):
