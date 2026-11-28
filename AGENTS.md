@@ -53,12 +53,13 @@ Ruff's one drift into it is PEP 758 (`except A, B:`), which
 it replace `.venv/Scripts/fusion360-mcp-server.exe` while a running MCP server holds it
 (`os error 32`). Use `uv run --no-sync …`, or stop the server first.
 
-Coverage is two gates: `pytest` floors the combined `src/` + `addon/server` total at 59
-(low on purpose — the CAM paths that remain uncovered only run inside Fusion; the
-export family, viewport captures and the view sheet are covered offline in
-`tests/test_addon_export.py`),
-and CI separately requires 95 on `src/`. The lazy `adsk` adapter, the fake runtime
-and the atheris targets: `docs/TESTING.md`.
+Coverage is two gates: `pytest` floors the combined `src/` + `addon/server` total at 95
+in `addopts`, and CI separately requires 95 on `src/`, so an add-in regression cannot
+buy slack for the published package. The combined floor sat at 59 while the add-in's
+Fusion-only paths were the bulk of the misses; the export family, the viewport captures
+and the view sheet are covered offline now (`tests/test_addon_export.py`), so the floor
+is the number the suite actually holds. The lazy `adsk` adapter, the fake runtime, the
+uncovered-by-design lines and the atheris targets: `docs/TESTING.md`.
 
 ## Adding a tool
 
