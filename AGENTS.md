@@ -62,6 +62,11 @@ and the atheris targets: `docs/TESTING.md`.
 
 ## Adding a tool
 
+**Nothing is added unproven.** A tool's PR carries the live envelope that proves it - step
+8 - so its row lands as `proven` and the `Proven` cell names the build that answered.
+`unproven` is only for the tools that predate this rule, `auto_constrain` today, and that
+backlog only shrinks: a row nobody can demonstrate is not a tool to merge.
+
 1. Handler method in the module that owns the domain — one of the `handler_*.py` modules
    `COMMAND_MODULES` lists, not `command_handler.py`, which composes them and declares
    nothing — and its name in `HandlerBase._COMMAND_NAMES`
@@ -74,15 +79,15 @@ and the atheris targets: `docs/TESTING.md`.
    and the connection read; `tests/test_addon_sync.py` fails while any mirror is stale
 5. Annotations: `readOnlyHint`, `destructiveHint`, `idempotentHint`
 6. A row in `docs/TOOLS.md` and the name in the index in this file — the index is
-   guarded, the description is not — whose `Evidence` cell is `unproven — <why>` wherever
-   no call has succeeded: nobody called it, or it was only ever refused. Then
-   `uv run python scripts/sync_proven_column.py` fills the `Proven` cell from it;
-   `tests/test_proven.py` fails a tool with no row and a cell that disagrees, and the
-   evidence is the record the next session starts from
+   guarded, the description is not — whose `Evidence` cell says `proven`:
+   ``proven — YYYY-MM-DD, `version`, #pr: what was measured``, where the PR is this one
+   and its body carries the envelope from step 8
 7. A behavioural mock test (`tests/test_mock.py`); the tool count and each tool's argument
    count are pinned in `tests/test_tools.py`
-8. When a call succeeds, its `proven — date, version, #pr: what was measured` replaces the
-   `unproven` line, the envelopes go in that PR's body, and the column is regenerated
+8. A live call before the PR opens: reload the add-in from the branch
+   (`scripts/reload_addin.py`), call the tool, and paste the envelope and `app.version`
+   into the PR body. Then `uv run python scripts/sync_proven_column.py` fills the `Proven`
+   cell from that evidence — the cell is generated and never typed
 
 The MCP server forwards tool calls 1:1 — there is no mapping layer to touch — with one
 documented exception: a tool with its own client-side bound (`health`) needs a method on

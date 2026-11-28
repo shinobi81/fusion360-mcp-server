@@ -23,10 +23,11 @@ checked against **Fusion 2706.1.17**'s API.
 
 ## Reading a row
 
-`Proven` is the `app.version` the tool has answered a real Fusion on, or an em dash
-where nothing has succeeded yet. It is **generated** from the `Evidence` cell and never
-typed: `uv run python scripts/sync_proven_column.py` rewrites it, `--check` reports a
-stale one, and `tests/test_proven.py` fails while the two disagree.
+`Proven` is the `app.version` the tool has answered a real Fusion on, or an em dash for
+the tools that predate the rule below. It is **generated** from the `Evidence` cell and
+never typed: `uv run python scripts/sync_proven_column.py` rewrites it and `--check`
+reports a cell that disagrees. A new tool arrives proven, so its cell names the build its
+PR measured against; the dash only marks the backlog.
 
 `Evidence` is the record, one line per row, and the only part written by hand:
 
@@ -38,9 +39,11 @@ stale one, and `tests/test_proven.py` fails while the two disagree.
   not, and `scripts/check_proven.py` refuses one.
 
 Nothing here is aspirational: an `unproven` row is where the next unknown defect
-lives. `uv run python scripts/check_proven.py` validates this table against
+lives, and no tool is added without a live call behind its row.
+`uv run python scripts/check_proven.py` validates this table against
 `src/fusion360_mcp/tools.py` without needing Fusion. `--live` sends the read-only tools
-it chooses to send — twelve of the nineteen — and reports a row whose reply contradicts
+it chooses to send — twelve of the nineteen — and reports a row whose reply
+contradicts
 its state, in either direction; a *proven* row it sends no call to is reported as not
 probed, never as passing. Two of those twelve touch the session: `cam_list_setups`
 activates the Manufacture workspace, and `render_view` repositions the camera for its

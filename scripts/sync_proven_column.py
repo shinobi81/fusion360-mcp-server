@@ -13,8 +13,8 @@ rewrites the cells, re-padding the four columns so the seventeen tables stay ali
     uv run python scripts/sync_proven_column.py           # rewrite the column
     uv run python scripts/sync_proven_column.py --check   # print a diff, exit 1
 
-``tests/test_proven.py`` runs the same renderer and fails while the file on disk
-differs, which makes a stale cell a red suite rather than a slowly wrong doc.
+``--check`` is the report, so run it after editing an evidence cell and in the PR that
+adds a tool: the cell a reader scans then cannot drift from the record beside it.
 """
 
 from __future__ import annotations
