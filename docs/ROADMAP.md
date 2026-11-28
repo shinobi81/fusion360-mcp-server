@@ -114,7 +114,7 @@ worked, across the seven rows below:
 | `flat_pattern` | `root.features.flatPatternFeatures` does not exist; a component creates a flat pattern | fixed (#130) |
 | `thicken_surface` | `isSymmetric` and `isChainSelection` were swapped, so `direction` never made anything symmetric | fixed (#130) |
 | `scale_body` | per-axis branch passed five arguments to a three-argument `createInput`; non-uniform is `setToNonUniform` | fixed (#131) |
-| `create_construction_axis("perpendicular_at_point")` | handed a `ConstructionPlane` to a `BRepFace` parameter; refused and named the missing argument until #149 made it build | fixed (#131), built (#149) |
+| `create_construction_axis("perpendicular_at_point")` | handed a `ConstructionPlane` to a `BRepFace` parameter; refused and named the missing argument until #149 made it build | fixed (#131), built (#149), proven live (#163) |
 | `patch_surface` | wrote a property Fusion does not ship, so `continuity` was a silent no-op | fixed to `groupContinuity`; the argument is inert for sketch curves until the tool takes edges (#131) |
 | `create_flange`, `create_bend`, `trim_surface` | `FlangeFeatures` has no `createInput`; there is no `bendFeatures` at all; `TrimFeatures.createInput` takes the tool alone | **fixed and proven live (#134)** |
 
@@ -295,7 +295,7 @@ and asks the running Fusion whether it exists - 190 references, none missing on
    method="perpendicular_at_point", body_name="Body2", face_index=0, point_one=[0, 0, 2])`
    answered `created: true`, `name: "Axis1"`, and `rootComponent.constructionAxes` then
    held exactly that one axis - which is where it has to be read, because `get_scene_info`
-   reports bodies, sketches and features and no construction geometry.
+   reports bodies, sketches and counts, and no construction geometry.
 
 5. ~~`_find_operation` still picks the first same-named operation~~ - **closed (#141)**.
    The first-match scan resolved `operation_name` inside one setup for
@@ -488,7 +488,7 @@ and asks the running Fusion whether it exists - 190 references, none missing on
 11. **Which of the tools has a real Fusion ever answered** - **started (this PR).**
     `docs/PROVEN.md` is one row per tool: a `proven` row cites the date, the
     `app.version` and the PR that added it, whose body carries the envelope; an
-    `unproven` row says why. 30 of 98 were proven when #158 seeded it, 37 of 100 now;
+    `unproven` row says why. 30 of 98 were proven when #158 seeded it, 38 of 100 now;
     the rest name the reason, so the gap is a checklist rather than a guess. `scripts/check_proven.py`
     validates the table against `tools.py` both ways, and `--live` re-probes the
     read-only subset and reports a row its reply contradicts. The live sweep that
