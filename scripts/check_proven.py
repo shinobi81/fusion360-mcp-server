@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Check which tools have been answered by a real Fusion, and optionally re-probe.
 
-``docs/PROVEN.md`` holds one row per tool: what a caller can rely on, and the evidence
-for it.  Three invented ``adsk`` names in this repo's history were all found by hand,
-and ``scripts/check_fusion_api.py`` proves *names* — neither says a tool was ever
+``docs/TOOLS.md`` carries one row per tool with the record beside the description: the
+``Evidence`` cell says what a caller can rely on and, for a tool nobody has called, why
+it cannot.  Three invented ``adsk`` names in this repo's history were all found by hand,
+and ``scripts/check_fusion_api.py`` proves *names* - neither says a tool was ever
 called, or that the answer it gave was the answer its row claims.  This script is that
 record's guard.
 
@@ -35,7 +36,14 @@ from pathlib import Path
 from fusion360_mcp.tools import _READ_ONLY, TOOLS
 
 ROOT = Path(__file__).resolve().parents[1]
-PROVEN = ROOT / "docs" / "PROVEN.md"
+CATALOGUE = ROOT / "docs" / "TOOLS.md"
+
+#: The four cells a tool row carries: the name, the derived build, the description and
+#: the record.  The evidence is the *last* cell so a description may grow without moving
+#: it, and so the audit reads at the end of the row.
+TOOL_HEADER = "Tool"
+EVIDENCE_COLUMN = 3
+ROW_WIDTH = 4
 
 #: `proven — 2026-11-26, `2706.1.17`, #158: what was measured`.  The three fields are
 #: mandatory so a row cannot claim a probe without saying when, against which build, and
@@ -122,15 +130,6 @@ class Row:
         return None
 
 
-def _table_lines(text: str) -> list[tuple[int, str]]:
-    """Every ``|``-line with its line number, header and separator included."""
-    return [
-        (lineno, line)
-        for lineno, line in enumerate(text.splitlines(), 1)
-        if line.lstrip().startswith("|")
-    ]
-
-
 def _cells(line: str) -> list[str]:
     """The cells of a ``|``-line, stripped."""
     return [cell.strip() for cell in line.strip().strip("|").split("|")]
@@ -147,38 +146,81 @@ def _is_header_or_separator(cells: list[str]) -> bool:
     return first in ("Tool", "---") or not first or set(first) <= set("-:")
 
 
-def parse_table(text: str) -> list[Row]:
-    """The rows of ``docs/PROVEN.md``, in file order.
+def _table_blocks(text: str) -> list[tuple[int, list[str]]]:
+    """Every ``|`` table with the line number it starts on - markdown ends one at the
+    first line that is not a ``|``-line.
 
-    Only the two-column table is read: a row is a ``|``-line - indented or not - that is
-    not the header or the separator.  A ``|``-line that is neither is reported by
-    ``malformed_lines`` rather than dropped here - a row nobody can parse is exactly
-    the row a reader would trust.
+    A file with one table needs no such walk; this one has seventeen domain tables, a
+    legend and argument breakdowns, so "which lines are rows" is a question about
+    blocks, not about the whole file.
+    """
+    blocks: list[tuple[int, list[str]]] = []
+    lines = text.splitlines()
+    index = 0
+    while index < len(lines):
+        if not lines[index].lstrip().startswith("|"):
+            index += 1
+            continue
+        end = index
+        while end < len(lines) and lines[end].lstrip().startswith("|"):
+            end += 1
+        blocks.append((index + 1, lines[index:end]))
+        index = end
+    return blocks
+
+
+def _tool_blocks(text: str) -> list[tuple[int, list[str]]]:
+    """The blocks whose header's first cell is ``Tool`` - the catalogue's own tables.
+
+    Everything else in the file - the ``x``/``y``/``z`` legend, the argument
+    breakdowns - is somebody else's table and is never read as a row here.
+    """
+    return [
+        (lineno, block)
+        for lineno, block in _table_blocks(text)
+        if block and _cells(block[0])[0] == TOOL_HEADER
+    ]
+
+
+def parse_table(text: str) -> list[Row]:
+    """The tool rows of ``docs/TOOLS.md``, in file order.
+
+    A row is a four-cell line inside a ``Tool`` table: the backticked name, the derived
+    build, the description and the evidence.  A line that is neither a header, a
+    separator nor four cells is reported by ``malformed_lines`` rather than dropped -
+    a row nobody can parse is exactly the row a reader would trust.
     """
     rows: list[Row] = []
-    for _lineno, line in _table_lines(text):
-        cells = _cells(line)
-        if _is_header_or_separator(cells) or len(cells) != 2:
-            continue
-        rows.append(Row(cells[0].strip("`"), cells[1]))
+    for _lineno, block in _tool_blocks(text):
+        for line in block[2:]:
+            cells = _cells(line)
+            if _is_header_or_separator(cells) or len(cells) != ROW_WIDTH:
+                continue
+            rows.append(Row(cells[0].strip("`"), cells[EVIDENCE_COLUMN]))
     return rows
 
 
 def malformed_lines(text: str) -> list[str]:
-    """``|``-lines that are neither a header, a separator, nor a two-cell row."""
+    """Tool-table lines that are neither a header, a separator, nor a four-cell row."""
     problems: list[str] = []
-    for lineno, line in _table_lines(text):
-        cells = _cells(line)
-        if _is_header_or_separator(cells):
-            continue
-        if len(cells) != 2:
-            problems.append(f"line {lineno}: a row needs exactly two cells: {line}")
+    for lineno, block in _tool_blocks(text):
+        for offset, line in enumerate(block):
+            if offset < 2:
+                continue
+            cells = _cells(line)
+            if _is_header_or_separator(cells):
+                continue
+            if len(cells) != ROW_WIDTH:
+                problems.append(
+                    f"line {lineno + offset}: a tool row needs four cells "
+                    f"(name, proven, description, evidence), not {len(cells)}: {line}"
+                )
     return problems
 
 
 def check(text: str, rows: list[Row] | None = None) -> list[str]:
     """Every problem with the table, as messages a caller can act on."""
-    problems: list[str] = malformed_lines(text)
+    problems = malformed_lines(text)
     rows = parse_table(text) if rows is None else rows
     names = [row.tool for row in rows]
 
@@ -288,7 +330,9 @@ def not_probed(replies: dict[str, dict], rows: list[Row]) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Validate docs/PROVEN.md.")
+    parser = argparse.ArgumentParser(
+        description="Validate docs/TOOLS.md's Evidence rows."
+    )
     parser.add_argument(
         "--live",
         action="store_true",
@@ -305,12 +349,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    text = PROVEN.read_text(encoding="utf-8")
+    text = CATALOGUE.read_text(encoding="utf-8")
     rows = parse_table(text)
     problems = check(text, rows)
     proven = sum(1 for row in rows if row.proven)
     print(
-        f"docs/PROVEN.md: {len(rows)} rows, {proven} proven, "
+        f"docs/TOOLS.md: {len(rows)} rows, {proven} proven, "
         f"{len(rows) - proven} unproven"
     )
 
