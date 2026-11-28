@@ -60,15 +60,13 @@ After each merge, say which item closed, and start the next in rank order.
 
 ## When a merge becomes a release
 
-The queue carries issues, not version numbers: the diff decides the bump, and
-`CONTRIBUTING.md` (Releasing) owns both the table and the triggers that say when a tag
-follows. Two things belong here, because they are rules of the loop rather than of the
-release:
+`CONTRIBUTING.md` (Releasing) owns the bump table and the triggers that say when a tag
+follows. What the loop adds:
 
-- A `none` merge releases nothing and moves nothing to installable: say so and carry on.
-- The release is its own PR and it closes nothing: an item is
-  closed by the PR that changes it. When the tag is pushed, say which released fixes are
-  now installable, because that is the change a reader of the README can act on.
+- A `none` merge: say so and carry on.
+- The release PR closes nothing - an item is closed by the PR that changes it - and the
+  tag's `v` is the first moment a released fix is installable. So when it is pushed, say
+  which released fixes a reader of the README can now install.
 
 ## The gates
 

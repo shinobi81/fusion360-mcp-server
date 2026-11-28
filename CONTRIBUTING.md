@@ -113,9 +113,9 @@ and a tag for a range that only touched those publishes a version a reader canno
 
 | the diff touches | bump |
 | --- | --- |
-| a tool added, renamed or removed; an argument that is now required, removed, or means something else; a reply key renamed or removed; an `error_kind` that was already classified, renamed or repurposed; `requires-python` raised; or a **successful** call whose answer changes by design | **minor** — a caller has to change, or asks one question and gets a different answer |
+| a tool added, renamed or removed; an argument that is now required, removed, or means something else; a reply key renamed or removed; an `error_kind` that was already classified, renamed or repurposed; `requires-python` raised; or a **successful** call whose existing answer values change by design — not a defect fixed and not a key added, both patch below | **minor** — a caller has to change, or asks one question and gets a different answer |
 | a defect fixed with no contract change — the same arguments, the same keys, the right answer — including an add-in fix, an optional argument added, a reply key *added*, a dependency floor or cap moved, a refusal that used to arrive as `UNKNOWN` now carrying its kind, and a refusal that replaces a wrong success | **patch** |
-| only documentation (any tracked `*.md` page), `tests/`, `fuzz/`, `scripts/`, `.github/` or comments | **none** — no tag; the merges accumulate |
+| only documentation (any tracked `*.md` page), `tests/`, `fuzz/`, `scripts/`, `.github/`, repo tooling and config that ships nothing (`llms.txt`, `devcontainer/`, `pyrightconfig.json`, `pyproject.toml`'s `[tool.*]` tables, a relock with no floor moved) or comments | **none** — no tag; the merges accumulate |
 
 A range that straddles two rows takes the higher of them (`none` < `patch` < `minor`): a
 patch that should have been a minor is a caller who never upgraded, while a minor that
