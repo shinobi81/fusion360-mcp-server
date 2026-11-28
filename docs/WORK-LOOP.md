@@ -65,8 +65,8 @@ The queue carries issues, not version numbers: the diff decides the bump, and
 follows. Two things belong here, because they are rules of the loop rather than of the
 release:
 
-- A range that touched only tests, docs, fuzz or scripts earns **no bump**. It is not a
-  release, and cutting one for it spends a version number a reader cannot act on.
+- A range with no bump moves nothing to installable: it is carried by the next bumping
+  range, and a `none` range is never tagged on its own.
 - The release is its own PR (`chore(release): x.y.z`) and it closes nothing: an item is
   closed by the PR that changes it. When the tag is pushed, say which released fixes are
   now installable, because that is the change a reader of the README can act on.

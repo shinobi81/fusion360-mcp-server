@@ -113,14 +113,14 @@ and a tag for a range that only touched those publishes a version a reader canno
 
 | the diff touches | bump |
 | --- | --- |
-| `src/fusion360_mcp/tools.py`'s schema, a tool added or renamed, a reply key renamed or removed, an `error_kind` changed, or a call that now answers differently | **minor** — a caller has to change, or reads a different answer |
-| a defect fixed with no contract change — same arguments, same keys, the right answer — including an add-in fix and a reply key *added* | **patch** |
-| only `tests/`, `docs/`, `fuzz/`, `scripts/` or comments | **none** — no tag; the merges accumulate |
+| a tool added, renamed or removed; an argument that is now required, removed, or means something else; a reply key renamed or removed; an `error_kind` that was already classified, renamed or repurposed; or a call that answers differently **by design** | **minor** — a caller has to change, or asks one question and gets a different answer |
+| a defect fixed with no contract change — the same arguments, the same keys, the right answer — including an add-in fix, an optional argument added, a reply key *added*, and a refusal that used to arrive as `UNKNOWN` now carrying its kind | **patch** |
+| only `tests/`, `docs/`, `fuzz/`, `scripts/`, `.github/` or comments | **none** — no tag; the merges accumulate |
 
 A range that straddles two rows takes the higher of them (`none` < `patch` < `minor`): a
 patch that should have been a minor is a caller who never upgraded, while a minor that
 should have been a patch is one line in the changelog. A trigger below firing on a range
-the table gives **none** cuts nothing - two documentation merges are not a release, and
+the table gives **none** cuts nothing — two documentation merges are not a release, and
 the next bumping range carries them.
 
 Cut a release when either of these comes first:
@@ -129,9 +129,9 @@ Cut a release when either of these comes first:
 - three PRs have merged since the previous tag, not counting a release PR.
 
 The first is the one that matters: `README.md` pins a tag, so a fix nobody tags is
-invisible to every reader who installs from that pin. The second bounds the wait - a
+invisible to every reader who installs from that pin. The second bounds the wait — a
 released fix should not sit behind a batch bigger than one round of live proof
-(`docs/WORK-LOOP.md`, *Live proof*).
+(`docs/WORK-LOOP.md`, Live proof).
 
 This is where the project's earlier practice changes. `0.8.2` cut a documentation-and-
 guards payload as a patch, and `0.7.3` shipped docs, tooling and a version bump; each
@@ -141,10 +141,10 @@ and this rule replaces them.
 ### Cutting the tag
 
 1. Classify the range since the last tag against the table above, and put the bump in the
-   PR body. A judgement that is not written down cannot be reviewed.
+   release PR's body. A judgement that is not written down cannot be reviewed.
 2. Move `version` in `pyproject.toml`, `addon/Fusion360MCP.manifest` and the install
    snippets in `README.md`, and on a **minor or major** both rows of `SECURITY.md`'s
-   supported-versions table - the new `<major>.<minor>.x` Yes row and its
+   supported-versions table — the new `<major>.<minor>.x` Yes row and its
    `< major.minor` No row beneath it, in the shape that file already uses. Then
    `uv lock`. They ship together, and `tests/test_packaging.py` fails naming whichever
    one you missed: the manifest, pin and supported-versions guards each name the file and
@@ -152,9 +152,9 @@ and this rule replaces them.
 3. Write the `CHANGELOG.md` entry: the heading `## [X.Y.Z] - YYYY-MM-DD`, the sections
    under it, and the compare link at the bottom of the file in the shape the others use,
    `[X.Y.Z]: https://github.com/shinobi81/fusion360-mcp-server/compare/vX.Y.W...vX.Y.Z`.
-   Three guards read it - the opening heading, its date, and that link - and each names
+   Three guards read it — the opening heading, its date, and that link — and each names
    what is missing. The entry is written **in this PR**, while the reason for every
-   change is still in hand; that is the practice `CHANGELOG.md`'s 0.8.2 entry records.
+   change is still in hand; that is the practice `CHANGELOG.md`'s 0.7.3 entry records.
 4. PR it (`chore(release): x.y.z`), merge as usual.
 5. Start from the merged `main` (`git checkout main && git pull`), so the tree you tag is
    the tree you built, then check that the artifacts ship the add-in, unpiped -
