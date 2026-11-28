@@ -81,8 +81,7 @@ _MOCK_DELTAS = {
 #: that never happened.  The numbers are mock's own scene - one body, 10 g, that box -
 #: unchanged, which is why the judgement adds its warning, as the add-in does for a
 #: script that touched nothing.  What mock cannot know is what the script *would* have
-#: built; that is a divergence recorded in ``docs/ROADMAP.md``, not one this table can
-#: fix.
+#: built; that is a divergence no reply can close, and not one this table can fix.
 _NO_CHANGE_DELTAS = {
     "body_count_before": 1,
     "body_count_after": 1,

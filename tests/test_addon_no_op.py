@@ -81,8 +81,8 @@ def test_a_mass_change_does_not_warn():
 
 def test_a_bounding_box_change_alone_does_not_warn():
     """The box is judged because a real change can leave count and mass at zero -
-    measured on a 2 cm ``move_body`` (``docs/ROADMAP.md`` item 10).  The command name
-    here is any non-exempt mutation; what the test pins is the box comparison."""
+    measured on a 2 cm ``move_body``.  The command name here is any non-exempt
+    mutation; what the test pins is the box comparison."""
     deltas = _deltas(
         bbox_after={"min": [5.0, 0.0, 0.0], "max": [6.0, 1.0, 1.0]},
     )
@@ -197,7 +197,6 @@ def test_an_exempt_command_never_warns(command):
 #: a one-sided slice would accept a name moved anywhere else in the paragraph.
 _DOC_LISTS = {
     "docs/TOOLS.md": ("A mutation whose snapshot did not move", "never carry it"),
-    "docs/ROADMAP.md": ("commands are exempt", "the table is pinned"),
 }
 
 #: The count ``AGENTS.md`` spells out.  It is prose, so it is checked as prose: the word
@@ -239,9 +238,7 @@ def test_every_exemption_is_named_in_the_doc_paragraph(doc):
     assert not missing, (doc, missing)
 
 
-#: The three docs that state the exempt count as a word, and the sentence each states it
-#: in.  ``docs/ROADMAP.md`` states it too, and its paragraph is already covered by the
-#: name test two lines above the word - these are the rest.
+#: The docs that state the exempt count as a word, and the sentence each states it in.
 _COUNT_DOCS = {
     "AGENTS.md": ("command exempt from", "never carries the key"),
     "ARCHITECTURE.md": ("the warning is the verdict", "reason:"),
