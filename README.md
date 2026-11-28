@@ -223,8 +223,9 @@ with
 **[AGENTS.md](AGENTS.md)**.
 
 Deeper notes: **[docs/TESTING.md](docs/TESTING.md)** (how the suite and the fuzz targets
-run, what they deliberately cannot run) and
-**[docs/ROADMAP.md](docs/ROADMAP.md)** (what is planned and why it is not here yet).
+run, what they deliberately cannot run) and the
+**[issue tracker](https://github.com/shinobi81/fusion360-mcp-server/issues)** (what is
+still open, and why it is not here yet).
 
 ## This repo
 

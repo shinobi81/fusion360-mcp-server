@@ -129,28 +129,25 @@ def test_documents_quoting_the_ruff_selection_match_the_config():
     Stale copies have surfaced across more than one change, one of them in a table that
     argued an external criterion was met.  Quoting the list in a document is fine;
     quoting a list the configuration no longer has is a false claim that no reader can
-    be expected to catch.  Two spellings are in use - ``select = [...]`` in the roadmap
-    and the prose ``rules `E`, `F`, ...`` in CONTRIBUTING - so both are read, and each
-    must still be found: a quote that quietly disappears takes the guard with it.
+    be expected to catch.  ``CONTRIBUTING.md`` is the one document that still spells
+    the set out, in prose - ``rules `E`, `F`, ...`` - and it must still be found: a
+    quote that quietly disappears takes the guard with it.
     """
     configured = sorted(_pyproject()["tool"]["ruff"]["lint"]["select"])
-    readers = (
-        (REPO_ROOT / "docs" / "ROADMAP.md", re.compile(r"select = \[([^\]]*)\]")),
-        (REPO_ROOT / "CONTRIBUTING.md", re.compile(r"rules ((?:`[A-Z]+`(?:, )?)+)")),
-    )
+    doc = REPO_ROOT / "CONTRIBUTING.md"
+    pattern = re.compile(r"rules ((?:`[A-Z]+`(?:, )?)+)")
     offenders = []
-    for doc, pattern in readers:
-        assert doc.exists(), f"{doc.name} is gone; this guard would pass vacuously"
-        hits = 0
-        for number, line in enumerate(doc.read_text(encoding="utf-8").splitlines(), 1):
-            found = pattern.search(line)
-            if found is None:
-                continue
-            hits += 1
-            stated = sorted(re.findall(r'["`]([A-Z]+)["`]', found.group(1)))
-            if stated != configured:
-                offenders.append(f"{doc.name}:{number} quotes {stated}")
-        assert hits, f"{doc.name} no longer quotes the rule set; the guard is vacuous"
+    assert doc.exists(), f"{doc.name} is gone; this guard would pass vacuously"
+    hits = 0
+    for number, line in enumerate(doc.read_text(encoding="utf-8").splitlines(), 1):
+        found = pattern.search(line)
+        if found is None:
+            continue
+        hits += 1
+        stated = sorted(re.findall(r'["`]([A-Z]+)["`]', found.group(1)))
+        if stated != configured:
+            offenders.append(f"{doc.name}:{number} quotes {stated}")
+    assert hits, f"{doc.name} no longer quotes the rule set; the guard is vacuous"
     assert offenders == [], f"{'; '.join(offenders)}; pyproject configures {configured}"
 
 
