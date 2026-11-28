@@ -154,14 +154,20 @@ documented exception: a tool with its own client-side bound (`health`) needs a m
 ## Merging
 
 `main` takes PRs only, and merging needs an approving review a solo author cannot give
-themselves, so the merge is `gh pr merge <pr> --squash --admin`. **`--admin` bypasses the
-entire ruleset**, including `required_review_thread_resolution`, so the check is yours:
+themselves, so the merge is `gh pr merge <pr> --squash --admin --delete-branch`.
+**`--admin` bypasses the entire ruleset**, including
+`required_review_thread_resolution`, so the check is yours:
 
 ```bash
 python scripts/check_review_threads.py <pr>   # exit 0 = mergeable, 1 = threads open
 gh pr view <pr> --json reviews --jq '.reviews[] | "\(.author.login) [\(.state)]\n\(.body)"'
-gh pr merge <pr> --squash --admin             # only after the two commands above are clean
+gh pr merge <pr> --squash --admin --delete-branch   # only after those two are clean
 ```
+
+`--delete-branch` is part of the command, not a courtesy:
+`delete_branch_on_merge` is set on the repository, and the admin merge path still
+leaves the head branch behind — which is how 59 branches (25 local, 35 remote) had
+piled up by 2026-11-28, every one with a merged PR and none holding unmerged work.
 
 The `threads` CI job runs the same script, so open threads show up as a failing check. A
 red `threads` check is never "fine, merge anyway", and failing to _query_ threads is a
